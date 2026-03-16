@@ -1,0 +1,203 @@
+import './global.css';
+import 'react-native-gesture-handler'
+import { useState, useEffect, useRef } from 'react'
+import { NavigationContainer } from '@react-navigation/native'
+import { Main } from './src/main'
+import { useFonts } from 'expo-font'
+import { ThemeContext, AppContext } from './src/context'
+import * as themes from './src/theme'
+import { IMAGE_MODELS, MODELS } from './constants'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { ChatModelModal } from './src/components/index'
+import { Model } from './types'
+import { ActionSheetProvider } from '@expo/react-native-action-sheet'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetModalProvider,
+  BottomSheetView,
+} from '@gorhom/bottom-sheet'
+import { StyleSheet, LogBox } from 'react-native'
+import { authClient } from './src/lib/auth-client'
+import { Onboarding } from './src/screens'
+
+LogBox.ignoreLogs([
+  'Key "cancelled" in the image picker result is deprecated and will be removed in SDK 48, use "canceled" instead',
+  'No native splash screen registered'
+])
+
+export default function App() {
+  const [theme, setTheme] = useState<string>('vercel')
+  const [chatType, setChatType] = useState<Model>(MODELS.claudeOpus)
+  const [imageModel, setImageModel] = useState<string>(IMAGE_MODELS.nanoBanana.label)
+  const [modalVisible, setModalVisible] = useState<boolean>(false)
+    const [fontsLoaded] = useFonts({
+    'Geist-Regular': require('./assets/fonts/Geist-Regular.otf'),
+    'Geist-Light': require('./assets/fonts/Geist-Light.otf'),
+    'Geist-Bold': require('./assets/fonts/Geist-Bold.otf'),
+    'Geist-Medium': require('./assets/fonts/Geist-Medium.otf'),
+    'Geist-Black': require('./assets/fonts/Geist-Black.otf'),
+    'Geist-SemiBold': require('./assets/fonts/Geist-SemiBold.otf'),
+    'Geist-Thin': require('./assets/fonts/Geist-Thin.otf'),
+    'Geist-UltraLight': require('./assets/fonts/Geist-UltraLight.otf'),
+    'Geist-UltraBlack': require('./assets/fonts/Geist-UltraBlack.otf')
+  })
+
+  useEffect(() => {
+    configureStorage()
+  }, [])
+
+  async function configureStorage() {
+    try {
+      const _theme = await AsyncStorage.getItem('rnai-theme')
+      if (_theme) setTheme(_theme)
+      const _chatType = await AsyncStorage.getItem('rnai-chatType')
+      if (_chatType) setChatType(JSON.parse(_chatType))
+      const _imageModel = await AsyncStorage.getItem('rnai-imageModel')
+      if (_imageModel) setImageModel(_imageModel)
+    } catch (err) {
+      console.log('error configuring storage', err)
+    }
+  }
+
+  const bottomSheetModalRef = useRef<BottomSheetModal>(null)
+  function closeModal() {
+    bottomSheetModalRef.current?.dismiss()
+    setModalVisible(false)
+  }
+
+  function handlePresentModalPress() {
+    if (modalVisible) {
+      closeModal()
+    } else {
+      bottomSheetModalRef.current?.present()
+      setModalVisible(true)
+    }
+  }
+
+  function _setChatType(type) {
+    setChatType(type)
+    AsyncStorage.setItem('rnai-chatType', JSON.stringify(type))
+  }
+
+  function _setImageModel(model) {
+    setImageModel(model)
+    AsyncStorage.setItem('rnai-imageModel', model)
+  }
+
+  function _setTheme(theme) {
+    setTheme(theme)
+    AsyncStorage.setItem('rnai-theme', theme)
+  }
+
+  const bottomSheetStyles = getBottomsheetStyles(getTheme(theme))
+
+  if (!fontsLoaded) return null
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeContext.Provider value={{
+        theme: getTheme(theme),
+        themeName: theme,
+        setTheme: _setTheme
+      }}>
+        <AuthGate
+          bottomSheetModalRef={bottomSheetModalRef}
+          bottomSheetStyles={bottomSheetStyles}
+          setModalVisible={setModalVisible}
+          modalVisible={modalVisible}
+          chatType={chatType}
+          _setChatType={_setChatType}
+          handlePresentModalPress={handlePresentModalPress}
+          imageModel={imageModel}
+          _setImageModel={_setImageModel}
+          closeModal={closeModal}
+        />
+      </ThemeContext.Provider>
+    </GestureHandlerRootView>
+  )
+}
+
+const getBottomsheetStyles = theme => StyleSheet.create({
+  background: {
+    paddingHorizontal: 24,
+    backgroundColor: theme.backgroundColor
+  },
+  handle: {
+    marginHorizontal: 15,
+    backgroundColor: theme.backgroundColor,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  handleIndicator: {
+    backgroundColor: 'rgba(255, 255, 255, .3)'
+  }
+})
+
+function getTheme(theme: any) {
+  let current
+  Object.keys(themes).forEach(_theme => {
+    if (_theme.includes(theme)) {
+      current = themes[_theme]
+    }
+  })
+  return current
+}
+
+function AuthGate(props: {
+  bottomSheetModalRef: React.RefObject<BottomSheetModal | null>
+  bottomSheetStyles: { handleIndicator: object; handle: object; background: object }
+  setModalVisible: (v: boolean) => void
+  modalVisible: boolean
+  chatType: Model
+  _setChatType: (t: Model) => void
+  handlePresentModalPress: () => void
+  imageModel: string
+  _setImageModel: (m: string) => void
+  closeModal: () => void
+}) {
+  const { data: session, isPending } = authClient.useSession()
+  if (isPending) return null
+  if (!session) {
+    return (
+      <NavigationContainer>
+        <Onboarding />
+      </NavigationContainer>
+    )
+  }
+  return (
+    <AppContext.Provider
+      value={{
+        chatType: props.chatType,
+        setChatType: props._setChatType,
+        handlePresentModalPress: props.handlePresentModalPress,
+        imageModel: props.imageModel,
+        setImageModel: props._setImageModel,
+        closeModal: props.closeModal,
+      }}
+    >
+      <ActionSheetProvider>
+        <NavigationContainer>
+          <Main />
+        </NavigationContainer>
+      </ActionSheetProvider>
+      <BottomSheetModalProvider>
+        <BottomSheetModal
+          handleIndicatorStyle={props.bottomSheetStyles.handleIndicator}
+          handleStyle={props.bottomSheetStyles.handle}
+          backgroundStyle={props.bottomSheetStyles.background}
+          ref={props.bottomSheetModalRef}
+          enableDynamicSizing={true}
+          backdropComponent={(p) => <BottomSheetBackdrop {...p} disappearsOnIndex={-1} />}
+          enableDismissOnClose
+          enablePanDownToClose
+          onDismiss={() => props.setModalVisible(false)}
+        >
+          <BottomSheetView>
+            <ChatModelModal handlePresentModalPress={props.handlePresentModalPress} />
+          </BottomSheetView>
+        </BottomSheetModal>
+      </BottomSheetModalProvider>
+    </AppContext.Provider>
+  )
+}
