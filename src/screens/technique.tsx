@@ -72,6 +72,8 @@ export function Technique() {
   const [markerProgress, setMarkerProgress] = useState(0.5)
   const [trimTrackWidth, setTrimTrackWidth] = useState(0)
   const styles = getStyles(theme)
+
+  const API_BASE = DOMAIN.replace(/\/+$/, '')
   const metrics = analysisJson?.metrics || null
   const aiAnalysis = metrics?.ai_analysis || null
   const score =
@@ -190,7 +192,7 @@ export function Technique() {
         resolve()
       })
 
-      xhr.open('POST', `${DOMAIN}/technique/upload`)
+      xhr.open('POST', `${API_BASE}/technique/upload`)
       xhr.withCredentials = true
       xhr.setRequestHeader('Accept', 'application/json')
       xhr.send(formData)
@@ -209,7 +211,7 @@ export function Technique() {
       setAnalysisError(null)
       setAnalysisJson(null)
 
-      const res = await fetch(`${DOMAIN}/technique/analyze`, {
+      const res = await fetch(`${API_BASE}/technique/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -235,7 +237,7 @@ export function Technique() {
       let done = false
       while (!done && Date.now() - pollStart < 600000) {
         await new Promise(r => setTimeout(r, 3000))
-        const pollRes = await fetch(`${DOMAIN}/technique/analysis/${id}`, {
+        const pollRes = await fetch(`${API_BASE}/technique/analysis/${id}`, {
           credentials: 'include',
           headers: { Accept: 'application/json' },
         })
