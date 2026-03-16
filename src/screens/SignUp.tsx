@@ -35,6 +35,10 @@ export function SignUp() {
       Alert.alert("Error", "Password must be at least 8 characters.");
       return;
     }
+    console.log("[Auth] SignUp pressed", {
+      name: name.trim(),
+      email: email.trim(),
+    });
     setLoading(true);
     const { error } = await authClient.signUp.email({
       name: name.trim(),
@@ -43,9 +47,19 @@ export function SignUp() {
     });
     setLoading(false);
     if (error) {
+      console.log("[Auth] SignUp error", {
+        name: name.trim(),
+        email: email.trim(),
+        message: error.message,
+        code: (error as any)?.code,
+      });
       Alert.alert("Sign up failed", error.message || "Could not create account.");
       return;
     }
+    console.log("[Auth] SignUp success", {
+      name: name.trim(),
+      email: email.trim(),
+    });
   };
 
   return (

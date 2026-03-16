@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 const LOGO_LEFT = require('../../assets/logo.png')
 const PADDLE_ICON = require('../../assets/paddle.png')
 
-const HEADER_HEIGHT = 44
+const HEADER_HEIGHT = 56
 const LOGO_HEIGHT = 24
 const PADDLE_HEIGHT = 20
 const HORIZONTAL_PADDING = 16
@@ -58,11 +58,13 @@ function getStyles(theme: any, insets: { top: number; left: number; right: numbe
       alignItems: 'center',
       justifyContent: 'space-between',
       minHeight: HEADER_HEIGHT,
-      paddingTop: Math.max(12, insets.top * 0.5),
+      paddingTop: Math.max(24, insets.top + 8),
       paddingBottom: 12,
       paddingLeft: horizontalPadding,
       paddingRight: horizontalPadding,
       backgroundColor: 'transparent',
+      borderRadius: 0,
+      overflow: 'visible',
       borderBottomWidth: 0,
       borderBottomColor: 'transparent',
       zIndex: 100,

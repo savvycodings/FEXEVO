@@ -30,13 +30,24 @@ export function SignIn() {
       Alert.alert("Error", "Please enter email and password.");
       return;
     }
+    console.log("[Auth] SignIn pressed", {
+      email: email.trim(),
+    });
     setLoading(true);
     const { error } = await authClient.signIn.email({ email: email.trim(), password });
     setLoading(false);
     if (error) {
+      console.log("[Auth] SignIn error", {
+        email: email.trim(),
+        message: error.message,
+        code: (error as any)?.code,
+      });
       Alert.alert("Sign in failed", error.message || "Invalid email or password.");
       return;
     }
+    console.log("[Auth] SignIn success", {
+      email: email.trim(),
+    });
   };
 
   return (

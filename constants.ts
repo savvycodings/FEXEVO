@@ -10,12 +10,14 @@ const normalizeDomain = (value?: string) => {
   return `http://${value}`
 }
 
-const env = (process.env.EXPO_PUBLIC_ENV || 'DEVELOPMENT').toUpperCase()
-const devUrl = process.env.EXPO_PUBLIC_DEV_API_URL
-const prodUrl = process.env.EXPO_PUBLIC_PROD_API_URL
-const rawDomain = env === 'DEVELOPMENT' ? devUrl : prodUrl
+// Always use the explicit backend URL when provided (Railway in your case),
+// otherwise fall back to the prod/dev URLs.
+const backendUrl =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  process.env.EXPO_PUBLIC_PROD_API_URL ||
+  process.env.EXPO_PUBLIC_DEV_API_URL
 
-export const DOMAIN = normalizeDomain(rawDomain || devUrl || prodUrl || '')
+export const DOMAIN = normalizeDomain(backendUrl || '')
 
 export const MODELS = {
   claudeOpus: {

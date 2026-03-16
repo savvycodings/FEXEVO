@@ -29,7 +29,7 @@ LogBox.ignoreLogs([
 
 export default function App() {
   const [theme, setTheme] = useState<string>('vercel')
-  const [chatType, setChatType] = useState<Model>(MODELS.claudeOpus)
+  const [chatType, setChatType] = useState<Model>(MODELS.gpt5Mini)
   const [imageModel, setImageModel] = useState<string>(IMAGE_MODELS.nanoBanana.label)
   const [modalVisible, setModalVisible] = useState<boolean>(false)
     const [fontsLoaded] = useFonts({
@@ -156,15 +156,6 @@ function AuthGate(props: {
   _setImageModel: (m: string) => void
   closeModal: () => void
 }) {
-  const { data: session, isPending } = authClient.useSession()
-  if (isPending) return null
-  if (!session) {
-    return (
-      <NavigationContainer>
-        <Onboarding />
-      </NavigationContainer>
-    )
-  }
   return (
     <AppContext.Provider
       value={{

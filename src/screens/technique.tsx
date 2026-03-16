@@ -1490,12 +1490,12 @@ function getStyles(theme: any) {
     },
     heroGlow: {
       position: 'absolute',
-      top: -100,
+      top: -80,
       left: -40,
       right: -40,
-      height: 260,
-      borderRadius: 260,
-      overflow: 'hidden',
+      height: 320,
+      borderRadius: 0,
+      overflow: 'visible',
       zIndex: -10,
     },
     bulletRow: {
