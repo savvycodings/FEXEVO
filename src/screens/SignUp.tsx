@@ -45,20 +45,27 @@ export function SignUp() {
       email: email.trim(),
       password,
     });
+    const session = await authClient.getSession().catch(() => null);
     setLoading(false);
-    if (error) {
+    if (error || !session) {
       console.log("[Auth] SignUp error", {
         name: name.trim(),
         email: email.trim(),
-        message: error.message,
+        message: error?.message || "No session after sign-up",
         code: (error as any)?.code,
+        hasSession: !!session,
       });
-      Alert.alert("Sign up failed", error.message || "Could not create account.");
+      Alert.alert(
+        "Sign up failed",
+        error?.message || "Could not create account / session. Please try again."
+      );
       return;
     }
     console.log("[Auth] SignUp success", {
       name: name.trim(),
       email: email.trim(),
+      userId: session.user?.id,
+      sessionId: session.session?.id,
     });
   };
 

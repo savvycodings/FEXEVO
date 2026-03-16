@@ -35,18 +35,25 @@ export function SignIn() {
     });
     setLoading(true);
     const { error } = await authClient.signIn.email({ email: email.trim(), password });
+    const session = await authClient.getSession().catch(() => null);
     setLoading(false);
-    if (error) {
+    if (error || !session) {
       console.log("[Auth] SignIn error", {
         email: email.trim(),
-        message: error.message,
+        message: error?.message || "No session after sign-in",
         code: (error as any)?.code,
+        hasSession: !!session,
       });
-      Alert.alert("Sign in failed", error.message || "Invalid email or password.");
+      Alert.alert(
+        "Sign in failed",
+        error?.message || "Could not establish a session. Please try again."
+      );
       return;
     }
     console.log("[Auth] SignIn success", {
       email: email.trim(),
+      userId: session.user?.id,
+      sessionId: session.session?.id,
     });
   };
 

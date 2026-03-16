@@ -156,6 +156,20 @@ function AuthGate(props: {
   _setImageModel: (m: string) => void
   closeModal: () => void
 }) {
+  const { data: session, isPending } = authClient.useSession()
+
+  if (isPending) return null
+
+  // If not signed in, show onboarding stack (Sign In / Sign Up)
+  if (!session) {
+    return (
+      <NavigationContainer>
+        <Onboarding />
+      </NavigationContainer>
+    )
+  }
+
+  // Signed in: show main app + model picker
   return (
     <AppContext.Provider
       value={{
