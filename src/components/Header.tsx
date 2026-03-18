@@ -2,6 +2,7 @@ import {
   StyleSheet,
   View,
   TouchableHighlight,
+  TouchableOpacity,
   Image,
 } from 'react-native'
 import { useContext } from 'react'
@@ -11,12 +12,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 const LOGO_LEFT = require('../../assets/logo.png')
 const PADDLE_ICON = require('../../assets/paddle.png')
 
-const HEADER_HEIGHT = 56
+const HEADER_HEIGHT = 44
 const LOGO_HEIGHT = 24
 const PADDLE_HEIGHT = 20
 const HORIZONTAL_PADDING = 16
 
-export function Header() {
+type HeaderProps = {
+  onLogoPress?: () => void
+}
+
+export function Header({ onLogoPress }: HeaderProps) {
   const insets = useSafeAreaInsets()
   const { theme } = useContext(ThemeContext)
   const { handlePresentModalPress } = useContext(AppContext)
@@ -24,14 +29,19 @@ export function Header() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.left}>
+      <TouchableOpacity
+        onPress={onLogoPress}
+        activeOpacity={onLogoPress ? 0.7 : 1}
+        disabled={!onLogoPress}
+        style={styles.left}
+      >
         <Image
           source={LOGO_LEFT}
           style={styles.logo}
           resizeMode="contain"
           accessibilityLabel="xEVO Padel logo"
         />
-      </View>
+      </TouchableOpacity>
       <TouchableHighlight
         style={styles.rightButton}
         underlayColor="transparent"
@@ -58,7 +68,7 @@ function getStyles(theme: any, insets: { top: number; left: number; right: numbe
       alignItems: 'center',
       justifyContent: 'space-between',
       minHeight: HEADER_HEIGHT,
-      paddingTop: Math.max(24, insets.top + 8),
+      paddingTop: insets.top > 0 ? Math.max(8, insets.top * 0.4) : 8,
       paddingBottom: 12,
       paddingLeft: horizontalPadding,
       paddingRight: horizontalPadding,

@@ -15,15 +15,17 @@ import { ThemeContext } from "../context";
 import { authClient } from "../lib/auth-client";
 import { LinearGradient } from "expo-linear-gradient";
 import { Header } from "../components";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 // @ts-ignore - web + native masked view
 import MaskedView from "@react-native-masked-view/masked-view";
 
 export function SignIn() {
   const { theme } = useContext(ThemeContext);
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const styles = getStyles(theme);
+  const styles = getStyles(theme, insets);
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) {
@@ -35,14 +37,31 @@ export function SignIn() {
     });
     setLoading(true);
     const { error } = await authClient.signIn.email({ email: email.trim(), password });
-    const session = await authClient.getSession().catch(() => null);
-    setLoading(false);
-    if (error || !session) {
+    if (error) {
+      setLoading(false);
       console.log("[Auth] SignIn error", {
         email: email.trim(),
-        message: error?.message || "No session after sign-in",
+        message: error.message,
         code: (error as any)?.code,
-        hasSession: !!session,
+        hasSession: false,
+        hasUser: false,
+        hasSessionId: false,
+      });
+      Alert.alert("Sign in failed", error.message || "Could not establish a session.");
+      return;
+    }
+
+    const sessionResult = await authClient.getSession().catch(() => null);
+    const sessionData: any = (sessionResult as any)?.data ?? sessionResult;
+    setLoading(false);
+    if (!sessionData?.user?.id || !sessionData?.session?.id) {
+      console.log("[Auth] SignIn error", {
+        email: email.trim(),
+        message: "No session after sign-in",
+        code: undefined,
+        hasSession: !!sessionData,
+        hasUser: !!sessionData?.user,
+        hasSessionId: !!sessionData?.session?.id,
       });
       Alert.alert(
         "Sign in failed",
@@ -52,8 +71,8 @@ export function SignIn() {
     }
     console.log("[Auth] SignIn success", {
       email: email.trim(),
-      userId: session.user?.id,
-      sessionId: session.session?.id,
+      userId: sessionData.user.id,
+      sessionId: sessionData.session.id,
     });
   };
 
@@ -135,12 +154,15 @@ export function SignIn() {
   );
 }
 
-function getStyles(theme: any) {
+function getStyles(theme: any, insets: { top: number; left: number; right: number }) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: theme.backgroundColor,
       justifyContent: "flex-start",
+      paddingTop: insets.top,
+      paddingLeft: insets.left,
+      paddingRight: insets.right,
     },
     content: {
       flex: 1,

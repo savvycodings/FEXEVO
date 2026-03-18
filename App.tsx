@@ -21,6 +21,7 @@ import {
 import { StyleSheet, LogBox } from 'react-native'
 import { authClient } from './src/lib/auth-client'
 import { Onboarding } from './src/screens'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
 
 LogBox.ignoreLogs([
   'Key "cancelled" in the image picker result is deprecated and will be removed in SDK 48, use "canceled" instead',
@@ -163,9 +164,11 @@ function AuthGate(props: {
   // If not signed in, show onboarding stack (Sign In / Sign Up)
   if (!session) {
     return (
-      <NavigationContainer>
-        <Onboarding />
-      </NavigationContainer>
+      <SafeAreaProvider>
+        <NavigationContainer>
+          <Onboarding />
+        </NavigationContainer>
+      </SafeAreaProvider>
     )
   }
 

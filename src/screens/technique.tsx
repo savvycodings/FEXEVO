@@ -2,6 +2,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
@@ -14,7 +15,7 @@ import { ThemeContext } from '../context'
 import { DOMAIN } from '../../constants'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
-import { Video } from 'expo-av'
+import { Video, ResizeMode } from 'expo-av'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import FeatherIcon from '@expo/vector-icons/Feather'
 import Svg, {
@@ -27,6 +28,7 @@ import Svg, {
   Filter,
   FeGaussianBlur,
 } from 'react-native-svg'
+import { authClient } from '../lib/auth-client'
 import { LinearGradient } from 'expo-linear-gradient'
 // @ts-ignore - web + native masked view
 import MaskedView from '@react-native-masked-view/masked-view'
@@ -42,18 +44,60 @@ const GRADIENT_COLORS = ['#0022FF', '#00BBFF', '#00BBFF', '#0022FF']
 const GRADIENT_STOPS = ['0%', '30%', '70%', '100%']
 const THUMB_SIZE = 144
 const SCROLLUI_IMAGE = require('../../assets/scrollui.png')
+const COURT_IMAGE = require('../../assets/court.png')
+const BALL_IMAGE = require('../../assets/ball.png')
 
 const PROGRESS_HEIGHT = 6
-const STEP_SEGMENT_COLORS = ['#0022FF', '#005CFF', '#00BBFF'] // step 1, 2, 3 active
+const STEP_SEGMENT_COLORS = ['#0022FF', '#0048FF', '#0078FF', '#009BFF', '#00BBFF']
 const STEP_TITLES = [
+  'Player profile setup.',
+  'Set ranking and level.',
   'Upload or record your Padel video.',
   'Select frame of the video.',
   'Results of the analysis.',
 ]
+const LEVEL_OPTIONS = [
+  'Beginner',
+  'High Beginner',
+  'Low Intermediate',
+  'Intermediate',
+  'High Intermediate',
+  'Low Advanced',
+  'Advanced',
+  'High Advanced',
+  'Competition/Open',
+  'Other',
+]
+const RANKING_ORG_OPTIONS = [
+  'Playtomic',
+  'Redpadel',
+  'USPA',
+  'Spain Federation',
+  'Play by Point',
+]
+const FRAME_SNAP_POINTS = 15
+const DEFAULT_CLIP_HALF_WINDOW_MS = 2000
+
+type TechniqueClip = {
+  id: string
+  startMs: number
+  endMs: number
+}
+
+type RunAnalysisOptions = {
+  navigateOnDone?: boolean
+  resetState?: boolean
+}
 
 export function Technique() {
   const { theme } = useContext(ThemeContext)
   const [step, setStep] = useState(1)
+  const [dominantHand, setDominantHand] = useState<'left' | 'right' | null>(null)
+  const [courtSide, setCourtSide] = useState<'left' | 'right' | null>(null)
+  const [hasRanking, setHasRanking] = useState<boolean | null>(null)
+  const [level, setLevel] = useState<string | null>(null)
+  const [rankingOrg, setRankingOrg] = useState<string | null>(null)
+  const [rankingValue, setRankingValue] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null)
@@ -63,6 +107,7 @@ export function Technique() {
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [analysisJson, setAnalysisJson] = useState<any>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const mainVideoRef = useRef<Video | null>(null)
   const trimVideoRef = useRef<Video | null>(null)
   const [introMode, setIntroMode] = useState(true)
@@ -71,7 +116,13 @@ export function Technique() {
   const [recommendationsOpen, setRecommendationsOpen] = useState(true)
   const [markerProgress, setMarkerProgress] = useState(0.5)
   const [trimTrackWidth, setTrimTrackWidth] = useState(0)
+  const [isTrimPlaying, setIsTrimPlaying] = useState(false)
+  const [currentTrimMs, setCurrentTrimMs] = useState(0)
+  const [clips, setClips] = useState<TechniqueClip[]>([])
   const styles = getStyles(theme)
+  const lastSeekMsRef = useRef(0)
+  const isScrubbingRef = useRef(false)
+  const lastPlaybackUiSyncRef = useRef(0)
 
   const API_BASE = DOMAIN.replace(/\/+$/, '')
   const metrics = analysisJson?.metrics || null
@@ -84,8 +135,94 @@ export function Technique() {
   const SCORE_STROKE = 10
   const scoreCirc = 2 * Math.PI * SCORE_RADIUS
   const scoreProgress = score != null ? score / 10 : 0
+  const analysisReady =
+    analysisJson?.status === 'completed' || analysisJson?.status === 'failed'
+  const canContinueProfileStep1 = dominantHand != null && courtSide != null
+  const canContinueProfileStep2 =
+    hasRanking === false
+      ? !!level
+      : hasRanking === true
+      ? !!rankingOrg && rankingValue.trim().length > 0
+      : false
 
   const STEP2_MAX_LENGTH_SEC = 20
+
+  function clamp01(v: number) {
+    return Math.max(0, Math.min(1, v))
+  }
+
+  function setMarkerProgressStable(next: number) {
+    const p = clamp01(next)
+    setMarkerProgress(prev => (Math.abs(prev - p) < 0.002 ? prev : p))
+  }
+
+  function snapProgress(v: number) {
+    if (FRAME_SNAP_POINTS <= 1) return clamp01(v)
+    const p = clamp01(v)
+    const idx = Math.round(p * (FRAME_SNAP_POINTS - 1))
+    return idx / (FRAME_SNAP_POINTS - 1)
+  }
+
+  function formatTimeFromMs(ms: number) {
+    const totalSec = Math.max(0, Math.floor(ms / 1000))
+    const min = Math.floor(totalSec / 60)
+    const sec = totalSec % 60
+    return `${min}:${sec.toString().padStart(2, '0')}`
+  }
+
+  async function seekTrimToProgress(progress: number) {
+    if (!trimVideoRef.current || videoDurationSeconds == null) return
+    const p = clamp01(progress)
+    const ms = Math.round(videoDurationSeconds * 1000 * p)
+    const now = Date.now()
+    // Keep dragging smooth: avoid flooding seek calls on every pointer move.
+    if (now - lastSeekMsRef.current < 16) return
+    lastSeekMsRef.current = now
+    setCurrentTrimMs(ms)
+    try {
+      await trimVideoRef.current.setStatusAsync({ positionMillis: ms, shouldPlay: false })
+      setIsTrimPlaying(false)
+    } catch {
+      // ignore seek errors while scrubbing
+    }
+  }
+
+  async function toggleTrimPlay() {
+    if (!trimVideoRef.current) return
+    try {
+      await trimVideoRef.current.setStatusAsync({ shouldPlay: !isTrimPlaying, isMuted: true })
+      setIsTrimPlaying(prev => !prev)
+    } catch (err) {
+      console.log('[Technique] toggleTrimPlay error', err)
+    }
+  }
+
+  function getClipRangeFromProgress(progress: number) {
+    if (videoDurationSeconds == null || videoDurationSeconds <= 0) return { startMs: 0, endMs: 0 }
+    const totalMs = videoDurationSeconds * 1000
+    const impactMs = Math.round(totalMs * clamp01(progress))
+    const startMs = Math.max(0, impactMs - DEFAULT_CLIP_HALF_WINDOW_MS * 2)
+    return {
+      startMs,
+      endMs: impactMs,
+    }
+  }
+
+  function addClipAtCurrentMarker() {
+    if (videoDurationSeconds == null || videoDurationSeconds <= 0) return
+    const totalMs = videoDurationSeconds * 1000
+    const { startMs, endMs } = getClipRangeFromProgress(markerProgress)
+    const nextClip: TechniqueClip = {
+      id: `${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      startMs,
+      endMs: Math.max(startMs + 300, Math.min(totalMs, endMs)),
+    }
+    setClips(prev => [...prev, nextClip])
+  }
+
+  function removeClip(id: string) {
+    setClips(prev => prev.filter(c => c.id !== id))
+  }
 
   async function pickVideo() {
     // Prefer camera for recording; fall back to library if needed
@@ -125,13 +262,31 @@ export function Technique() {
     await uploadVideo(f.uri, f.name ?? 'video.mp4', f.mimeType ?? 'video/mp4')
   }
 
-  function uploadVideo(uri: string, fileName: string, mimeType: string): Promise<void> {
-    return new Promise(async (resolve) => {
+  async function pickFromGallery() {
+    const mediaPerm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (mediaPerm.status !== 'granted') return
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: false,
+      quality: 1,
+    })
+    if (result.canceled || !result.assets?.[0]) return
+    await uploadVideo(
+      result.assets[0].uri,
+      result.assets[0].fileName ?? 'video.mp4',
+      result.assets[0].mimeType ?? 'video/mp4'
+    )
+  }
+
+  async function uploadVideo(uri: string, fileName: string, mimeType: string): Promise<void> {
+    try {
       console.log('[Technique] Upload started', { fileName, mimeType })
       setUploading(true)
       setUploadProgress(0)
-      const xhr = new XMLHttpRequest()
+      setUploadError(null)
+
       const formData = new FormData()
+
       if (Platform.OS === 'web') {
         try {
           const res = await fetch(uri)
@@ -141,110 +296,153 @@ export function Technique() {
           formData.append('video', file)
         } catch (err) {
           console.error('[Technique] Failed to load blob for web upload', err)
+          setUploading(false)
+          return
         }
       } else {
         // @ts-ignore - React Native FormData file
         formData.append('video', { uri, name: fileName, type: mimeType })
       }
 
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100)
-          setUploadProgress(pct)
-          if (pct % 25 === 0 || pct === 100) console.log('[Technique] Upload progress', pct + '%')
-        }
-      })
-      xhr.addEventListener('load', () => {
-        setUploading(false)
-        setUploadProgress(100)
-        const status = xhr.status
-        const responseText = xhr.responseText || '{}'
-        console.log('[Technique] Upload response', { status, responseText: responseText.slice(0, 200) })
-        if (status >= 200 && status < 300) {
-          try {
-            const data = JSON.parse(responseText)
-            const url = data?.url
-            const id = data?.id
-            console.log('[Technique] Upload success', { id, url: url ? `${url.slice(0, 50)}...` : '' })
-            if (url) {
-              const absoluteUrl = url.startsWith('http') ? url : `${DOMAIN}${url}`
-              setUploadedVideoUrl(absoluteUrl)
-            }
-            if (id) {
-              setUploadedVideoId(id)
-              console.log('[Technique] Stored uploadedVideoId', id)
-              // After upload, move to step 2 (trim/marker screen)
-              setStep(2)
-            }
-            resolve()
-          } catch (err) {
-            console.error('[Technique] Failed to parse response', err)
-            resolve()
-          }
-        } else {
-          console.error('[Technique] Upload failed with status', status)
-          resolve()
-        }
-      })
-      xhr.addEventListener('error', () => {
-        setUploading(false)
-        console.error('[Technique] Upload XHR error')
-        resolve()
+      const res = await authClient
+        .$fetch<{ id?: string; url?: string; error?: string }>('/technique/upload', {
+          method: 'POST',
+          body: formData,
+        })
+        .catch((err) => {
+          console.error('[Technique] Upload request error', err)
+          return { error: err?.message || 'Upload failed' } as any
+        })
+
+      const data = ((res as any)?.data ?? res) as { id?: string; url?: string; error?: string }
+      const responseText = JSON.stringify(data)
+      console.log('[Technique] Upload response', {
+        status: (res as any)?.status ?? null,
+        responseText: responseText.slice(0, 200),
       })
 
-      xhr.open('POST', `${API_BASE}/technique/upload`)
-      xhr.withCredentials = true
-      xhr.setRequestHeader('Accept', 'application/json')
-      xhr.send(formData)
-    })
+      if (!data?.id) {
+        console.error('[Technique] Upload failed body:', data)
+        setUploadError(data?.error || 'Upload failed. Please try again.')
+        return
+      }
+
+      try {
+        const url = data?.url
+        const id = data?.id
+        console.log('[Technique] Upload success', {
+          id,
+          url: url ? `${url.slice(0, 50)}...` : '',
+        })
+        if (url) {
+          const absoluteUrl = url.startsWith('http') ? url : `${API_BASE}${url}`
+          setUploadedVideoUrl(absoluteUrl)
+        }
+        if (id) {
+          setUploadedVideoId(id)
+          console.log('[Technique] Stored uploadedVideoId', id)
+          setClips([])
+          setMarkerProgress(0.5)
+          setCurrentTrimMs(0)
+          setAnalysisId(null)
+          setAnalysisError(null)
+          setAnalysisJson(null)
+          setIntroMode(false)
+          setStep(4)
+          // Kick off analysis immediately in background while user sets clips.
+          void runAnalysis(id, { navigateOnDone: false, resetState: true })
+        } else {
+          console.log('[Technique] Upload succeeded but no id in response, not advancing to step 2')
+          setUploadError('Upload succeeded but no video id was returned. Please try again.')
+        }
+      } catch (err) {
+        console.error('[Technique] Failed to parse response JSON', err)
+        setUploadError('Upload failed: invalid server response.')
+      }
+    } catch (err) {
+      console.error('[Technique] Upload error', err)
+      setUploadError('Upload failed due to a network error. Please try again.')
+    } finally {
+      setUploading(false)
+      setUploadProgress(100)
+    }
   }
 
-  async function runAnalysis(forcedVideoId?: string) {
+  async function runAnalysis(forcedVideoId?: string, options: RunAnalysisOptions = {}) {
+    if (analysisLoading) return
     const videoId = forcedVideoId ?? uploadedVideoId
     if (!videoId) {
       console.log('[Technique] No uploadedVideoId, cannot analyze')
+       setAnalysisError('Please upload a video before analyzing.')
       return
     }
     try {
       console.log('[Technique] Starting analysis for video', videoId)
       setAnalysisLoading(true)
       setAnalysisError(null)
-      setAnalysisJson(null)
+      if (options.resetState ?? true) {
+        setAnalysisJson(null)
+      }
 
-      const res = await fetch(`${API_BASE}/technique/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ techniqueVideoId: videoId }),
+      const res = await authClient
+        .$fetch<{ analysisId?: string; error?: string }>('/technique/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ techniqueVideoId: videoId }),
+        })
+        .catch((err) => ({ error: err?.message || 'Analyze failed' } as any))
+
+      const body = ((res as any)?.data ?? res) as { analysisId?: string; error?: string }
+      console.log('[Technique] Analyze response', {
+        status: (res as any)?.status ?? null,
+        body,
       })
-      const body = await res.json()
-      console.log('[Technique] Analyze response', { status: res.status, body })
-      if (!res.ok || !body.analysisId) {
-        setAnalysisError(body?.error || 'Analyze failed')
+
+      const analysisId = (body as any)?.analysisId as string | undefined
+      const errorMsg = (body as any)?.error as string | undefined
+
+      if (!analysisId) {
+        setAnalysisError(errorMsg || 'Analyze failed')
         setAnalysisLoading(false)
         return
       }
 
-      const id = body.analysisId as string
+      const id = analysisId
       setAnalysisId(id)
-      setStep(2)
+      setStep(4)
 
       // Poll for analysis result
       const pollStart = Date.now()
       let done = false
       while (!done && Date.now() - pollStart < 600000) {
         await new Promise(r => setTimeout(r, 3000))
-        const pollRes = await fetch(`${API_BASE}/technique/analysis/${id}`, {
-          credentials: 'include',
-          headers: { Accept: 'application/json' },
-        })
-        const pollBody = await pollRes.json()
-        console.log('[Technique] Analysis poll', { status: pollRes.status, body: pollBody })
-        if (!pollRes.ok) {
-          setAnalysisError(pollBody?.error || 'Failed to fetch analysis')
+        const pollRes = await authClient
+          .$fetch<{
+            id?: string
+            status?: string
+            metrics?: any
+            feedbackText?: string
+            error?: string
+          }>(`/technique/analysis/${id}`, {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+          })
+          .catch((err) => ({ error: err?.message || 'Failed to fetch analysis' } as any))
+
+        const pollBody = ((pollRes as any)?.data ?? pollRes) as {
+          id?: string
+          status?: string
+          metrics?: any
+          feedbackText?: string
+          error?: string
+        }
+        console.log('[Technique] Analysis poll', { status: (pollRes as any)?.status ?? null, body: pollBody })
+
+        if (pollBody?.error && !pollBody?.status) {
+          setAnalysisError(pollBody.error || 'Failed to fetch analysis')
           break
         }
         if (pollBody.status === 'completed' || pollBody.status === 'failed') {
@@ -271,8 +469,8 @@ export function Technique() {
       }
 
       setAnalysisLoading(false)
-      if (done) {
-        setStep(3)
+      if (done && (options.navigateOnDone ?? true)) {
+        setStep(5)
       }
     } catch (err: any) {
       console.error('[Technique] runAnalysis error', err)
@@ -324,7 +522,7 @@ export function Technique() {
           Upload your Padel video. Get AI-powered feedback on your serve, bandeja, and movement instantly
           </Text>
           <View style={styles.progressWrapIntro}>
-            {[1, 2, 3].map((i) => (
+            {[1, 2, 3, 4, 5].map((i) => (
               <View
                 key={i}
                 style={[
@@ -337,7 +535,10 @@ export function Technique() {
 
           <TouchableOpacity
             activeOpacity={0.9}
-            onPress={() => setIntroMode(false)}
+            onPress={() => {
+              setStep(1)
+              setIntroMode(false)
+            }}
             style={styles.introCardPrimaryOuter}
           >
             <LinearGradient
@@ -391,6 +592,26 @@ export function Technique() {
               </Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            onPress={async () => {
+              console.log('[Auth] SignOut pressed from Technique intro')
+              await authClient.signOut()
+            }}
+            activeOpacity={0.7}
+            style={{ marginTop: 24, marginBottom: 8 }}
+          >
+            <Text
+              style={{
+                textAlign: 'center',
+                textDecorationLine: 'underline',
+                color: 'rgba(255,255,255,0.6)',
+                fontSize: 13,
+              }}
+            >
+              Sign out
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
     )
@@ -400,7 +621,7 @@ export function Technique() {
     <View style={styles.container}>
       <View style={styles.progressSection}>
         <View style={styles.progressWrap}>
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3, 4, 5].map((i) => (
             <View
               key={i}
               style={[
@@ -420,6 +641,178 @@ export function Technique() {
         keyboardShouldPersistTaps="handled"
       >
         {step === 1 && (
+          <View style={styles.profileCard}>
+            <Text style={styles.profileTitle}>Are you:</Text>
+            <View style={styles.profileChoiceRow}>
+              <TouchableOpacity
+                style={[styles.profileChoicePill, dominantHand === 'left' && styles.profileChoicePillActive]}
+                onPress={() => setDominantHand('left')}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.profileChoiceText, dominantHand === 'left' && styles.profileChoiceTextActive]}>
+                  Left Handed
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.profileChoicePill, dominantHand === 'right' && styles.profileChoicePillActive]}
+                onPress={() => setDominantHand('right')}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.profileChoiceText, dominantHand === 'right' && styles.profileChoiceTextActive]}>
+                  Right Handed
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.profileTitle, { marginTop: 14 }]}>What side of court do you play?</Text>
+            <View style={styles.profileChoiceRow}>
+              <TouchableOpacity
+                style={[styles.profileChoicePill, courtSide === 'left' && styles.profileChoicePillActive]}
+                onPress={() => setCourtSide('left')}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.profileChoiceText, courtSide === 'left' && styles.profileChoiceTextActive]}>
+                  Left
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.profileChoicePill, courtSide === 'right' && styles.profileChoicePillActive]}
+                onPress={() => setCourtSide('right')}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.profileChoiceText, courtSide === 'right' && styles.profileChoiceTextActive]}>
+                  Right
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.courtWrap}>
+              <Image source={COURT_IMAGE} style={styles.courtImage} resizeMode="contain" />
+              {courtSide && (
+                <Image
+                  source={BALL_IMAGE}
+                  style={[
+                    styles.courtBall,
+                    courtSide === 'left' ? { left: 24 } : { right: 24 },
+                  ]}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.profileNextButton, !canContinueProfileStep1 && { opacity: 0.45 }]}
+              onPress={() => setStep(2)}
+              disabled={!canContinueProfileStep1}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={['#0022FF', '#00BBFF']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.profileNextButtonInner}
+              >
+                <Text style={styles.profileNextButtonText}>Set your Ranking</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {step === 2 && (
+          <View style={styles.profileCard}>
+            <Text style={styles.profileTitle}>Set your Ranking</Text>
+            <Text style={styles.profileSubtitle}>Do you have a ranking rating?</Text>
+            <View style={styles.profileChoiceRow}>
+              <TouchableOpacity
+                style={[styles.profileChoicePill, hasRanking === false && styles.profileChoicePillActive]}
+                onPress={() => {
+                  setHasRanking(false)
+                  setRankingOrg(null)
+                  setRankingValue('')
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.profileChoiceText, hasRanking === false && styles.profileChoiceTextActive]}>
+                  No
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.profileChoicePill, hasRanking === true && styles.profileChoicePillActive]}
+                onPress={() => setHasRanking(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.profileChoiceText, hasRanking === true && styles.profileChoiceTextActive]}>
+                  Yes
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {hasRanking === false && (
+              <>
+                <Text style={[styles.profileTitle, { marginTop: 14 }]}>Set your Level</Text>
+                <View style={styles.levelList}>
+                  {LEVEL_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[styles.levelOption, level === opt && styles.levelOptionActive]}
+                      onPress={() => setLevel(opt)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.levelOptionText, level === opt && styles.levelOptionTextActive]}>
+                        {opt}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {hasRanking === true && (
+              <>
+                <Text style={[styles.profileTitle, { marginTop: 14 }]}>Choose ranking source</Text>
+                <View style={styles.rankOrgWrap}>
+                  {RANKING_ORG_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[styles.rankOrgChip, rankingOrg === opt && styles.rankOrgChipActive]}
+                      onPress={() => setRankingOrg(opt)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.rankOrgChipText, rankingOrg === opt && styles.rankOrgChipTextActive]}>
+                        {opt}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TextInput
+                  value={rankingValue}
+                  onChangeText={setRankingValue}
+                  placeholder="Please put your rating"
+                  placeholderTextColor={theme.mutedForegroundColor}
+                  style={styles.rankInput}
+                />
+              </>
+            )}
+
+            <TouchableOpacity
+              style={[styles.profileNextButton, !canContinueProfileStep2 && { opacity: 0.45 }]}
+              onPress={() => setStep(3)}
+              disabled={!canContinueProfileStep2}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={['#0022FF', '#00BBFF']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.profileNextButtonInner}
+              >
+                <Text style={styles.profileNextButtonText}>Go to Upload</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {step === 3 && (
           <View style={styles.step1}>
             {uploading ? (
               <View style={styles.uploadProgressWrap}>
@@ -484,11 +877,12 @@ export function Technique() {
                       </TouchableOpacity>
                       <View style={[styles.frameActionsSpacer, { alignItems: 'flex-end' }]}>
                         <TouchableOpacity
-                          style={styles.chooseFileButton}
-                          onPress={pickDocument}
+                          style={styles.galleryButton}
+                          onPress={pickFromGallery}
                           activeOpacity={0.85}
                         >
-                          <Text style={styles.chooseFileText}>Choose File</Text>
+                          <FeatherIcon name="image" size={14} color="#fff" />
+                          <Text style={styles.galleryButtonText}>Gallery</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -505,7 +899,7 @@ export function Technique() {
           </View>
         )}
 
-        {step === 2 && (
+        {step === 4 && (
           <View style={styles.step2}>
             {/* Centered video thumbnail with gradient border */}
             <View style={styles.step2ThumbnailContainer}>
@@ -535,14 +929,33 @@ export function Technique() {
                     ref={trimVideoRef}
                     source={{ uri: uploadedVideoUrl }}
                     style={styles.step2ThumbnailVideo}
-                    resizeMode="cover"
+                    resizeMode={ResizeMode.COVER}
                     shouldPlay={false}
                     isMuted
-                    onPlaybackStatusUpdate={(e) => {
-                      if (e.status?.isLoaded && typeof e.status.durationMillis === 'number' && videoDurationSeconds == null)
-                        setVideoDurationSeconds(Math.round(e.status.durationMillis / 1000))
-                      if (e.status?.isLoaded === false && e.status?.error) {
-                        console.log('[Technique] Thumbnail video error', e.status.error)
+                    onPlaybackStatusUpdate={(status) => {
+                      if (status.isLoaded && typeof status.durationMillis === 'number' && videoDurationSeconds == null) {
+                        setVideoDurationSeconds(Math.round(status.durationMillis / 1000))
+                      }
+                      if (status.isLoaded) {
+                        // While the user is dragging the timeline, ignore playback-driven UI updates
+                        // so the thumb does not jitter/flicker.
+                        if (isScrubbingRef.current) return
+
+                        const now = Date.now()
+                        if (now - lastPlaybackUiSyncRef.current < 60) return
+                        lastPlaybackUiSyncRef.current = now
+
+                        setCurrentTrimMs(status.positionMillis ?? 0)
+                        setIsTrimPlaying(!!status.isPlaying)
+                        if (videoDurationSeconds != null && videoDurationSeconds > 0 && !status.didJustFinish) {
+                          setMarkerProgressStable((status.positionMillis ?? 0) / (videoDurationSeconds * 1000))
+                        }
+                        if (status.didJustFinish) {
+                          setIsTrimPlaying(false)
+                        }
+                      }
+                      if (!status.isLoaded && 'error' in status && status.error) {
+                        console.log('[Technique] Thumbnail video error', status.error)
                       }
                     }}
                     onError={(err) => {
@@ -561,43 +974,75 @@ export function Technique() {
             <View style={styles.trimCard}>
               <Text style={styles.trimTitle}>Set impact of the ball</Text>
               <Text style={styles.trimSubtitle}>
-                Drag the handle so the ball meets the racket in the center of the frame.
+                Drag the slider. The thumb marks the impact point, and the clip ends at that point.
               </Text>
+              <View style={styles.trimControlsRow}>
+                <TouchableOpacity style={styles.trimPlayButton} onPress={toggleTrimPlay} activeOpacity={0.8}>
+                  <FeatherIcon name={isTrimPlaying ? 'pause' : 'play'} size={16} color="#fff" />
+                  <Text style={styles.trimPlayButtonText}>{isTrimPlaying ? 'Pause' : 'Play'}</Text>
+                </TouchableOpacity>
+                <Text style={styles.trimTimeText}>
+                  {formatTimeFromMs(currentTrimMs)} / {formatTimeFromMs((videoDurationSeconds ?? 0) * 1000)}
+                </Text>
+              </View>
+              {videoDurationSeconds != null && videoDurationSeconds > 0 && (
+                <Text style={styles.trimRangeText}>
+                  Selected clip: {formatTimeFromMs(getClipRangeFromProgress(markerProgress).startMs)} -{' '}
+                  {formatTimeFromMs(getClipRangeFromProgress(markerProgress).endMs)}
+                </Text>
+              )}
               <View
                 style={styles.trimTimeline}
                 onLayout={e => setTrimTrackWidth(e.nativeEvent.layout.width)}
                 onStartShouldSetResponder={() => true}
                 onMoveShouldSetResponder={() => true}
-                onResponderMove={async e => {
-                  if (!trimTrackWidth) return
-                  const x = e.nativeEvent.locationX
-                  const p = Math.max(0, Math.min(1, x / trimTrackWidth))
-                  setMarkerProgress(p)
-                  if (trimVideoRef.current && videoDurationSeconds != null) {
-                    const ms = videoDurationSeconds * 1000 * p
-                    try {
-                      await trimVideoRef.current.setStatusAsync({ positionMillis: ms })
-                    } catch {
-                      // ignore seek errors
-                    }
+                onResponderGrant={() => {
+                  isScrubbingRef.current = true
+                  setIsTrimPlaying(false)
+                  if (trimVideoRef.current) {
+                    void trimVideoRef.current.setStatusAsync({ shouldPlay: false })
                   }
                 }}
-                onResponderRelease={async e => {
+                onResponderMove={e => {
                   if (!trimTrackWidth) return
                   const x = e.nativeEvent.locationX
-                  const p = Math.max(0, Math.min(1, x / trimTrackWidth))
-                  setMarkerProgress(p)
-                  if (trimVideoRef.current && videoDurationSeconds != null) {
-                    const ms = videoDurationSeconds * 1000 * p
-                    try {
-                      await trimVideoRef.current.setStatusAsync({ positionMillis: ms })
-                    } catch {
-                      // ignore seek errors
-                    }
-                  }
+                  const p = snapProgress(x / trimTrackWidth)
+                  setMarkerProgressStable(p)
+                  void seekTrimToProgress(p)
+                }}
+                onResponderRelease={e => {
+                  if (!trimTrackWidth) return
+                  const x = e.nativeEvent.locationX
+                  const p = snapProgress(x / trimTrackWidth)
+                  setMarkerProgressStable(p)
+                  void seekTrimToProgress(p)
+                  // Let one final seek settle before allowing playback updates to drive UI again.
+                  setTimeout(() => {
+                    isScrubbingRef.current = false
+                  }, 80)
+                }}
+                onResponderTerminate={() => {
+                  isScrubbingRef.current = false
                 }}
               >
                 <View style={styles.trimTrack} />
+                {trimTrackWidth > 0 && (
+                  <View
+                    style={[
+                      styles.trimTrackRange,
+                      {
+                        left: getClipRangeFromProgress(markerProgress).startMs / ((videoDurationSeconds ?? 1) * 1000) * trimTrackWidth,
+                        width:
+                          (getClipRangeFromProgress(markerProgress).endMs - getClipRangeFromProgress(markerProgress).startMs) /
+                          ((videoDurationSeconds ?? 1) * 1000) *
+                          trimTrackWidth,
+                      },
+                    ]}
+                  />
+                )}
+                {trimTrackWidth > 0 && (
+                  <View style={[styles.trimTrackActive, { width: markerProgress * trimTrackWidth }]} />
+                )}
                 {trimTrackWidth > 0 && (
                   <View
                     style={[
@@ -607,14 +1052,43 @@ export function Technique() {
                   />
                 )}
               </View>
+              <View style={styles.frameTicksRow}>
+                {Array.from({ length: FRAME_SNAP_POINTS }).map((_, i) => (
+                  <View key={`tick-${i}`} style={styles.frameTick} />
+                ))}
+              </View>
+              <TouchableOpacity style={styles.setClipButton} onPress={addClipAtCurrentMarker} activeOpacity={0.9}>
+                <Text style={styles.setClipButtonText}>Set Clip</Text>
+                <Ionicons name="lock-closed-outline" size={16} color="#0A1120" />
+              </TouchableOpacity>
+              {clips.length > 0 && (
+                <View style={styles.clipsList}>
+                  {clips.map((clip, idx) => (
+                    <View key={clip.id} style={styles.clipRow}>
+                      <Text style={styles.clipText}>
+                        Clip {idx + 1}: {formatTimeFromMs(clip.startMs)} - {formatTimeFromMs(clip.endMs)}
+                      </Text>
+                      <TouchableOpacity onPress={() => removeClip(clip.id)} hitSlop={8}>
+                        <FeatherIcon name="x-circle" size={18} color="rgba(255,255,255,0.75)" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
               <Text style={styles.trimHint}>You can refine this later in future versions.</Text>
             </View>
 
             <TouchableOpacity
               style={styles.analyseButton}
-              onPress={() => runAnalysis()}
+              onPress={() => {
+                if (analysisReady) {
+                  setStep(5)
+                  return
+                }
+                void runAnalysis(undefined, { navigateOnDone: true, resetState: false })
+              }}
               activeOpacity={0.9}
-              disabled={!uploadedVideoId || analysisLoading}
+              disabled={!uploadedVideoId || analysisLoading || clips.length === 0}
             >
               <LinearGradient
                 colors={['#0022FF', '#00BBFF']}
@@ -627,6 +1101,11 @@ export function Technique() {
                     <ActivityIndicator size="small" color="#fff" />
                     <Text style={styles.analyseButtonText}>Analyzing your technique…</Text>
                   </>
+                ) : analysisReady ? (
+                  <>
+                    <Text style={styles.analyseButtonText}>View Results</Text>
+                    <FeatherIcon name="arrow-right" size={20} color="#fff" />
+                  </>
                 ) : (
                   <>
                     <Text style={styles.analyseButtonText}>Analyse Videos</Text>
@@ -635,10 +1114,13 @@ export function Technique() {
                 )}
               </LinearGradient>
             </TouchableOpacity>
+            {clips.length === 0 && (
+              <Text style={styles.addClipRequiredText}>Set at least one clip before analyzing.</Text>
+            )}
           </View>
         )}
 
-        {step === 3 && (
+        {step === 5 && (
           <View style={styles.step2}>
             {/* Centered video thumbnail with gradient border */}
             <View style={styles.step2ThumbnailContainer}>
@@ -667,14 +1149,15 @@ export function Technique() {
                   <Video
                     source={{ uri: uploadedVideoUrl }}
                     style={styles.step2ThumbnailVideo}
-                    resizeMode="cover"
+                      resizeMode={ResizeMode.COVER}
                     shouldPlay={false}
                     isMuted
-                    onPlaybackStatusUpdate={(e) => {
-                      if (e.status?.isLoaded && typeof e.status.durationMillis === 'number' && videoDurationSeconds == null)
-                        setVideoDurationSeconds(Math.round(e.status.durationMillis / 1000))
-                      if (e.status?.isLoaded === false && e.status?.error) {
-                        console.log('[Technique] Thumbnail video error', e.status.error)
+                    onPlaybackStatusUpdate={(status) => {
+                      if (status.isLoaded && typeof status.durationMillis === 'number' && videoDurationSeconds == null) {
+                        setVideoDurationSeconds(Math.round(status.durationMillis / 1000))
+                      }
+                      if (!status.isLoaded && 'error' in status && status.error) {
+                        console.log('[Technique] Thumbnail video error', status.error)
                       }
                     }}
                     onError={(err) => {
@@ -885,7 +1368,7 @@ export function Technique() {
                                 ref={mainVideoRef}
                                 source={{ uri: uploadedVideoUrl }}
                                 style={styles.videoCardPlayer}
-                                resizeMode="contain"
+                                resizeMode={ResizeMode.CONTAIN}
                                 shouldPlay={false}
                                 useNativeControls
                                 onError={(err) => {
@@ -968,6 +1451,154 @@ function getStyles(theme: any) {
     },
     stepContent: { flex: 1 },
     stepContentInner: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 40 },
+    profileCard: {
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: 'rgba(0, 102, 255, 0.4)',
+      backgroundColor: 'rgba(7, 16, 46, 0.9)',
+      padding: 14,
+      gap: 10,
+    },
+    profileTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 22,
+      color: '#FFFFFF',
+    },
+    profileSubtitle: {
+      fontFamily: theme.regularFont,
+      fontSize: 13,
+      color: 'rgba(255,255,255,0.72)',
+      marginTop: -4,
+    },
+    profileChoiceRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 6,
+    },
+    profileChoicePill: {
+      flex: 1,
+      minHeight: 40,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: 'rgba(0, 134, 255, 0.35)',
+      backgroundColor: 'rgba(0, 34, 120, 0.45)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 10,
+    },
+    profileChoicePillActive: {
+      backgroundColor: '#FFFFFF',
+      borderColor: '#FFFFFF',
+    },
+    profileChoiceText: {
+      fontFamily: theme.mediumFont,
+      fontSize: 13,
+      color: '#73A8FF',
+    },
+    profileChoiceTextActive: {
+      color: '#062063',
+    },
+    courtWrap: {
+      marginTop: 6,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: 'rgba(0, 134, 255, 0.3)',
+      backgroundColor: 'rgba(0, 20, 64, 0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      minHeight: 230,
+    },
+    courtImage: {
+      width: 120,
+      height: 210,
+    },
+    courtBall: {
+      position: 'absolute',
+      width: 24,
+      height: 24,
+      bottom: 24,
+    },
+    levelList: {
+      marginTop: 4,
+      gap: 8,
+    },
+    levelOption: {
+      minHeight: 38,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: 'rgba(0, 120, 255, 0.4)',
+      backgroundColor: 'rgba(3, 23, 90, 0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+    },
+    levelOptionActive: {
+      borderColor: '#00BBFF',
+      backgroundColor: 'rgba(0, 108, 255, 0.35)',
+    },
+    levelOptionText: {
+      fontFamily: theme.mediumFont,
+      color: '#79AFFF',
+      fontSize: 13,
+    },
+    levelOptionTextActive: {
+      color: '#FFFFFF',
+    },
+    rankOrgWrap: {
+      marginTop: 4,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    rankOrgChip: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: 'rgba(0, 120, 255, 0.45)',
+      backgroundColor: 'rgba(2, 26, 92, 0.45)',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    rankOrgChipActive: {
+      borderColor: '#00BBFF',
+      backgroundColor: 'rgba(0, 94, 255, 0.38)',
+    },
+    rankOrgChipText: {
+      fontFamily: theme.mediumFont,
+      color: '#79AFFF',
+      fontSize: 12,
+    },
+    rankOrgChipTextActive: {
+      color: '#FFFFFF',
+    },
+    rankInput: {
+      marginTop: 10,
+      minHeight: 44,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: 'rgba(0, 120, 255, 0.4)',
+      backgroundColor: 'rgba(2, 26, 92, 0.45)',
+      color: '#FFFFFF',
+      paddingHorizontal: 12,
+      fontFamily: theme.regularFont,
+      fontSize: 13,
+    },
+    profileNextButton: {
+      marginTop: 10,
+      borderRadius: 999,
+      overflow: 'hidden',
+    },
+    profileNextButtonInner: {
+      minHeight: 46,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 999,
+    },
+    profileNextButtonText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 14,
+      color: '#FFFFFF',
+    },
     step1: { flex: 1, minHeight: 260 },
     frameWrap: { alignItems: 'center', marginTop: 0 },
     frameOuter: { position: 'relative', borderRadius: FRAME_RADIUS + STROKE_WIDTH, overflow: 'hidden' },
@@ -1018,18 +1649,22 @@ function getStyles(theme: any) {
       borderRadius: 12,
       backgroundColor: '#C62828',
     },
-    chooseFileButton: {
-      paddingVertical: 12,
-      paddingHorizontal: 18,
-      borderRadius: 24,
-      backgroundColor: '#fff',
+    galleryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 20,
+      backgroundColor: '#005CFF',
       marginLeft: 16,
+      marginTop: 4,
     },
-    chooseFileText: {
+    galleryButtonText: {
       fontFamily: theme.semiBoldFont,
-      fontSize: 13,
-      color: '#000',
-      flexShrink: 1,
+      fontSize: 12,
+      color: '#fff',
     },
     primaryAction: {
       flexDirection: 'row',
@@ -1375,32 +2010,141 @@ function getStyles(theme: any) {
       color: theme.mutedForegroundColor,
       marginBottom: 16,
     },
+    trimControlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    trimPlayButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 10,
+      backgroundColor: 'rgba(0, 92, 255, 0.35)',
+      borderWidth: 1,
+      borderColor: 'rgba(0, 187, 255, 0.45)',
+    },
+    trimPlayButtonText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 12,
+      color: '#fff',
+    },
+    trimTimeText: {
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      color: theme.mutedForegroundColor,
+    },
+    trimRangeText: {
+      fontFamily: theme.mediumFont,
+      fontSize: 12,
+      color: theme.textColor,
+      marginBottom: 10,
+    },
     trimTimeline: {
-      height: 60,
-      borderRadius: 12,
+      height: 44,
+      borderRadius: 22,
       backgroundColor: 'rgba(0,0,0,0.5)',
       justifyContent: 'center',
-      alignItems: 'center',
       overflow: 'hidden',
+      paddingHorizontal: 4,
     },
     trimTrack: {
-      width: '80%',
+      width: '100%',
       height: 4,
       borderRadius: 2,
       backgroundColor: 'rgba(255,255,255,0.25)',
     },
+    trimTrackRange: {
+      position: 'absolute',
+      top: 20,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: 'rgba(255,255,255,0.95)',
+    },
+    trimTrackActive: {
+      position: 'absolute',
+      left: 0,
+      top: 20,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: '#00BBFF',
+      opacity: 0.9,
+    },
+    frameTicksRow: {
+      marginTop: 10,
+      marginBottom: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 2,
+    },
+    frameTick: {
+      width: 2,
+      height: 10,
+      borderRadius: 1,
+      backgroundColor: 'rgba(255,255,255,0.28)',
+    },
+    setClipButton: {
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: '#fff',
+      borderRadius: 22,
+      paddingHorizontal: 22,
+      paddingVertical: 10,
+      marginBottom: 12,
+    },
+    setClipButtonText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 16,
+      color: '#0A1120',
+    },
+    clipsList: {
+      marginBottom: 6,
+      gap: 8,
+    },
+    clipRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)',
+      backgroundColor: 'rgba(0,0,0,0.25)',
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+    },
+    clipText: {
+      fontFamily: theme.mediumFont,
+      fontSize: 12,
+      color: theme.textColor,
+    },
     trimHandle: {
       position: 'absolute',
-      width: 6,
-      height: 34,
-      borderRadius: 3,
-      backgroundColor: '#00BBFF',
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      top: 13,
+      backgroundColor: '#fff',
+      borderWidth: 2,
+      borderColor: '#00BBFF',
     },
     trimHint: {
       fontFamily: theme.regularFont,
       fontSize: 11,
       color: theme.mutedForegroundColor,
       marginTop: 10,
+    },
+    addClipRequiredText: {
+      marginTop: 8,
+      textAlign: 'center',
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      color: theme.mutedForegroundColor,
     },
     heroTitlePrefix: {
       fontFamily: theme.semiBoldFont,

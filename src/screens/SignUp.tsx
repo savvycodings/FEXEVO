@@ -15,16 +15,18 @@ import { ThemeContext } from "../context";
 import { authClient } from "../lib/auth-client";
 import { LinearGradient } from "expo-linear-gradient";
 import { Header } from "../components";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 // @ts-ignore - web + native masked view
 import MaskedView from "@react-native-masked-view/masked-view";
 
 export function SignUp() {
   const { theme } = useContext(ThemeContext);
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const styles = getStyles(theme);
+  const styles = getStyles(theme, insets);
 
   const handleSignUp = async () => {
     if (!name.trim() || !email.trim() || !password) {
@@ -45,15 +47,33 @@ export function SignUp() {
       email: email.trim(),
       password,
     });
-    const session = await authClient.getSession().catch(() => null);
-    setLoading(false);
-    if (error || !session) {
+    if (error) {
+      setLoading(false);
       console.log("[Auth] SignUp error", {
         name: name.trim(),
         email: email.trim(),
-        message: error?.message || "No session after sign-up",
+        message: error.message,
         code: (error as any)?.code,
-        hasSession: !!session,
+        hasSession: false,
+        hasUser: false,
+        hasSessionId: false,
+      });
+      Alert.alert("Sign up failed", error.message || "Could not create account.");
+      return;
+    }
+
+    const sessionResult = await authClient.getSession().catch(() => null);
+    const sessionData: any = (sessionResult as any)?.data ?? sessionResult;
+    setLoading(false);
+    if (!sessionData?.user?.id || !sessionData?.session?.id) {
+      console.log("[Auth] SignUp error", {
+        name: name.trim(),
+        email: email.trim(),
+        message: "No session after sign-up",
+        code: undefined,
+        hasSession: !!sessionData,
+        hasUser: !!sessionData?.user,
+        hasSessionId: !!sessionData?.session?.id,
       });
       Alert.alert(
         "Sign up failed",
@@ -64,8 +84,8 @@ export function SignUp() {
     console.log("[Auth] SignUp success", {
       name: name.trim(),
       email: email.trim(),
-      userId: session.user?.id,
-      sessionId: session.session?.id,
+      userId: sessionData.user.id,
+      sessionId: sessionData.session.id,
     });
   };
 
@@ -156,12 +176,15 @@ export function SignUp() {
   );
 }
 
-function getStyles(theme: any) {
+function getStyles(theme: any, insets: { top: number; left: number; right: number }) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: theme.backgroundColor,
       justifyContent: "flex-start",
+      paddingTop: insets.top,
+      paddingLeft: insets.left,
+      paddingRight: insets.right,
     },
     content: {
       flex: 1,

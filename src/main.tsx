@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Technique } from './screens'
 import { Header } from './components'
@@ -11,12 +11,13 @@ import { ThemeContext } from './context'
 function MainComponent() {
   const insets = useSafeAreaInsets()
   const { theme } = useContext(ThemeContext)
+  const [techniqueResetKey, setTechniqueResetKey] = useState(0)
   const styles = getStyles({ theme, insets })
   
   return (
     <View style={styles.container}>
-      <Header />
-      <Technique />
+      <Header onLogoPress={() => setTechniqueResetKey(prev => prev + 1)} />
+      <Technique key={techniqueResetKey} />
     </View>
   );
 }
