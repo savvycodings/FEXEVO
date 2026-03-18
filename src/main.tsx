@@ -1,6 +1,6 @@
 import { useContext, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Technique, Profile, ProfileSetup } from './screens'
+import { Technique, Profile } from './screens'
 import { Header } from './components'
 import {
   SafeAreaProvider,
@@ -15,7 +15,7 @@ function MainComponent() {
   const insets = useSafeAreaInsets()
   const { theme } = useContext(ThemeContext)
   const [techniqueResetKey, setTechniqueResetKey] = useState(0)
-  const [activeView, setActiveView] = useState<'technique' | 'profile' | 'profileEdit'>('technique')
+  const [activeView, setActiveView] = useState<'technique' | 'profile'>('technique')
   const [profileName, setProfileName] = useState('Player')
   const [profileRank, setProfileRank] = useState('No rank yet')
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
@@ -67,15 +67,10 @@ function MainComponent() {
       />
       {activeView === 'technique' ? (
         <Technique key={techniqueResetKey} />
-      ) : activeView === 'profile' ? (
-        <Profile onEditProfile={() => setActiveView('profileEdit')} />
       ) : (
-        <ProfileSetup
-          mode="edit"
-          onBack={() => setActiveView('profile')}
-          onComplete={() => {
+        <Profile
+          onProfileUpdated={() => {
             setProfileRefreshTick(prev => prev + 1)
-            setActiveView('profile')
           }}
         />
       )}

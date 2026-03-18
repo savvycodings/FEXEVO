@@ -18,7 +18,8 @@ import { authClient } from "../lib/auth-client";
 import { Header } from "../components";
 import { SignUpDraft } from "./SignUp";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
+import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect, SvgUri } from "react-native-svg";
+import { Asset } from "expo-asset";
 
 const COURT_IMAGE = require("../../assets/court.png");
 const BALL_IMAGE = require("../../assets/ball.png");
@@ -38,11 +39,40 @@ const LEVEL_OPTIONS = [
 
 const RANKING_ORG_OPTIONS = [
   "Playtomic",
-  "Redpadel",
-  "USPA",
+  "Playbypoint",
+  "RankedIn",
+  "MATCHi",
+  "Padel Manager",
+  "Red Padel",
+  "PadelScore",
+  "Tie Player",
   "Spain Federation",
-  "Play by Point",
 ];
+
+const GENDER_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
+
+const RANKING_ORG_LOGOS: Record<string, any> = {
+  Playtomic: require("../../assets/logos/playtomic.svg"),
+  Playbypoint: require("../../assets/logos/playbypoint.svg"),
+  RankedIn: require("../../assets/logos/RankedIn.svg"),
+  MATCHi: require("../../assets/logos/MATCHi.svg"),
+  "Padel Manager": require("../../assets/logos/Padel Manager.svg"),
+  "Red Padel": require("../../assets/logos/Red Padel.svg"),
+  PadelScore: require("../../assets/logos/PadelScore.svg"),
+  "Tie Player": require("../../assets/logos/Tie Player.svg"),
+  "Spain Federation": require("../../assets/logos/Spain Federation.svg"),
+};
+
+function getRankingLogoUri(org: string | null): string | null {
+  if (!org) return null;
+  const moduleRef = RANKING_ORG_LOGOS[org];
+  if (!moduleRef) return null;
+  try {
+    return Asset.fromModule(moduleRef).uri;
+  } catch {
+    return null;
+  }
+}
 
 type ProfileSetupProps = {
   onComplete?: () => void;
@@ -58,11 +88,13 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [displayName, setDisplayName] = useState(signUpDraft?.name ?? "");
+  const [username, setUsername] = useState("");
+  const [gender, setGender] = useState<string | null>(null);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [courtSide, setCourtSide] = useState<"left" | "right" | null>(null);
   const [hasRanking, setHasRanking] = useState<boolean | null>(null);
   const [level, setLevel] = useState<string | null>(null);
-  const [rankingOrg, setRankingOrg] = useState<string | null>(null);
+  const [rankingOrg, setRankingOrg] = useState<string | null>("Playtomic");
   const [rankingValue, setRankingValue] = useState("");
 
   const canContinueStep1 = !!courtSide;
@@ -101,6 +133,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         setHasRanking(body.profile.hasRanking);
       }
       if (body?.profile?.level) setLevel(body.profile.level);
+      if (body?.profile?.username) setUsername(body.profile.username);
+      if (body?.profile?.gender) setGender(body.profile.gender);
       if (body?.profile?.rankingOrg) setRankingOrg(body.profile.rankingOrg);
       if (body?.profile?.rankingValue) setRankingValue(body.profile.rankingValue);
       setLoading(false);
@@ -191,6 +225,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
     if (rankingOrg) form.append("rankingOrg", rankingOrg);
     if (rankingValue.trim()) form.append("rankingValue", rankingValue.trim());
     if (displayName.trim()) form.append("name", displayName.trim());
+    if (isEditMode && username.trim()) form.append("username", username.trim());
+    if (isEditMode && gender) form.append("gender", gender);
     if (avatarUri) {
       if (Platform.OS === "web") {
         try {
@@ -325,6 +361,43 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             />
           </View>
         </View>
+        {isEditMode ? (
+          <>
+            <View>
+              <Text allowFontScaling={false} style={styles.inputLabel}>Username</Text>
+              <TextInput
+                value={username}
+                onChangeText={setUsername}
+                style={styles.input}
+                placeholder="Username"
+                placeholderTextColor={theme.mutedForegroundColor}
+                autoCapitalize="none"
+              />
+            </View>
+            <View>
+              <Text allowFontScaling={false} style={styles.inputLabel}>Gender</Text>
+              <View style={styles.chipWrap}>
+                {GENDER_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.chip, gender === opt && styles.chipActive]}
+                    onPress={() => setGender(opt)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      allowFontScaling={false}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                      style={[styles.chipText, gender === opt && styles.chipTextActive]}
+                    >
+                      {opt}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </>
+        ) : null}
 
         {step === 1 && (
           <View style={styles.card}>
@@ -391,7 +464,6 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         {step === 2 && (
           <View style={styles.card}>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>Set your Ranking</Text>
-          <Text allowFontScaling={false} style={styles.cardSub}>Do you have a ranking rating?</Text>
           <View style={styles.row}>
             <ChoicePill
               label="No"
@@ -406,7 +478,10 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             <ChoicePill
               label="Yes"
               active={hasRanking === true}
-              onPress={() => setHasRanking(true)}
+              onPress={() => {
+                setHasRanking(true);
+                setRankingOrg((prev) => prev || "Playtomic");
+              }}
               styles={styles}
             />
           </View>
@@ -431,7 +506,19 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
 
           {hasRanking === true && (
             <View style={{ gap: 10, marginTop: 12 }}>
-              <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>Choose ranking source</Text>
+              <View style={styles.rankLogoWrap}>
+                {getRankingLogoUri(rankingOrg) ? (
+                  <SvgUri
+                    uri={getRankingLogoUri(rankingOrg) as string}
+                    width={300}
+                    height={64}
+                  />
+                ) : (
+                  <Text allowFontScaling={false} style={styles.rankLogoFallback}>
+                    {rankingOrg || "Playtomic"}
+                  </Text>
+                )}
+              </View>
               <View style={styles.chipWrap}>
                 {RANKING_ORG_OPTIONS.map((opt) => (
                   <TouchableOpacity
@@ -440,7 +527,12 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                     onPress={() => setRankingOrg(opt)}
                     activeOpacity={0.85}
                   >
-                    <Text allowFontScaling={false} style={[styles.chipText, rankingOrg === opt && styles.chipTextActive]}>
+                    <Text
+                      allowFontScaling={false}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                      style={[styles.chipText, rankingOrg === opt && styles.chipTextActive]}
+                    >
                       {opt}
                     </Text>
                   </TouchableOpacity>
@@ -620,7 +712,6 @@ function getStyles(theme: any) {
       gap: 10,
     },
     cardTitle: { fontFamily: theme.semiBoldFont, fontSize: 21, color: "#fff" },
-    cardSub: { fontFamily: theme.regularFont, fontSize: 13, color: "rgba(255,255,255,0.72)" },
     row: { flexDirection: "row", gap: 10 },
     choicePill: {
       flex: 1,
@@ -668,20 +759,37 @@ function getStyles(theme: any) {
     levelOptionActive: { borderColor: "#00BBFF", backgroundColor: "rgba(0, 108, 255, 0.35)" },
     levelText: { fontFamily: theme.mediumFont, color: "#79AFFF", fontSize: 13 },
     levelTextActive: { color: "#fff" },
-    chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
     chip: {
+      width: "48.5%",
       borderRadius: 12,
       borderWidth: 1,
       borderColor: "rgba(0, 120, 255, 0.45)",
       backgroundColor: "rgba(2, 26, 92, 0.45)",
       paddingHorizontal: 12,
       paddingVertical: 8,
+      alignItems: "center",
     },
     chipActive: { borderColor: "#00BBFF", backgroundColor: "rgba(0, 94, 255, 0.38)" },
     chipText: { fontFamily: theme.mediumFont, color: "#79AFFF", fontSize: 12 },
     chipTextActive: { color: "#fff" },
-    primaryOuter: { marginTop: 8, borderRadius: 999, overflow: "hidden" },
-    primaryInner: { minHeight: 46, alignItems: "center", justifyContent: "center", borderRadius: 999 },
+    rankLogoWrap: {
+      marginTop: 2,
+      marginBottom: 2,
+      minHeight: 78,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 10,
+      backgroundColor: "rgba(255,255,255,0.02)",
+    },
+    rankLogoFallback: {
+      color: "#FFFFFF",
+      fontFamily: theme.semiBoldFont,
+      letterSpacing: 1.6,
+      fontSize: 18,
+    },
+    primaryOuter: { borderRadius: 16, overflow: "hidden" },
+    primaryInner: { minHeight: 54, alignItems: "center", justifyContent: "center", borderRadius: 16 },
     primaryText: { fontFamily: theme.semiBoldFont, fontSize: 14, color: "#fff" },
     actionRow: {
       marginTop: 10,

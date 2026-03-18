@@ -309,13 +309,12 @@ function getStyles(theme: any) {
       paddingHorizontal: 4,
     },
     buttonOuter: {
-      borderRadius: 14,
+      borderRadius: 16,
       overflow: "hidden",
-      marginTop: 8,
     },
     button: {
-      borderRadius: 14,
-      paddingVertical: 16,
+      minHeight: 54,
+      borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
     },
