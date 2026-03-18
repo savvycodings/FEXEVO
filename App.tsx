@@ -1,6 +1,6 @@
 import './global.css';
 import 'react-native-gesture-handler'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { NavigationContainer } from '@react-navigation/native'
 import { Main } from './src/main'
 import { useFonts } from 'expo-font'
@@ -158,15 +158,64 @@ function AuthGate(props: {
   closeModal: () => void
 }) {
   const { data: session, isPending } = authClient.useSession()
+  const [profileChecked, setProfileChecked] = useState(false)
+  const [profileComplete, setProfileComplete] = useState(false)
+
+  const checkProfile = useCallback(async () => {
+    if (!session?.user?.id) {
+      setProfileChecked(false)
+      setProfileComplete(false)
+      return
+    }
+    setProfileChecked(false)
+    let isComplete = false
+    // Avoid "bounce-back" race right after final setup save.
+    // On some runs, session appears before profile row is fully visible.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await authClient.$fetch('/profile/me', { method: 'GET' }).catch(() => null)
+      const body: any = (res as any)?.data ?? res
+      if (body?.isComplete) {
+        isComplete = true
+        break
+      }
+      if (attempt < 4) {
+        await new Promise(resolve => setTimeout(resolve, 300))
+      }
+    }
+    setProfileComplete(isComplete)
+    setProfileChecked(true)
+  }, [session?.user?.id])
+
+  useEffect(() => {
+    void checkProfile()
+  }, [checkProfile])
 
   if (isPending) return null
+
+  if (session && !profileChecked) return null
 
   // If not signed in, show onboarding stack (Sign In / Sign Up)
   if (!session) {
     return (
       <SafeAreaProvider>
         <NavigationContainer>
-          <Onboarding />
+          <Onboarding initialRouteName="SignIn" />
+        </NavigationContainer>
+      </SafeAreaProvider>
+    )
+  }
+
+  if (!profileComplete) {
+    return (
+      <SafeAreaProvider>
+        <NavigationContainer>
+          <Onboarding
+            initialRouteName="ProfileSetup"
+            onProfileSetupComplete={() => {
+              setProfileComplete(true)
+              setProfileChecked(true)
+            }}
+          />
         </NavigationContainer>
       </SafeAreaProvider>
     )
@@ -209,3 +258,4 @@ function AuthGate(props: {
     </AppContext.Provider>
   )
 }
+

@@ -15,17 +15,16 @@ import { ThemeContext } from "../context";
 import { authClient } from "../lib/auth-client";
 import { LinearGradient } from "expo-linear-gradient";
 import { Header } from "../components";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 // @ts-ignore - web + native masked view
 import MaskedView from "@react-native-masked-view/masked-view";
+import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
 
 export function SignIn() {
   const { theme } = useContext(ThemeContext);
-  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const styles = getStyles(theme, insets);
+  const styles = getStyles(theme);
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) {
@@ -65,7 +64,7 @@ export function SignIn() {
       });
       Alert.alert(
         "Sign in failed",
-        error?.message || "Could not establish a session. Please try again."
+        "Could not establish a session. Please try again."
       );
       return;
     }
@@ -81,16 +80,33 @@ export function SignIn() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
+      <Svg pointerEvents="none" style={styles.heroGlow}>
+        <Defs>
+          <SvgRadialGradient
+            id="signInRadialBg"
+            cx="50%"
+            cy="-30%"
+            rx="120%"
+            ry="95%"
+          >
+            <Stop offset="0%" stopColor="#071D47" stopOpacity={1} />
+            <Stop offset="100%" stopColor="#071D47" stopOpacity={0} />
+          </SvgRadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#signInRadialBg)" />
+      </Svg>
       <Header />
       <View style={styles.content}>
         <View style={styles.header}>
           {Platform.OS === "web" ? (
-            <Text style={styles.heroTitleTechniqueWeb}>Sign in</Text>
+            <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.heroTitleTechniqueWeb}>
+              Sign in
+            </Text>
           ) : (
             <MaskedView
               style={styles.heroTitleMask}
               maskElement={
-                <Text style={[styles.heroTitleTechnique, { color: "#ffffff" }]}>
+                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={[styles.heroTitleTechnique, { color: "#ffffff" }]}>
                   Sign in
                 </Text>
               }
@@ -100,13 +116,15 @@ export function SignIn() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
-                <Text style={[styles.heroTitleTechnique, { color: "transparent" }]}>
+                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={[styles.heroTitleTechnique, { color: "transparent" }]}>
                   Sign in
                 </Text>
               </LinearGradient>
             </MaskedView>
           )}
-          <Text style={styles.subtitle}>Sign in to your AI padel coach.</Text>
+          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.subtitle}>
+            Sign in to your AI padel coach.
+          </Text>
         </View>
 
         <TextInput
@@ -145,7 +163,7 @@ export function SignIn() {
             {loading ? (
               <ActivityIndicator color={theme.tintTextColor} />
             ) : (
-              <Text style={styles.buttonText}>Sign in</Text>
+              <Text allowFontScaling={false} style={styles.buttonText}>Sign in</Text>
             )}
           </LinearGradient>
         </TouchableOpacity>
@@ -154,15 +172,12 @@ export function SignIn() {
   );
 }
 
-function getStyles(theme: any, insets: { top: number; left: number; right: number }) {
+function getStyles(theme: any) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: theme.backgroundColor,
       justifyContent: "flex-start",
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
     },
     content: {
       flex: 1,
@@ -235,7 +250,12 @@ function getStyles(theme: any, insets: { top: number; left: number; right: numbe
       color: theme.tintTextColor,
     },
     heroGlow: {
-      display: "none",
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 430,
+      opacity: 1,
     },
   });
 }

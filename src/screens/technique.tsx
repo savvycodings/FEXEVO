@@ -48,10 +48,8 @@ const COURT_IMAGE = require('../../assets/court.png')
 const BALL_IMAGE = require('../../assets/ball.png')
 
 const PROGRESS_HEIGHT = 6
-const STEP_SEGMENT_COLORS = ['#0022FF', '#0048FF', '#0078FF', '#009BFF', '#00BBFF']
+const STEP_SEGMENT_COLORS = ['#0022FF', '#005CFF', '#00BBFF']
 const STEP_TITLES = [
-  'Player profile setup.',
-  'Set ranking and level.',
   'Upload or record your Padel video.',
   'Select frame of the video.',
   'Results of the analysis.',
@@ -348,7 +346,7 @@ export function Technique() {
           setAnalysisError(null)
           setAnalysisJson(null)
           setIntroMode(false)
-          setStep(4)
+          setStep(2)
           // Kick off analysis immediately in background while user sets clips.
           void runAnalysis(id, { navigateOnDone: false, resetState: true })
         } else {
@@ -412,7 +410,7 @@ export function Technique() {
 
       const id = analysisId
       setAnalysisId(id)
-      setStep(4)
+      setStep(2)
 
       // Poll for analysis result
       const pollStart = Date.now()
@@ -470,7 +468,7 @@ export function Technique() {
 
       setAnalysisLoading(false)
       if (done && (options.navigateOnDone ?? true)) {
-        setStep(5)
+        setStep(3)
       }
     } catch (err: any) {
       console.error('[Technique] runAnalysis error', err)
@@ -522,7 +520,7 @@ export function Technique() {
           Upload your Padel video. Get AI-powered feedback on your serve, bandeja, and movement instantly
           </Text>
           <View style={styles.progressWrapIntro}>
-            {[1, 2, 3, 4, 5].map((i) => (
+            {[1, 2, 3].map((i) => (
               <View
                 key={i}
                 style={[
@@ -621,7 +619,7 @@ export function Technique() {
     <View style={styles.container}>
       <View style={styles.progressSection}>
         <View style={styles.progressWrap}>
-          {[1, 2, 3, 4, 5].map((i) => (
+          {[1, 2, 3].map((i) => (
             <View
               key={i}
               style={[
@@ -640,7 +638,7 @@ export function Technique() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {step === 1 && (
+        {false && (
           <View style={styles.profileCard}>
             <Text style={styles.profileTitle}>Are you:</Text>
             <View style={styles.profileChoiceRow}>
@@ -687,17 +685,19 @@ export function Technique() {
             </View>
 
             <View style={styles.courtWrap}>
-              <Image source={COURT_IMAGE} style={styles.courtImage} resizeMode="contain" />
-              {courtSide && (
-                <Image
-                  source={BALL_IMAGE}
-                  style={[
-                    styles.courtBall,
-                    courtSide === 'left' ? { left: 24 } : { right: 24 },
-                  ]}
-                  resizeMode="contain"
-                />
-              )}
+              <View style={styles.courtImageArea}>
+                <Image source={COURT_IMAGE} style={styles.courtImage} resizeMode="contain" />
+                {courtSide && (
+                  <Image
+                    source={BALL_IMAGE}
+                    style={[
+                      styles.courtBall,
+                      courtSide === 'left' ? styles.courtBallLeft : styles.courtBallRight,
+                    ]}
+                    resizeMode="contain"
+                  />
+                )}
+              </View>
             </View>
 
             <TouchableOpacity
@@ -718,7 +718,7 @@ export function Technique() {
           </View>
         )}
 
-        {step === 2 && (
+        {false && (
           <View style={styles.profileCard}>
             <Text style={styles.profileTitle}>Set your Ranking</Text>
             <Text style={styles.profileSubtitle}>Do you have a ranking rating?</Text>
@@ -812,7 +812,7 @@ export function Technique() {
           </View>
         )}
 
-        {step === 3 && (
+        {step === 1 && (
           <View style={styles.step1}>
             {uploading ? (
               <View style={styles.uploadProgressWrap}>
@@ -899,7 +899,7 @@ export function Technique() {
           </View>
         )}
 
-        {step === 4 && (
+        {step === 2 && (
           <View style={styles.step2}>
             {/* Centered video thumbnail with gradient border */}
             <View style={styles.step2ThumbnailContainer}>
@@ -1082,7 +1082,7 @@ export function Technique() {
               style={styles.analyseButton}
               onPress={() => {
                 if (analysisReady) {
-                  setStep(5)
+                  setStep(3)
                   return
                 }
                 void runAnalysis(undefined, { navigateOnDone: true, resetState: false })
@@ -1120,7 +1120,7 @@ export function Technique() {
           </View>
         )}
 
-        {step === 5 && (
+        {step === 3 && (
           <View style={styles.step2}>
             {/* Centered video thumbnail with gradient border */}
             <View style={styles.step2ThumbnailContainer}>
@@ -1509,6 +1509,12 @@ function getStyles(theme: any) {
       paddingVertical: 8,
       minHeight: 230,
     },
+    courtImageArea: {
+      width: 120,
+      height: 210,
+      position: 'relative',
+      overflow: 'hidden',
+    },
     courtImage: {
       width: 120,
       height: 210,
@@ -1517,7 +1523,13 @@ function getStyles(theme: any) {
       position: 'absolute',
       width: 24,
       height: 24,
-      bottom: 24,
+      bottom: 20,
+    },
+    courtBallLeft: {
+      left: 12,
+    },
+    courtBallRight: {
+      right: 12,
     },
     levelList: {
       marginTop: 4,

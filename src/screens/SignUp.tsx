@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -12,81 +12,69 @@ import {
 } from "react-native";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
-import { authClient } from "../lib/auth-client";
 import { LinearGradient } from "expo-linear-gradient";
 import { Header } from "../components";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 // @ts-ignore - web + native masked view
 import MaskedView from "@react-native-masked-view/masked-view";
+import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
-export function SignUp() {
+export type SignUpDraft = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+type SignUpProps = {
+  onContinue?: (draft: SignUpDraft) => void;
+  onBack?: () => void;
+  initialDraft?: SignUpDraft | null;
+};
+
+export function SignUp(props?: SignUpProps) {
   const { theme } = useContext(ThemeContext);
-  const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
-  const styles = getStyles(theme, insets);
+  const styles = getStyles(theme);
 
-  const handleSignUp = async () => {
-    if (!name.trim() || !email.trim() || !password) {
-      Alert.alert("Error", "Please fill in name, email, and password.");
+  useEffect(() => {
+    if (!props?.initialDraft) return;
+    setName(props.initialDraft.name || "");
+    setEmail(props.initialDraft.email || "");
+    setPassword(props.initialDraft.password || "");
+  }, [props?.initialDraft]);
+
+  const handleContinue = async () => {
+    const nextErrors: { name?: string; email?: string; password?: string } = {};
+    if (!name.trim()) nextErrors.name = "Name is required.";
+    if (!email.trim()) nextErrors.email = "Email is required.";
+    if (!password) {
+      nextErrors.password = "Password is required.";
+    } else if (password.length < 8) {
+      nextErrors.password = "Password must be at least 8 characters.";
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      Alert.alert("Missing info", "Please fix the highlighted fields.");
       return;
     }
-    if (password.length < 8) {
-      Alert.alert("Error", "Password must be at least 8 characters.");
-      return;
-    }
-    console.log("[Auth] SignUp pressed", {
+    setErrors({});
+
+    console.log("[Auth] SignUp onboarding step complete", {
       name: name.trim(),
       email: email.trim(),
     });
     setLoading(true);
-    const { error } = await authClient.signUp.email({
+    props?.onContinue?.({
       name: name.trim(),
       email: email.trim(),
       password,
     });
-    if (error) {
-      setLoading(false);
-      console.log("[Auth] SignUp error", {
-        name: name.trim(),
-        email: email.trim(),
-        message: error.message,
-        code: (error as any)?.code,
-        hasSession: false,
-        hasUser: false,
-        hasSessionId: false,
-      });
-      Alert.alert("Sign up failed", error.message || "Could not create account.");
-      return;
-    }
-
-    const sessionResult = await authClient.getSession().catch(() => null);
-    const sessionData: any = (sessionResult as any)?.data ?? sessionResult;
     setLoading(false);
-    if (!sessionData?.user?.id || !sessionData?.session?.id) {
-      console.log("[Auth] SignUp error", {
-        name: name.trim(),
-        email: email.trim(),
-        message: "No session after sign-up",
-        code: undefined,
-        hasSession: !!sessionData,
-        hasUser: !!sessionData?.user,
-        hasSessionId: !!sessionData?.session?.id,
-      });
-      Alert.alert(
-        "Sign up failed",
-        error?.message || "Could not create account / session. Please try again."
-      );
-      return;
-    }
-    console.log("[Auth] SignUp success", {
-      name: name.trim(),
-      email: email.trim(),
-      userId: sessionData.user.id,
-      sessionId: sessionData.session.id,
-    });
   };
 
   return (
@@ -94,17 +82,47 @@ export function SignUp() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
+      <Svg pointerEvents="none" style={styles.heroGlow}>
+        <Defs>
+          <SvgRadialGradient
+            id="signUpRadialBg"
+            cx="50%"
+            cy="-30%"
+            rx="120%"
+            ry="95%"
+          >
+            <Stop offset="0%" stopColor="#071D47" stopOpacity={1} />
+            <Stop offset="100%" stopColor="#071D47" stopOpacity={0} />
+          </SvgRadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#signUpRadialBg)" />
+      </Svg>
       <Header />
+      <View style={styles.progressSection}>
+        <View style={styles.progressWrap}>
+          {[1, 2, 3].map((i) => (
+            <View
+              key={i}
+              style={[styles.progressSegment, i <= 1 && styles.progressSegmentActive]}
+            />
+          ))}
+        </View>
+        <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.stepTitle}>
+          Create your account.
+        </Text>
+      </View>
       <View style={styles.content}>
         <View style={styles.header}>
           {Platform.OS === "web" ? (
-            <Text style={styles.heroTitleTechniqueWeb}>Sign up</Text>
+            <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.heroTitleTechniqueWeb}>
+              Create your account
+            </Text>
           ) : (
             <MaskedView
               style={styles.heroTitleMask}
               maskElement={
-                <Text style={[styles.heroTitleTechnique, { color: "#ffffff" }]}>
-                  Sign up
+                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={[styles.heroTitleTechnique, { color: "#ffffff" }]}>
+                  Create your account
                 </Text>
               }
             >
@@ -113,78 +131,118 @@ export function SignUp() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
-                <Text style={[styles.heroTitleTechnique, { color: "transparent" }]}>
-                  Sign up
+                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={[styles.heroTitleTechnique, { color: "transparent" }]}>
+                  Create your account
                 </Text>
               </LinearGradient>
             </MaskedView>
           )}
-          <Text style={styles.subtitle}>Join the best AI padel training experience.</Text>
+          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.subtitle}>
+            Start your onboarding and set up your player profile.
+          </Text>
         </View>
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.name && styles.inputError]}
           placeholder="Name"
           placeholderTextColor={theme.placeholderTextColor}
           value={name}
-          onChangeText={setName}
+          onChangeText={(v) => {
+            setName(v);
+            if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+          }}
           autoComplete="name"
           editable={!loading}
         />
+        {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.email && styles.inputError]}
           placeholder="Email"
           placeholderTextColor={theme.placeholderTextColor}
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(v) => {
+            setEmail(v);
+            if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+          }}
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
           editable={!loading}
         />
+        {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.password && styles.inputError]}
           placeholder="Password (min 8 characters)"
           placeholderTextColor={theme.placeholderTextColor}
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+          }}
           secureTextEntry
           autoComplete="password-new"
           editable={!loading}
         />
+        {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
 
-        <TouchableOpacity
-          style={[styles.buttonOuter, loading && styles.buttonDisabled]}
-          onPress={handleSignUp}
-          disabled={loading}
-        >
-          <LinearGradient
-            colors={["#0022FF", "#00BBFF"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.button}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={props?.onBack}
+            activeOpacity={0.85}
+            accessibilityLabel="Go back"
           >
-            {loading ? (
-              <ActivityIndicator color={theme.tintTextColor} />
-            ) : (
-              <Text style={styles.buttonText}>Sign up</Text>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
+            <Ionicons name="chevron-back" size={22} color="#00BBFF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.buttonOuter, { flex: 1 }, loading && styles.buttonDisabled]}
+            onPress={handleContinue}
+            disabled={loading}
+          >
+            <LinearGradient
+              colors={["#0022FF", "#00BBFF"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.button}
+            >
+              {loading ? (
+                <ActivityIndicator color={theme.tintTextColor} />
+              ) : (
+                <Text allowFontScaling={false} style={styles.buttonText}>Continue</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-function getStyles(theme: any, insets: { top: number; left: number; right: number }) {
+function getStyles(theme: any) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: theme.backgroundColor,
       justifyContent: "flex-start",
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
+    },
+    progressSection: {
+      paddingHorizontal: 24,
+      paddingTop: 16,
+      paddingBottom: 8,
+    },
+    progressWrap: { flexDirection: "row", gap: 8, marginBottom: 12 },
+    progressSegment: {
+      flex: 1,
+      height: 6,
+      borderRadius: 999,
+      backgroundColor: "rgba(255,255,255,0.12)",
+    },
+    progressSegmentActive: { backgroundColor: "#00BBFF" },
+    stepTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 13,
+      color: theme.textColor,
+      marginBottom: 4,
     },
     content: {
       flex: 1,
@@ -237,6 +295,19 @@ function getStyles(theme: any, insets: { top: number; left: number; right: numbe
       backgroundColor: "#0E1830",
       marginBottom: 16,
     },
+    inputError: {
+      borderColor: "#FF5A6A",
+      backgroundColor: "rgba(70, 12, 20, 0.35)",
+      marginBottom: 6,
+    },
+    errorText: {
+      color: "#FF6B7A",
+      fontSize: 12,
+      fontFamily: theme.mediumFont,
+      marginBottom: 10,
+      marginTop: -2,
+      paddingHorizontal: 4,
+    },
     buttonOuter: {
       borderRadius: 14,
       overflow: "hidden",
@@ -256,8 +327,29 @@ function getStyles(theme: any, insets: { top: number; left: number; right: numbe
       fontFamily: theme.semiBoldFont,
       color: theme.tintTextColor,
     },
+    actionRow: {
+      marginTop: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    backButton: {
+      width: 54,
+      height: 54,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(6, 26, 86, 0.9)",
+      borderWidth: 1,
+      borderColor: "rgba(0, 120, 255, 0.45)",
+    },
     heroGlow: {
-      display: "none",
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 430,
+      opacity: 1,
     },
   });
 }

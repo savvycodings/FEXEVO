@@ -4,7 +4,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
 import { SignIn } from "./SignIn";
-import { SignUp } from "./SignUp";
+import { SignUp, SignUpDraft } from "./SignUp";
+import { ProfileSetup } from "./ProfileSetup";
 
 const Stack = createNativeStackNavigator();
 
@@ -26,12 +27,27 @@ function SignInScreen({ navigation }: { navigation: any }) {
   );
 }
 
-function SignUpScreen({ navigation }: { navigation: any }) {
+function SignUpScreen({
+  navigation,
+  onContinue,
+  initialDraft,
+}: {
+  navigation: any;
+  onContinue: (draft: SignUpDraft) => void;
+  initialDraft: SignUpDraft | null;
+}) {
   const { theme } = useContext(ThemeContext);
   const styles = getStyles(theme);
   return (
     <View style={styles.screenContainer}>
-      <SignUp />
+      <SignUp
+        initialDraft={initialDraft}
+        onBack={() => navigation.navigate("SignIn")}
+        onContinue={(draft) => {
+          onContinue(draft);
+          navigation.replace("ProfileSetup");
+        }}
+      />
       <TouchableOpacity
         style={styles.switchLink}
         onPress={() => navigation.navigate("SignIn")}
@@ -44,9 +60,12 @@ function SignUpScreen({ navigation }: { navigation: any }) {
   );
 }
 
-export function Onboarding() {
+export function Onboarding(props?: {
+  initialRouteName?: "SignIn" | "SignUp" | "ProfileSetup";
+  onProfileSetupComplete?: () => void;
+}) {
   const { theme } = useContext(ThemeContext);
-  const styles = getStyles(theme);
+  const [signUpDraft, setSignUpDraft] = useState<SignUpDraft | null>(null);
 
   return (
     <Stack.Navigator
@@ -54,7 +73,7 @@ export function Onboarding() {
         headerShown: false,
         contentStyle: { backgroundColor: theme.backgroundColor },
       }}
-      initialRouteName="SignIn"
+      initialRouteName={props?.initialRouteName || "SignIn"}
     >
       <Stack.Screen
         name="SignIn"
@@ -63,9 +82,30 @@ export function Onboarding() {
       />
       <Stack.Screen
         name="SignUp"
-        component={SignUpScreen}
         options={{ title: "Sign up" }}
-      />
+      >
+        {({ navigation }) => (
+          <SignUpScreen
+            navigation={navigation}
+            initialDraft={signUpDraft}
+            onContinue={(draft) => {
+              setSignUpDraft(draft);
+            }}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen
+        name="ProfileSetup"
+        options={{ title: "Profile setup" }}
+      >
+        {({ navigation }) => (
+          <ProfileSetup
+            signUpDraft={signUpDraft}
+            onBack={() => navigation.replace("SignUp")}
+            onComplete={props?.onProfileSetupComplete}
+          />
+        )}
+      </Stack.Screen>
     </Stack.Navigator>
   );
 }
