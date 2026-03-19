@@ -25,6 +25,8 @@ import Svg, {
   Rect,
   Circle,
   G,
+  Path,
+  ClipPath,
   Filter,
   FeGaussianBlur,
 } from 'react-native-svg'
@@ -46,6 +48,8 @@ const THUMB_SIZE = 144
 const SCROLLUI_IMAGE = require('../../assets/scrollui.png')
 const COURT_IMAGE = require('../../assets/court.png')
 const BALL_IMAGE = require('../../assets/ball.png')
+const CORRECTION_MODE_ICON_GREY = '#6B7F9E'
+const CORRECTION_MODE_ICON_ACTIVE = '#00BBFF'
 
 const PROGRESS_HEIGHT = 6
 const STEP_SEGMENT_COLORS = ['#0022FF', '#005CFF', '#00BBFF']
@@ -87,6 +91,74 @@ type RunAnalysisOptions = {
   resetState?: boolean
 }
 
+type CorrectionModeIconProps = {
+  color: string
+  strokeOpacity?: number
+}
+
+function DragModeIcon({ color, strokeOpacity = 1 }: CorrectionModeIconProps) {
+  return (
+    <Svg width={26} height={26} viewBox="0 0 32 32" fill="none">
+      <G clipPath="url(#drag_clip_a)">
+        <Rect
+          x={3}
+          y={29.5}
+          width={27}
+          height={27}
+          rx={8}
+          transform="rotate(-90 3 29.5)"
+          stroke={color}
+          strokeOpacity={strokeOpacity}
+        />
+      </G>
+      <Path
+        d="M16 22L16 10"
+        stroke={color}
+        strokeOpacity={strokeOpacity}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeDasharray="2 3"
+      />
+      <G clipPath="url(#drag_clip_b)">
+        <Rect
+          width={27}
+          height={27}
+          rx={8}
+          transform="matrix(-4.37114e-08 -1 -1 4.37114e-08 29 29.5)"
+          stroke={color}
+          strokeOpacity={strokeOpacity}
+          strokeWidth={3}
+        />
+      </G>
+      <Defs>
+        <ClipPath id="drag_clip_a">
+          <Rect width={30} height={15} fill="white" transform="translate(1 31) rotate(-90)" />
+        </ClipPath>
+        <ClipPath id="drag_clip_b">
+          <Rect width={30} height={15} fill="white" transform="matrix(-4.37114e-08 -1 -1 4.37114e-08 31 31)" />
+        </ClipPath>
+      </Defs>
+    </Svg>
+  )
+}
+
+function SideBySideModeIcon({ color, strokeOpacity = 1 }: CorrectionModeIconProps) {
+  return (
+    <Svg width={26} height={26} viewBox="0 0 30 31" fill="none">
+      <Rect x={16.5781} y={10.5} width={9} height={9} rx={3} stroke={color} strokeOpacity={strokeOpacity} strokeWidth={2} />
+      <Rect x={4.42188} y={10.5} width={9} height={9} rx={3} stroke={color} strokeOpacity={strokeOpacity} strokeWidth={2} />
+      <Path
+        d="M19.4211 29.5C22.1655 29.5 23.5378 29.5 24.6366 29.1C26.4785 28.4297 27.9297 26.9785 28.6 25.1366C29 24.0378 29 22.6655 29 19.9211M10.5789 29.5C7.83449 29.5 6.46225 29.5 5.36345 29.1C3.52141 28.4297 2.07038 26.9785 1.39993 25.1366C1 24.0378 1 22.6655 1 19.9211M10.5789 1.5C7.83449 1.5 6.46225 1.5 5.36345 1.89993C3.52141 2.57037 2.07038 4.02142 1.39993 5.86345C1 6.96226 1 8.33448 1 11.079M19.4211 1.5C22.1655 1.5 23.5378 1.5 24.6366 1.89993C26.4785 2.57037 27.9297 4.02142 28.6 5.86345C29 6.96226 29 8.33448 29 11.079"
+        stroke={color}
+        strokeOpacity={strokeOpacity}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
 export function Technique() {
   const { theme } = useContext(ThemeContext)
   const [step, setStep] = useState(1)
@@ -117,6 +189,19 @@ export function Technique() {
   const [isTrimPlaying, setIsTrimPlaying] = useState(false)
   const [currentTrimMs, setCurrentTrimMs] = useState(0)
   const [clips, setClips] = useState<TechniqueClip[]>([])
+  const [correctionImages, setCorrectionImages] = useState<
+    Array<{ frame: number; originalImage: string; correctedImage: string }>
+  >([])
+  const [correctionsLoading, setCorrectionsLoading] = useState(false)
+  const [correctionsError, setCorrectionsError] = useState<string | null>(null)
+  const [activeCorrection, setActiveCorrection] = useState(0)
+  /** 0–1: fraction from left showing Current (classic before/after wipe). 0.5 = half & half. */
+  const [compareSplit, setCompareSplit] = useState(0.5)
+  const [correctionViewMode, setCorrectionViewMode] = useState<'sideBySide' | 'drag'>('drag')
+  const [compareCardLayout, setCompareCardLayout] = useState<{
+    width: number
+    height: number
+  } | null>(null)
   const styles = getStyles(theme)
   const lastSeekMsRef = useRef(0)
   const isScrubbingRef = useRef(false)
@@ -345,6 +430,11 @@ export function Technique() {
           setAnalysisId(null)
           setAnalysisError(null)
           setAnalysisJson(null)
+          setCorrectionImages([])
+          setCorrectionsError(null)
+          setActiveCorrection(0)
+          setCompareSplit(0.5)
+          setCorrectionViewMode('drag')
           setIntroMode(false)
           setStep(2)
           // Kick off analysis immediately in background while user sets clips.
@@ -380,6 +470,11 @@ export function Technique() {
       setAnalysisError(null)
       if (options.resetState ?? true) {
         setAnalysisJson(null)
+        setCorrectionImages([])
+        setCorrectionsError(null)
+        setActiveCorrection(0)
+        setCompareSplit(0.5)
+        setCorrectionViewMode('drag')
       }
 
       const res = await authClient
@@ -474,6 +569,57 @@ export function Technique() {
       console.error('[Technique] runAnalysis error', err)
       setAnalysisError(err?.message || 'Analyze error')
       setAnalysisLoading(false)
+    }
+  }
+
+  async function generateCorrectionImages() {
+    if (correctionsLoading || !analysisId) return
+    try {
+      setCorrectionsLoading(true)
+      setCorrectionsError(null)
+
+      const res = await authClient
+        .$fetch<{ corrections?: Array<{ frame: number; originalImage: string; correctedImage: string }>; error?: string }>(
+          '/technique/correction-images',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ analysisId }),
+          }
+        )
+        .catch((err) => ({ error: err?.message || 'Failed to generate corrections' } as any))
+
+      const body = ((res as any)?.data ?? res) as {
+        corrections?: Array<{ frame: number; originalImage: string; correctedImage: string }>
+        error?: unknown
+      }
+
+      if (body?.corrections && body.corrections.length > 0) {
+        setCorrectionImages(body.corrections)
+        setActiveCorrection(0)
+        setCompareSplit(0.5)
+        setCorrectionViewMode('drag')
+      } else {
+        const apiError = body?.error
+        if (typeof apiError === 'string') {
+          setCorrectionsError(apiError)
+        } else if (apiError && typeof apiError === 'object' && typeof (apiError as any).message === 'string') {
+          setCorrectionsError((apiError as any).message)
+        } else {
+          setCorrectionsError('No correction images returned')
+        }
+      }
+    } catch (err: any) {
+      console.error('[Technique] generateCorrectionImages error', err)
+      if (typeof err?.message === 'string') {
+        setCorrectionsError(err.message)
+      } else if (typeof err?.error === 'string') {
+        setCorrectionsError(err.error)
+      } else {
+        setCorrectionsError('Failed to generate corrections')
+      }
+    } finally {
+      setCorrectionsLoading(false)
     }
   }
 
@@ -1178,7 +1324,7 @@ export function Technique() {
                     height={(SCORE_RADIUS + SCORE_STROKE) * 2}
                     style={styles.scoreCircleSvg}
                   >
-                    <G rotation="-90" originX={(SCORE_RADIUS + SCORE_STROKE)} originY={(SCORE_RADIUS + SCORE_STROKE)}>
+                    <G transform={`rotate(-90 ${SCORE_RADIUS + SCORE_STROKE} ${SCORE_RADIUS + SCORE_STROKE})`}>
                       <Circle
                         cx={SCORE_RADIUS + SCORE_STROKE}
                         cy={SCORE_RADIUS + SCORE_STROKE}
@@ -1331,6 +1477,260 @@ export function Technique() {
                         </View>
                       )}
 
+                      {/* Pose Correction Images — flat section, no card stroke */}
+                      {aiAnalysis?.en && (
+                        <View style={styles.correctionSection}>
+                          <View style={styles.correctionSectionTitleRow}>
+                            <Text style={styles.correctionSectionTitle}>Pose Corrections</Text>
+                            {correctionImages.length > 0 && (
+                              <View style={styles.correctionModeIcons}>
+                                <TouchableOpacity
+                                  onPress={() => setCorrectionViewMode('sideBySide')}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                  style={[
+                                    styles.correctionModeIconWrap,
+                                    correctionViewMode === 'sideBySide' && styles.correctionModeIconWrapActive,
+                                  ]}
+                                  activeOpacity={0.85}
+                                >
+                                  <SideBySideModeIcon
+                                    color={
+                                      correctionViewMode === 'sideBySide'
+                                        ? CORRECTION_MODE_ICON_ACTIVE
+                                        : CORRECTION_MODE_ICON_GREY
+                                    }
+                                    strokeOpacity={correctionViewMode === 'sideBySide' ? 1 : 0.65}
+                                  />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => setCorrectionViewMode('drag')}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                  style={[
+                                    styles.correctionModeIconWrap,
+                                    correctionViewMode === 'drag' && styles.correctionModeIconWrapActive,
+                                  ]}
+                                  activeOpacity={0.85}
+                                >
+                                  <DragModeIcon
+                                    color={
+                                      correctionViewMode === 'drag'
+                                        ? CORRECTION_MODE_ICON_ACTIVE
+                                        : CORRECTION_MODE_ICON_GREY
+                                    }
+                                    strokeOpacity={correctionViewMode === 'drag' ? 1 : 0.65}
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.correctionSectionBody}>
+                              {correctionImages.length === 0 && !correctionsLoading && !correctionsError && (
+                                <TouchableOpacity
+                                  style={styles.correctionGenerateButton}
+                                  onPress={generateCorrectionImages}
+                                  activeOpacity={0.9}
+                                >
+                                  <LinearGradient
+                                    colors={['#0022FF', '#00BBFF']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.correctionGenerateButtonInner}
+                                  >
+                                    <FeatherIcon name="zap" size={16} color="#fff" />
+                                    <Text style={styles.correctionGenerateButtonText}>
+                                      Generate Corrected Poses
+                                    </Text>
+                                  </LinearGradient>
+                                </TouchableOpacity>
+                              )}
+
+                              {correctionsLoading && (
+                                <View style={styles.correctionLoadingWrap}>
+                                  <ActivityIndicator size="small" color="#00BBFF" />
+                                  <Text style={styles.correctionLoadingText}>
+                                    Extracting frames & generating corrections…
+                                  </Text>
+                                  <Text style={[styles.correctionLoadingText, { fontSize: 11, marginTop: 4 }]}>
+                                    This may take 30-60 seconds
+                                  </Text>
+                                </View>
+                              )}
+
+                              {correctionsError && (
+                                <View>
+                                  <Text style={[styles.placeholderHint, { color: '#FF6B6B' }]}>
+                                    {correctionsError}
+                                  </Text>
+                                  <TouchableOpacity
+                                    style={[styles.correctionGenerateButton, { marginTop: 8 }]}
+                                    onPress={generateCorrectionImages}
+                                    activeOpacity={0.9}
+                                  >
+                                    <LinearGradient
+                                      colors={['#0022FF', '#00BBFF']}
+                                      start={{ x: 0, y: 0 }}
+                                      end={{ x: 1, y: 1 }}
+                                      style={styles.correctionGenerateButtonInner}
+                                    >
+                                      <Text style={styles.correctionGenerateButtonText}>Retry</Text>
+                                    </LinearGradient>
+                                  </TouchableOpacity>
+                                </View>
+                              )}
+
+                              {correctionImages.length > 0 && (
+                                <View style={styles.correctionCarousel}>
+                                  <View style={styles.correctionTabHeader}>
+                                    <Text style={styles.correctionTabLabel}>Current</Text>
+                                    <Text style={[styles.correctionTabLabel, styles.correctionTabLabelRight]}>
+                                      Corrected
+                                    </Text>
+                                  </View>
+
+                                  {correctionViewMode === 'sideBySide' ? (
+                                    <View style={styles.correctionSideBySideRow}>
+                                      <View style={styles.correctionSideBySideCol}>
+                                        <Image
+                                          key={`side-current-${correctionImages[activeCorrection].frame}`}
+                                          source={{ uri: correctionImages[activeCorrection].originalImage }}
+                                          style={styles.correctionSideBySideImage}
+                                          resizeMode="cover"
+                                        />
+                                      </View>
+                                      <View style={styles.correctionSideBySideCol}>
+                                        <Image
+                                          key={`side-corrected-${correctionImages[activeCorrection].frame}`}
+                                          source={{ uri: correctionImages[activeCorrection].correctedImage }}
+                                          style={styles.correctionSideBySideImage}
+                                          resizeMode="cover"
+                                        />
+                                      </View>
+                                    </View>
+                                  ) : (
+                                    <View
+                                      style={styles.correctionCompareCard}
+                                      onLayout={e => {
+                                        const { width, height } = e.nativeEvent.layout
+                                        if (width > 1 && height > 1) {
+                                          setCompareCardLayout({ width, height })
+                                        }
+                                      }}
+                                      onStartShouldSetResponder={() => true}
+                                      onMoveShouldSetResponder={() => true}
+                                      onResponderGrant={e => {
+                                        const w = compareCardLayout?.width
+                                        if (!w) return
+                                        const split = clamp01(e.nativeEvent.locationX / w)
+                                        setCompareSplit(split)
+                                      }}
+                                      onResponderMove={e => {
+                                        const w = compareCardLayout?.width
+                                        if (!w) return
+                                        const split = clamp01(e.nativeEvent.locationX / w)
+                                        setCompareSplit(split)
+                                      }}
+                                    >
+                                      {compareCardLayout ? (
+                                        <>
+                                          <Image
+                                            key={`corrected-main-${correctionImages[activeCorrection].frame}`}
+                                            source={{ uri: correctionImages[activeCorrection].correctedImage }}
+                                            style={{
+                                              position: 'absolute',
+                                              left: 0,
+                                              top: 0,
+                                              width: compareCardLayout.width,
+                                              height: compareCardLayout.height,
+                                            }}
+                                            resizeMode="cover"
+                                          />
+                                          <View
+                                            style={{
+                                              position: 'absolute',
+                                              left: 0,
+                                              top: 0,
+                                              bottom: 0,
+                                              width: Math.max(0, compareSplit * compareCardLayout.width),
+                                              overflow: 'hidden',
+                                            }}
+                                          >
+                                            <Image
+                                              key={`current-main-${correctionImages[activeCorrection].frame}`}
+                                              source={{ uri: correctionImages[activeCorrection].originalImage }}
+                                              style={{
+                                                position: 'absolute',
+                                                left: 0,
+                                                top: 0,
+                                                width: compareCardLayout.width,
+                                                height: compareCardLayout.height,
+                                              }}
+                                              resizeMode="cover"
+                                            />
+                                          </View>
+                                          <View
+                                            pointerEvents="none"
+                                            style={[
+                                              styles.correctionCompareSliderTrack,
+                                              {
+                                                left: compareSplit * compareCardLayout.width - 28,
+                                              },
+                                            ]}
+                                          >
+                                            <View style={styles.correctionCompareDividerLine} />
+                                            <View style={styles.correctionCompareHandle}>
+                                              <FeatherIcon name="chevron-left" size={16} color="#fff" />
+                                              <FeatherIcon name="chevron-right" size={16} color="#fff" />
+                                            </View>
+                                          </View>
+                                        </>
+                                      ) : null}
+                                    </View>
+                                  )}
+
+                                  {/* Thumbnails below */}
+                                  <View style={styles.correctionThumbsWrap}>
+                                    <ScrollView
+                                      horizontal
+                                      showsHorizontalScrollIndicator={false}
+                                      contentContainerStyle={styles.correctionThumbsRow}
+                                    >
+                                      {correctionImages.slice(0, 5).map((c, idx) => (
+                                        <TouchableOpacity
+                                          key={`thumb-${c.frame}`}
+                                          style={[
+                                            styles.correctionThumbWrap,
+                                            idx === activeCorrection && styles.correctionThumbWrapActive,
+                                          ]}
+                                          onPress={() => {
+                                            setActiveCorrection(idx)
+                                            setCompareSplit(0.5)
+                                          }}
+                                          activeOpacity={0.85}
+                                        >
+                                          <Image
+                                            source={{ uri: c.correctedImage }}
+                                            style={styles.correctionThumbImage}
+                                            resizeMode="cover"
+                                          />
+                                          {idx === activeCorrection && (
+                                            <View style={styles.correctionThumbCheck}>
+                                              <FeatherIcon name="check" size={11} color="#00122D" />
+                                            </View>
+                                          )}
+                                        </TouchableOpacity>
+                                      ))}
+                                    </ScrollView>
+                                    <Text style={styles.correctionCountText}>
+                                      {Math.min(5, correctionImages.length)}{' '}
+                                      {Math.min(5, correctionImages.length) === 1 ? 'Frame' : 'Frames'} Corrected
+                                    </Text>
+                                  </View>
+                                </View>
+                              )}
+                            </View>
+                        </View>
+                      )}
+
                       {/* Fallback text if no AI analysis */}
                       {!aiAnalysis && (
                         <Text style={[styles.placeholderHint, { marginTop: 8 }]}>
@@ -1411,6 +1811,12 @@ export function Technique() {
                     setAnalysisId(null)
                     setAnalysisJson(null)
                     setAnalysisError(null)
+                    setCorrectionImages([])
+                    setCorrectionsError(null)
+                    setCorrectionsLoading(false)
+                    setActiveCorrection(0)
+                    setCompareSplit(0.5)
+                    setCorrectionViewMode('drag')
                     setStep(1)
                   }}
                   activeOpacity={0.85}
@@ -2280,6 +2686,206 @@ function getStyles(theme: any) {
       color: theme.textColor,
       textAlign: 'left',
       marginTop: 2,
+    },
+    correctionGenerateButton: {
+      borderRadius: 14,
+      overflow: 'hidden',
+      marginTop: 4,
+    },
+    correctionGenerateButtonInner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderRadius: 14,
+    },
+    correctionGenerateButtonText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 14,
+      color: '#fff',
+    },
+    correctionLoadingWrap: {
+      alignItems: 'center',
+      paddingVertical: 20,
+      gap: 8,
+    },
+    correctionLoadingText: {
+      fontFamily: theme.regularFont,
+      fontSize: 13,
+      color: theme.mutedForegroundColor,
+      textAlign: 'center',
+    },
+    correctionSection: {
+      width: '100%',
+      marginTop: 20,
+    },
+    correctionSectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+      width: '100%',
+    },
+    correctionSectionTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 15,
+      color: theme.textColor,
+      marginBottom: 0,
+      flexShrink: 1,
+    },
+    correctionModeIcons: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    correctionModeIconWrap: {
+      padding: 6,
+      borderRadius: 10,
+    },
+    correctionModeIconWrapActive: {
+      backgroundColor: 'rgba(0, 187, 255, 0.14)',
+    },
+    correctionSectionBody: {
+      width: '100%',
+    },
+    correctionCarousel: {
+      marginTop: 0,
+    },
+    correctionTabHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+      paddingHorizontal: 32,
+      paddingVertical: 15,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: 'rgba(22, 103, 201, 0.28)',
+      backgroundColor: '#0A1A45',
+    },
+    correctionTabLabel: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 18,
+      color: '#8CB0E2',
+    },
+    correctionTabLabelRight: {
+      color: '#EAF4FF',
+    },
+    correctionCompareCard: {
+      width: '100%',
+      aspectRatio: 9 / 14,
+      borderRadius: 20,
+      overflow: 'hidden',
+      backgroundColor: '#000',
+      position: 'relative',
+    },
+    correctionSideBySideRow: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      gap: 8,
+      width: '100%',
+    },
+    correctionSideBySideCol: {
+      flex: 1,
+      aspectRatio: 9 / 14,
+      borderRadius: 20,
+      overflow: 'hidden',
+      backgroundColor: '#000',
+    },
+    correctionSideBySideImage: {
+      width: '100%',
+      height: '100%',
+    },
+    correctionCompareSliderTrack: {
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
+      width: 56,
+      alignItems: 'center',
+      zIndex: 3,
+    },
+    correctionCompareDividerLine: {
+      position: 'absolute',
+      top: 0,
+      bottom: 30,
+      width: 3,
+      left: 26.5,
+      backgroundColor: '#00BBFF',
+      shadowColor: '#00BBFF',
+      shadowOpacity: 0.45,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 0 },
+    },
+    correctionCompareHandle: {
+      position: 'absolute',
+      bottom: 14,
+      left: 0,
+      width: 56,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: '#00BBFF',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 0,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.35)',
+    },
+    correctionThumbsWrap: {
+      marginTop: 14,
+      width: '100%',
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.08)',
+      backgroundColor: '#0A1635',
+      paddingVertical: 14,
+    },
+    correctionThumbsRow: {
+      flexDirection: 'row',
+      flexGrow: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 12,
+    },
+    correctionThumbWrap: {
+      width: 58,
+      height: 58,
+      borderRadius: 12,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.18)',
+      backgroundColor: '#000',
+      position: 'relative',
+    },
+    correctionThumbWrapActive: {
+      borderColor: '#00BBFF',
+      borderWidth: 2,
+    },
+    correctionThumbImage: {
+      width: '100%',
+      height: '100%',
+    },
+    correctionThumbCheck: {
+      position: 'absolute',
+      right: 3,
+      top: 3,
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#00BBFF',
+    },
+    correctionCountText: {
+      marginTop: 10,
+      textAlign: 'center',
+      fontFamily: theme.semiBoldFont,
+      fontSize: 12,
+      color: '#EAF4FF',
+      letterSpacing: 0.2,
     },
   })
 }
