@@ -7,7 +7,6 @@ import {
   Image,
   TextInput,
   ScrollView,
-  ActivityIndicator,
   Alert,
   Platform,
 } from "react-native";
@@ -87,6 +86,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [submittingOverlay, setSubmittingOverlay] = useState(false);
   const [displayName, setDisplayName] = useState(signUpDraft?.name ?? "");
   const [username, setUsername] = useState("");
   const [gender, setGender] = useState<string | null>(null);
@@ -160,6 +160,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
 
   async function saveProfile() {
     if (!canContinueStep2 || !courtSide) return;
+    setSubmittingOverlay(true);
     setSaving(true);
 
     async function ensureSessionReady(): Promise<boolean> {
@@ -192,6 +193,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
 
         if (!looksLikeExistingUser) {
           setSaving(false);
+          setSubmittingOverlay(false);
           Alert.alert("Sign up failed", error.message || "Could not create account.");
           return;
         }
@@ -202,6 +204,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         });
         if (signInRes?.error) {
           setSaving(false);
+          setSubmittingOverlay(false);
           Alert.alert(
             "Account exists",
             "This email already exists and password did not match. Try signing in."
@@ -213,6 +216,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
       const hasSessionAfterAuth = await ensureSessionReady();
       if (!hasSessionAfterAuth) {
         setSaving(false);
+        setSubmittingOverlay(false);
         Alert.alert("Session error", "Could not establish a session. Please try again.");
         return;
       }
@@ -255,6 +259,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
     setSaving(false);
 
     if (!body?.ok) {
+      setSubmittingOverlay(false);
       Alert.alert("Setup failed", body?.error || "Could not save your profile setup.");
       return;
     }
@@ -262,7 +267,11 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
     onComplete?.();
   }
 
-  if (loading) {
+  if (loading || submittingOverlay) {
+    const loadingTitle = loading ? "Loading profile..." : "Setting up your profile...";
+    const loadingSubtitle = loading
+      ? "Fetching your latest player data."
+      : "Saving your account details and preparing your experience.";
     return (
       <View style={styles.screen}>
         <Svg pointerEvents="none" style={styles.heroGlow}>
@@ -282,7 +291,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         </Svg>
         <Header />
         <View style={styles.loadingWrap}>
-          <ActivityIndicator color="#00BBFF" />
+          <Text allowFontScaling={false} style={styles.loadingTitle}>{loadingTitle}</Text>
+          <Text allowFontScaling={false} style={styles.loadingSubtitle}>{loadingSubtitle}</Text>
         </View>
       </View>
     );
@@ -572,7 +582,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 style={styles.primaryInner}
               >
                 <Text allowFontScaling={false} style={styles.primaryText}>
-                  {saving ? "Saving..." : isEditMode ? "Done" : "Finish Setup"}
+                  {isEditMode ? "Done" : "Finish Setup"}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -646,7 +656,28 @@ function getStyles(theme: any) {
     },
     container: { flex: 1, backgroundColor: theme.backgroundColor },
     content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 40, gap: 10 },
-    loadingWrap: { flex: 1, backgroundColor: theme.backgroundColor, alignItems: "center", justifyContent: "center" },
+    loadingWrap: {
+      flex: 1,
+      backgroundColor: theme.backgroundColor,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 28,
+      gap: 8,
+    },
+    loadingTitle: {
+      color: "#FFFFFF",
+      fontFamily: theme.semiBoldFont,
+      fontSize: 17,
+      textAlign: "center",
+    },
+    loadingSubtitle: {
+      color: "rgba(255,255,255,0.72)",
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: "center",
+      maxWidth: 320,
+    },
     progressSection: {
       paddingHorizontal: 24,
       paddingTop: 16,

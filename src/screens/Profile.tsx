@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Image,
-  ActivityIndicator,
   TouchableOpacity,
   Platform,
   TextInput,
@@ -15,6 +14,7 @@ import { authClient } from "../lib/auth-client";
 import { LinearGradient } from "expo-linear-gradient";
 import { DOMAIN } from "../../constants";
 import * as ImagePicker from "expo-image-picker";
+import { getCachedProfile, setCachedProfile } from "../lib/profile-cache";
 
 type ProfileData = {
   user?: { name?: string; email?: string; image?: string | null };
@@ -41,30 +41,74 @@ export function Profile(props?: { onProfileUpdated?: () => void }) {
   const [usernameInput, setUsernameInput] = useState("");
   const [genderInput, setGenderInput] = useState<string | null>(null);
 
-  async function load() {
-    setLoading(true);
+  function applyProfileBody(body: ProfileData) {
+    setData(body);
+    setNameInput(body.user?.name || "");
+    setUsernameInput(body.profile?.username || "");
+    setGenderInput(body.profile?.gender || null);
+    const rawImage = body.user?.image;
+    if (typeof rawImage === "string" && rawImage.length > 0) {
+      const normalized = rawImage.startsWith("http")
+        ? rawImage
+        : `${DOMAIN.replace(/\/+$/, "")}${rawImage}`;
+      setProfileImageUri(`${normalized}${normalized.includes("?") ? "&" : "?"}t=${Date.now()}`);
+    } else {
+      setProfileImageUri(null);
+    }
+  }
+
+  async function loadRemote(opts?: { showLoading?: boolean }) {
+    if (opts?.showLoading) setLoading(true);
     const res = await authClient.$fetch("/profile/me", { method: "GET" }).catch(() => null);
     const body = ((res as any)?.data ?? res) as ProfileData | null;
     if (body) {
-      setData(body);
-      setNameInput(body.user?.name || "");
-      setUsernameInput(body.profile?.username || "");
-      setGenderInput(body.profile?.gender || null);
-      const rawImage = body.user?.image;
-      if (typeof rawImage === "string" && rawImage.length > 0) {
-        const normalized = rawImage.startsWith("http")
-          ? rawImage
-          : `${DOMAIN.replace(/\/+$/, "")}${rawImage}`;
-        setProfileImageUri(`${normalized}${normalized.includes("?") ? "&" : "?"}t=${Date.now()}`);
-      } else {
-        setProfileImageUri(null);
-      }
+      applyProfileBody(body);
+      void setCachedProfile({
+        user: {
+          name: body.user?.name || null,
+          email: body.user?.email || null,
+          image: body.user?.image || null,
+        },
+        profile: {
+          username: body.profile?.username || null,
+          gender: body.profile?.gender || null,
+          level: body.profile?.level || null,
+          rankingOrg: body.profile?.rankingOrg || null,
+          rankingValue: body.profile?.rankingValue || null,
+        },
+      });
     }
-    setLoading(false);
+    if (opts?.showLoading) setLoading(false);
   }
 
   useEffect(() => {
-    void load();
+    let mounted = true;
+    async function loadWithCacheFirst() {
+      const cached = await getCachedProfile();
+      if (mounted && cached?.user) {
+        applyProfileBody({
+          user: {
+            name: cached.user?.name || undefined,
+            email: cached.user?.email || undefined,
+            image: cached.user?.image || null,
+          },
+          profile: {
+            username: cached.profile?.username || null,
+            gender: cached.profile?.gender || null,
+            level: cached.profile?.level || null,
+            rankingOrg: cached.profile?.rankingOrg || null,
+            rankingValue: cached.profile?.rankingValue || null,
+          },
+        });
+        setLoading(false);
+      }
+      await loadRemote({ showLoading: !cached });
+      if (mounted) setLoading(false);
+    }
+    void loadWithCacheFirst();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   async function pickAndUploadAvatar() {
@@ -97,7 +141,7 @@ export function Profile(props?: { onProfileUpdated?: () => void }) {
         method: "POST",
         body: form,
       });
-      await load();
+      await loadRemote();
       props?.onProfileUpdated?.();
     } finally {
       setAvatarSaving(false);
@@ -128,17 +172,8 @@ export function Profile(props?: { onProfileUpdated?: () => void }) {
       Alert.alert("Save failed", body?.error || "Could not save profile.");
       return;
     }
-    await load();
+    await loadRemote();
     props?.onProfileUpdated?.();
-    setEditMode(false);
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator color="#00BBFF" />
-      </View>
-    );
   }
 
   const levelText =
@@ -152,79 +187,118 @@ export function Profile(props?: { onProfileUpdated?: () => void }) {
       <View style={styles.card}>
         <View style={styles.identityBlock}>
           <TouchableOpacity style={styles.avatarWrap} onPress={pickAndUploadAvatar} activeOpacity={0.85}>
-          {profileImageUri ? (
+          {!loading && profileImageUri ? (
             <Image source={{ uri: profileImageUri }} style={styles.avatar} resizeMode="cover" />
             ) : (
-              <Text style={styles.avatarFallback}>
-                {(data.user?.name || "U").slice(0, 1).toUpperCase()}
-              </Text>
+              loading ? (
+                <View style={[styles.skeletonBase, styles.skeletonAvatar]} />
+              ) : (
+                <Text style={styles.avatarFallback}>
+                  {(data.user?.name || "U").slice(0, 1).toUpperCase()}
+                </Text>
+              )
             )}
             {avatarSaving ? <Text style={styles.avatarSavingText}>...</Text> : null}
           </TouchableOpacity>
           <View style={styles.identityText}>
-          <Text style={styles.name}>{data.user?.name || "Player"}</Text>
-          {data.profile?.username ? <Text style={styles.username}>@{data.profile.username}</Text> : null}
-          <Text style={styles.email}>{data.user?.email || "-"}</Text>
+          {loading ? (
+            <>
+              <View style={[styles.skeletonBase, styles.skeletonName]} />
+              <View style={[styles.skeletonBase, styles.skeletonUsername]} />
+              <View style={[styles.skeletonBase, styles.skeletonEmail]} />
+            </>
+          ) : (
+            <>
+              <Text style={styles.name}>{data.user?.name || "Player"}</Text>
+              {data.profile?.username ? <Text style={styles.username}>@{data.profile.username}</Text> : null}
+              <Text style={styles.email}>{data.user?.email || "-"}</Text>
+            </>
+          )}
           </View>
         </View>
-        <View style={styles.levelChip}>
-          <Text style={styles.levelChipText}>Level: {levelText}</Text>
-        </View>
-        {data.profile?.gender ? (
-          <View style={[styles.levelChip, { marginTop: -2 }]}>
-            <Text style={styles.levelChipText}>Gender: {data.profile.gender}</Text>
-          </View>
-        ) : null}
+        {loading ? (
+          <>
+            <View style={[styles.skeletonBase, styles.skeletonChip]} />
+            <View style={[styles.skeletonBase, styles.skeletonChip]} />
+          </>
+        ) : (
+          <>
+            <View style={styles.levelChip}>
+              <Text style={styles.levelChipText}>Level: {levelText}</Text>
+            </View>
+            {data.profile?.gender ? (
+              <View style={[styles.levelChip, { marginTop: -2 }]}>
+                <Text style={styles.levelChipText}>Gender: {data.profile.gender}</Text>
+              </View>
+            ) : null}
+          </>
+        )}
         <View style={styles.editCard}>
           <View>
             <Text style={styles.inputLabel}>Name</Text>
-            <TextInput
-              value={nameInput}
-              onChangeText={setNameInput}
-              style={styles.input}
-              placeholder="Your name"
-              placeholderTextColor={theme.mutedForegroundColor}
-            />
+            {loading ? (
+              <View style={[styles.skeletonBase, styles.skeletonInput]} />
+            ) : (
+              <TextInput
+                value={nameInput}
+                onChangeText={setNameInput}
+                style={styles.input}
+                placeholder="Your name"
+                placeholderTextColor={theme.mutedForegroundColor}
+              />
+            )}
           </View>
           <View>
             <Text style={styles.inputLabel}>Username</Text>
-            <TextInput
-              value={usernameInput}
-              onChangeText={setUsernameInput}
-              style={styles.input}
-              placeholder="Username"
-              placeholderTextColor={theme.mutedForegroundColor}
-              autoCapitalize="none"
-            />
+            {loading ? (
+              <View style={[styles.skeletonBase, styles.skeletonInput]} />
+            ) : (
+              <TextInput
+                value={usernameInput}
+                onChangeText={setUsernameInput}
+                style={styles.input}
+                placeholder="Username"
+                placeholderTextColor={theme.mutedForegroundColor}
+                autoCapitalize="none"
+              />
+            )}
           </View>
           <View>
             <Text style={styles.inputLabel}>Gender</Text>
-            <View style={styles.chipWrap}>
-              {GENDER_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[styles.chip, genderInput === opt && styles.chipActive]}
-                  onPress={() => setGenderInput(opt)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.chipText, genderInput === opt && styles.chipTextActive]}>{opt}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {loading ? (
+              <View style={styles.chipWrap}>
+                {GENDER_OPTIONS.map((opt) => (
+                  <View key={opt} style={[styles.skeletonBase, styles.skeletonChipOption]} />
+                ))}
+              </View>
+            ) : (
+              <View style={styles.chipWrap}>
+                {GENDER_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.chip, genderInput === opt && styles.chipActive]}
+                    onPress={() => setGenderInput(opt)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.chipText, genderInput === opt && styles.chipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
           <View style={styles.actionRow}>
             <TouchableOpacity
-              style={[styles.secondaryBtn, saving && { opacity: 0.5 }]}
+              style={[styles.secondaryBtn, (saving || loading) && { opacity: 0.5 }]}
               onPress={resetEditDraft}
-              disabled={saving}
+              disabled={saving || loading}
               activeOpacity={0.85}
             >
               <Text style={styles.secondaryBtnText}>Reset</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.saveOuter, saving && { opacity: 0.5 }]}
+              style={[styles.saveOuter, (saving || loading) && { opacity: 0.5 }]}
               onPress={saveBasicProfile}
-              disabled={saving}
+              disabled={saving || loading}
               activeOpacity={0.85}
             >
               <LinearGradient
@@ -243,6 +317,7 @@ export function Profile(props?: { onProfileUpdated?: () => void }) {
             await authClient.signOut().catch(() => null);
           }}
           style={[styles.refreshBtn, { marginTop: 4, borderColor: "rgba(255,80,95,0.6)" }]}
+          disabled={loading}
           activeOpacity={0.8}
         >
           <Text style={[styles.refreshBtnText, { color: "#FF8A95" }]}>Sign out</Text>
@@ -255,7 +330,6 @@ export function Profile(props?: { onProfileUpdated?: () => void }) {
 function getStyles(theme: any) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.backgroundColor, paddingHorizontal: 24, paddingTop: 20 },
-    loadingWrap: { flex: 1, backgroundColor: theme.backgroundColor, alignItems: "center", justifyContent: "center" },
     card: {
       borderRadius: 18,
       borderWidth: 1,
@@ -292,6 +366,48 @@ function getStyles(theme: any) {
       fontSize: 12,
     },
     avatar: { width: 86, height: 86 },
+    skeletonBase: {
+      backgroundColor: "rgba(255,255,255,0.12)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.08)",
+    },
+    skeletonAvatar: {
+      width: 86,
+      height: 86,
+      borderRadius: 43,
+    },
+    skeletonName: {
+      width: 128,
+      height: 20,
+      borderRadius: 8,
+      marginBottom: 6,
+    },
+    skeletonUsername: {
+      width: 104,
+      height: 14,
+      borderRadius: 7,
+      marginBottom: 6,
+    },
+    skeletonEmail: {
+      width: 168,
+      height: 14,
+      borderRadius: 7,
+    },
+    skeletonChip: {
+      width: 140,
+      height: 30,
+      borderRadius: 999,
+      marginTop: 4,
+    },
+    skeletonInput: {
+      minHeight: 42,
+      borderRadius: 12,
+    },
+    skeletonChipOption: {
+      width: "48.5%",
+      height: 36,
+      borderRadius: 12,
+    },
     avatarFallback: { color: "#fff", fontFamily: theme.semiBoldFont, fontSize: 26 },
     name: { color: "#fff", fontFamily: theme.semiBoldFont, fontSize: 22 },
     username: { color: "#8DBBFF", fontFamily: theme.mediumFont, fontSize: 13, marginTop: -2 },

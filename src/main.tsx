@@ -10,6 +10,7 @@ import { ThemeContext } from './context'
 import { authClient } from './lib/auth-client'
 import { DOMAIN } from '../constants'
 import { useEffect } from 'react'
+import { getCachedProfile, setCachedProfile } from './lib/profile-cache'
 
 function MainComponent() {
   const insets = useSafeAreaInsets()
@@ -21,6 +22,36 @@ function MainComponent() {
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
   const [profileRefreshTick, setProfileRefreshTick] = useState(0)
   const styles = getStyles({ theme, insets })
+
+  useEffect(() => {
+    let mounted = true
+    async function loadProfileFromCache() {
+      const cached = await getCachedProfile()
+      if (!mounted || !cached?.user) return
+
+      setProfileName(cached.user?.name || 'Player')
+      const levelText =
+        cached?.profile?.level ||
+        (cached?.profile?.rankingOrg && cached?.profile?.rankingValue
+          ? `${cached.profile.rankingOrg}: ${cached.profile.rankingValue}`
+          : 'No rank yet')
+      setProfileRank(levelText)
+
+      const rawImage = cached.user?.image
+      if (typeof rawImage === 'string' && rawImage.length > 0) {
+        const normalized = rawImage.startsWith('http')
+          ? rawImage
+          : `${DOMAIN.replace(/\/+$/, '')}${rawImage}`
+        setProfileImageUri(`${normalized}${normalized.includes('?') ? '&' : '?'}t=${Date.now()}`)
+      } else {
+        setProfileImageUri(null)
+      }
+    }
+    void loadProfileFromCache()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -46,12 +77,27 @@ function MainComponent() {
       } else {
         setProfileImageUri(null)
       }
+
+      void setCachedProfile({
+        user: {
+          name: body.user?.name || null,
+          email: body.user?.email || null,
+          image: body.user?.image || null,
+        },
+        profile: {
+          username: body?.profile?.username || null,
+          gender: body?.profile?.gender || null,
+          level: body?.profile?.level || null,
+          rankingOrg: body?.profile?.rankingOrg || null,
+          rankingValue: body?.profile?.rankingValue || null,
+        },
+      })
     }
     void loadProfile()
     return () => {
       mounted = false
     }
-  }, [activeView, profileRefreshTick])
+  }, [profileRefreshTick])
   
   return (
     <View style={styles.container}>

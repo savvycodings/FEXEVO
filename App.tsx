@@ -1,6 +1,6 @@
 import './global.css';
 import 'react-native-gesture-handler'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { NavigationContainer } from '@react-navigation/native'
 import { Main } from './src/main'
 import { useFonts } from 'expo-font'
@@ -18,10 +18,11 @@ import {
   BottomSheetModalProvider,
   BottomSheetView,
 } from '@gorhom/bottom-sheet'
-import { StyleSheet, LogBox } from 'react-native'
+import { StyleSheet, LogBox, View, Text } from 'react-native'
 import { authClient } from './src/lib/auth-client'
 import { Onboarding } from './src/screens'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { Header } from './src/components'
 
 LogBox.ignoreLogs([
   'Key "cancelled" in the image picker result is deprecated and will be removed in SDK 48, use "canceled" instead',
@@ -157,6 +158,7 @@ function AuthGate(props: {
   _setImageModel: (m: string) => void
   closeModal: () => void
 }) {
+  const { theme } = useContext(ThemeContext)
   const { data: session, isPending } = authClient.useSession()
   const [profileChecked, setProfileChecked] = useState(false)
   const [profileComplete, setProfileComplete] = useState(false)
@@ -190,9 +192,15 @@ function AuthGate(props: {
     void checkProfile()
   }, [checkProfile])
 
-  if (isPending) return null
-
-  if (session && !profileChecked) return null
+  if (session && (isPending || !profileChecked)) {
+    return (
+      <AuthLoadingScreen
+        theme={theme}
+        title="Finalizing your account"
+        subtitle="Syncing your profile and preparing your Technique workspace."
+      />
+    )
+  }
 
   // If not signed in, show onboarding stack (Sign In / Sign Up)
   if (!session) {
@@ -226,10 +234,10 @@ function AuthGate(props: {
     <AppContext.Provider
       value={{
         chatType: props.chatType,
-        setChatType: props._setChatType,
+        setChatType: props._setChatType as any,
         handlePresentModalPress: props.handlePresentModalPress,
         imageModel: props.imageModel,
-        setImageModel: props._setImageModel,
+        setImageModel: props._setImageModel as any,
         closeModal: props.closeModal,
       }}
     >
@@ -258,4 +266,60 @@ function AuthGate(props: {
     </AppContext.Provider>
   )
 }
+
+function AuthLoadingScreen({
+  theme,
+  title,
+  subtitle,
+}: {
+  theme: any
+  title: string
+  subtitle: string
+}) {
+  const styles = getAuthLoadingStyles(theme)
+  return (
+    <SafeAreaProvider>
+      <View style={styles.screen}>
+        <Header />
+        <View style={styles.centerContent}>
+          <Text allowFontScaling={false} style={styles.title}>
+            {title}
+          </Text>
+          <Text allowFontScaling={false} style={styles.subtitle}>
+            {subtitle}
+          </Text>
+        </View>
+      </View>
+    </SafeAreaProvider>
+  )
+}
+
+const getAuthLoadingStyles = (theme: any) =>
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: theme.backgroundColor,
+    },
+    centerContent: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 28,
+      gap: 12,
+    },
+    title: {
+      color: '#FFFFFF',
+      fontFamily: theme.semiBoldFont,
+      fontSize: 18,
+      textAlign: 'center',
+    },
+    subtitle: {
+      color: 'rgba(255,255,255,0.74)',
+      fontFamily: theme.regularFont,
+      fontSize: 13,
+      textAlign: 'center',
+      lineHeight: 19,
+      maxWidth: 320,
+    },
+  })
 
