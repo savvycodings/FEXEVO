@@ -6,6 +6,7 @@ import { ThemeContext } from "../context";
 import { SignIn } from "./SignIn";
 import { SignUp, SignUpDraft } from "./SignUp";
 import { ProfileSetup } from "./ProfileSetup";
+import { AccountCreated } from "./AccountCreated";
 
 const Stack = createNativeStackNavigator();
 
@@ -45,7 +46,7 @@ function SignUpScreen({
         onBack={() => navigation.navigate("SignIn")}
         onContinue={(draft) => {
           onContinue(draft);
-          navigation.replace("ProfileSetup");
+          navigation.replace("AccountCreated");
         }}
       />
       <TouchableOpacity
@@ -61,7 +62,7 @@ function SignUpScreen({
 }
 
 export function Onboarding(props?: {
-  initialRouteName?: "SignIn" | "SignUp" | "ProfileSetup";
+  initialRouteName?: "SignIn" | "SignUp" | "AccountCreated" | "ProfileSetup";
   onProfileSetupComplete?: () => void;
 }) {
   const { theme } = useContext(ThemeContext);
@@ -90,6 +91,18 @@ export function Onboarding(props?: {
             initialDraft={signUpDraft}
             onContinue={(draft) => {
               setSignUpDraft(draft);
+            }}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen
+        name="AccountCreated"
+        options={{ title: "Account created" }}
+      >
+        {({ navigation }) => (
+          <AccountCreated
+            onDone={() => {
+              navigation.replace("ProfileSetup");
             }}
           />
         )}

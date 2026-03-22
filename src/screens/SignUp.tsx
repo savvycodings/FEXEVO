@@ -9,15 +9,15 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Header } from "../components";
-// @ts-ignore - web + native masked view
-import MaskedView from "@react-native-masked-view/masked-view";
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
 import Ionicons from "@expo/vector-icons/Ionicons";
+
+const APP_LOGO = require("../../assets/logo.png");
 
 export type SignUpDraft = {
   name: string;
@@ -36,7 +36,8 @@ export function SignUp(props?: SignUpProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({});
   const [loading, setLoading] = useState(false);
   const styles = getStyles(theme);
 
@@ -45,16 +46,22 @@ export function SignUp(props?: SignUpProps) {
     setName(props.initialDraft.name || "");
     setEmail(props.initialDraft.email || "");
     setPassword(props.initialDraft.password || "");
+    setConfirmPassword(props.initialDraft.password || "");
   }, [props?.initialDraft]);
 
   const handleContinue = async () => {
-    const nextErrors: { name?: string; email?: string; password?: string } = {};
+    const nextErrors: { name?: string; email?: string; password?: string; confirmPassword?: string } = {};
     if (!name.trim()) nextErrors.name = "Name is required.";
     if (!email.trim()) nextErrors.email = "Email is required.";
     if (!password) {
       nextErrors.password = "Password is required.";
     } else if (password.length < 8) {
       nextErrors.password = "Password must be at least 8 characters.";
+    }
+    if (!confirmPassword) {
+      nextErrors.confirmPassword = "Please confirm your password.";
+    } else if (confirmPassword !== password) {
+      nextErrors.confirmPassword = "Passwords do not match.";
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -97,46 +104,14 @@ export function SignUp(props?: SignUpProps) {
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#signUpRadialBg)" />
       </Svg>
-      <Header />
-      <View style={styles.progressSection}>
-        <View style={styles.progressWrap}>
-          {[1, 2, 3].map((i) => (
-            <View
-              key={i}
-              style={[styles.progressSegment, i <= 1 && styles.progressSegmentActive]}
-            />
-          ))}
-        </View>
-        <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.stepTitle}>
-          Create your account.
-        </Text>
-      </View>
       <View style={styles.content}>
+        <View style={styles.logoWrap}>
+          <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
+        </View>
         <View style={styles.header}>
-          {Platform.OS === "web" ? (
-            <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.heroTitleTechniqueWeb}>
-              Create your account
-            </Text>
-          ) : (
-            <MaskedView
-              style={styles.heroTitleMask}
-              maskElement={
-                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={[styles.heroTitleTechnique, { color: "#ffffff" }]}>
-                  Create your account
-                </Text>
-              }
-            >
-              <LinearGradient
-                colors={["#0022FF", "#00BBFF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={[styles.heroTitleTechnique, { color: "transparent" }]}>
-                  Create your account
-                </Text>
-              </LinearGradient>
-            </MaskedView>
-          )}
+          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.heroTitleTechniqueWeb}>
+            Create your account
+          </Text>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.subtitle}>
             Start your onboarding and set up your player profile.
           </Text>
@@ -184,6 +159,38 @@ export function SignUp(props?: SignUpProps) {
           editable={!loading}
         />
         {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
+        <TextInput
+          style={[styles.input, errors.confirmPassword && styles.inputError]}
+          placeholder="Repeat your password"
+          placeholderTextColor={theme.placeholderTextColor}
+          value={confirmPassword}
+          onChangeText={(v) => {
+            setConfirmPassword(v);
+            if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+          }}
+          secureTextEntry
+          autoComplete="password-new"
+          editable={!loading}
+        />
+        {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
+
+        <View style={styles.socialDividerRow}>
+          <View style={styles.socialDividerLine} />
+          <Text allowFontScaling={false} style={styles.socialDividerText}>Or create with</Text>
+          <View style={styles.socialDividerLine} />
+        </View>
+
+        <View style={styles.socialRow}>
+          <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
+            <Ionicons name="logo-google" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
+            <Ionicons name="logo-facebook" size={22} color="#2D7DFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
+            <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.actionRow}>
           <TouchableOpacity
@@ -208,7 +215,7 @@ export function SignUp(props?: SignUpProps) {
               {loading ? (
                 <ActivityIndicator color={theme.tintTextColor} />
               ) : (
-                <Text allowFontScaling={false} style={styles.buttonText}>Continue</Text>
+                <Text allowFontScaling={false} style={styles.buttonText}>Sign up</Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -225,75 +232,49 @@ function getStyles(theme: any) {
       backgroundColor: theme.backgroundColor,
       justifyContent: "flex-start",
     },
-    progressSection: {
-      paddingHorizontal: 24,
-      paddingTop: 16,
-      paddingBottom: 8,
-    },
-    progressWrap: { flexDirection: "row", gap: 8, marginBottom: 12 },
-    progressSegment: {
-      flex: 1,
-      height: 6,
-      borderRadius: 999,
-      backgroundColor: "rgba(255,255,255,0.12)",
-    },
-    progressSegmentActive: { backgroundColor: "#00BBFF" },
-    stepTitle: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 13,
-      color: theme.textColor,
-      marginBottom: 4,
-    },
     content: {
       flex: 1,
       justifyContent: "center",
       paddingHorizontal: 24,
+      paddingTop: 0,
+    },
+    logoWrap: {
+      alignItems: "center",
+      marginBottom: 32,
+    },
+    logoImage: {
+      width: 172,
+      height: 92,
     },
     header: {
       alignItems: "center",
-      marginTop: 24,
-      marginBottom: 32,
-    },
-    heroTitlePrefix: {
-      fontSize: 28,
-      fontFamily: theme.semiBoldFont,
-      color: theme.textColor,
-    },
-    heroTitleTechnique: {
-      fontSize: 40,
-      fontFamily: theme.semiBoldFont,
-      textAlign: "center",
-      marginBottom: 8,
+      marginBottom: 22,
     },
     heroTitleTechniqueWeb: {
-      fontSize: 40,
+      fontSize: 34,
       fontFamily: theme.semiBoldFont,
       textAlign: "center",
       marginBottom: 8,
-      color: "#00BBFF",
-    },
-    heroTitleMask: {
-      marginTop: 2,
-      marginBottom: 8,
+      color: "#FFFFFF",
     },
     subtitle: {
-      fontSize: 16,
+      fontSize: 12,
       fontFamily: theme.regularFont,
-      color: theme.mutedForegroundColor,
+      color: "rgba(255,255,255,0.62)",
       textAlign: "center",
       marginTop: 0,
     },
     input: {
       borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.08)",
+      borderColor: "rgba(21, 102, 196, 0.45)",
       borderRadius: 16,
       paddingHorizontal: 16,
-      paddingVertical: 14,
-      fontSize: 16,
+      paddingVertical: 12,
+      fontSize: 15,
       fontFamily: theme.regularFont,
       color: theme.textColor,
-      backgroundColor: "#0E1830",
-      marginBottom: 16,
+      backgroundColor: "#0B1F57",
+      marginBottom: 10,
     },
     inputError: {
       borderColor: "#FF5A6A",
@@ -327,7 +308,7 @@ function getStyles(theme: any) {
       color: theme.tintTextColor,
     },
     actionRow: {
-      marginTop: 10,
+      marginTop: 14,
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
@@ -341,6 +322,38 @@ function getStyles(theme: any) {
       backgroundColor: "rgba(6, 26, 86, 0.9)",
       borderWidth: 1,
       borderColor: "rgba(0, 120, 255, 0.45)",
+    },
+    socialDividerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 8,
+      marginBottom: 14,
+      gap: 8,
+    },
+    socialDividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: "rgba(255,255,255,0.12)",
+    },
+    socialDividerText: {
+      fontSize: 12,
+      color: "rgba(255,255,255,0.55)",
+      fontFamily: theme.regularFont,
+    },
+    socialRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    socialButton: {
+      flex: 1,
+      height: 50,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: "rgba(21, 102, 196, 0.45)",
+      backgroundColor: "#0B1F57",
+      alignItems: "center",
+      justifyContent: "center",
     },
     heroGlow: {
       position: "absolute",

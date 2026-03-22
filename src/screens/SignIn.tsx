@@ -9,15 +9,16 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
 import { authClient } from "../lib/auth-client";
 import { LinearGradient } from "expo-linear-gradient";
-import { Header } from "../components";
-// @ts-ignore - web + native masked view
-import MaskedView from "@react-native-masked-view/masked-view";
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+const APP_LOGO = require("../../assets/logo.png");
 
 export function SignIn() {
   const { theme } = useContext(ThemeContext);
@@ -95,36 +96,9 @@ export function SignIn() {
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#signInRadialBg)" />
       </Svg>
-      <Header />
       <View style={styles.content}>
-        <View style={styles.header}>
-          {Platform.OS === "web" ? (
-            <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.heroTitleTechniqueWeb}>
-              Sign in
-            </Text>
-          ) : (
-            <MaskedView
-              style={styles.heroTitleMask}
-              maskElement={
-                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={[styles.heroTitleTechnique, { color: "#ffffff" }]}>
-                  Sign in
-                </Text>
-              }
-            >
-              <LinearGradient
-                colors={["#0022FF", "#00BBFF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={[styles.heroTitleTechnique, { color: "transparent" }]}>
-                  Sign in
-                </Text>
-              </LinearGradient>
-            </MaskedView>
-          )}
-          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.subtitle}>
-            Sign in to your AI padel coach.
-          </Text>
+        <View style={styles.logoWrap}>
+          <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
         </View>
 
         <TextInput
@@ -167,6 +141,28 @@ export function SignIn() {
             )}
           </LinearGradient>
         </TouchableOpacity>
+
+        <TouchableOpacity activeOpacity={0.8} style={styles.forgotWrap}>
+          <Text allowFontScaling={false} style={styles.forgotText}>Forgot my password</Text>
+        </TouchableOpacity>
+
+        <View style={styles.socialDividerRow}>
+          <View style={styles.socialDividerLine} />
+          <Text allowFontScaling={false} style={styles.socialDividerText}>Or sign in with</Text>
+          <View style={styles.socialDividerLine} />
+        </View>
+
+        <View style={styles.socialRow}>
+          <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
+            <Ionicons name="logo-google" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
+            <Ionicons name="logo-facebook" size={22} color="#2D7DFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
+            <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -183,61 +179,36 @@ function getStyles(theme: any) {
       flex: 1,
       justifyContent: "center",
       paddingHorizontal: 24,
+      paddingTop: 0,
     },
-    header: {
+    logoWrap: {
       alignItems: "center",
-      marginTop: 24,
-      marginBottom: 32,
+      marginBottom: 42,
     },
-    heroTitlePrefix: {
-      fontSize: 28,
-      fontFamily: theme.semiBoldFont,
-      color: theme.textColor,
-    },
-    heroTitleTechnique: {
-      fontSize: 40,
-      fontFamily: theme.semiBoldFont,
-      textAlign: "center",
-      marginBottom: 8,
-    },
-    heroTitleTechniqueWeb: {
-      fontSize: 40,
-      fontFamily: theme.semiBoldFont,
-      textAlign: "center",
-      marginBottom: 8,
-      color: "#00BBFF",
-    },
-    heroTitleMask: {
-      marginTop: 2,
-      marginBottom: 8,
-    },
-    subtitle: {
-      fontSize: 16,
-      fontFamily: theme.regularFont,
-      color: theme.mutedForegroundColor,
-      textAlign: "center",
-      marginTop: 0,
+    logoImage: {
+      width: 172,
+      height: 92,
     },
     input: {
       borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.08)",
+      borderColor: "rgba(21, 102, 196, 0.45)",
       borderRadius: 16,
       paddingHorizontal: 16,
-      paddingVertical: 14,
-      fontSize: 16,
+      paddingVertical: 13,
+      fontSize: 15,
       fontFamily: theme.regularFont,
       color: theme.textColor,
-      backgroundColor: "#0E1830",
-      marginBottom: 16,
+      backgroundColor: "#0B1F57",
+      marginBottom: 12,
     },
     buttonOuter: {
       borderRadius: 14,
       overflow: "hidden",
-      marginTop: 8,
+      marginTop: 14,
     },
     button: {
       borderRadius: 14,
-      paddingVertical: 16,
+      paddingVertical: 14,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -248,6 +219,48 @@ function getStyles(theme: any) {
       fontSize: 17,
       fontFamily: theme.semiBoldFont,
       color: theme.tintTextColor,
+    },
+    forgotWrap: {
+      alignItems: "center",
+      marginTop: 14,
+      marginBottom: 18,
+    },
+    forgotText: {
+      color: "#18C0FF",
+      fontSize: 12,
+      fontFamily: theme.regularFont,
+    },
+    socialDividerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 16,
+      gap: 8,
+    },
+    socialDividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: "rgba(255,255,255,0.12)",
+    },
+    socialDividerText: {
+      fontSize: 12,
+      color: "rgba(255,255,255,0.55)",
+      fontFamily: theme.regularFont,
+    },
+    socialRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 12,
+      marginBottom: 8,
+    },
+    socialButton: {
+      flex: 1,
+      height: 50,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: "rgba(21, 102, 196, 0.45)",
+      backgroundColor: "#0B1F57",
+      alignItems: "center",
+      justifyContent: "center",
     },
     heroGlow: {
       position: "absolute",

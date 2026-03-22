@@ -1756,11 +1756,24 @@ export function Technique() {
                           <View style={styles.videoCardPlayerWrap}>
                             <TouchableOpacity
                               activeOpacity={0.9}
-                              onPress={() => {
+                              onPress={async () => {
                                 if (mainVideoRef.current) {
-                                  mainVideoRef.current.playAsync().catch((err) => {
+                                  try {
+                                    const status = await mainVideoRef.current.getStatusAsync()
+                                    if (status.isLoaded) {
+                                      const nearEnd =
+                                        typeof status.durationMillis === 'number' &&
+                                        typeof status.positionMillis === 'number' &&
+                                        status.durationMillis > 0 &&
+                                        status.positionMillis >= status.durationMillis - 250
+                                      if (status.didJustFinish || nearEnd) {
+                                        await mainVideoRef.current.setPositionAsync(0)
+                                      }
+                                    }
+                                    await mainVideoRef.current.playAsync()
+                                  } catch (err) {
                                     console.log('[Technique] playAsync error', err)
-                                  })
+                                  }
                                 }
                               }}
                             >
@@ -1777,6 +1790,11 @@ export function Technique() {
                                 onPlaybackStatusUpdate={(status) => {
                                   if (!status.isLoaded && status.error) {
                                     console.log('[Technique] Main video status error', status.error)
+                                  }
+                                  if (status.isLoaded && status.didJustFinish && mainVideoRef.current) {
+                                    mainVideoRef.current.setPositionAsync(0).catch((err) => {
+                                      console.log('[Technique] Main video reset error', err)
+                                    })
                                   }
                                 }}
                               />
