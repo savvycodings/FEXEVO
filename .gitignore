@@ -1,0 +1,22 @@
+
+node_modules/
+
+.expo/
+dist/
+web-build/
+
+.metro-health-check*
+
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+.DS_Store
+
+.env
+.env*.local
+android/local.properties
+
+# Google Cloud service account keys — never commit (GitHub push protection)
+gen-lang-client*.json
+*-service-account*.json

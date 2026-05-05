@@ -1,0 +1,1 @@
+export const ACTIVITIES_FAVORITES_STORAGE_KEY = 'activities_favorite_analysis_ids_v1'
