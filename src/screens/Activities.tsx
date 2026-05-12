@@ -628,7 +628,9 @@ export function ActivitiesCalendarFlow({
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{
-            paddingTop: Math.max(12, insets.top) + 8,
+            // Sits below the global <Header/> in main.tsx, which already pads insets.top.
+            // Re-adding insets.top here doubled the gap above the "Shots" title.
+            paddingTop: 8,
             paddingHorizontal: pad,
             paddingBottom: 32 + insets.bottom,
           }}

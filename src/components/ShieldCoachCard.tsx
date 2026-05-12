@@ -13,6 +13,7 @@ import {
   shieldFlagSource,
 } from './shieldCardFlags'
 import { shieldLayout, type ShieldLayoutSpec, type ShieldLayoutVariant } from './shieldLayouts'
+import { profileSettingsShieldLayout } from './profileSettingsShieldLayout'
 import { smallShieldLayout } from './smallShieldLayout'
 
 export type { ShieldFlagCode } from './shieldCardFlags'
@@ -79,8 +80,12 @@ type Props = {
   showFlag?: boolean
   /** Large crest where the Xevo logo used to sit. */
   showCrest?: boolean
-  /** Bundled asset key — extend `SHIELD_FLAG_MODULES` in `shieldCardFlags.ts`. */
-  flagCode?: ShieldFlagCode
+  /**
+   * Country identifier for the displayed flag. Accepts an ISO code ("ZA"),
+   * a full English country name ("South Africa"), or `null`/`undefined`.
+   * Resolved via `lib/countries.ts`; unknown values fall back to US.
+   */
+  flagCode?: ShieldFlagCode | null
   /**
    * Name on the back-ellipse band, above every layer including the outline.
    * If omitted, uses `coachName` (after trim). Pass `""` to hide while keeping `coachName` for the lower label.
@@ -89,6 +94,8 @@ type Props = {
   showTopShieldName?: boolean
   /** SR / GS / NP / DG / OH row under the name; loads `/profile/rating-by-category` (this week → 0–100). */
   showPillarScores?: boolean
+  /** Optional wide mark at the shield tip, under crest/flag (e.g. Xevo wordmark on profile settings). */
+  brandLogoSource?: ImageSourcePropType | null
   /** Optional multiplier for the top name text only (e.g. 1.15). */
   topNameScale?: number
   /**
@@ -121,10 +128,16 @@ export function ShieldCoachCard({
   topShieldName,
   showTopShieldName = true,
   showPillarScores = false,
+  brandLogoSource,
   topNameScale = 1,
   variant = 'default',
 }: Props) {
-  const L: ShieldLayoutSpec = variant === 'small' ? (smallShieldLayout as ShieldLayoutSpec) : shieldLayout
+  const L: ShieldLayoutSpec =
+    variant === 'small'
+      ? (smallShieldLayout as ShieldLayoutSpec)
+      : variant === 'profileSettings'
+        ? profileSettingsShieldLayout
+        : shieldLayout
   const styles = useMemo(() => createShieldStyles(L), [variant])
 
   const height = Math.round((width * BASE_H) / BASE_W)
@@ -180,6 +193,8 @@ export function ShieldCoachCard({
   const photoSource: ImageSourcePropType = coachImageUri ? { uri: coachImageUri } : FALLBACK_COACH
   const flagSource = shieldFlagSource(flagCode)
   const topNameLabel = (topShieldName !== undefined ? topShieldName : coachName).trim()
+  const profileSettingsStackEnabled =
+    variant === 'profileSettings' && brandLogoSource != null && showCrest
   const isWeb = Platform.OS === 'web'
   const shieldMaskUri = isWeb ? Asset.fromModule(SHIELD_MASK).uri : null
   const photoTopMaskUri = isWeb ? Asset.fromModule(PHOTO_TOP_MASK).uri : null
@@ -261,9 +276,69 @@ export function ShieldCoachCard({
         resizeMode="contain"
       />
 
-      {showCrest ? (
-        <Image
-          source={flagSource}
+      {profileSettingsStackEnabled ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: '7%',
+            right: '7%',
+            bottom: '9%',
+            height: height * 0.29,
+            zIndex: 9,
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          {showTopShieldName && topNameLabel.length > 0 ? (
+            <Text
+              allowFontScaling={false}
+              numberOfLines={1}
+              style={[
+                styles.shieldTopNameText,
+                {
+                  fontSize: topNameFontSize,
+                  lineHeight: topNameLineHeight,
+                  textShadowRadius: Math.max(2, Math.round(4 * typeScale)),
+                  textAlign: 'center',
+                  width: '100%',
+                },
+              ]}
+              accessibilityRole="text"
+            >
+              {topNameLabel}
+            </Text>
+          ) : (
+            <View style={{ height: 1 }} />
+          )}
+          <View
+            style={{
+              width: Math.round(width * 0.118),
+              aspectRatio: SHIELD_FLAG_ASPECT,
+              overflow: 'hidden',
+            }}
+          >
+            <Image source={flagSource} style={styles.flagImage} resizeMode="contain" />
+          </View>
+          <View
+            style={{
+              width: Math.round(width * 0.26),
+              aspectRatio: L.brandLogoBelowFlag.aspectRatio,
+              overflow: 'hidden',
+            }}
+          >
+            <Image source={brandLogoSource} style={styles.brandLogoImage} resizeMode="contain" />
+          </View>
+        </View>
+      ) : null}
+
+      {showCrest && !profileSettingsStackEnabled ? (
+        // Wrapper owns the box geometry (width %, aspectRatio, bottom %). The Image
+        // just fills the box, so its intrinsic dimensions can never leak into the
+        // layout and shift the flag's anchor when the asset changes.
+        <View
+          pointerEvents="none"
           style={[
             styles.crest,
             {
@@ -271,12 +346,13 @@ export function ShieldCoachCard({
               bottom: L.crest.bottom,
             },
           ]}
-          resizeMode="contain"
-        />
+        >
+          <Image source={flagSource} style={styles.flagImage} resizeMode="contain" />
+        </View>
       ) : null}
       {showFlag ? (
-        <Image
-          source={flagSource}
+        <View
+          pointerEvents="none"
           style={[
             styles.flag,
             {
@@ -284,21 +360,79 @@ export function ShieldCoachCard({
               bottom: L.flag.bottom,
             },
           ]}
-          resizeMode="contain"
-        />
+        >
+          <Image source={flagSource} style={styles.flagImage} resizeMode="contain" />
+        </View>
+      ) : null}
+
+      {brandLogoSource && !profileSettingsStackEnabled ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.brandLogoBelowFlag,
+            {
+              width: L.brandLogoBelowFlag.width,
+              left: L.brandLogoBelowFlag.left,
+              bottom: L.brandLogoBelowFlag.bottom,
+              aspectRatio: L.brandLogoBelowFlag.aspectRatio,
+            },
+          ]}
+        >
+          <Image source={brandLogoSource} style={styles.brandLogoImage} resizeMode="contain" />
+        </View>
       ) : null}
 
       {showScore ? (
-        <View style={styles.scoreWrap}>
+        <View
+          style={[
+            styles.scoreWrap,
+            variant === 'profileSettings' && {
+              zIndex: 12,
+              flexDirection: 'column' as const,
+              alignItems: 'center' as const,
+            },
+          ]}
+        >
           <Text
             allowFontScaling={false}
-            style={[styles.scoreValue, { fontSize: scoreValueFontSize, lineHeight: scoreValueFontSize }]}
+            style={[
+              styles.scoreValue,
+              {
+                fontSize:
+                  variant === 'profileSettings'
+                    ? Math.max(34, Math.min(50, Math.round(width * 0.104)))
+                    : scoreValueFontSize,
+                lineHeight:
+                  variant === 'profileSettings'
+                    ? Math.max(34, Math.min(50, Math.round(width * 0.104)))
+                    : scoreValueFontSize,
+                textAlign: variant === 'profileSettings' ? ('center' as const) : undefined,
+              },
+            ]}
           >
             {scoreValue}
           </Text>
           <Text
             allowFontScaling={false}
-            style={[styles.scoreLabel, { fontSize: scoreLabelFontSize, lineHeight: scoreLabelFontSize + 1 }]}
+            style={[
+              styles.scoreLabel,
+              {
+                fontSize:
+                  variant === 'profileSettings'
+                    ? Math.max(12, Math.min(15, Math.round(13 * typeScale)))
+                    : scoreLabelFontSize,
+                lineHeight:
+                  variant === 'profileSettings'
+                    ? Math.max(12, Math.min(15, Math.round(13 * typeScale)))
+                    : scoreLabelFontSize + 1,
+                textAlign: variant === 'profileSettings' ? ('center' as const) : undefined,
+              },
+              variant === 'profileSettings' && {
+                color: '#FFFFFF',
+                fontWeight: '400' as const,
+                marginTop: 0,
+              },
+            ]}
           >
             {scoreLabel}
           </Text>
@@ -345,7 +479,8 @@ export function ShieldCoachCard({
       >
         {outlineEl}
       </View>
-      {(showTopShieldName && topNameLabel.length > 0) || showPillarScores ? (
+      {(showTopShieldName && topNameLabel.length > 0 && !profileSettingsStackEnabled) ||
+      showPillarScores ? (
         <View
           style={[
             styles.shieldHeaderOverlay,
@@ -502,12 +637,28 @@ function createShieldStyles(L: ShieldLayoutSpec) {
       width: L.crest.width,
       left: L.crest.left,
       zIndex: 7,
+      overflow: 'hidden',
     },
     flag: {
       position: 'absolute',
       width: L.flag.width,
       left: L.flag.left,
       zIndex: 8,
+      overflow: 'hidden',
+    },
+    brandLogoBelowFlag: {
+      position: 'absolute',
+      zIndex: 9,
+      overflow: 'hidden',
+    },
+    brandLogoImage: {
+      width: '100%',
+      height: '100%',
+    },
+    /** Fills its parent (crest/flag wrapper) so the asset never affects layout geometry. */
+    flagImage: {
+      width: '100%',
+      height: '100%',
     },
     scoreWrap: {
       position: 'absolute',

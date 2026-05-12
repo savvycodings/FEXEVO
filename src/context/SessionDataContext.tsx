@@ -50,6 +50,8 @@ type SessionDataContextValue = {
   ratingError: string | null
   profileName: string | null
   profileImageUri: string | null
+  /** Saved `profile.areaLocation` (country name or ISO code); drives the shield flag. */
+  profileAreaLocation: string | null
   overallPillarScore: number | null
   /** When user focuses Activities / You / Progress — refreshes stale slices (cooldown). */
   onTabFocus: () => void
@@ -82,6 +84,7 @@ export function SessionDataProvider({
 
   const [profileName, setProfileName] = useState<string | null>(null)
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
+  const [profileAreaLocation, setProfileAreaLocation] = useState<string | null>(null)
   const [overallPillarScore, setOverallPillarScore] = useState<number | null>(null)
 
   const lastActivitiesOkAt = useRef(0)
@@ -174,6 +177,7 @@ export function SessionDataProvider({
       }
       const body = ((res as { data?: unknown })?.data ?? res) as {
         user?: { name?: string; image?: string | null }
+        profile?: { areaLocation?: string | null } | null
       }
       if (!body?.user) {
         return
@@ -181,6 +185,8 @@ export function SessionDataProvider({
       const n = body.user.name?.trim()
       if (n) setProfileName(n)
       setProfileImageUri(profileImageToAbsoluteUri(body.user.image))
+      const area = body.profile?.areaLocation
+      setProfileAreaLocation(typeof area === 'string' && area.trim() ? area.trim() : null)
       lastProfileOkAt.current = Date.now()
     } catch {
       /* keep previous */
@@ -192,6 +198,10 @@ export function SessionDataProvider({
     const n = cached?.user?.name?.trim()
     if (n) setProfileName(n)
     setProfileImageUri(profileImageToAbsoluteUri(cached?.user?.image))
+    const area = cached?.profile?.areaLocation
+    if (typeof area === 'string' && area.trim()) {
+      setProfileAreaLocation(area.trim())
+    }
   }, [])
 
   const invalidate = useCallback(() => {
@@ -252,6 +262,7 @@ export function SessionDataProvider({
       ratingError,
       profileName,
       profileImageUri,
+      profileAreaLocation,
       overallPillarScore,
       onTabFocus,
       invalidate,
@@ -265,6 +276,7 @@ export function SessionDataProvider({
       ratingError,
       profileName,
       profileImageUri,
+      profileAreaLocation,
       overallPillarScore,
       onTabFocus,
       invalidate,

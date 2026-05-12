@@ -657,12 +657,15 @@ export function ActivitiesVideoAnalysis({
   }, [aiSnapshot])
 
   return (
-    <View style={[styles.gradient, { paddingTop: 6, backgroundColor: theme.backgroundColor }]}>
+    <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollInner,
-          { paddingBottom: 28 + insets.bottom, paddingTop: Math.max(8, insets.top) },
+          // Sits below the global <Header/> in main.tsx, which already pads insets.top.
+          // Matches the Activities Shots home page (paddingTop: 8) so the back row has
+          // the same top padding when you tap into a shot.
+          { paddingBottom: 28 + insets.bottom, paddingTop: 8 },
         ]}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews={Platform.OS === 'android' ? false : undefined}

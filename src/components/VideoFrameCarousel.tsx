@@ -266,6 +266,20 @@ export function VideoFrameCarousel({
   const callbackRafRef = useRef<number | null>(null)
   const pendingProgressRef = useRef<number | null>(null)
   const pendingTrimRef = useRef<{ startMs: number; endMs: number } | null>(null)
+  /**
+   * Screen-space X of the strip's left edge. We hit-test in screen (page) coords because
+   * `evt.nativeEvent.locationX` is reported relative to the *touched child* on Android,
+   * which broke right-handle and scrub taps when a child intercepted the touch.
+   */
+  const stripOuterRef = useRef<View | null>(null)
+  const stripPageXRef = useRef(0)
+  const measureStrip = useCallback(() => {
+    const node = stripOuterRef.current
+    if (!node || typeof node.measureInWindow !== 'function') return
+    node.measureInWindow((x) => {
+      if (typeof x === 'number' && Number.isFinite(x)) stripPageXRef.current = x
+    })
+  }, [])
   const latestRef = useRef({
     clampedLeftX: 0,
     clampedRightX: 0,
@@ -388,6 +402,11 @@ export function VideoFrameCarousel({
   )
 
   useEffect(() => {
+    if (viewportW <= 0) return
+    measureStrip()
+  }, [viewportW, measureStrip])
+
+  useEffect(() => {
     let cancelled = false
     setFrames(times.map((t, i) => ({ id: `f-${i}-${t}`, timeMs: t, uri: null })))
     if (!videoUri || durationMs <= 0) {
@@ -476,14 +495,27 @@ export function VideoFrameCarousel({
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      // Capture variants prevent a parent ScrollView (KeyboardAwareScrollView in
+      // technique.tsx) from stealing the gesture on Android.
+      onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const x = evt.nativeEvent.locationX
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (evt, gestureState) => {
+        // Use page coords - locationX is unreliable on Android when a child view is hit.
+        const pageX =
+          typeof evt.nativeEvent.pageX === 'number'
+            ? evt.nativeEvent.pageX
+            : gestureState.x0
+        const x = pageX - stripPageXRef.current
         const { clampedLeftX: l, clampedRightX: r, currentTimeMs: c, dragTrimStartMs: s, dragTrimEndMs: e } =
           latestRef.current
-        if (Math.abs(x - l) <= Math.max(MIN_HANDLE_HIT_SLOP, HANDLE_WIDTH)) {
+        const leftDist = Math.abs(x - l)
+        const rightDist = Math.abs(x - r)
+        const handleSlop = Math.max(MIN_HANDLE_HIT_SLOP, HANDLE_WIDTH)
+        if (leftDist <= handleSlop && leftDist <= rightDist) {
           dragModeRef.current = 'left'
-        } else if (Math.abs(x - r) <= Math.max(MIN_HANDLE_HIT_SLOP, HANDLE_WIDTH)) {
+        } else if (rightDist <= handleSlop) {
           dragModeRef.current = 'right'
         } else {
           dragModeRef.current = 'scrub'
@@ -573,12 +605,17 @@ export function VideoFrameCarousel({
       </View>
 
       <View
+        ref={stripOuterRef}
+        collapsable={false}
         style={styles.stripOuter}
-        onLayout={(e) => setViewportW(Math.max(0, e.nativeEvent.layout.width))}
+        onLayout={(e) => {
+          setViewportW(Math.max(0, e.nativeEvent.layout.width))
+          measureStrip()
+        }}
         {...panResponder.panHandlers}
       >
-        <View style={styles.stripInner}>
-          <View style={styles.framesRow}>
+        <View pointerEvents="box-none" style={styles.stripInner}>
+          <View pointerEvents="none" style={styles.framesRow}>
             {frames.map((frame) => {
               const ms = frame.timeMs ?? 0
               const inside = ms >= safeStartMs && ms <= safeEndMs
@@ -630,6 +667,7 @@ export function VideoFrameCarousel({
           />
 
           <View
+            pointerEvents="none"
             style={[
               styles.handle,
               {
@@ -641,6 +679,7 @@ export function VideoFrameCarousel({
             <View style={styles.handleInnerPill} />
           </View>
           <View
+            pointerEvents="none"
             style={[
               styles.handle,
               {

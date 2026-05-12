@@ -53,6 +53,13 @@ export const shieldLayout = {
     left: '46.75%',
     bottom: '18%',
   },
+  /** Wide brand mark under crest/flag (tip of shield). */
+  brandLogoBelowFlag: {
+    width: '28%',
+    left: '36%',
+    bottom: '0.9%',
+    aspectRatio: 3.6,
+  },
   score: {
     right: '6%',
     top: '12%',
@@ -69,4 +76,4 @@ export const shieldLayout = {
 
 export type ShieldLayoutSpec = typeof shieldLayout
 
-export type ShieldLayoutVariant = 'default' | 'small'
+export type ShieldLayoutVariant = 'default' | 'small' | 'profileSettings'

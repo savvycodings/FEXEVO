@@ -35,9 +35,14 @@ export type ShieldHeroRowProps = {
   rowWidth: number
   coachName: string
   coachImageUri?: string | null
-  /** Renders top-right share; omit to hide and use the full row width for the shield. */
+  /** Renders top share control; omit to hide and use the full row width for the shield. */
   onSharePress?: () => void
   shareAccessibilityLabel?: string
+  /** `start` = leading edge (left in LTR), `end` = trailing (right in LTR). Default `end`. */
+  shareEdge?: 'start' | 'end'
+  /** Metro `require('*.svg')` id; defaults to the app share glyph. */
+  shareIconModule?: number
+  shareIconSize?: number
   /** Cap shield height as a fraction of window height (default 0.27). */
   maxHeightFrac?: number
   /** Upper bound for shield height in px before frac is applied (default 300). */
@@ -57,6 +62,9 @@ export function ShieldHeroRow({
   coachImageUri,
   onSharePress,
   shareAccessibilityLabel = 'Share',
+  shareEdge = 'end',
+  shareIconModule,
+  shareIconSize,
   maxHeightFrac = DEFAULT_MAX_HEIGHT_FRAC,
   maxShieldHeightCap = DEFAULT_MAX_SHIELD_H_CAP,
   shareSideReserve = DEFAULT_SHARE_SIDE_RESERVE,
@@ -69,6 +77,8 @@ export function ShieldHeroRow({
   const screenH = winH > 0 ? winH : Dimensions.get('window').height
   const maxShieldH = Math.min(maxShieldHeightCap, screenH * maxHeightFrac)
   const { width: shieldDisplayW, height: shieldDisplayH } = fitShieldInBox(maxShieldW, maxShieldH)
+
+  const shieldLeadingInset = (rowWidth - shieldDisplayW) / 2
 
   return (
     <View style={[stylesStatic.hero, { width: rowWidth }]}>
@@ -83,12 +93,21 @@ export function ShieldHeroRow({
       {onSharePress ? (
         <TouchableOpacity
           onPress={onSharePress}
-          style={stylesStatic.shareHit}
+          style={[
+            stylesStatic.shareHitBase,
+            shareEdge === 'start'
+              ? [stylesStatic.shareHitStart, { left: shieldLeadingInset }]
+              : stylesStatic.shareHitEnd,
+          ]}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           accessibilityRole="button"
           accessibilityLabel={shareAccessibilityLabel}
         >
-          <LocalSvgAsset assetModule={SHARE_ICON_SVG} width={SHARE_SVG} height={SHARE_SVG} />
+          <LocalSvgAsset
+            assetModule={shareIconModule ?? SHARE_ICON_SVG}
+            width={shareIconSize ?? SHARE_SVG}
+            height={shareIconSize ?? SHARE_SVG}
+          />
         </TouchableOpacity>
       ) : null}
     </View>
@@ -120,15 +139,20 @@ const stylesStatic = StyleSheet.create({
       default: {},
     }),
   },
-  shareHit: {
+  shareHitBase: {
     position: 'absolute',
-    right: 0,
     top: SHARE_HIT_TOP,
     zIndex: 10,
     justifyContent: 'flex-start',
-    alignItems: 'center',
     minWidth: SHARE_TOUCH + 12,
     minHeight: SHARE_TOUCH + 8,
     paddingTop: 0,
+  },
+  shareHitEnd: {
+    right: 0,
+    alignItems: 'center',
+  },
+  shareHitStart: {
+    alignItems: 'flex-start',
   },
 })

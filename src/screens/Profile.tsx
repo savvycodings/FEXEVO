@@ -22,7 +22,7 @@ const SMALL_SHIELD_CAP_REF_WIN_W = 430;
 function ProfileHeroScoreBlock() {
   const { theme } = useContext(ThemeContext);
   const { width: winW } = useWindowDimensions();
-  const { profileName, profileImageUri, overallPillarScore } = useSessionData();
+  const { profileName, profileImageUri, overallPillarScore, profileAreaLocation } = useSessionData();
 
   const heroH = useMemo(() => Math.min(220, Math.max(160, winW * 0.42)), [winW]);
   const shieldMaxW = useMemo(() => {
@@ -53,6 +53,7 @@ function ProfileHeroScoreBlock() {
               variant="small"
               coachName={profileName?.trim() ?? ""}
               coachImageUri={profileImageUri}
+              flagCode={profileAreaLocation}
               showName={false}
               showScore={false}
               showCrest={false}

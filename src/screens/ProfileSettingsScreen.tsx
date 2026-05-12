@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,14 +11,19 @@ import {
   ScrollView,
   Share,
   useWindowDimensions,
+  Modal,
+  FlatList,
+  Pressable,
 } from "react-native";
+import { COUNTRIES, findCountry, type Country } from "../lib/countries";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { MainStackParamList } from "../navigation/types";
 import { ThemeContext } from "../context";
-import { Header } from "../components";
+import { useSessionData } from "../context/SessionDataContext";
+import { AdminGradientCard, Header } from "../components";
 import { ShieldHeroRow } from "../components/ShieldHeroRow";
 import { authClient } from "../lib/auth-client";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,10 +40,16 @@ const MENU_SVG = {
   game: require("../../assets/youpage/gamesettingsicon.svg"),
 } as const;
 
+const SHARE_BUTTON_SVG = require("../../assets/actiities/sharebutton.svg");
+const CAMERA_ICON_SVG = require("../../assets/actiities/camra1.svg");
+const BIRTHDAY_ICON_SVG = require("../../assets/actiities/birthday.svg");
+const LOCATION_PIN_ICON_SVG = require("../../assets/actiities/location.svg");
+const XEVO_BLUE_WORDMARK = require("../../assets/actiities/xevoblue.png");
+/** Profile badge camera circle (px); keep in sync with `badgeCameraCorner` + share alignment math. */
+const PROFILE_SETTINGS_CAMERA_BTN_PX = 40;
+
 const PROFILE_FIELD_BG = "#0E1830";
 const PROFILE_FIELD_BORDER = "rgba(21, 102, 196, 0.45)";
-const SETTINGS_MENU_FILL = "#041641";
-
 type ProfileData = {
   user?: { name?: string; email?: string; image?: string | null };
   profile?: {
@@ -99,6 +110,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   const { onProfileUpdated, onClose } = props;
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { theme } = useContext(ThemeContext);
+  const { overallPillarScore } = useSessionData();
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
@@ -112,11 +124,12 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     Math.max(1, Math.floor(badgeShieldMaxH * (444 / 589)))
   );
   const badgeShieldDisplayH = Math.round((badgeShieldDisplayW * 589) / 444);
-  const badgeCameraRight = Math.max(
-    -20,
-    Math.round((badgeShieldRowW - badgeShieldDisplayW) / 2) - 20
+  /** Horizontal center with `ShieldHeroRow` share control (`minWidth` = SHARE_TOUCH + 12). */
+  const BADGE_SHARE_HIT_MIN_W = 36 + 12;
+  const badgeCameraRightUnderShare = Math.max(
+    0,
+    Math.round(BADGE_SHARE_HIT_MIN_W / 2 - PROFILE_SETTINGS_CAMERA_BTN_PX / 2)
   );
-  const badgeCameraRightFar = badgeCameraRight - 42;
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ProfileData>({});
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
@@ -132,6 +145,18 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   const [rankingValueInput, setRankingValueInput] = useState("");
   const [locationInput, setLocationInput] = useState("");
   const [locationSaving, setLocationSaving] = useState(false);
+  /** Country selected in the picker (stored as the country's English `name`). */
+  const [locationCountry, setLocationCountry] = useState<Country | null>(null);
+  const [countryPickerOpen, setCountryPickerOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+
+  const countryResults = useMemo(() => {
+    const q = countrySearch.trim().toLowerCase();
+    if (!q) return COUNTRIES;
+    return COUNTRIES.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
+    );
+  }, [countrySearch]);
   const [activeSection, setActiveSection] = useState<"personal" | "account" | "location" | "game" | null>(null);
 
   function applyProfileBody(body: ProfileData) {
@@ -147,7 +172,9 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     setLevelInput(body.profile?.level || null);
     setRankingOrgInput(body.profile?.rankingOrg || "Playtomic");
     setRankingValueInput(body.profile?.rankingValue || "");
-    setLocationInput(body.profile?.areaLocation || "");
+    const storedArea = body.profile?.areaLocation || "";
+    setLocationInput(storedArea);
+    setLocationCountry(findCountry(storedArea));
     const rawImage = body.user?.image;
     if (typeof rawImage === "string" && rawImage.length > 0) {
       const normalized = rawImage.startsWith("http")
@@ -279,6 +306,10 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
 
   async function saveLocationProfile() {
     setLocationSaving(true);
+    // Picker stores `locationCountry`; persist the resolved English country
+    // name so existing consumers (My Coach, profile cache, etc.) keep reading
+    // a plain string from `areaLocation`. Empty string clears the field.
+    const areaToSave = locationCountry?.name ?? "";
     const res = await authClient
       .$fetch<{ ok?: boolean; error?: string }>("/profile/basic", {
         method: "POST",
@@ -286,7 +317,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           name: nameInput.trim() || data.user?.name || "",
           username: usernameInput.trim(),
           gender: genderInput || "",
-          areaLocation: locationInput.trim(),
+          areaLocation: areaToSave,
         } as any,
       })
       .catch((e) => ({ error: e?.message || "Failed to save location." } as any));
@@ -520,18 +551,34 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         >
           <Text style={styles.detailPageHeading}>{currentTitle}</Text>
           <View style={styles.editCard}>
-            <Text style={styles.inputLabel}>Area (visible to your coaches)</Text>
+            <Text style={styles.inputLabel}>Country (visible to your coaches)</Text>
             <Text style={styles.hintText}>
-              Example: Buenos Aires, Argentina. This line appears under your name on your coach&apos;s My Coach list. It is not shown on the public member directory.
+              This line appears under your name on your coach&apos;s My Coach list. It is not shown on the public member directory.
             </Text>
-            <TextInput
-              value={locationInput}
-              onChangeText={setLocationInput}
-              style={[styles.input, { marginTop: 12 }]}
-              placeholder="City, country"
-              placeholderTextColor={theme.placeholderTextColor ?? theme.mutedForegroundColor}
-              maxLength={200}
-            />
+            <TouchableOpacity
+              style={[styles.countryTrigger, { marginTop: 12 }]}
+              onPress={() => {
+                setCountrySearch("");
+                setCountryPickerOpen(true);
+              }}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Select country"
+            >
+              {locationCountry ? (
+                <>
+                  <Image source={locationCountry.flag} style={styles.countryTriggerFlag} />
+                  <Text style={styles.countryTriggerText} numberOfLines={1}>
+                    {locationCountry.name}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.countryTriggerPlaceholder} numberOfLines={1}>
+                  {locationInput ? locationInput : "Select your country"}
+                </Text>
+              )}
+              <Ionicons name="chevron-down" size={18} color="rgba(200, 220, 255, 0.85)" />
+            </TouchableOpacity>
           </View>
           <SubsectionFooter
             onBack={() => setActiveSection(null)}
@@ -540,6 +587,86 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             primaryDisabled={locationSaving}
             primaryLoading={locationSaving}
           />
+
+          <Modal
+            visible={countryPickerOpen}
+            animationType="fade"
+            transparent
+            onRequestClose={() => setCountryPickerOpen(false)}
+          >
+            <View style={styles.countryModalOverlay}>
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={() => setCountryPickerOpen(false)}
+              />
+              <View style={[styles.countryModalCard, { maxHeight: winH * 0.78 }]}>
+                <View style={styles.countryModalHeader}>
+                  <Text style={styles.countryModalTitle}>Select country</Text>
+                  <TouchableOpacity
+                    onPress={() => setCountryPickerOpen(false)}
+                    hitSlop={12}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                  >
+                    <Ionicons name="close" size={22} color="rgba(232,240,255,0.92)" />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.countrySearchWrap}>
+                  <Ionicons
+                    name="search"
+                    size={16}
+                    color="rgba(200, 220, 255, 0.65)"
+                    style={{ marginRight: 8 }}
+                  />
+                  <TextInput
+                    value={countrySearch}
+                    onChangeText={setCountrySearch}
+                    placeholder="Search country"
+                    placeholderTextColor={theme.placeholderTextColor ?? theme.mutedForegroundColor}
+                    style={styles.countrySearchInput}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    returnKeyType="search"
+                  />
+                </View>
+                <FlatList
+                  data={countryResults}
+                  keyExtractor={(item) => item.code}
+                  keyboardShouldPersistTaps="handled"
+                  initialNumToRender={20}
+                  maxToRenderPerBatch={30}
+                  windowSize={11}
+                  ListEmptyComponent={
+                    <Text style={styles.countryEmptyText}>No countries match &quot;{countrySearch}&quot;.</Text>
+                  }
+                  renderItem={({ item }) => {
+                    const selected = locationCountry?.code === item.code;
+                    return (
+                      <TouchableOpacity
+                        style={[styles.countryRow, selected && styles.countryRowActive]}
+                        onPress={() => {
+                          setLocationCountry(item);
+                          setCountryPickerOpen(false);
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <Image source={item.flag} style={styles.countryRowFlag} />
+                        <Text
+                          style={[styles.countryRowText, selected && styles.countryRowTextActive]}
+                          numberOfLines={1}
+                        >
+                          {item.name}
+                        </Text>
+                        {selected ? (
+                          <Ionicons name="checkmark" size={18} color="#18C0FF" />
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </View>
+            </View>
+          </Modal>
         </KeyboardAwareScrollView>
       </View>
     );
@@ -696,14 +823,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               Profile Edit
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => void shareProfile()}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.profileEditShareBtn}
-            accessibilityLabel="Share profile"
-          >
-            <Ionicons name="share-outline" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
         </View>
 
         <View style={styles.badgeRow}>
@@ -712,26 +831,36 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               rowWidth={badgeShieldRowW}
               coachName={data.user?.name || "Player"}
               coachImageUri={!loading ? profileImageUri : null}
+              onSharePress={() => void shareProfile()}
+              shareAccessibilityLabel="Share profile"
+              shareIconModule={SHARE_BUTTON_SVG}
+              shareIconSize={36}
               shieldCardProps={{
+                variant: "profileSettings",
                 showName: false,
-                showScore: false,
+                showScore: true,
+                scoreLabel: "Score",
+                scoreValue: String(overallPillarScore ?? 54),
                 showFlag: false,
-                showPillarScores: true,
-                topNameScale: 1.45,
+                showPillarScores: false,
+                topNameScale: 2.15,
+                brandLogoSource: XEVO_BLUE_WORDMARK,
+                // Reflect the live picker selection (before save) and the saved value (after save).
+                flagCode: locationCountry?.code ?? data.profile?.areaLocation ?? null,
               }}
             />
             <TouchableOpacity
               style={[
                 styles.badgeCameraCorner,
                 {
-                  right: badgeCameraRightFar,
+                  right: badgeCameraRightUnderShare,
                 },
               ]}
               onPress={pickAndUploadAvatar}
               activeOpacity={0.88}
               accessibilityLabel="Change profile photo"
             >
-              <Ionicons name="camera" size={18} color="#FFFFFF" />
+              <LocalSvgAsset assetModule={CAMERA_ICON_SVG} width={18} height={18} />
             </TouchableOpacity>
           </View>
         </View>
@@ -743,48 +872,41 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
 
         <View style={styles.quickInfoRow}>
           <View style={styles.quickInfoItem}>
-            <Ionicons name="gift-outline" size={16} color="rgba(200, 220, 255, 0.85)" />
+            <LocalSvgAsset assetModule={BIRTHDAY_ICON_SVG} width={16} height={16} />
             <Text allowFontScaling={false} style={styles.quickInfoText}>
               Date not set
             </Text>
           </View>
           <View style={styles.quickInfoItem}>
-            <Ionicons name="location-outline" size={16} color="rgba(200, 220, 255, 0.85)" />
+            <LocalSvgAsset assetModule={LOCATION_PIN_ICON_SVG} width={16} height={16} />
             <Text allowFontScaling={false} style={styles.quickInfoText}>
               Location not set
             </Text>
           </View>
         </View>
 
-        <LinearGradient
-          colors={["#0022FF", "#00BBFF"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.menuCardGradientOuter}
-        >
-          <View style={styles.menuCard}>
-            <MenuRow
-              title="Personal Data"
-              iconModule={MENU_SVG.personal}
-              onPress={() => setActiveSection("personal")}
-            />
-            <MenuRow
-              title="Account"
-              iconModule={MENU_SVG.account}
-              onPress={() => setActiveSection("account")}
-            />
-            <MenuRow
-              title="Location"
-              iconModule={MENU_SVG.location}
-              onPress={() => setActiveSection("location")}
-            />
-            <MenuRow
-              title="Game Settings"
-              iconModule={MENU_SVG.game}
-              onPress={() => setActiveSection("game")}
-            />
-          </View>
-        </LinearGradient>
+        <AdminGradientCard innerStyle={{ overflow: "hidden" }}>
+          <MenuRow
+            title="Personal Data"
+            iconModule={MENU_SVG.personal}
+            onPress={() => setActiveSection("personal")}
+          />
+          <MenuRow
+            title="Account"
+            iconModule={MENU_SVG.account}
+            onPress={() => setActiveSection("account")}
+          />
+          <MenuRow
+            title="Location"
+            iconModule={MENU_SVG.location}
+            onPress={() => setActiveSection("location")}
+          />
+          <MenuRow
+            title="Game Settings"
+            iconModule={MENU_SVG.game}
+            onPress={() => setActiveSection("game")}
+          />
+        </AdminGradientCard>
 
         <View style={styles.settingsFooterStack}>
           <TouchableOpacity
@@ -858,12 +980,6 @@ function getStyles(theme: any) {
       letterSpacing: 0.2,
       flexShrink: 1,
     },
-    profileEditShareBtn: {
-      width: 44,
-      height: 44,
-      alignItems: "center",
-      justifyContent: "center",
-    },
     badgeRow: {
       width: "100%",
       alignItems: "center",
@@ -881,12 +997,10 @@ function getStyles(theme: any) {
       position: "absolute",
       bottom: 18,
       right: -20,
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: "rgba(0, 102, 255, 0.95)",
-      borderWidth: 1,
-      borderColor: "rgba(0, 221, 255, 0.65)",
+      width: PROFILE_SETTINGS_CAMERA_BTN_PX,
+      height: PROFILE_SETTINGS_CAMERA_BTN_PX,
+      borderRadius: PROFILE_SETTINGS_CAMERA_BTN_PX / 2,
+      backgroundColor: "#0048FF",
       alignItems: "center",
       justifyContent: "center",
       zIndex: 20,
@@ -913,20 +1027,10 @@ function getStyles(theme: any) {
       gap: 5,
     },
     quickInfoText: {
-      color: "rgba(200, 220, 255, 0.78)",
+      color: "#86A7D2",
       fontFamily: theme.regularFont,
       fontSize: 13,
       flexShrink: 1,
-    },
-    menuCardGradientOuter: {
-      borderRadius: 20,
-      padding: 2.5,
-      overflow: "hidden",
-    },
-    menuCard: {
-      borderRadius: 18,
-      backgroundColor: SETTINGS_MENU_FILL,
-      overflow: "hidden",
     },
     menuRow: {
       flexDirection: "row",
@@ -1033,6 +1137,114 @@ function getStyles(theme: any) {
       fontFamily: theme.regularFont,
       fontSize: 15,
       marginBottom: 2,
+    },
+    countryTrigger: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      minHeight: 48,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: PROFILE_FIELD_BORDER,
+      backgroundColor: PROFILE_FIELD_BG,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    countryTriggerFlag: {
+      width: 26,
+      height: 18,
+      borderRadius: 3,
+      backgroundColor: "rgba(255,255,255,0.06)",
+    },
+    countryTriggerText: {
+      flex: 1,
+      color: "#fff",
+      fontFamily: theme.regularFont,
+      fontSize: 15,
+    },
+    countryTriggerPlaceholder: {
+      flex: 1,
+      color: theme.placeholderTextColor ?? theme.mutedForegroundColor ?? "rgba(200, 220, 255, 0.55)",
+      fontFamily: theme.regularFont,
+      fontSize: 15,
+    },
+    countryModalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(1, 7, 25, 0.78)",
+      justifyContent: "center",
+      paddingHorizontal: 18,
+    },
+    countryModalCard: {
+      backgroundColor: "#030A17",
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: "rgba(0, 187, 255, 0.32)",
+      paddingTop: 14,
+      paddingBottom: 8,
+      overflow: "hidden",
+    },
+    countryModalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+    },
+    countryModalTitle: {
+      color: "#FFFFFF",
+      fontFamily: theme.semiBoldFont,
+      fontSize: 17,
+    },
+    countrySearchWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: PROFILE_FIELD_BG,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: PROFILE_FIELD_BORDER,
+      paddingHorizontal: 12,
+      marginHorizontal: 14,
+      marginBottom: 8,
+    },
+    countrySearchInput: {
+      flex: 1,
+      color: "#fff",
+      fontFamily: theme.regularFont,
+      fontSize: 14,
+      paddingVertical: Platform.OS === "ios" ? 12 : 8,
+    },
+    countryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+    },
+    countryRowActive: {
+      backgroundColor: "rgba(0, 120, 255, 0.18)",
+    },
+    countryRowFlag: {
+      width: 28,
+      height: 20,
+      borderRadius: 3,
+      backgroundColor: "rgba(255,255,255,0.06)",
+    },
+    countryRowText: {
+      flex: 1,
+      color: "#fff",
+      fontFamily: theme.mediumFont,
+      fontSize: 15,
+    },
+    countryRowTextActive: {
+      color: "#18C0FF",
+    },
+    countryEmptyText: {
+      color: "rgba(232,240,255,0.62)",
+      fontFamily: theme.regularFont,
+      fontSize: 13,
+      textAlign: "center",
+      paddingVertical: 24,
+      paddingHorizontal: 16,
     },
     chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
     chip: {

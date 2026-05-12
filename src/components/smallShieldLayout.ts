@@ -53,6 +53,12 @@ export const smallShieldLayout = {
     left: '43.5%',
     bottom: '9.2%',
   },
+  brandLogoBelowFlag: {
+    width: '28%',
+    left: '36%',
+    bottom: '0.9%',
+    aspectRatio: 3.6,
+  },
   score: {
     right: '6%',
     top: '12%',

@@ -494,6 +494,8 @@ export function Technique() {
   const [hideHowToNextTime, setHideHowToNextTime] = useState(false)
   const [skipHowToModal, setSkipHowToModal] = useState(false)
   const [pendingHowToAction, setPendingHowToAction] = useState<HowToAction | null>(null)
+  /** Measured size of the "How to upload" modal card so the SVG inner-glow matches the upload box. */
+  const [howToCardSize, setHowToCardSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const styles = getStyles(theme)
 
   /**
@@ -2940,17 +2942,81 @@ export function Technique() {
             onPress={closeHowToModal}
             style={StyleSheet.absoluteFillObject}
           />
-          <View style={styles.howToCard}>
+          <View
+            style={styles.howToCard}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout
+              setHowToCardSize((prev) =>
+                prev.w === width && prev.h === height ? prev : { w: width, h: height }
+              )
+            }}
+          >
+            {/* Same inset-glow + gradient-border treatment as the Step 1 upload box (see `frameOuter`). */}
+            {howToCardSize.w > 0 && howToCardSize.h > 0 ? (
+              <Svg
+                pointerEvents="none"
+                width={howToCardSize.w}
+                height={howToCardSize.h}
+                style={StyleSheet.absoluteFill}
+              >
+                <Defs>
+                  <SvgLinearGradient
+                    id="howToFrameStroke"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2={howToCardSize.h}
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <Stop offset="0" stopColor="#0066FF" stopOpacity={0} />
+                    <Stop offset="1" stopColor="#0066FF" stopOpacity={0.25} />
+                  </SvgLinearGradient>
+                  <Filter id="howToInsetGlow" x="-20%" y="-20%" width="140%" height="140%">
+                    <FeGaussianBlur in="SourceGraphic" stdDeviation={20} />
+                  </Filter>
+                </Defs>
+                {/* inset glow — blurred blue rect clipped to the panel edges */}
+                <Rect
+                  x={1}
+                  y={1}
+                  width={howToCardSize.w - 2}
+                  height={howToCardSize.h - 2}
+                  rx={28}
+                  ry={28}
+                  fill="none"
+                  stroke="#0066FF"
+                  strokeWidth={40}
+                  strokeOpacity={0.25}
+                  filter="url(#howToInsetGlow)"
+                />
+                {/* gradient border on top */}
+                <Rect
+                  x={1}
+                  y={1}
+                  width={howToCardSize.w - 2}
+                  height={howToCardSize.h - 2}
+                  rx={28}
+                  ry={28}
+                  fill="none"
+                  stroke="url(#howToFrameStroke)"
+                  strokeWidth={2}
+                />
+              </Svg>
+            ) : null}
             <Text style={styles.howToTitle}>How to upload your video</Text>
             <Text style={styles.howToSubtitle}>
-              Make sure your video recording/file{'\n'}is close to the player
+              Make sure your video recording/{'\n'}file is close to the player
             </Text>
             <View style={styles.howToBadgeRow}>
-              <View style={[styles.howToBadgeCircle, styles.howToBadgeWrong]}>
-                <Ionicons name="close" size={20} color="#FFFFFF" />
+              <View style={styles.howToBadgeCol}>
+                <View style={[styles.howToBadgeCircle, styles.howToBadgeWrong]}>
+                  <Ionicons name="close" size={20} color="#FFFFFF" />
+                </View>
               </View>
-              <View style={[styles.howToBadgeCircle, styles.howToBadgeCorrect]}>
-                <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+              <View style={styles.howToBadgeCol}>
+                <View style={[styles.howToBadgeCircle, styles.howToBadgeCorrect]}>
+                  <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                </View>
               </View>
             </View>
             <View style={styles.howToImagesRow}>
@@ -2964,10 +3030,18 @@ export function Technique() {
               </View>
               <View style={styles.howToImagesCol}>
                 <View style={[styles.howToImageWrap, styles.howToImageWrapCorrect]}>
-                  <Image source={HOWTO_RIGHT1_IMAGE} style={styles.howToImage} resizeMode="cover" />
+                  <Image
+                    source={HOWTO_RIGHT1_IMAGE}
+                    style={[styles.howToImage, styles.howToImageRightShift]}
+                    resizeMode="cover"
+                  />
                 </View>
                 <View style={[styles.howToImageWrap, styles.howToImageWrapCorrect]}>
-                  <Image source={HOWTO_RIGHT2_IMAGE} style={styles.howToImage} resizeMode="cover" />
+                  <Image
+                    source={HOWTO_RIGHT2_IMAGE}
+                    style={[styles.howToImage, styles.howToImageRightShift]}
+                    resizeMode="cover"
+                  />
                 </View>
               </View>
             </View>
@@ -3465,7 +3539,9 @@ function getStyles(theme: any) {
       borderWidth: 0,
       backgroundColor: '#041641',
       marginTop: 4,
-      marginBottom: 14,
+      // Match marginTop so the banner has the same gap above and below
+      // (gap below was 14, which read as too much padding before the video preview).
+      marginBottom: 4,
     },
     step2VideoSummaryTextCol: {
       flex: 1,
@@ -3986,6 +4062,8 @@ function getStyles(theme: any) {
     },
     scoreBreakdownGradientBar: {
       width: '100%',
+      flex: 0,
+      alignSelf: 'stretch',
     },
     scoreBreakdownScoreCol: {
       alignItems: 'flex-end',
@@ -4489,46 +4567,49 @@ function getStyles(theme: any) {
     },
     howToCard: {
       borderRadius: 28,
-      borderWidth: 1,
-      borderColor: 'rgba(0, 187, 255, 0.32)',
-      backgroundColor: '#031748',
+      backgroundColor: '#030A17',
       paddingHorizontal: 16,
       paddingVertical: 18,
       alignSelf: 'center',
       width: '100%',
       maxWidth: 380,
-      shadowColor: '#00BBFF',
-      shadowOpacity: 0.22,
-      shadowRadius: 22,
-      shadowOffset: { width: 0, height: 8 },
+      // Inset glow + gradient border are drawn as an SVG overlay (matches the AI Coach
+      // Step 1 upload box). `overflow: 'hidden'` clips the blurred stroke to the card edges.
+      overflow: 'hidden',
     },
     howToTitle: {
       textAlign: 'center',
       color: '#FFFFFF',
       fontFamily: theme.semiBoldFont,
-      fontSize: 25,
-      lineHeight: 29,
+      fontSize: 20,
+      lineHeight: 24,
     },
     howToSubtitle: {
-      marginTop: 8,
+      marginTop: 6,
       textAlign: 'center',
-      color: 'rgba(223, 241, 255, 0.86)',
+      color: '#86A7D2',
       fontFamily: theme.regularFont,
       fontSize: 13,
-      lineHeight: 18,
+      lineHeight: 17,
       paddingHorizontal: 10,
     },
     howToBadgeRow: {
-      marginTop: 14,
+      marginTop: 12,
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      paddingHorizontal: 56,
+      gap: 8,
+      alignSelf: 'center',
+      width: '88%',
+    },
+    /** Mirrors `howToImagesCol` width so each badge centers above its image column. */
+    howToBadgeCol: {
+      flex: 1,
       alignItems: 'center',
+      justifyContent: 'center',
     },
     howToBadgeCircle: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 38,
+      height: 38,
+      borderRadius: 19,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -4541,16 +4622,18 @@ function getStyles(theme: any) {
     howToImagesRow: {
       marginTop: 10,
       flexDirection: 'row',
-      gap: 10,
+      gap: 8,
+      alignSelf: 'center',
+      width: '88%',
     },
     howToImagesCol: {
       flex: 1,
-      gap: 10,
+      gap: 8,
     },
     howToImageWrap: {
       width: '100%',
       aspectRatio: 1,
-      borderRadius: 18,
+      borderRadius: 16,
       overflow: 'hidden',
       backgroundColor: '#0A1330',
     },
@@ -4565,13 +4648,27 @@ function getStyles(theme: any) {
     howToImage: {
       width: '100%',
       height: '100%',
+      // Crop in tighter on the subject without changing the surrounding layout.
+      // `cover` already fills the wrap; the extra scale just zooms further in.
+      transform: [{ scale: 1.2 }],
+    },
+    /**
+     * Shifts the right-column photos UP within their wraps so the bottom of the source
+     * (the "SIDE ✓" caption baked into the image) ends up visible. Wraps stay the same
+     * size/position — only the image content slides.
+     */
+    howToImageRightShift: {
+      transform: [{ scale: 1.2 }, { translateY: -12 }],
     },
     howToCheckboxRow: {
-      marginTop: 14,
+      // Match the 88% side margins used by the images + badges above.
+      marginTop: 6,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      alignSelf: 'flex-start',
+      alignSelf: 'center',
+      width: '88%',
+      paddingVertical: 10,
     },
     howToCheckbox: {
       width: 22,
@@ -4592,20 +4689,23 @@ function getStyles(theme: any) {
       fontSize: 15,
     },
     howToAcceptOuter: {
-      marginTop: 16,
-      borderRadius: 24,
+      // Same 88% side margins as the imagery + checkbox above.
+      marginTop: 4,
+      borderRadius: 22,
       overflow: 'hidden',
+      alignSelf: 'center',
+      width: '88%',
     },
     howToAcceptInner: {
-      minHeight: 66,
-      borderRadius: 24,
+      minHeight: 56,
+      borderRadius: 22,
       alignItems: 'center',
       justifyContent: 'center',
     },
     howToAcceptText: {
       fontFamily: theme.semiBoldFont,
-      fontSize: 24,
-      lineHeight: 28,
+      fontSize: 20,
+      lineHeight: 24,
       color: '#FFFFFF',
     },
   })

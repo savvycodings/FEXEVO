@@ -144,11 +144,7 @@ function YouTabStack({
 }
 
 function MainTabsLayout(props: { profileRefreshTick: number; onProfileUpdated: () => void }) {
-  return (
-    <SessionDataProvider profileRefreshTick={props.profileRefreshTick}>
-      <MainTabsLayoutInner {...props} />
-    </SessionDataProvider>
-  )
+  return <MainTabsLayoutInner {...props} />
 }
 
 function MainTabsLayoutInner({
@@ -464,15 +460,16 @@ function AuthenticatedStack() {
 
   return (
     <View style={{ flex: 1, backgroundColor: stackContentBg }}>
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        /** Opaque route cards — default nav theme can still flash at edges if this is ever transparent. */
-        contentStyle: {
-          backgroundColor: stackContentBg,
-        },
-      }}
-    >
+      <SessionDataProvider profileRefreshTick={profileRefreshTick}>
+        <Stack.Navigator
+          screenOptions={{
+            headerShown: false,
+            /** Opaque route cards — default nav theme can still flash at edges if this is ever transparent. */
+            contentStyle: {
+              backgroundColor: stackContentBg,
+            },
+          }}
+        >
       <Stack.Screen name="Main">
         {() => (
           <MainTabsLayout profileRefreshTick={profileRefreshTick} onProfileUpdated={onProfileUpdated} />
@@ -522,7 +519,8 @@ function AuthenticatedStack() {
       <Stack.Screen name="CoachReviewEditor" component={CoachReviewEditorScreen} />
       <Stack.Screen name="StudentCoachReview" component={StudentCoachReviewScreen} />
       <Stack.Screen name="AdminMembers" component={AdminMembersScreen} />
-    </Stack.Navigator>
+        </Stack.Navigator>
+      </SessionDataProvider>
     </View>
   )
 }

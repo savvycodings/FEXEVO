@@ -449,7 +449,9 @@ export function ProgressScreen() {
           styles.scrollInner,
           {
             paddingHorizontal: horizontalPad,
-            paddingTop: insets.top + 12,
+            // Sits below the global <Header/> in main.tsx, which already pads insets.top.
+            // Re-adding insets.top here doubled the gap above the "Progress" title.
+            paddingTop: 8,
             // Keep content clear of tab bar without painting an extra bottom block.
             paddingBottom: 32 + insets.bottom + 74,
           },
