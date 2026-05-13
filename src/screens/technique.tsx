@@ -1780,6 +1780,7 @@ export function Technique() {
           contentContainerStyle={[
             styles.stepContentInner,
             { paddingBottom: TAB_SCENE_SCROLL_BOTTOM_PAD },
+            step === 1 && uploading && scrollBodyH > 0 ? { minHeight: scrollBodyH } : null,
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -3270,7 +3271,7 @@ function getStyles(theme: any) {
       fontSize: 14,
       color: '#FFFFFF',
     },
-    step1: { flex: 1, minHeight: 0 },
+    step1: { flex: 1, minHeight: 0, width: '100%', alignSelf: 'stretch' },
     frameWrap: { alignItems: 'center', marginTop: 0, flex: 1, justifyContent: 'flex-start' },
     frameOuter: { position: 'relative', borderRadius: FRAME_RADIUS + STROKE_WIDTH, overflow: 'hidden' },
     frameInner: {
@@ -3435,9 +3436,12 @@ function getStyles(theme: any) {
     },
     secondaryActionText: { fontFamily: theme.semiBoldFont, fontSize: 16, color: theme.textColor },
     uploadProgressWrap: {
+      flex: 1,
+      width: '100%',
+      minHeight: 0,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 40,
+      paddingVertical: 24,
       gap: 12,
     },
     uploadProgressBarTrack: {
