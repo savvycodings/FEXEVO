@@ -68,6 +68,8 @@ const HORIZONTAL_PADDING = 24
 const FRAME_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 2
 const FRAME_ASPECT = 9 / 16
 const FRAME_HEIGHT = FRAME_WIDTH / FRAME_ASPECT
+/** Upload step: bar slightly narrower than the “Uploading your video” caption line. */
+const UPLOAD_PROGRESS_TRACK_WIDTH = Math.min(200, Math.max(168, Math.round(FRAME_WIDTH * 0.56)))
 const STROKE_WIDTH = 4
 const FRAME_RADIUS = 24
 const GRADIENT_COLORS = ['#0022FF', '#00BBFF', '#00BBFF', '#0022FF']
@@ -96,7 +98,7 @@ const FOCUS_HEADLINE_FALLBACK = 'Next focus'
 const STEP3_INSIGHT_ICON_PX = 42
 const HOWTO_HIDE_KEY = 'technique_hide_howto_prompt'
 const CHOOSE_FILE_ICON = require('../../assets/aicoach/choosefileicon.svg')
-const SLIDER_LOCK_ICON = require('../../assets/sliderpage/lockicon.svg')
+const UPLOADING_STEP_ICON = require('../../assets/actiities/uploading.svg')
 const CORRECTION_MODE_ICON_GREY = '#6B7F9E'
 const CORRECTION_MODE_ICON_ACTIVE = '#00BBFF'
 /** Matches Summary Category / Level / Shot gradient ring */
@@ -906,15 +908,6 @@ export function Technique() {
     setClips(prev => prev.filter(c => c.id !== id))
   }
 
-  function nudgeMarkerByFrame(direction: -1 | 1) {
-    if (videoDurationSeconds == null || videoDurationSeconds <= 0) return
-    const totalMs = videoDurationSeconds * 1000
-    const frameStepMs = (CAROUSEL_FRAMES_EVERY / CAROUSEL_FPS) * 1000
-    const next = clamp01(markerProgress + (direction * frameStepMs) / totalMs)
-    setMarkerProgressStable(next)
-    void seekTrimToProgress(next)
-  }
-
   const resetToNewVideo = useCallback(() => {
     setUploadedVideoUrl(null)
     setLocalVideoUri(null)
@@ -1040,6 +1033,13 @@ export function Technique() {
   }
 
   async function uploadVideo(uri: string, fileName: string, mimeType: string): Promise<void> {
+    let uploadProgressTimer: ReturnType<typeof setInterval> | null = null
+    const clearUploadProgressTimer = () => {
+      if (uploadProgressTimer != null) {
+        clearInterval(uploadProgressTimer)
+        uploadProgressTimer = null
+      }
+    }
     try {
       console.log('[Technique] Upload started', { fileName, mimeType, sendVideoToCoach })
       setUploading(true)
@@ -1082,6 +1082,15 @@ export function Technique() {
         formData.append('video', { uri, name: fileName, type: mimeType })
       }
       formData.append('sendVideoToCoach', sendVideoToCoach ? '1' : '0')
+
+      setUploadProgress(5)
+      uploadProgressTimer = setInterval(() => {
+        setUploadProgress((p) => {
+          if (p >= 94) return p
+          const delta = Math.max(1.2, (94 - p) * 0.09)
+          return Math.min(94, p + delta)
+        })
+      }, 110)
 
       const res = await authClient
         .$fetch<{ id?: string; url?: string; error?: string }>('/technique/upload', {
@@ -1150,8 +1159,9 @@ export function Technique() {
       console.error('[Technique] Upload error', err)
       setUploadError('Upload failed due to a network error. Please try again.')
     } finally {
-      setUploading(false)
+      clearUploadProgressTimer()
       setUploadProgress(100)
+      setUploading(false)
     }
   }
 
@@ -1522,12 +1532,8 @@ export function Technique() {
             <View style={styles.step2}>
                 <View style={styles.step2VideoSummaryCard}>
                   <View style={styles.step2VideoSummaryTextCol}>
-                    <Text allowFontScaling={false} style={styles.step2VideoSummaryLabel}>
-                      Total Length of the video
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.step2VideoSummaryValue}>
-                      {videoDurationSeconds != null ? String(videoDurationSeconds) : '—'}
-                      <Text style={styles.step2VideoSummaryUnit}> Seconds</Text>
+                    <Text allowFontScaling={false} style={styles.step2VideoSummaryInstruction}>
+                      Set the impact of the ball with the white line
                     </Text>
                   </View>
                   <View style={styles.step2SummaryThumbOuter}>
@@ -1645,11 +1651,7 @@ export function Technique() {
                 <View style={styles.trimCard}>
                   {uploadedVideoUrl != null ? (
                     videoDurationSeconds != null && videoDurationSeconds > 0 ? (
-                      <>
-                        <Text allowFontScaling={false} style={styles.trimImpactInstruction}>
-                          Set the impact of the ball with the white line
-                        </Text>
-                        <VideoFrameCarousel
+                      <VideoFrameCarousel
                         videoUri={localVideoUri ?? uploadedVideoUrl}
                         durationMs={videoDurationSeconds * 1000}
                         durationSec={videoDurationSeconds}
@@ -1679,42 +1681,29 @@ export function Technique() {
                         }}
                         onCenterFrameImageUriChange={setStep2CenterFrameUri}
                       />
-                      </>
                     ) : (
-                      <>
-                        <Text allowFontScaling={false} style={styles.trimImpactInstruction}>
-                          Set the impact of the ball with the white line
-                        </Text>
-                        <View style={styles.step2CarouselLoading}>
+                      <View style={styles.step2CarouselLoading}>
                         <ActivityIndicator size="small" color="#2AB4FF" />
                         <Text allowFontScaling={false} style={styles.step2CarouselLoadingText}>
                           Loading video duration…
                         </Text>
                       </View>
-                      </>
                     )
                   ) : null}
 
                   <View style={styles.setClipControlRow}>
                     <TouchableOpacity
-                      style={styles.frameNudgeArrowBtn}
-                      onPress={() => nudgeMarkerByFrame(-1)}
+                      style={[styles.step2TrimTrashBtn, clips.length === 0 && styles.step2TrimTrashBtnDisabled]}
+                      onPress={() => setClips([])}
                       activeOpacity={0.85}
-                      disabled={videoDurationSeconds == null || videoDurationSeconds <= 0}
+                      disabled={clips.length === 0}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear all clips"
                     >
-                      <Text style={styles.frameNudgeArrowText}>{'<-'}</Text>
+                      <FeatherIcon name="trash-2" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.setClipButton} onPress={addClipAtCurrentMarker} activeOpacity={0.9}>
                       <Text style={styles.setClipButtonText}>Set Clip</Text>
-                      <LocalSvgAsset assetModule={SLIDER_LOCK_ICON} width={16} height={16} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.frameNudgeArrowBtn}
-                      onPress={() => nudgeMarkerByFrame(1)}
-                      activeOpacity={0.85}
-                      disabled={videoDurationSeconds == null || videoDurationSeconds <= 0}
-                    >
-                      <Text style={styles.frameNudgeArrowText}>{'->'}</Text>
                     </TouchableOpacity>
                   </View>
                   {clips.length > 0 && (
@@ -1733,45 +1722,55 @@ export function Technique() {
                   )}
                 </View>
               <View style={styles.step2BottomBar}>
-              <TouchableOpacity
-                style={styles.analyseButton}
-                onPress={() => {
-                  if (analysisReady) {
-                    setStep(3)
-                    return
-                  }
-                  void runAnalysis(undefined, { navigateOnDone: true, resetState: false })
-                }}
-                activeOpacity={0.9}
-                disabled={!uploadedVideoId || analysisLoading || clips.length === 0}
-              >
-                <LinearGradient
-                  colors={['#4B2CFF', '#00B4FF']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.analyseButtonInner}
-                >
-                  {analysisLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : analysisReady ? (
-                    <>
-                      <Text style={styles.analyseButtonText}>View Results</Text>
-                      <FeatherIcon name="arrow-right" size={20} color="#fff" />
-                    </>
-                  ) : (
-                    <Text style={styles.analyseButtonText}>Analyse Video</Text>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.step2TryNewVideoBtn}
-                onPress={resetToNewVideo}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel="Try a new video"
-              >
-                <Text style={styles.step2TryNewVideoText}>Try a new video</Text>
-              </TouchableOpacity>
+                <View style={styles.step2BottomBarHalf}>
+                  <TouchableOpacity
+                    style={[styles.step2TryNewVideoBtn, styles.step2BottomBarBtnFill]}
+                    onPress={resetToNewVideo}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Try a new video"
+                  >
+                    <Text style={styles.step2TryNewVideoText} numberOfLines={2}>
+                      Try a new video
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.step2BottomBarHalf}>
+                  <TouchableOpacity
+                    style={[styles.analyseButton, styles.step2BottomBarBtnFill]}
+                    onPress={() => {
+                      if (analysisReady) {
+                        setStep(3)
+                        return
+                      }
+                      void runAnalysis(undefined, { navigateOnDone: true, resetState: false })
+                    }}
+                    activeOpacity={0.9}
+                    disabled={!uploadedVideoId || analysisLoading || clips.length === 0}
+                  >
+                    <LinearGradient
+                      colors={['#4B2CFF', '#00B4FF']}
+                      start={{ x: 0, y: 0.5 }}
+                      end={{ x: 1, y: 0.5 }}
+                      style={styles.analyseButtonInner}
+                    >
+                      {analysisLoading ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : analysisReady ? (
+                        <>
+                          <Text style={styles.analyseButtonText} numberOfLines={1}>
+                            View Results
+                          </Text>
+                          <FeatherIcon name="arrow-right" size={20} color="#fff" />
+                        </>
+                      ) : (
+                        <Text style={styles.analyseButtonText} numberOfLines={2}>
+                          Analyse Video
+                        </Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </KeyboardAwareScrollView>
@@ -1963,11 +1962,20 @@ export function Technique() {
           <View style={styles.step1}>
             {uploading ? (
               <View style={styles.uploadProgressWrap}>
-                <ActivityIndicator size="large" color="#E85D04" />
-                <Text style={styles.uploadProgressText}>Uploading… {uploadProgress}%</Text>
-                <View style={styles.progressBarBg}>
-                  <View style={[styles.progressBarFill, { width: `${uploadProgress}%` }]} />
+                <LocalSvgAsset assetModule={UPLOADING_STEP_ICON} width={56} height={56} />
+                <View style={styles.uploadProgressBarTrack}>
+                  <View
+                    style={[
+                      styles.uploadProgressBarFill,
+                      {
+                        width: `${Math.max(0, Math.min(100, uploadProgress))}%`,
+                      },
+                    ]}
+                  />
                 </View>
+                <Text allowFontScaling={false} style={styles.uploadProgressCaption}>
+                  Uploading your video
+                </Text>
               </View>
             ) : (
               <View style={styles.frameWrap}>
@@ -3426,10 +3434,32 @@ function getStyles(theme: any) {
       borderColor: theme.borderColor,
     },
     secondaryActionText: { fontFamily: theme.semiBoldFont, fontSize: 16, color: theme.textColor },
-    uploadProgressWrap: { alignItems: 'center', paddingVertical: 32 },
-    uploadProgressText: { fontFamily: theme.mediumFont, fontSize: 16, color: theme.textColor, marginTop: 16, marginBottom: 12 },
-    progressBarBg: { height: 8, width: '100%', backgroundColor: theme.borderColor, borderRadius: 4, overflow: 'hidden' },
-    progressBarFill: { height: '100%', backgroundColor: '#E85D04', borderRadius: 4 },
+    uploadProgressWrap: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 40,
+      gap: 12,
+    },
+    uploadProgressBarTrack: {
+      width: UPLOAD_PROGRESS_TRACK_WIDTH,
+      height: 8,
+      borderRadius: 4,
+      overflow: 'hidden',
+      backgroundColor: 'rgba(255,255,255,0.14)',
+    },
+    uploadProgressBarFill: {
+      height: '100%',
+      minWidth: 0,
+      borderRadius: 4,
+      backgroundColor: '#00BBFF',
+    },
+    uploadProgressCaption: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 15,
+      color: '#FFFFFF',
+      textAlign: 'center',
+      letterSpacing: 0.2,
+    },
     step2: { position: 'relative' as const, flexShrink: 1, gap: 20, minHeight: 0 },
     /** Step 2: scroll region + pinned actions above tab bar */
     step2SplitRoot: {
@@ -3438,8 +3468,22 @@ function getStyles(theme: any) {
       flexDirection: 'column' as const,
     },
     step2BottomBar: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
       gap: 8,
       paddingTop: 6,
+    },
+    step2BottomBarHalf: {
+      flex: 1,
+      flexBasis: 0,
+      minWidth: 0,
+    },
+    /** Fill half column: equal width + height for Try new / Analyse. */
+    step2BottomBarBtnFill: {
+      flex: 1,
+      alignSelf: 'stretch',
+      width: '100%',
+      minHeight: 52,
     },
     step2ThumbnailContainer: {
       marginTop: 8,
@@ -3509,10 +3553,10 @@ function getStyles(theme: any) {
       color: '#86A7D2',
       marginTop: 2,
     },
-    /** Width = scroll gutter; height set inline from intrinsic video aspect (`trimPreviewLayout`). */
+    /** Same bottom margin as `step2VideoSummaryCard` so gap-to-carousel matches gap-to-video. */
     trimImpactPreviewOuter: {
       width: '100%',
-      marginBottom: 14,
+      marginBottom: 4,
     },
     trimImpactPreviewFrame: {
       flex: 1,
@@ -3547,22 +3591,12 @@ function getStyles(theme: any) {
       flex: 1,
       minWidth: 0,
     },
-    step2VideoSummaryLabel: {
-      fontFamily: theme.regularFont,
-      fontSize: 12,
-      color: '#86A7D2',
-      marginBottom: 8,
-    },
-    step2VideoSummaryValue: {
+    step2VideoSummaryInstruction: {
       fontFamily: theme.semiBoldFont,
-      fontSize: 26,
+      fontSize: 16,
+      lineHeight: 22,
       color: '#FFFFFF',
-      letterSpacing: 0.2,
-    },
-    step2VideoSummaryUnit: {
-      fontFamily: theme.mediumFont,
-      fontSize: 14,
-      color: 'rgba(232,240,255,0.82)',
+      letterSpacing: 0.1,
     },
     step2SummaryThumbOuter: {
       position: 'relative' as const,
@@ -3594,16 +3628,6 @@ function getStyles(theme: any) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#041641',
-    },
-    trimImpactInstruction: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 15,
-      color: '#FFFFFF',
-      textAlign: 'center',
-      lineHeight: 20,
-      marginBottom: 10,
-      marginTop: 0,
-      paddingHorizontal: 8,
     },
     step2CarouselLoading: {
       width: '100%',
@@ -3648,14 +3672,16 @@ function getStyles(theme: any) {
       borderWidth: 0,
       backgroundColor: '#041641',
       paddingVertical: 15,
-      paddingHorizontal: 20,
+      paddingHorizontal: 12,
       alignItems: 'center',
       justifyContent: 'center',
+      minHeight: 52,
     },
     step2TryNewVideoText: {
       fontFamily: theme.semiBoldFont,
       fontSize: 16,
       color: '#00B8FF',
+      textAlign: 'center',
     },
     step2InstructionMain: {
       fontFamily: theme.semiBoldFont,
@@ -3736,15 +3762,22 @@ function getStyles(theme: any) {
       marginTop: 0,
     },
     analyseButtonInner: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
       paddingVertical: 16,
-      paddingHorizontal: 24,
+      paddingHorizontal: 16,
       borderRadius: 14,
+      minHeight: 52,
     },
-    analyseButtonText: { fontFamily: theme.semiBoldFont, fontSize: 17, color: '#fff' },
+    analyseButtonText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 17,
+      color: '#fff',
+      textAlign: 'center',
+    },
     step3: { flexShrink: 1, gap: 24, minHeight: 0 },
     /** Match accordion row width: no extra horizontal inset beyond `stepContentInner` */
     step3FullWidthBlock: {
@@ -4097,25 +4130,21 @@ function getStyles(theme: any) {
     setClipControlRow: {
       marginTop: 2,
       marginBottom: 6,
+      width: '100%',
       flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 10,
+      justifyContent: 'space-between',
       alignItems: 'center',
     },
-    frameNudgeArrowBtn: {
+    step2TrimTrashBtn: {
       width: 46,
       height: 46,
+      borderRadius: 23,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 23,
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.22)',
-      backgroundColor: 'rgba(4,22,65,0.88)',
+      backgroundColor: '#006EFF',
     },
-    frameNudgeArrowText: {
-      fontFamily: theme.mediumFont,
-      fontSize: 18,
-      color: '#E8F0FF',
+    step2TrimTrashBtnDisabled: {
+      opacity: 0.35,
     },
     trimTitle: {
       fontFamily: theme.semiBoldFont,
@@ -4213,9 +4242,8 @@ function getStyles(theme: any) {
       backgroundColor: 'rgba(255,255,255,0.48)',
     },
     setClipButton: {
-      flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      justifyContent: 'center',
       backgroundColor: '#FFFFFF',
       borderRadius: 24,
       paddingHorizontal: 26,

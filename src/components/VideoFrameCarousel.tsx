@@ -618,7 +618,6 @@ export function VideoFrameCarousel({
           <View pointerEvents="none" style={styles.framesRow}>
             {frames.map((frame) => {
               const ms = frame.timeMs ?? 0
-              const inside = ms >= safeStartMs && ms <= safeEndMs
               const frameX = ms * pxPerMs
               const width = Math.max(8, FRAME_WIDTH * Math.min(1, Math.max(0.22, pxPerMs * 180)))
               return (
@@ -626,7 +625,7 @@ export function VideoFrameCarousel({
                   {frame.uri ? (
                     <Image
                       source={{ uri: normalizeThumbnailImageUri(frame.uri) }}
-                      style={[styles.frameImage, !inside && styles.frameImageDim]}
+                      style={styles.frameImage}
                       resizeMode="cover"
                       fadeDuration={0}
                     />
@@ -708,11 +707,6 @@ export function VideoFrameCarousel({
           {fmt(dragTrimEndMs)}
         </Text>
       </View>
-
-      <Text allowFontScaling={false} style={styles.metaText}>
-        Clip: {fmt(dragTrimStartMs)} - {fmt(dragTrimEndMs)} (
-        {Math.max(0, Math.round((dragTrimEndMs - dragTrimStartMs) / 1000))}s)
-      </Text>
     </View>
   )
 }
@@ -763,9 +757,6 @@ const styles = StyleSheet.create({
   frameImage: {
     width: '100%',
     height: '100%',
-  },
-  frameImageDim: {
-    opacity: 0.42,
   },
   framePlaceholder: {
     flex: 1,
@@ -833,12 +824,5 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     fontSize: 11,
     color: '#FFFFFF',
-  },
-  metaText: {
-    marginTop: 6,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
   },
 })

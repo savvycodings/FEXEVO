@@ -9,7 +9,8 @@ import type { ImageSourcePropType } from 'react-native'
  *
  * `name` is the English display name shown in the picker. Short forms are
  * preferred over diplomatic long names (e.g. "Russia" not "Russian Federation")
- * so the list stays readable on phone widths.
+ * so the list stays readable on phone widths. The exported `COUNTRIES` list is
+ * sorted A–Z by `name` (not by ISO `code`).
  */
 export type Country = {
   code: string
@@ -17,7 +18,7 @@ export type Country = {
   flag: ImageSourcePropType
 }
 
-export const COUNTRIES: ReadonlyArray<Country> = [
+const COUNTRIES_DATA: ReadonlyArray<Country> = [
   { code: 'AC', name: 'Ascension Island', flag: require('../../assets/shield-card/flags/flag/AC.png') },
   { code: 'AD', name: 'Andorra', flag: require('../../assets/shield-card/flags/flag/AD.png') },
   { code: 'AE', name: 'United Arab Emirates', flag: require('../../assets/shield-card/flags/flag/AE.png') },
@@ -273,10 +274,62 @@ export const COUNTRIES: ReadonlyArray<Country> = [
   { code: 'ZA', name: 'South Africa', flag: require('../../assets/shield-card/flags/flag/ZA.png') },
   { code: 'ZM', name: 'Zambia', flag: require('../../assets/shield-card/flags/flag/ZM.png') },
   { code: 'ZW', name: 'Zimbabwe', flag: require('../../assets/shield-card/flags/flag/ZW.png') },
-] as const
+]
 
-const COUNTRIES_BY_NAME = new Map(COUNTRIES.map((c) => [c.name.toLowerCase(), c]))
-const COUNTRIES_BY_CODE = new Map(COUNTRIES.map((c) => [c.code.toUpperCase(), c]))
+const COUNTRIES_BY_NAME = new Map(COUNTRIES_DATA.map((c) => [c.name.toLowerCase(), c]))
+const COUNTRIES_BY_CODE = new Map(COUNTRIES_DATA.map((c) => [c.code.toUpperCase(), c]))
+
+/** Sorted A–Z by English `name` (lazy init). */
+let _countriesPickerCache: Country[] | null = null
+export function getCountriesForPicker(): ReadonlyArray<Country> {
+  if (!_countriesPickerCache) {
+    _countriesPickerCache = [...COUNTRIES_DATA].sort((a, b) => a.name.localeCompare(b.name, 'en'))
+  }
+  return _countriesPickerCache
+}
+
+/** @deprecated Prefer `getCountriesForPicker()` where tree-shaking matters. */
+export const COUNTRIES: ReadonlyArray<Country> = getCountriesForPicker()
+
+/**
+ * Extra search strings → ISO `code` (formal `name` often omits colloquial terms).
+ * e.g. "United States" does not include "America".
+ */
+const COUNTRY_SEARCH_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
+  US: [
+    'america',
+    'amerika',
+    'amarica',
+    'usa',
+    'u.s.a.',
+    'u.s.a',
+    'u.s.',
+    'united states of america',
+    'the states',
+  ],
+}
+
+/**
+ * Whether a country row should appear for a picker search (`query` trimmed; caller may lowercase).
+ */
+export function countryMatchesSearchQuery(country: Country, queryRaw: string | null | undefined): boolean {
+  const q = String(queryRaw ?? '')
+    .trim()
+    .toLowerCase()
+  if (!q) return true
+  if (!country?.name || !country?.code) return false
+  const name = country.name.toLowerCase()
+  const code = country.code.toLowerCase()
+  if (name.includes(q) || code.includes(q)) return true
+  const syn = COUNTRY_SEARCH_SYNONYMS[country.code]
+  if (!syn) return false
+  return syn.some((s) => {
+    if (q === s) return true
+    if (q.length >= 3 && s.startsWith(q)) return true
+    if (q.length >= 4 && (s.includes(q) || q.includes(s))) return true
+    return false
+  })
+}
 
 /**
  * Resolve a stored `areaLocation` string back to a `Country` row.
@@ -284,7 +337,8 @@ const COUNTRIES_BY_CODE = new Map(COUNTRIES.map((c) => [c.code.toUpperCase(), c]
  * (e.g. `"ZA"`). Returns `null` if no match (e.g. legacy free-text entries).
  */
 export function findCountry(value: string | null | undefined): Country | null {
-  if (!value) return null
+  if (value == null) return null
+  if (typeof value !== 'string') return null
   const trimmed = value.trim()
   if (!trimmed) return null
   const byName = COUNTRIES_BY_NAME.get(trimmed.toLowerCase())

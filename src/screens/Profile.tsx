@@ -151,7 +151,7 @@ function ProfileAiInsightBanner({
         <Text allowFontScaling={false} style={styles.aiInsightBody}>
           {body}
         </Text>
-        {insight.subtitle.trim() ? (
+        {typeof insight.subtitle === 'string' && insight.subtitle.trim() ? (
           <>
             <View style={styles.aiInsightDivider} />
             <Text allowFontScaling={false} style={styles.aiInsightSub}>

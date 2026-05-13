@@ -192,7 +192,9 @@ export function ShieldCoachCard({
   const outlineTop = (height - outlineH) / 2
   const photoSource: ImageSourcePropType = coachImageUri ? { uri: coachImageUri } : FALLBACK_COACH
   const flagSource = shieldFlagSource(flagCode)
-  const topNameLabel = (topShieldName !== undefined ? topShieldName : coachName).trim()
+  const topNameRaw =
+    topShieldName !== undefined && topShieldName !== null ? topShieldName : coachName
+  const topNameLabel = typeof topNameRaw === 'string' ? topNameRaw.trim() : ''
   const profileSettingsStackEnabled =
     variant === 'profileSettings' && brandLogoSource != null && showCrest
   const isWeb = Platform.OS === 'web'

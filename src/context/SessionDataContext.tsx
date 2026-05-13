@@ -182,7 +182,8 @@ export function SessionDataProvider({
       if (!body?.user) {
         return
       }
-      const n = body.user.name?.trim()
+      const rawName = body.user.name
+      const n = typeof rawName === 'string' ? rawName.trim() : ''
       if (n) setProfileName(n)
       setProfileImageUri(profileImageToAbsoluteUri(body.user.image))
       const area = body.profile?.areaLocation
@@ -195,7 +196,8 @@ export function SessionDataProvider({
 
   const hydrateFromCache = useCallback(async () => {
     const cached = await getCachedProfile().catch(() => null)
-    const n = cached?.user?.name?.trim()
+    const rawCachedName = cached?.user?.name
+    const n = typeof rawCachedName === 'string' ? rawCachedName.trim() : ''
     if (n) setProfileName(n)
     setProfileImageUri(profileImageToAbsoluteUri(cached?.user?.image))
     const area = cached?.profile?.areaLocation

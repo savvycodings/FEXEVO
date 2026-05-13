@@ -10,7 +10,9 @@ export type CachedProfile = {
   };
   profile?: {
     username?: string | null;
+    phone?: string | null;
     areaLocation?: string | null;
+    birthDate?: string | null;
     gender?: string | null;
     level?: string | null;
     rankingOrg?: string | null;

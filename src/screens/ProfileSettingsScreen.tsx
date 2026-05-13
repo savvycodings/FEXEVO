@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
   FlatList,
   Pressable,
 } from "react-native";
-import { COUNTRIES, findCountry, type Country } from "../lib/countries";
+import { getCountriesForPicker, countryMatchesSearchQuery, findCountry, type Country } from "../lib/countries";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -44,18 +44,67 @@ const SHARE_BUTTON_SVG = require("../../assets/actiities/sharebutton.svg");
 const CAMERA_ICON_SVG = require("../../assets/actiities/camra1.svg");
 const BIRTHDAY_ICON_SVG = require("../../assets/actiities/birthday.svg");
 const LOCATION_PIN_ICON_SVG = require("../../assets/actiities/location.svg");
+const PASSWORD_HIDE_ICON_SVG = require("../../assets/actiities/hide.svg");
+const PASSWORD_SEE_ICON_SVG = require("../../assets/actiities/see.svg");
 const XEVO_BLUE_WORDMARK = require("../../assets/actiities/xevoblue.png");
 /** Profile badge camera circle (px); keep in sync with `badgeCameraCorner` + share alignment math. */
 const PROFILE_SETTINGS_CAMERA_BTN_PX = 40;
+/** Password visibility icons (`hide.svg` / `see.svg`) — row height matches this so nothing clips. */
+const PASSWORD_VISIBILITY_ICON_PX = 26;
 
 const PROFILE_FIELD_BG = "#0E1830";
 const PROFILE_FIELD_BORDER = "rgba(21, 102, 196, 0.45)";
+/** Personal Data subsection — matches design spec */
+const PERSONAL_FIELD_BG = "#041641";
+const PERSONAL_FIELD_BORDER_FOCUS = "#00B8FF40";
+const PERSONAL_LABEL_COLOR = "#86A7D2";
+
+function splitDisplayName(full: string): { first: string; last: string } {
+  const t = full.trim();
+  if (!t) return { first: "", last: "" };
+  const i = t.indexOf(" ");
+  if (i === -1) return { first: t, last: "" };
+  return { first: t.slice(0, i).trim(), last: t.slice(i + 1).trim() };
+}
+
+function joinDisplayName(first: string, last: string): string {
+  return `${first.trim()} ${last.trim()}`.trim();
+}
+
+/** `YYYY-MM-DD` or `null` (clear). `undefined` = omit from save (keep server value). */
+function tryBuildIsoBirthDate(day: string, month: string, year: string): string | null | undefined {
+  const d = String(day ?? "").trim();
+  const m = String(month ?? "").trim();
+  const y = String(year ?? "").trim();
+  const any = !!(d || m || y);
+  if (!any) return null;
+  if (d.length < 2 || m.length < 2 || y.length < 4) return undefined;
+  const di = Number(d);
+  const mi = Number(m);
+  const yi = Number(y);
+  if (![di, mi, yi].every((n) => Number.isFinite(n))) return undefined;
+  if (mi < 1 || mi > 12 || di < 1 || di > 31 || yi < 1900 || yi > 2100) return undefined;
+  const dt = new Date(Date.UTC(yi, mi - 1, di));
+  if (dt.getUTCFullYear() !== yi || dt.getUTCMonth() !== mi - 1 || dt.getUTCDate() !== di) return undefined;
+  return `${yi}-${String(mi).padStart(2, "0")}-${String(di).padStart(2, "0")}`;
+}
+
+function formatIsoBirthDateToDMY(iso: string | null | undefined): string | null {
+  if (iso == null || typeof iso !== "string") return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  return `${d}/${mo}/${y}`;
+}
 type ProfileData = {
   user?: { name?: string; email?: string; image?: string | null };
   profile?: {
     username?: string | null;
+    phone?: string | null;
     /** Shown to your linked coaches on My Coach; not listed on the admin member directory. */
     areaLocation?: string | null;
+    /** ISO `YYYY-MM-DD` when set. */
+    birthDate?: string | null;
     gender?: string | null;
     level?: string | null;
     rankingOrg?: string | null;
@@ -136,7 +185,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [gameSaving, setGameSaving] = useState(false);
-  const [nameInput, setNameInput] = useState("");
+  const [firstNameInput, setFirstNameInput] = useState("");
+  const [lastNameInput, setLastNameInput] = useState("");
   const [usernameInput, setUsernameInput] = useState("");
   const [genderInput, setGenderInput] = useState<string | null>(null);
   const [hasRankingInput, setHasRankingInput] = useState<boolean | null>(null);
@@ -151,19 +201,135 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   const [countrySearch, setCountrySearch] = useState("");
 
   const countryResults = useMemo(() => {
-    const q = countrySearch.trim().toLowerCase();
-    if (!q) return COUNTRIES;
-    return COUNTRIES.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
-    );
+    const list = getCountriesForPicker();
+    const q = String(countrySearch ?? "").trim().toLowerCase();
+    if (!q) return list;
+    return [...list].filter((c) => countryMatchesSearchQuery(c, q));
   }, [countrySearch]);
+
+  const shieldQuickLocationLabel = useMemo(() => {
+    const pickedRaw = locationCountry?.name;
+    const picked = typeof pickedRaw === "string" ? pickedRaw.trim() : "";
+    const rawLoc = data.profile?.areaLocation;
+    const stored = typeof rawLoc === "string" ? rawLoc.trim() : "";
+    if (picked) return picked;
+    if (stored) return findCountry(stored)?.name ?? stored;
+    return null;
+  }, [locationCountry?.name, data.profile?.areaLocation]);
+
+  const shieldQuickBirthLabel = useMemo(() => {
+    const rawIso = data.profile?.birthDate;
+    const iso = typeof rawIso === "string" ? rawIso.trim() : "";
+    if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) return formatIsoBirthDateToDMY(iso) ?? null;
+    const d = String(birthDayInput ?? "").trim();
+    const m = String(birthMonthInput ?? "").trim();
+    const y = String(birthYearInput ?? "").trim();
+    if (d.length >= 2 && m.length >= 2 && y.length >= 4) {
+      return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+    }
+    return null;
+  }, [data.profile?.birthDate, birthDayInput, birthMonthInput, birthYearInput]);
   const [activeSection, setActiveSection] = useState<"personal" | "account" | "location" | "game" | null>(null);
+  const [personalFocusedField, setPersonalFocusedField] = useState<
+    "name" | "lastname" | "username" | "birthdate" | null
+  >(null);
+  const blurClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const birthBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nameInputRef = useRef<TextInput | null>(null);
+  const lastNameInputRef = useRef<TextInput | null>(null);
+  const usernameInputRef = useRef<TextInput | null>(null);
+  const birthDayInputRef = useRef<TextInput | null>(null);
+  const birthMonthInputRef = useRef<TextInput | null>(null);
+  const birthYearInputRef = useRef<TextInput | null>(null);
+
+  function cancelScheduledBlurClears() {
+    if (blurClearTimerRef.current) {
+      clearTimeout(blurClearTimerRef.current);
+      blurClearTimerRef.current = null;
+    }
+    if (birthBlurTimerRef.current) {
+      clearTimeout(birthBlurTimerRef.current);
+      birthBlurTimerRef.current = null;
+    }
+  }
+
+  function commitPersonalFieldFocus(field: "name" | "lastname" | "username" | "birthdate") {
+    cancelScheduledBlurClears();
+    setPersonalFocusedField(field);
+  }
+
+  function scheduleBlurClearField() {
+    if (blurClearTimerRef.current) clearTimeout(blurClearTimerRef.current);
+    blurClearTimerRef.current = setTimeout(() => {
+      blurClearTimerRef.current = null;
+      setPersonalFocusedField(null);
+    }, 50);
+  }
+
+  function onBirthSegmentFocus() {
+    cancelScheduledBlurClears();
+    setPersonalFocusedField("birthdate");
+  }
+
+  function onBirthSegmentBlur() {
+    if (birthBlurTimerRef.current) clearTimeout(birthBlurTimerRef.current);
+    birthBlurTimerRef.current = setTimeout(() => {
+      birthBlurTimerRef.current = null;
+      setPersonalFocusedField((f) => (f === "birthdate" ? null : f));
+    }, 120);
+  }
+
+  const [birthDayInput, setBirthDayInput] = useState("");
+  const [birthMonthInput, setBirthMonthInput] = useState("");
+  const [birthYearInput, setBirthYearInput] = useState("");
+  const [genderPickerOpen, setGenderPickerOpen] = useState(false);
+  const [accountEmailInput, setAccountEmailInput] = useState("");
+  const [accountPhoneInput, setAccountPhoneInput] = useState("");
+  const [accountPasswordCurrent, setAccountPasswordCurrent] = useState("");
+  const [accountPasswordNew, setAccountPasswordNew] = useState("");
+  const [showAccountCurrentPassword, setShowAccountCurrentPassword] = useState(false);
+  const [showAccountNewPassword, setShowAccountNewPassword] = useState(false);
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [accountFocusedField, setAccountFocusedField] = useState<
+    "email" | "phone" | "passwordCurrent" | "passwordNew" | null
+  >(null);
+  const accountBlurClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accountEmailRef = useRef<TextInput | null>(null);
+  const accountPhoneRef = useRef<TextInput | null>(null);
+  const accountPasswordCurrentRef = useRef<TextInput | null>(null);
+  const accountPasswordNewRef = useRef<TextInput | null>(null);
+
+  function cancelAccountBlurClear() {
+    if (accountBlurClearTimerRef.current) {
+      clearTimeout(accountBlurClearTimerRef.current);
+      accountBlurClearTimerRef.current = null;
+    }
+  }
+
+  function commitAccountFieldFocus(
+    field: "email" | "phone" | "passwordCurrent" | "passwordNew"
+  ) {
+    cancelAccountBlurClear();
+    setAccountFocusedField(field);
+  }
+
+  function scheduleAccountBlurClear() {
+    if (accountBlurClearTimerRef.current) clearTimeout(accountBlurClearTimerRef.current);
+    accountBlurClearTimerRef.current = setTimeout(() => {
+      accountBlurClearTimerRef.current = null;
+      setAccountFocusedField(null);
+    }, 50);
+  }
 
   function applyProfileBody(body: ProfileData) {
     setData(body);
-    setNameInput(body.user?.name || "");
+    const { first, last } = splitDisplayName(body.user?.name || "");
+    setFirstNameInput(first);
+    setLastNameInput(last);
     setUsernameInput(body.profile?.username || "");
     setGenderInput(body.profile?.gender || null);
+    setAccountEmailInput(body.user?.email || "");
+    setAccountPhoneInput(body.profile?.phone ?? "");
     if (typeof body.profile?.hasRanking === "boolean") {
       setHasRankingInput(body.profile?.hasRanking);
     } else {
@@ -175,6 +341,18 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     const storedArea = body.profile?.areaLocation || "";
     setLocationInput(storedArea);
     setLocationCountry(findCountry(storedArea));
+    const rawBd = body.profile?.birthDate;
+    const isoBirth = typeof rawBd === "string" ? rawBd.trim() : "";
+    if (isoBirth && /^\d{4}-\d{2}-\d{2}$/.test(isoBirth)) {
+      const [yStr, mStr, dStr] = isoBirth.split("-");
+      setBirthYearInput(yStr);
+      setBirthMonthInput(mStr);
+      setBirthDayInput(dStr);
+    } else {
+      setBirthDayInput("");
+      setBirthMonthInput("");
+      setBirthYearInput("");
+    }
     const rawImage = body.user?.image;
     if (typeof rawImage === "string" && rawImage.length > 0) {
       const normalized = rawImage.startsWith("http")
@@ -201,6 +379,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         profile: {
           username: body.profile?.username || null,
           areaLocation: body.profile?.areaLocation || null,
+          birthDate: body.profile?.birthDate ?? null,
+          phone: body.profile?.phone || null,
           gender: body.profile?.gender || null,
           level: body.profile?.level || null,
           rankingOrg: body.profile?.rankingOrg || null,
@@ -224,6 +404,9 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           },
           profile: {
             username: cached.profile?.username || null,
+            phone: cached.profile?.phone || null,
+            areaLocation: cached.profile?.areaLocation || null,
+            birthDate: cached.profile?.birthDate ?? null,
             gender: cached.profile?.gender || null,
             level: cached.profile?.level || null,
             rankingOrg: cached.profile?.rankingOrg || null,
@@ -238,6 +421,13 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     void loadWithCacheFirst();
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      cancelScheduledBlurClears();
+      cancelAccountBlurClear();
     };
   }, []);
 
@@ -277,20 +467,37 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   }
 
   function resetEditDraft() {
-    setNameInput(data.user?.name || "");
+    const { first, last } = splitDisplayName(data.user?.name || "");
+    setFirstNameInput(first);
+    setLastNameInput(last);
     setUsernameInput(data.profile?.username || "");
     setGenderInput(data.profile?.gender || null);
   }
 
   async function saveBasicProfile() {
+    const d0 = String(birthDayInput ?? "").trim();
+    const m0 = String(birthMonthInput ?? "").trim();
+    const y0 = String(birthYearInput ?? "").trim();
+    const anyBirth = !!(d0 || m0 || y0);
+    if (anyBirth && (d0.length < 2 || m0.length < 2 || y0.length < 4)) {
+      Alert.alert("Birthdate", "Enter day, month, and year, or clear all birthdate fields.");
+      return;
+    }
+    const birthResolved = tryBuildIsoBirthDate(birthDayInput, birthMonthInput, birthYearInput);
+    if (birthResolved === undefined) {
+      Alert.alert("Birthdate", "That date is not valid. Please check day, month, and year.");
+      return;
+    }
+
     setSaving(true);
     const res = await authClient
       .$fetch<{ ok?: boolean; error?: string }>("/profile/basic", {
         method: "POST",
         body: {
-          name: nameInput.trim(),
+          name: joinDisplayName(firstNameInput, lastNameInput),
           username: usernameInput.trim(),
           gender: genderInput || "",
+          birthDate: birthResolved,
         } as any,
       })
       .catch((e) => ({ error: e?.message || "Failed to save profile." } as any));
@@ -304,6 +511,78 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     onProfileUpdated?.();
   }
 
+  async function saveAccountProfile() {
+    const emailTrim = accountEmailInput.trim();
+    if (emailTrim.length > 0 && !emailTrim.includes("@")) {
+      Alert.alert("Invalid email", "Please enter a valid email address.");
+      return;
+    }
+    const cur = accountPasswordCurrent.trim();
+    const neu = accountPasswordNew.trim();
+    if (cur || neu) {
+      if (!cur || !neu) {
+        Alert.alert("Password", "Enter both your current password and your new password.");
+        return;
+      }
+      if (cur === neu) {
+        Alert.alert("Password", "New password must be different from your current password.");
+        return;
+      }
+    }
+
+    setAccountSaving(true);
+    try {
+      if (cur && neu) {
+        const pwRes = await authClient
+          .$fetch<{ error?: { message?: string }; token?: string | null; user?: unknown }>(
+            "/change-password",
+            {
+              method: "POST",
+              body: {
+                currentPassword: cur,
+                newPassword: neu,
+                revokeOtherSessions: false,
+              },
+            } as any
+          )
+          .catch((e) => ({ error: { message: e?.message || "Password change failed." } } as any));
+        const pwBody = ((pwRes as any)?.data ?? pwRes) as {
+          error?: { message?: string };
+          token?: string | null;
+        };
+        if (pwBody?.error?.message) {
+          Alert.alert("Password", pwBody.error.message);
+          return;
+        }
+        setAccountPasswordCurrent("");
+        setAccountPasswordNew("");
+      }
+
+      const res = await authClient
+        .$fetch<{ ok?: boolean; error?: string }>("/profile/basic", {
+          method: "POST",
+          body: {
+            name: joinDisplayName(firstNameInput, lastNameInput) || data.user?.name || "",
+            username: usernameInput.trim(),
+            gender: genderInput || "",
+            email: emailTrim,
+            phone: accountPhoneInput.trim(),
+          } as any,
+        })
+        .catch((e) => ({ error: e?.message || "Failed to save account." } as any));
+      const body = ((res as any)?.data ?? res) as { ok?: boolean; error?: string };
+      if (!body?.ok) {
+        Alert.alert("Save failed", body?.error || "Could not save account.");
+        return;
+      }
+      await loadRemote();
+      onProfileUpdated?.();
+      Alert.alert("Saved", "Account updated.");
+    } finally {
+      setAccountSaving(false);
+    }
+  }
+
   async function saveLocationProfile() {
     setLocationSaving(true);
     // Picker stores `locationCountry`; persist the resolved English country
@@ -314,7 +593,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
       .$fetch<{ ok?: boolean; error?: string }>("/profile/basic", {
         method: "POST",
         body: {
-          name: nameInput.trim() || data.user?.name || "",
+          name: joinDisplayName(firstNameInput, lastNameInput) || data.user?.name || "",
           username: usernameInput.trim(),
           gender: genderInput || "",
           areaLocation: areaToSave,
@@ -423,7 +702,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         activeOpacity={0.85}
         accessibilityLabel="Go back"
       >
-        <Ionicons name="chevron-back" size={22} color="#00BBFF" />
+        <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
       </TouchableOpacity>
       {onPrimary ? (
         <TouchableOpacity
@@ -453,88 +732,487 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   );
 
   if (activeSection === "personal") {
+    const displayFullName =
+      joinDisplayName(firstNameInput, lastNameInput) || data.user?.name || "Player";
+    const usernameBare = usernameInput.replace(/^@+/, "");
+    const phColor = theme.placeholderTextColor ?? theme.mutedForegroundColor;
+
     return (
-      <View style={[styles.container, { paddingTop: topInset }]}>
+      <View style={styles.screenRoot}>
+        <Header flatOverlay onLogoPress={() => navigateMainTab("AICoach")} />
         <KeyboardAwareScrollView
-          style={{ width: "100%" }}
-          contentContainerStyle={styles.subsectionScrollContent}
+          style={{ flex: 1, width: "100%" }}
+          contentContainerStyle={[
+            styles.subsectionScrollContent,
+            {
+              paddingHorizontal: pageHorizontalPad,
+              paddingTop: 12,
+              paddingBottom: 28 + insets.bottom,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bottomOffset={insets.bottom + 12}
         >
           <Text style={styles.detailPageHeading}>{currentTitle}</Text>
-          <View style={styles.editCard}>
-            <View>
-              <Text style={styles.inputLabel}>Name</Text>
+
+          <View style={styles.personalHeroRow}>
+            <TouchableOpacity
+              onPress={pickAndUploadAvatar}
+              activeOpacity={0.88}
+              accessibilityLabel="Change profile photo"
+            >
+              {profileImageUri ? (
+                <Image source={{ uri: profileImageUri }} style={styles.personalHeroAvatar} />
+              ) : (
+                <View style={[styles.personalHeroAvatar, styles.personalHeroAvatarPlaceholder]}>
+                  <Ionicons name="person" size={28} color="rgba(200,220,255,0.75)" />
+                </View>
+              )}
+            </TouchableOpacity>
+            <Text allowFontScaling={false} style={styles.personalHeroName} numberOfLines={2}>
+              {displayFullName}
+            </Text>
+          </View>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              personalFocusedField === "name" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => nameInputRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                Name
+              </Text>
               <TextInput
-                value={nameInput}
-                onChangeText={setNameInput}
-                style={styles.input}
-                placeholder="Your name"
-                placeholderTextColor={theme.placeholderTextColor ?? theme.mutedForegroundColor}
+                ref={nameInputRef}
+                value={firstNameInput}
+                onChangeText={setFirstNameInput}
+                onFocus={() => commitPersonalFieldFocus("name")}
+                onBlur={() => scheduleBlurClearField()}
+                style={styles.personalFieldInput}
+                placeholder="First name"
+                placeholderTextColor={phColor}
               />
             </View>
-            <View>
-              <Text style={styles.inputLabel}>Username</Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              personalFocusedField === "lastname" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => lastNameInputRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                Lastname
+              </Text>
               <TextInput
-                value={usernameInput}
-                onChangeText={setUsernameInput}
-                style={styles.input}
-                placeholder="Username"
-                placeholderTextColor={theme.placeholderTextColor ?? theme.mutedForegroundColor}
-                autoCapitalize="none"
+                ref={lastNameInputRef}
+                value={lastNameInput}
+                onChangeText={setLastNameInput}
+                onFocus={() => commitPersonalFieldFocus("lastname")}
+                onBlur={() => scheduleBlurClearField()}
+                style={styles.personalFieldInput}
+                placeholder="Last name"
+                placeholderTextColor={phColor}
               />
             </View>
-            <View>
-              <Text style={styles.inputLabel}>Gender</Text>
-              <View style={styles.chipWrap}>
-                {GENDER_OPTIONS.map((opt) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[styles.chip, genderInput === opt && styles.chipActive]}
-                    onPress={() => setGenderInput(opt)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={[styles.chipText, genderInput === opt && styles.chipTextActive]}>
-                      {opt}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              personalFocusedField === "username" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => usernameInputRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                Username
+              </Text>
+              <View style={styles.personalUsernameRow}>
+                <Text allowFontScaling={false} style={styles.personalUsernameAt}>
+                  @
+                </Text>
+                <TextInput
+                  ref={usernameInputRef}
+                  value={usernameBare}
+                  onChangeText={(t) => setUsernameInput(t.replace(/^@+/, ""))}
+                  onFocus={() => commitPersonalFieldFocus("username")}
+                  onBlur={() => scheduleBlurClearField()}
+                  style={[styles.personalFieldInput, styles.personalUsernameInput]}
+                  placeholder="username"
+                  placeholderTextColor={phColor}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
               </View>
             </View>
-            <TouchableOpacity onPress={resetEditDraft} disabled={saving} activeOpacity={0.85}>
-              <Text style={styles.resetLink}>Reset changes</Text>
-            </TouchableOpacity>
-          </View>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              personalFocusedField === "birthdate" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => birthDayInputRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalBirthSectionLabel}>
+                Birthdate
+              </Text>
+              <View style={styles.personalBirthDateClusterWrap}>
+                <View style={styles.personalBirthValueRow}>
+                  <View style={styles.personalBirthCol}>
+                    <Text allowFontScaling={false} style={styles.personalBirthMiniLabel}>
+                      Day
+                    </Text>
+                    <TextInput
+                      ref={birthDayInputRef}
+                      value={birthDayInput}
+                      onChangeText={(t) => setBirthDayInput(t.replace(/\D/g, "").slice(0, 2))}
+                      onFocus={onBirthSegmentFocus}
+                      onBlur={onBirthSegmentBlur}
+                      style={styles.personalBirthInput}
+                      placeholder="—"
+                      placeholderTextColor={phColor}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                    />
+                  </View>
+                  <Text allowFontScaling={false} style={styles.personalBirthSlash}>
+                    /
+                  </Text>
+                  <View style={styles.personalBirthCol}>
+                    <Text allowFontScaling={false} style={styles.personalBirthMiniLabel}>
+                      Month
+                    </Text>
+                    <TextInput
+                      ref={birthMonthInputRef}
+                      value={birthMonthInput}
+                      onChangeText={(t) => setBirthMonthInput(t.replace(/\D/g, "").slice(0, 2))}
+                      onFocus={onBirthSegmentFocus}
+                      onBlur={onBirthSegmentBlur}
+                      style={styles.personalBirthInput}
+                      placeholder="—"
+                      placeholderTextColor={phColor}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                    />
+                  </View>
+                  <Text allowFontScaling={false} style={styles.personalBirthSlash}>
+                    /
+                  </Text>
+                  <View style={styles.personalBirthCol}>
+                    <Text allowFontScaling={false} style={styles.personalBirthMiniLabel}>
+                      Year
+                    </Text>
+                    <TextInput
+                      ref={birthYearInputRef}
+                      value={birthYearInput}
+                      onChangeText={(t) => setBirthYearInput(t.replace(/\D/g, "").slice(0, 4))}
+                      onFocus={onBirthSegmentFocus}
+                      onBlur={onBirthSegmentBlur}
+                      style={[styles.personalBirthInput, styles.personalBirthYearInput]}
+                      placeholder="—"
+                      placeholderTextColor={phColor}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                    />
+                  </View>
+                </View>
+              </View>
+            </View>
+          </Pressable>
+
+          <TouchableOpacity
+            activeOpacity={0.88}
+            style={[
+              styles.personalFieldBox,
+              genderPickerOpen && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => {
+              setGenderPickerOpen(true);
+            }}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                Gender
+              </Text>
+              <View style={styles.personalGenderValueRow}>
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.personalGenderValueText, !genderInput && { color: phColor }]}
+                  numberOfLines={1}
+                >
+                  {genderInput || "Select"}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color="rgba(200, 220, 255, 0.85)" />
+              </View>
+            </View>
+          </TouchableOpacity>
+
           <SubsectionFooter
             onBack={() => setActiveSection(null)}
-            primaryLabel="Save Changes"
+            primaryLabel="Save"
             onPrimary={saveBasicProfile}
             primaryDisabled={saving}
             primaryLoading={saving}
           />
         </KeyboardAwareScrollView>
+
+        <Modal
+          visible={genderPickerOpen}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setGenderPickerOpen(false)}
+        >
+          <View style={styles.countryModalOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setGenderPickerOpen(false)} />
+            <View style={[styles.countryModalCard, { maxHeight: winH * 0.5 }]}>
+              <View style={styles.countryModalHeader}>
+                <Text style={styles.countryModalTitle}>Gender</Text>
+                <TouchableOpacity
+                  onPress={() => setGenderPickerOpen(false)}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                >
+                  <Ionicons name="close" size={22} color={PERSONAL_LABEL_COLOR} />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={GENDER_OPTIONS}
+                keyExtractor={(item) => item}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => {
+                  const selected = genderInput === item;
+                  return (
+                    <TouchableOpacity
+                      style={[styles.countryRow, selected && styles.countryRowActive]}
+                      onPress={() => {
+                        setGenderInput(item);
+                        setGenderPickerOpen(false);
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[styles.countryRowText, selected && styles.countryRowTextActive]}
+                        numberOfLines={1}
+                      >
+                        {item}
+                      </Text>
+                      {selected ? (
+                        <Ionicons name="checkmark" size={18} color="#18C0FF" />
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   }
 
   if (activeSection === "account") {
+    const displayFullName =
+      joinDisplayName(firstNameInput, lastNameInput) || data.user?.name || "Player";
+    const phColor = theme.placeholderTextColor ?? theme.mutedForegroundColor;
+
     return (
-      <View style={[styles.container, { paddingTop: topInset }]}>
-        <ScrollView
-          style={{ width: "100%" }}
-          contentContainerStyle={styles.subsectionScrollContent}
+      <View style={styles.screenRoot}>
+        <Header flatOverlay onLogoPress={() => navigateMainTab("AICoach")} />
+        <KeyboardAwareScrollView
+          style={{ flex: 1, width: "100%" }}
+          contentContainerStyle={[
+            styles.subsectionScrollContent,
+            {
+              paddingHorizontal: pageHorizontalPad,
+              paddingTop: 12,
+              paddingBottom: 28 + insets.bottom,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          bottomOffset={insets.bottom + 12}
         >
           <Text style={styles.detailPageHeading}>{currentTitle}</Text>
-          <View style={styles.editCard}>
-            <Text style={styles.inputLabel}>Email</Text>
-            <View style={styles.readOnlyField}>
-              <Text style={styles.readOnlyText}>{data.user?.email || "-"}</Text>
-            </View>
+
+          <View style={styles.personalHeroRow}>
+            <TouchableOpacity
+              onPress={pickAndUploadAvatar}
+              activeOpacity={0.88}
+              accessibilityLabel="Change profile photo"
+            >
+              {profileImageUri ? (
+                <Image source={{ uri: profileImageUri }} style={styles.personalHeroAvatar} />
+              ) : (
+                <View style={[styles.personalHeroAvatar, styles.personalHeroAvatarPlaceholder]}>
+                  <Ionicons name="person" size={28} color="rgba(200,220,255,0.75)" />
+                </View>
+              )}
+            </TouchableOpacity>
+            <Text allowFontScaling={false} style={styles.personalHeroName} numberOfLines={2}>
+              {displayFullName}
+            </Text>
           </View>
-          <SubsectionFooter onBack={() => setActiveSection(null)} />
-        </ScrollView>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              accountFocusedField === "email" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => accountEmailRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                Email
+              </Text>
+              <TextInput
+                ref={accountEmailRef}
+                value={accountEmailInput}
+                onChangeText={setAccountEmailInput}
+                onFocus={() => commitAccountFieldFocus("email")}
+                onBlur={() => scheduleAccountBlurClear()}
+                style={styles.personalFieldInput}
+                placeholder="you@email.com"
+                placeholderTextColor={phColor}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              accountFocusedField === "phone" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => accountPhoneRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                Phone
+              </Text>
+              <TextInput
+                ref={accountPhoneRef}
+                value={accountPhoneInput}
+                onChangeText={setAccountPhoneInput}
+                onFocus={() => commitAccountFieldFocus("phone")}
+                onBlur={() => scheduleAccountBlurClear()}
+                style={styles.personalFieldInput}
+                placeholder="Phone number"
+                placeholderTextColor={phColor}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              accountFocusedField === "passwordCurrent" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => accountPasswordCurrentRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                Password
+              </Text>
+              <View style={styles.personalPasswordValueRow}>
+                <TextInput
+                  ref={accountPasswordCurrentRef}
+                  value={accountPasswordCurrent}
+                  onChangeText={setAccountPasswordCurrent}
+                  onFocus={() => commitAccountFieldFocus("passwordCurrent")}
+                  onBlur={() => scheduleAccountBlurClear()}
+                  style={[styles.personalFieldInput, styles.personalUsernameInput]}
+                  placeholder="Current password"
+                  placeholderTextColor={phColor}
+                  secureTextEntry={!showAccountCurrentPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={styles.personalPasswordIconSlot}
+                  hitSlop={10}
+                  onPress={() => setShowAccountCurrentPassword((v) => !v)}
+                  activeOpacity={0.75}
+                  accessibilityLabel={
+                    showAccountCurrentPassword ? "Hide password" : "Show password"
+                  }
+                >
+                  <LocalSvgAsset
+                    assetModule={
+                      showAccountCurrentPassword ? PASSWORD_SEE_ICON_SVG : PASSWORD_HIDE_ICON_SVG
+                    }
+                    width={PASSWORD_VISIBILITY_ICON_PX}
+                    height={PASSWORD_VISIBILITY_ICON_PX}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              accountFocusedField === "passwordNew" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => accountPasswordNewRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                Repeat password
+              </Text>
+              <View style={styles.personalPasswordValueRow}>
+                <TextInput
+                  ref={accountPasswordNewRef}
+                  value={accountPasswordNew}
+                  onChangeText={setAccountPasswordNew}
+                  onFocus={() => commitAccountFieldFocus("passwordNew")}
+                  onBlur={() => scheduleAccountBlurClear()}
+                  style={[styles.personalFieldInput, styles.personalUsernameInput]}
+                  placeholder="New password"
+                  placeholderTextColor={phColor}
+                  secureTextEntry={!showAccountNewPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={styles.personalPasswordIconSlot}
+                  hitSlop={10}
+                  onPress={() => setShowAccountNewPassword((v) => !v)}
+                  activeOpacity={0.75}
+                  accessibilityLabel={showAccountNewPassword ? "Hide password" : "Show password"}
+                >
+                  <LocalSvgAsset
+                    assetModule={
+                      showAccountNewPassword ? PASSWORD_SEE_ICON_SVG : PASSWORD_HIDE_ICON_SVG
+                    }
+                    width={PASSWORD_VISIBILITY_ICON_PX}
+                    height={PASSWORD_VISIBILITY_ICON_PX}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Pressable>
+
+          <SubsectionFooter
+            onBack={() => setActiveSection(null)}
+            primaryLabel="Save"
+            onPrimary={() => void saveAccountProfile()}
+            primaryDisabled={accountSaving}
+            primaryLoading={accountSaving}
+          />
+        </KeyboardAwareScrollView>
       </View>
     );
   }
@@ -550,21 +1228,16 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           bottomOffset={insets.bottom + 12}
         >
           <Text style={styles.detailPageHeading}>{currentTitle}</Text>
-          <View style={styles.editCard}>
-            <Text style={styles.inputLabel}>Country (visible to your coaches)</Text>
-            <Text style={styles.hintText}>
-              This line appears under your name on your coach&apos;s My Coach list. It is not shown on the public member directory.
-            </Text>
-            <TouchableOpacity
-              style={[styles.countryTrigger, { marginTop: 12 }]}
-              onPress={() => {
-                setCountrySearch("");
-                setCountryPickerOpen(true);
-              }}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Select country"
-            >
+          <TouchableOpacity
+            style={styles.countryTrigger}
+            onPress={() => {
+              setCountrySearch("");
+              setCountryPickerOpen(true);
+            }}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Select country"
+          >
               {locationCountry ? (
                 <>
                   <Image source={locationCountry.flag} style={styles.countryTriggerFlag} />
@@ -578,8 +1251,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 </Text>
               )}
               <Ionicons name="chevron-down" size={18} color="rgba(200, 220, 255, 0.85)" />
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
           <SubsectionFooter
             onBack={() => setActiveSection(null)}
             primaryLabel="Save location"
@@ -608,7 +1280,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                     accessibilityRole="button"
                     accessibilityLabel="Close"
                   >
-                    <Ionicons name="close" size={22} color="rgba(232,240,255,0.92)" />
+                    <Ionicons name="close" size={22} color={PERSONAL_LABEL_COLOR} />
                   </TouchableOpacity>
                 </View>
                 <View style={styles.countrySearchWrap}>
@@ -622,7 +1294,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                     value={countrySearch}
                     onChangeText={setCountrySearch}
                     placeholder="Search country"
-                    placeholderTextColor={theme.placeholderTextColor ?? theme.mutedForegroundColor}
+                    placeholderTextColor={PERSONAL_LABEL_COLOR}
                     style={styles.countrySearchInput}
                     autoCorrect={false}
                     autoCapitalize="none"
@@ -846,7 +1518,10 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 topNameScale: 2.15,
                 brandLogoSource: XEVO_BLUE_WORDMARK,
                 // Reflect the live picker selection (before save) and the saved value (after save).
-                flagCode: locationCountry?.code ?? data.profile?.areaLocation ?? null,
+                flagCode:
+                  locationCountry?.code ??
+                  findCountry(data.profile?.areaLocation ?? "")?.code ??
+                  null,
               }}
             />
             <TouchableOpacity
@@ -873,14 +1548,14 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         <View style={styles.quickInfoRow}>
           <View style={styles.quickInfoItem}>
             <LocalSvgAsset assetModule={BIRTHDAY_ICON_SVG} width={16} height={16} />
-            <Text allowFontScaling={false} style={styles.quickInfoText}>
-              Date not set
+            <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
+              {shieldQuickBirthLabel ?? "Date not set"}
             </Text>
           </View>
           <View style={styles.quickInfoItem}>
             <LocalSvgAsset assetModule={LOCATION_PIN_ICON_SVG} width={16} height={16} />
-            <Text allowFontScaling={false} style={styles.quickInfoText}>
-              Location not set
+            <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
+              {shieldQuickLocationLabel ?? "Location not set"}
             </Text>
           </View>
         </View>
@@ -1031,6 +1706,7 @@ function getStyles(theme: any) {
       fontFamily: theme.regularFont,
       fontSize: 13,
       flexShrink: 1,
+      maxWidth: 168,
     },
     menuRow: {
       flexDirection: "row",
@@ -1138,17 +1814,20 @@ function getStyles(theme: any) {
       fontSize: 15,
       marginBottom: 2,
     },
+    /** Location — matches `personalFieldBox` (Personal / Account). */
     countryTrigger: {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      minHeight: 48,
+      width: "100%",
+      height: 60,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: PROFILE_FIELD_BORDER,
-      backgroundColor: PROFILE_FIELD_BG,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
+      borderColor: "transparent",
+      backgroundColor: PERSONAL_FIELD_BG,
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      marginBottom: 6,
     },
     countryTriggerFlag: {
       width: 26,
@@ -1158,15 +1837,15 @@ function getStyles(theme: any) {
     },
     countryTriggerText: {
       flex: 1,
-      color: "#fff",
+      color: "#FFFFFF",
       fontFamily: theme.regularFont,
-      fontSize: 15,
+      fontSize: 17,
     },
     countryTriggerPlaceholder: {
       flex: 1,
-      color: theme.placeholderTextColor ?? theme.mutedForegroundColor ?? "rgba(200, 220, 255, 0.55)",
+      color: PERSONAL_LABEL_COLOR,
       fontFamily: theme.regularFont,
-      fontSize: 15,
+      fontSize: 17,
     },
     countryModalOverlay: {
       flex: 1,
@@ -1175,11 +1854,11 @@ function getStyles(theme: any) {
       paddingHorizontal: 18,
     },
     countryModalCard: {
-      backgroundColor: "#030A17",
-      borderRadius: 22,
+      backgroundColor: PERSONAL_FIELD_BG,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: "rgba(0, 187, 255, 0.32)",
-      paddingTop: 14,
+      borderColor: PERSONAL_FIELD_BORDER_FOCUS,
+      paddingTop: 12,
       paddingBottom: 8,
       overflow: "hidden",
     },
@@ -1187,7 +1866,7 @@ function getStyles(theme: any) {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 16,
+      paddingHorizontal: 12,
       paddingBottom: 10,
     },
     countryModalTitle: {
@@ -1199,29 +1878,30 @@ function getStyles(theme: any) {
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: PROFILE_FIELD_BG,
-      borderRadius: 12,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: PROFILE_FIELD_BORDER,
+      borderColor: "transparent",
       paddingHorizontal: 12,
-      marginHorizontal: 14,
+      marginHorizontal: 12,
       marginBottom: 8,
+      minHeight: 48,
     },
     countrySearchInput: {
       flex: 1,
-      color: "#fff",
+      color: "#FFFFFF",
       fontFamily: theme.regularFont,
-      fontSize: 14,
-      paddingVertical: Platform.OS === "ios" ? 12 : 8,
+      fontSize: 17,
+      paddingVertical: Platform.OS === "ios" ? 12 : 10,
     },
     countryRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
     },
     countryRowActive: {
-      backgroundColor: "rgba(0, 120, 255, 0.18)",
+      backgroundColor: "rgba(0, 184, 255, 0.08)",
     },
     countryRowFlag: {
       width: 28,
@@ -1231,17 +1911,18 @@ function getStyles(theme: any) {
     },
     countryRowText: {
       flex: 1,
-      color: "#fff",
-      fontFamily: theme.mediumFont,
-      fontSize: 15,
+      color: "#FFFFFF",
+      fontFamily: theme.regularFont,
+      fontSize: 17,
     },
     countryRowTextActive: {
-      color: "#18C0FF",
+      color: "#FFFFFF",
+      fontFamily: theme.semiBoldFont,
     },
     countryEmptyText: {
-      color: "rgba(232,240,255,0.62)",
+      color: PERSONAL_LABEL_COLOR,
       fontFamily: theme.regularFont,
-      fontSize: 13,
+      fontSize: 15,
       textAlign: "center",
       paddingVertical: 24,
       paddingHorizontal: 16,
@@ -1327,5 +2008,162 @@ function getStyles(theme: any) {
     },
     readOnlyText: { color: "#D7E7FF", fontFamily: theme.regularFont, fontSize: 15 },
     hintText: { color: "rgba(255,255,255,0.72)", fontFamily: theme.regularFont, fontSize: 12 },
+    personalHeroRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+      marginBottom: 22,
+      marginTop: 4,
+    },
+    personalHeroAvatar: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: "rgba(255,255,255,0.06)",
+    },
+    personalHeroAvatarPlaceholder: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    personalHeroName: {
+      flex: 1,
+      color: "#FFFFFF",
+      fontFamily: theme.semiBoldFont,
+      fontSize: 20,
+      letterSpacing: 0.2,
+    },
+    personalFieldBox: {
+      width: "100%",
+      borderRadius: 16,
+      backgroundColor: PERSONAL_FIELD_BG,
+      borderWidth: 1,
+      borderColor: "transparent",
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      marginBottom: 6,
+      height: 60,
+      flexDirection: "column",
+      justifyContent: "flex-start",
+    },
+    personalFieldBoxSelected: {
+      borderColor: PERSONAL_FIELD_BORDER_FOCUS,
+    },
+    personalFieldBody: {
+      flex: 1,
+      width: "100%",
+      minHeight: 0,
+      justifyContent: "center",
+    },
+    personalFieldLabel: {
+      color: PERSONAL_LABEL_COLOR,
+      fontFamily: theme.mediumFont,
+      fontSize: 12,
+      lineHeight: 14,
+      marginBottom: 2,
+    },
+    personalFieldInput: {
+      color: "#FFFFFF",
+      fontFamily: theme.regularFont,
+      fontSize: 17,
+      padding: 0,
+      margin: 0,
+      height: 22,
+    },
+    personalUsernameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      height: 22,
+    },
+    /** Password rows only: 26px icon + 22px input, vertically centered together (no clipping). */
+    personalPasswordValueRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      height: PASSWORD_VISIBILITY_ICON_PX,
+    },
+    personalUsernameAt: {
+      color: "#FFFFFF",
+      fontFamily: theme.regularFont,
+      fontSize: 17,
+      marginRight: 2,
+    },
+    personalUsernameInput: {
+      flex: 1,
+    },
+    /** Visual nudge only — `transform` does not shift sibling layout (DMY stays put). */
+    personalBirthSectionLabel: {
+      color: PERSONAL_LABEL_COLOR,
+      fontFamily: theme.mediumFont,
+      fontSize: 11,
+      lineHeight: 12,
+      marginBottom: 2,
+      transform: [{ translateY: 8 }],
+    },
+    personalBirthDateClusterWrap: {
+      width: "100%",
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      alignItems: "center",
+      transform: [{ translateY: -5 }],
+    },
+    personalBirthValueRow: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      justifyContent: "flex-start",
+      flexWrap: "nowrap",
+      gap: 4,
+    },
+    personalBirthCol: {
+      alignItems: "center",
+      minWidth: 38,
+    },
+    personalBirthMiniLabel: {
+      color: "#86A7D2",
+      fontFamily: theme.mediumFont,
+      fontSize: 10,
+      lineHeight: 12,
+      marginBottom: 2,
+    },
+    personalBirthInput: {
+      color: "#FFFFFF",
+      fontFamily: theme.semiBoldFont,
+      fontSize: 16,
+      textAlign: "center",
+      minWidth: 36,
+      height: 22,
+      paddingVertical: 0,
+      paddingHorizontal: 2,
+    },
+    personalBirthYearInput: {
+      minWidth: 52,
+    },
+    personalBirthSlash: {
+      color: "rgba(200, 220, 255, 0.55)",
+      fontSize: 16,
+      paddingBottom: 0,
+      fontFamily: theme.regularFont,
+    },
+    personalGenderValueRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+      marginTop: 0,
+      height: 22,
+    },
+    personalGenderValueText: {
+      flex: 1,
+      color: "#FFFFFF",
+      fontFamily: theme.regularFont,
+      fontSize: 17,
+      minWidth: 0,
+    },
+    personalPasswordIconSlot: {
+      width: 36,
+      height: PASSWORD_VISIBILITY_ICON_PX,
+      alignItems: "center",
+      justifyContent: "center",
+      /** Optical nudge only — does not shift the TextInput or row layout. */
+      transform: [{ translateY: -7 }],
+    },
   });
 }
