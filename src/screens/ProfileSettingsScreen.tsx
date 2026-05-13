@@ -951,7 +951,9 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 >
                   {genderInput || "Select"}
                 </Text>
-                <Ionicons name="chevron-down" size={20} color="rgba(200, 220, 255, 0.85)" />
+                <View style={styles.personalGenderChevronSlot}>
+                  <Ionicons name="chevron-down" size={20} color="rgba(200, 220, 255, 0.85)" />
+                </View>
               </View>
             </View>
           </TouchableOpacity>
@@ -2156,6 +2158,12 @@ function getStyles(theme: any) {
       fontFamily: theme.regularFont,
       fontSize: 17,
       minWidth: 0,
+    },
+    /** Optical vertical center for chevron in gender row only. */
+    personalGenderChevronSlot: {
+      justifyContent: "center",
+      alignItems: "center",
+      transform: [{ translateY: -7 }],
     },
     personalPasswordIconSlot: {
       width: 36,
