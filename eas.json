@@ -8,15 +8,23 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://carylon-coconscious-fatally.ngrok-free.dev/",
-        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://carylon-coconscious-fatally.ngrok-free.dev/"
+        "EXPO_PUBLIC_BACKEND_URL": "https://bexevo-production.up.railway.app/",
+        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://bexevo-production.up.railway.app/"
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://bexevo-production.up.railway.app/",
+        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://bexevo-production.up.railway.app/"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://bexevo-production.up.railway.app/",
+        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://bexevo-production.up.railway.app/"
+      }
     }
   },
   "submit": {
