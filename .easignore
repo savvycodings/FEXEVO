@@ -1,0 +1,23 @@
+# Shrink upload; EAS installs deps on the builder (do not upload node_modules).
+node_modules/
+**/node_modules/
+
+# Local / CI build outputs (not needed; often huge)
+android/build/
+android/.gradle/
+android/app/build/
+**/.cxx/
+**/build/
+ios/build/
+ios/Pods/
+.expo/
+dist/
+web-build/
+
+# Env and secrets
+.env
+.env*.local
+
+# Logs and OS
+*.log
+.DS_Store

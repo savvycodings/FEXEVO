@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Image, useWindowDimensions } from 'react-native
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import { ShieldProportionalFrame } from './ShieldProportionalFrame'
+import { useTranslation } from 'react-i18next'
 
 const SCORE_BG = require('../../assets/aicoach/scorepng.png')
 const SMALL_SHIELD_CAP_REF_WIN_W = 430
@@ -18,6 +19,7 @@ type Props = {
  * Shield + score hero row (You / Profile tab). Shared with My Coach so layout stays identical.
  */
 export function ProfileHeroScoreBlock({ horizontalPadding = DEFAULT_HORIZONTAL_PAD }: Props) {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { width: winW } = useWindowDimensions()
   const { profileName, profileImageUri, overallPillarScore, profileAreaLocation } = useSessionData()
@@ -80,7 +82,7 @@ export function ProfileHeroScoreBlock({ horizontalPadding = DEFAULT_HORIZONTAL_P
                   allowFontScaling={false}
                   style={[styles.scorePremiumLabel, { fontFamily: theme.mediumFont }]}
                 >
-                  Premium
+                  {t('common.premium')}
                 </Text>
               </View>
               <View style={styles.scoreCenterCluster}>
@@ -91,7 +93,7 @@ export function ProfileHeroScoreBlock({ horizontalPadding = DEFAULT_HORIZONTAL_P
                   {overallPillarScore != null ? overallPillarScore : 54}
                 </Text>
                 <Text allowFontScaling={false} style={[styles.scoreLabel, { fontFamily: theme.regularFont }]}>
-                  Score
+                  {t('common.score')}
                 </Text>
               </View>
               <View style={styles.scoreStatsRow}>
@@ -106,7 +108,7 @@ export function ProfileHeroScoreBlock({ horizontalPadding = DEFAULT_HORIZONTAL_P
                     allowFontScaling={false}
                     style={[styles.scoreStatLabel, { fontFamily: theme.regularFont }]}
                   >
-                    Following
+                    {t('common.following')}
                   </Text>
                 </View>
                 <View style={styles.scoreStatCol}>
@@ -120,7 +122,7 @@ export function ProfileHeroScoreBlock({ horizontalPadding = DEFAULT_HORIZONTAL_P
                     allowFontScaling={false}
                     style={[styles.scoreStatLabel, { fontFamily: theme.regularFont }]}
                   >
-                    Followers
+                    {t('common.followers')}
                   </Text>
                 </View>
               </View>

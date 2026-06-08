@@ -23,6 +23,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useTranslation } from "react-i18next";
+import { LanguageToggle } from "../components/LanguageToggle";
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -39,6 +41,7 @@ type SignUpProps = {
 };
 
 export function SignUp(props?: SignUpProps) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { theme } = useContext(ThemeContext);
   const [name, setName] = useState("");
@@ -61,22 +64,22 @@ export function SignUp(props?: SignUpProps) {
 
   const handleContinue = async () => {
     const nextErrors: { name?: string; email?: string; password?: string; confirmPassword?: string } = {};
-    if (!name.trim()) nextErrors.name = "Name is required.";
-    if (!email.trim()) nextErrors.email = "Email is required.";
+    if (!name.trim()) nextErrors.name = t("auth.nameRequired");
+    if (!email.trim()) nextErrors.email = t("auth.emailRequired");
     if (!password) {
-      nextErrors.password = "Password is required.";
+      nextErrors.password = t("auth.passwordRequired");
     } else if (password.length < 8) {
-      nextErrors.password = "Password must be at least 8 characters.";
+      nextErrors.password = t("auth.passwordMin8");
     }
     if (!confirmPassword) {
-      nextErrors.confirmPassword = "Please confirm your password.";
+      nextErrors.confirmPassword = t("auth.confirmRequired");
     } else if (confirmPassword !== password) {
-      nextErrors.confirmPassword = "Passwords do not match.";
+      nextErrors.confirmPassword = t("auth.passwordsMismatch");
     }
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
-      Alert.alert("Missing info", "Please fix the highlighted fields.");
+      Alert.alert(t("auth.missingInfo"), t("auth.fixHighlighted"));
       return;
     }
     setErrors({});
@@ -99,16 +102,13 @@ export function SignUp(props?: SignUpProps) {
     try {
       const { error } = await signInWithSocial(provider);
       if (error) {
-        Alert.alert("Sign up failed", formatSocialAuthError(error));
+        Alert.alert(t("auth.signUpFailed"), formatSocialAuthError(error));
         return;
       }
       const sessionResult = await authClient.getSession().catch(() => null);
       const sessionData: any = (sessionResult as any)?.data ?? sessionResult;
       if (!sessionData?.user?.id || !sessionData?.session?.id) {
-        Alert.alert(
-          "Sign up failed",
-          "Could not establish a session. Please try again."
-        );
+        Alert.alert(t("auth.signUpFailed"), t("auth.sessionErrorMsg"));
         return;
       }
       console.log("[Auth] Social sign-up success", {
@@ -149,16 +149,16 @@ export function SignUp(props?: SignUpProps) {
         </View>
         <View style={styles.header}>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.heroTitleTechniqueWeb}>
-            Create your account
+            {t("auth.signUpHeroTitle")}
           </Text>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.subtitle}>
-            Start your onboarding and set up your player profile.
+            {t("auth.signUpHeroSubtitle")}
           </Text>
         </View>
 
         <TextInput
           style={[styles.input, errors.name && styles.inputError]}
-          placeholder="Name"
+          placeholder={t("auth.name")}
           placeholderTextColor={theme.placeholderTextColor}
           value={name}
           onChangeText={(v) => {
@@ -171,7 +171,7 @@ export function SignUp(props?: SignUpProps) {
         {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
         <TextInput
           style={[styles.input, errors.email && styles.inputError]}
-          placeholder="Email"
+          placeholder={t("auth.email")}
           placeholderTextColor={theme.placeholderTextColor}
           value={email}
           onChangeText={(v) => {
@@ -186,7 +186,7 @@ export function SignUp(props?: SignUpProps) {
         {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
         <TextInput
           style={[styles.input, errors.password && styles.inputError]}
-          placeholder="Password (min 8 characters)"
+          placeholder={t("auth.passwordMinPlaceholder")}
           placeholderTextColor={theme.placeholderTextColor}
           value={password}
           onChangeText={(v) => {
@@ -200,7 +200,7 @@ export function SignUp(props?: SignUpProps) {
         {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
         <TextInput
           style={[styles.input, errors.confirmPassword && styles.inputError]}
-          placeholder="Repeat your password"
+          placeholder={t("auth.repeatPassword")}
           placeholderTextColor={theme.placeholderTextColor}
           value={confirmPassword}
           onChangeText={(v) => {
@@ -217,7 +217,7 @@ export function SignUp(props?: SignUpProps) {
           <>
             <View style={styles.socialDividerRow}>
               <View style={styles.socialDividerLine} />
-              <Text allowFontScaling={false} style={styles.socialDividerText}>Or create with</Text>
+              <Text allowFontScaling={false} style={styles.socialDividerText}>{t("auth.orCreateWith")}</Text>
               <View style={styles.socialDividerLine} />
             </View>
 
@@ -277,11 +277,12 @@ export function SignUp(props?: SignUpProps) {
               {loading ? (
                 <ActivityIndicator color={theme.tintTextColor} />
               ) : (
-                <Text allowFontScaling={false} style={styles.buttonText}>Sign up</Text>
+                <Text allowFontScaling={false} style={styles.buttonText}>{t("auth.signUp")}</Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
         </View>
+        <LanguageToggle />
       </View>
     </KeyboardAwareScrollView>
   );

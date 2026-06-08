@@ -9,10 +9,12 @@ import {
   Platform,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
+import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { ACTIVITIES_FAVORITES_STORAGE_KEY } from '../constants/activitiesFavorites'
 import { DOMAIN } from '../../constants'
@@ -25,6 +27,24 @@ import {
   storedAiScoreToPercent,
 } from '../lib/techniqueScoreDisplay'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
+import { CoachAnalysisAccordions } from '../components/CoachAnalysisAccordions'
+import { CoachStrengthFocusInsightCards } from '../components/CoachStrengthFocusInsightCards'
+import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
+import { CorrectionFrameSelector } from '../components/CorrectionFrameSelector'
+import {
+  parseCorrectionFrameInsights,
+  insightForCorrectionIndex,
+  type CorrectionFrameInsight,
+} from '../types/correction'
+import {
+  buildCoachInsightCardsContent,
+  formatActivityShotTitle,
+  shouldShowCoachInsightCards,
+} from '../lib/coachInsightCards'
+import {
+  displayTrainShotTitle,
+  humanShotLabelFromStoredMetrics,
+} from '../lib/trainShotDisplay'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { ProLibraryGradientFrame, ProLibraryGradientProgressBar } from '../components'
 import { proLibraryChrome } from '../theme/proLibraryChrome'
@@ -33,7 +53,6 @@ const API_ROOT = DOMAIN.replace(/\/+$/, '')
 
 const ACTIVITIES_STAR_SVG = require('../../assets/actiities/star.svg')
 const ACTIVITIES_STAR_FILLED_SVG = require('../../assets/actiities/star-filled.svg')
-const COACHING_TIPS_TACTICS_SVG = require('../../assets/afteranylize/tactics-coaching-tips.svg')
 /** Back chevron + favorites star outline (matches `star.svg` stroke). */
 const NAV_ICON_TINT = '#86A7D2'
 
@@ -90,6 +109,54 @@ function toDisplayImageUri(raw: string): string {
 
 type CorrectionPair = { frame: number; originalImage: string; correctedImage: string }
 
+type CorrectionCoachingSummary = {
+  diagnosis?: string | null
+  shot_context?: string | null
+  actionable_corrections?: string[]
+  recommendations?: string[]
+}
+
+function parseCorrectionContext(raw: unknown): {
+  coaching: CorrectionCoachingSummary | null
+  frameCount: number
+  frameIndices: number[]
+} {
+  if (!raw || typeof raw !== 'object') return { coaching: null, frameCount: 0, frameIndices: [] }
+  const r = raw as Record<string, unknown>
+  const summary = r.coaching_summary as Record<string, unknown> | undefined
+  const coaching: CorrectionCoachingSummary | null = summary
+    ? {
+        diagnosis: typeof summary.diagnosis === 'string' ? summary.diagnosis : null,
+        shot_context: typeof summary.shot_context === 'string' ? summary.shot_context : null,
+        actionable_corrections: Array.isArray(summary.actionable_corrections)
+          ? summary.actionable_corrections.filter(
+              (x): x is string => typeof x === 'string' && x.trim().length > 0
+            )
+          : [],
+        recommendations: Array.isArray(summary.recommendations)
+          ? summary.recommendations.filter(
+              (x): x is string => typeof x === 'string' && x.trim().length > 0
+            )
+          : [],
+      }
+    : null
+  const frameCount = typeof r.frame_count === 'number' ? r.frame_count : 0
+  const frameIndices = Array.isArray(r.frame_indices)
+    ? r.frame_indices.filter((x): x is number => typeof x === 'number' && Number.isFinite(x))
+    : []
+  return { coaching, frameCount, frameIndices }
+}
+
+/** LLM copy may live under `ai_analysis.en` or at the top level of `ai_analysis`. */
+function aiAnalysisEnBlock(ai: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!ai) return undefined
+  const en = ai.en
+  if (en && typeof en === 'object' && !Array.isArray(en)) {
+    return en as Record<string, unknown>
+  }
+  return ai
+}
+
 function parseCorrectionImages(raw: unknown): CorrectionPair[] {
   if (!Array.isArray(raw)) return []
   const out: CorrectionPair[] = []
@@ -134,29 +201,6 @@ function toTitle(value: string): string {
     .trim()
 }
 
-function formatShotDisplayName(raw: string | null | undefined): string {
-  const s = (raw || 'Shot').trim() || 'Shot'
-  return s
-    .replace(/_/g, ' ')
-    .split(/\s+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ')
-}
-
-function mergeCoachingTips(
-  strengths: string[],
-  actionable: string[],
-  maxItems: number
-): { text: string; variant: 'positive' | 'action' }[] {
-  const out: { text: string; variant: 'positive' | 'action' }[] = []
-  const n = Math.max(strengths.length, actionable.length)
-  for (let i = 0; i < n && out.length < maxItems; i++) {
-    if (i < strengths.length) out.push({ text: strengths[i], variant: 'positive' })
-    if (out.length >= maxItems) break
-    if (i < actionable.length) out.push({ text: actionable[i], variant: 'action' })
-  }
-  return out
-}
 
 function getStyles(theme: any) {
   const pad = SCREEN_GUTTER
@@ -282,42 +326,14 @@ function getStyles(theme: any) {
       fontSize: 14,
       color: '#FFFFFF',
     },
+    insightCardsWrap: {
+      marginHorizontal: pad,
+      marginBottom: 14,
+    },
     breakdownScoreDenom: {
       fontFamily: theme.regularFont,
       fontSize: 11,
       color: '#86A7D2',
-    },
-    coachingCard: {
-      marginHorizontal: pad,
-      backgroundColor: VA.card,
-      borderRadius: 16,
-      paddingVertical: 16,
-      paddingHorizontal: 16,
-      marginBottom: 14,
-    },
-    coachingHead: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 14,
-    },
-    coachingHeadTitle: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
-      color: VA.accent,
-    },
-    coachingTipRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 10,
-      marginBottom: 12,
-    },
-    coachingTipText: {
-      flex: 1,
-      fontFamily: theme.regularFont,
-      fontSize: 14,
-      color: 'rgba(255,255,255,0.9)',
-      lineHeight: 20,
     },
     extraCard: {
       marginHorizontal: pad,
@@ -345,17 +361,40 @@ function getStyles(theme: any) {
       color: 'rgba(255,255,255,0.45)',
       marginBottom: 8,
     },
+    correctionPairBlock: {
+      marginBottom: 18,
+    },
+    correctionFrameLabel: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 13,
+      color: VA.accent,
+      marginBottom: 8,
+    },
     correctionPairRow: {
       flexDirection: 'row',
-      gap: 8,
-      marginBottom: 14,
+      gap: 10,
     },
-    correctionFrameImage: {
+    correctionPairCol: {
       flex: 1,
       minWidth: 0,
+    },
+    correctionPairColLabel: {
+      fontFamily: theme.regularFont,
+      fontSize: 11,
+      color: VA.muted,
+      marginBottom: 6,
+    },
+    correctionFrameImage: {
+      width: '100%',
       aspectRatio: 16 / 9,
       borderRadius: 8,
       backgroundColor: '#000',
+    },
+    correctionsLoadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 12,
     },
     commentDivider: {
       height: StyleSheet.hairlineWidth,
@@ -384,6 +423,7 @@ function getStyles(theme: any) {
       fontSize: 15,
       color: VA.text,
       lineHeight: 22,
+      flexShrink: 1,
     },
     aiSubTitle: {
       fontFamily: theme.semiBoldFont,
@@ -398,6 +438,7 @@ function getStyles(theme: any) {
       color: VA.text,
       lineHeight: 20,
       marginBottom: 4,
+      flexShrink: 1,
     },
     coachAnnWrap: {
       marginTop: 12,
@@ -443,6 +484,7 @@ export function ActivitiesVideoAnalysis({
   session: ActivitySession
   onBack: () => void
 }) {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
   const { width: winW } = useWindowDimensions()
@@ -469,12 +511,25 @@ export function ActivitiesVideoAnalysis({
     strengths: string[]
     technicalErrors: string[]
     actionableCorrections: string[]
+    recommendations: string[]
+    strokeLabel: string | null
     strokePreset: string | null
+    strokePresetId: string | null
+    primaryTrainCategory: string | null
     category: string | null
     level: string | null
   } | null>(null)
   const [correctionGemini, setCorrectionGemini] = useState<CorrectionPair[]>([])
   const [correctionFal, setCorrectionFal] = useState<CorrectionPair[]>([])
+  const [correctionCoaching, setCorrectionCoaching] = useState<CorrectionCoachingSummary | null>(
+    null
+  )
+  const [correctionFrameInsights, setCorrectionFrameInsights] = useState<
+    CorrectionFrameInsight[]
+  >([])
+  const [activeCorrection, setActiveCorrection] = useState(0)
+  const [correctionsLoading, setCorrectionsLoading] = useState(false)
+  const [hasCorrectionImagesFlag, setHasCorrectionImagesFlag] = useState(false)
 
   const [isFavorite, setIsFavorite] = useState(false)
 
@@ -526,45 +581,87 @@ export function ActivitiesVideoAnalysis({
     setAiSections(null)
     setCorrectionGemini([])
     setCorrectionFal([])
+    setCorrectionCoaching(null)
+    setCorrectionFrameInsights([])
+    setActiveCorrection(0)
+    setCorrectionsLoading(false)
+    setHasCorrectionImagesFlag(false)
     setTotalVidFrames(1)
     ;(async () => {
       try {
-        const res = await authClient
-          .$fetch(`/technique/analysis/${session.analysisId}`, { method: 'GET' })
-          .catch(() => null)
+        const [res, overlayRes] = await Promise.all([
+          authClient
+            .$fetch(`/technique/analysis/${session.analysisId}`, { method: 'GET' })
+            .catch(() => null),
+          authClient
+            .$fetch(`/technique/analysis/${session.analysisId}/pose-overlay`, { method: 'GET' })
+            .catch(() => null),
+        ])
         const body: any = (res as any)?.data ?? res
+        const overlayBody: any = (overlayRes as any)?.data ?? overlayRes
         if (cancelled || body?.error) return
         const metrics = body?.metrics as Record<string, unknown> | undefined
+        const overlayMetrics = {
+          total_frames: overlayBody?.total_frames,
+          analyzed_frames: overlayBody?.analyzed_frames,
+          video_duration_ms: overlayBody?.video_duration_ms,
+        } as Record<string, unknown>
         const ai = metrics?.ai_analysis as Record<string, unknown> | undefined
-        const en = ai?.en as Record<string, unknown> | undefined
+        const en = aiAnalysisEnBlock(ai)
         const retrievalBlock = metrics?.retrieval as Record<string, unknown> | undefined
         const shotHyp = retrievalBlock?.shot_hypothesis as Record<string, unknown> | undefined
         const rating = typeof ai?.rating === 'string' ? ai.rating : null
         const scorePercent = storedAiScoreToPercent(ai as Record<string, unknown>)
         const breakdown = storedAiBreakdownToPercent(ai as Record<string, unknown>)
         const confidence = storedAiConfidenceToPercent(ai as Record<string, unknown>)
-        const rows = normalizePoseData(metrics?.pose_data)
-        const tf = resolveTotalFrames(metrics, rows)
+        const rows = normalizePoseData(overlayBody?.pose_data ?? metrics?.pose_data)
+        const tf = resolveTotalFrames(
+          { ...overlayMetrics, ...metrics },
+          rows
+        )
         if (cancelled) return
         setFullFeedbackText(
           typeof body?.feedbackText === 'string' && body.feedbackText.trim().length > 0
             ? body.feedbackText.trim()
             : null
         )
+        const strengthsRaw = Array.isArray(en?.strengths)
+          ? en.strengths.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+          : Array.isArray(en?.observations)
+            ? en.observations.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+            : []
+        const actionableRaw = Array.isArray(en?.actionable_corrections)
+          ? en.actionable_corrections.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+          : []
+        const recommendationsRaw = Array.isArray(en?.recommendations)
+          ? en.recommendations.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+          : []
+        const humanShotLabel =
+          humanShotLabelFromStoredMetrics(metrics) ??
+          (typeof shotHyp?.stroke_label === 'string' && shotHyp.stroke_label.trim()
+            ? shotHyp.stroke_label.trim()
+            : null)
         setAiSections({
-          diagnosis: typeof en?.diagnosis === 'string' ? en.diagnosis : null,
+          diagnosis:
+            typeof en?.diagnosis === 'string'
+              ? en.diagnosis
+              : typeof ai?.diagnosis === 'string'
+                ? ai.diagnosis
+                : null,
           shotContext: typeof en?.shot_context === 'string' ? en.shot_context : null,
-          strengths: Array.isArray(en?.strengths)
-            ? en.strengths.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-            : [],
+          strengths: strengthsRaw,
           technicalErrors: Array.isArray(en?.technical_errors)
             ? en.technical_errors.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
             : [],
-          actionableCorrections: Array.isArray(en?.actionable_corrections)
-            ? en.actionable_corrections.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-            : [],
-          strokePreset:
-            typeof shotHyp?.stroke_preset === 'string' ? toTitle(shotHyp.stroke_preset) : null,
+          actionableCorrections: actionableRaw,
+          recommendations: recommendationsRaw,
+          strokeLabel: humanShotLabel,
+          strokePresetId:
+            typeof shotHyp?.stroke_preset === 'string' ? shotHyp.stroke_preset.trim() : null,
+          primaryTrainCategory:
+            typeof ai?.primary_train_category === 'string'
+              ? String(ai.primary_train_category).trim()
+              : null,
           category: typeof shotHyp?.category === 'string' ? toTitle(shotHyp.category) : null,
           level: typeof shotHyp?.skill_level === 'string' ? toTitle(shotHyp.skill_level) : null,
         })
@@ -578,12 +675,47 @@ export function ActivitiesVideoAnalysis({
           confidenceBand: confidence.band,
           uncertaintyPlusMinus: confidence.uncertaintyPlusMinus,
         })
-        setCorrectionGemini(parseCorrectionImages(metrics?.correction_images))
-        setCorrectionFal(parseCorrectionImages(metrics?.correction_images_fal))
         setPoseFrames(rows)
         setTotalVidFrames(tf)
+        const expectsCorrections = metrics?.has_correction_images === true
+        setHasCorrectionImagesFlag(expectsCorrections)
+
+        if (!expectsCorrections) return
+
+        setCorrectionsLoading(true)
+        const corrRes = await authClient
+          .$fetch(`/technique/analysis/${session.analysisId}/correction-images`, {
+            method: 'GET',
+          })
+          .catch(() => null)
+        if (!cancelled) {
+          const corrBody: any = (corrRes as any)?.data ?? corrRes
+          const geminiParsed = parseCorrectionImages(corrBody?.correction_images)
+          const falParsed = parseCorrectionImages(corrBody?.correction_images_fal)
+          setCorrectionGemini(geminiParsed)
+          setCorrectionFal(falParsed)
+          const ctxParsed = parseCorrectionContext(corrBody?.correction_context)
+          setCorrectionCoaching(ctxParsed.coaching)
+          const pairCount = geminiParsed.length > 0 ? geminiParsed.length : falParsed.length
+          const fallbackDiagnosis =
+            typeof en?.diagnosis === 'string'
+              ? en.diagnosis
+              : typeof ai?.diagnosis === 'string'
+                ? ai.diagnosis
+                : ctxParsed.coaching?.diagnosis ?? null
+          setCorrectionFrameInsights(
+            parseCorrectionFrameInsights(
+              corrBody?.correction_context,
+              pairCount,
+              fallbackDiagnosis
+            )
+          )
+          setActiveCorrection(0)
+        }
       } catch {
         /* no pose overlay */
+      } finally {
+        if (!cancelled) setCorrectionsLoading(false)
       }
     })()
     return () => {
@@ -608,28 +740,111 @@ export function ActivitiesVideoAnalysis({
     }
   }, [session, aiSnapshot])
 
-  const shotTitle = formatShotDisplayName(session.shotLabel ?? null)
+  const shotTitle = useMemo(
+    () =>
+      displayTrainShotTitle({
+        strokeLabel: aiSections?.strokeLabel ?? session.shotLabel ?? null,
+        strokeName: session.shotLabel ?? null,
+        strokePreset: aiSections?.strokePresetId ?? null,
+      }) ||
+      formatActivityShotTitle({
+        strokeLabel: aiSections?.strokeLabel ?? session.shotLabel ?? null,
+        shotContext: aiSections?.shotContext ?? null,
+        sessionLabel: session.shotLabel ?? null,
+      }),
+    [
+      aiSections?.strokeLabel,
+      aiSections?.shotContext,
+      aiSections?.strokePresetId,
+      session.shotLabel,
+    ]
+  )
   const created = useMemo(() => new Date(session.createdAt), [session.createdAt])
   const timeTag = formatTimeTag(created)
 
-  const narrativeText = fullFeedbackText?.trim() || session.feedbackSnippet?.trim() || ''
-  const hasNarrative = narrativeText.length > 0
+  const narrativeText = fullFeedbackText?.trim() || ''
+  const notesExtra = useMemo(() => {
+    const d = aiSections?.diagnosis?.trim() ?? ''
+    if (!narrativeText) return ''
+    if (d && narrativeText === d) return ''
+    if (d && narrativeText.startsWith(d)) return narrativeText.slice(d.length).trim()
+    return narrativeText
+  }, [narrativeText, aiSections?.diagnosis])
+  const hasNotesExtra = notesExtra.length > 0
   const hasAiStructured = Boolean(
     aiSections &&
       ((aiSections.diagnosis && aiSections.diagnosis.trim().length > 0) ||
         (aiSections.shotContext && aiSections.shotContext.trim().length > 0) ||
         aiSections.technicalErrors.length > 0 ||
         aiSections.strengths.length > 0 ||
-        aiSections.actionableCorrections.length > 0)
+        aiSections.actionableCorrections.length > 0 ||
+        aiSections.recommendations.length > 0)
   )
-  const showWrittenEmpty = aiSections != null && !hasAiStructured && !hasNarrative
+  const coachInsightCards = useMemo(() => {
+    if (!aiSections) return null
+    const input = {
+      strokeLabel: aiSections.strokeLabel,
+      strokePreset: aiSections.strokePresetId,
+      shotContext: aiSections.shotContext,
+      primaryTrainCategory: aiSections.primaryTrainCategory,
+      strengths: aiSections.strengths,
+      actionableCorrections: aiSections.actionableCorrections,
+      technicalErrors: aiSections.technicalErrors,
+      diagnosis: aiSections.diagnosis,
+    }
+    if (!shouldShowCoachInsightCards(input)) return null
+    return buildCoachInsightCardsContent(input)
+  }, [aiSections])
+
+  const accordionData = useMemo(() => {
+    if (!aiSections) return null
+    return {
+      rating: effectiveSession.rating ?? null,
+      score: effectiveSession.score ?? null,
+      diagnosis: aiSections.diagnosis,
+      shotContext: aiSections.shotContext,
+      strengths: aiSections.strengths,
+      technicalErrors: aiSections.technicalErrors,
+      actionableCorrections: aiSections.actionableCorrections,
+      recommendations: aiSections.recommendations,
+    }
+  }, [aiSections, effectiveSession.rating, effectiveSession.score])
+  const correctionPairs =
+    correctionGemini.length > 0 ? correctionGemini : correctionFal
+
+  const displayCorrectionFrameInsights = useMemo((): CorrectionFrameInsight[] => {
+    const diagnosis = correctionCoaching?.diagnosis?.trim() || aiSections?.diagnosis?.trim() || null
+    if (correctionPairs.length === 0) return []
+    if (correctionFrameInsights.length === 0) {
+      return parseCorrectionFrameInsights(null, correctionPairs.length, diagnosis)
+    }
+    const fallback = parseCorrectionFrameInsights(null, correctionPairs.length, diagnosis)
+    return correctionPairs.map((_, idx) => {
+      return (
+        insightForCorrectionIndex(correctionFrameInsights, correctionPairs, idx) ??
+        fallback[idx]
+      )
+    })
+  }, [correctionPairs, correctionFrameInsights, correctionCoaching?.diagnosis, aiSections?.diagnosis])
+
+  const proReferenceShot = aiSections?.strokeLabel?.trim() || null
+
+  useEffect(() => {
+    setActiveCorrection((prev) => {
+      const n = correctionPairs.length
+      if (n === 0) return 0
+      return prev >= n ? n - 1 : prev
+    })
+  }, [correctionPairs.length])
+
+  const showCorrectionsSection =
+    hasCorrectionImagesFlag || correctionGemini.length > 0 || correctionFal.length > 0
+  const showWrittenEmpty = aiSections != null && !hasAiStructured && !hasNotesExtra
   const coachFeedback = session.coachFeedbackText?.trim() ?? ''
   const coachAnnotations = useMemo(
     () => parseCoachAnnotations(session.coachMarksJson),
     [session.coachMarksJson]
   )
-  const hasCorrections = correctionGemini.length > 0 || correctionFal.length > 0
-
   const shotScoreWhole =
     typeof effectiveSession.score === 'number'
       ? Math.max(0, Math.min(100, Math.round(effectiveSession.score)))
@@ -640,21 +855,19 @@ export function ActivitiesVideoAnalysis({
       ? Math.max(0, Math.min(100, Math.round(effectiveSession.confidenceScore)))
       : null
 
-  const coachingTips = useMemo(() => {
-    if (!aiSections) return [] as { text: string; variant: 'positive' | 'action' }[]
-    return mergeCoachingTips(aiSections.strengths, aiSections.actionableCorrections, 8)
-  }, [aiSections])
-
   const showConfidenceInfo = useCallback(() => {
     const parts: string[] = []
-    if (aiSnapshot?.confidenceBand) parts.push(`Band: ${aiSnapshot.confidenceBand}`)
+    if (aiSnapshot?.confidenceBand)
+      parts.push(t('analysis.confidenceBand', { band: aiSnapshot.confidenceBand }))
     if (aiSnapshot?.uncertaintyPlusMinus != null)
-      parts.push(`±${aiSnapshot.uncertaintyPlusMinus} points`)
+      parts.push(
+        t('analysis.confidencePlusMinus', { points: aiSnapshot.uncertaintyPlusMinus })
+      )
     Alert.alert(
-      'Confidence',
-      parts.length > 0 ? parts.join('\n') : 'Model confidence in pose and scoring.'
+      t('analysis.confidenceTitle'),
+      parts.length > 0 ? parts.join('\n') : t('analysis.confidenceDefault')
     )
-  }, [aiSnapshot])
+  }, [aiSnapshot, t])
 
   return (
     <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
@@ -677,7 +890,7 @@ export function ActivitiesVideoAnalysis({
             activeOpacity={0.85}
             hitSlop={12}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={t('analysis.back')}
           >
             <Ionicons name="chevron-back" size={24} color={NAV_ICON_TINT} />
           </TouchableOpacity>
@@ -692,7 +905,9 @@ export function ActivitiesVideoAnalysis({
             activeOpacity={0.85}
             hitSlop={12}
             accessibilityRole="button"
-            accessibilityLabel={isFavorite ? 'Remove favorite' : 'Add favorite'}
+            accessibilityLabel={
+              isFavorite ? t('analysis.removeFavorite') : t('analysis.addFavorite')
+            }
           >
             <LocalSvgAsset
               assetModule={isFavorite ? ACTIVITIES_STAR_FILLED_SVG : ACTIVITIES_STAR_SVG}
@@ -712,7 +927,9 @@ export function ActivitiesVideoAnalysis({
             totalVidFrames={totalVidFrames}
             qualitySession={effectiveSession}
             isLooping
-            playerLayout="stacked"
+            playerLayout="default"
+            showLegend
+            skeletonColorMode="segment"
           />
         </View>
 
@@ -727,7 +944,7 @@ export function ActivitiesVideoAnalysis({
               </Text>
             </View>
             <Text allowFontScaling={false} style={styles.primaryLabel}>
-              Shot Score
+              {t('analysis.shotScore')}
             </Text>
           </View>
           <View style={styles.primaryDivider} />
@@ -742,7 +959,7 @@ export function ActivitiesVideoAnalysis({
             </View>
             <View style={styles.confidenceHeadRow}>
               <Text allowFontScaling={false} style={styles.confidenceCaption}>
-                Confidence
+                {t('analysis.confidence')}
               </Text>
               <TouchableOpacity onPress={showConfidenceInfo} hitSlop={10} activeOpacity={0.75}>
                 <Ionicons name="information-circle-outline" size={18} color="rgba(255,255,255,0.55)" />
@@ -766,9 +983,9 @@ export function ActivitiesVideoAnalysis({
           }}
         >
           {[
-            { label: 'Technique', value: effectiveSession.techniqueScore },
-            { label: 'Outcome', value: effectiveSession.outcomeScore },
-            { label: 'Tactics', value: effectiveSession.tacticsScore },
+            { label: t('activities.technique'), value: effectiveSession.techniqueScore },
+            { label: t('activities.outcome'), value: effectiveSession.outcomeScore },
+            { label: t('activities.tactics'), value: effectiveSession.tacticsScore },
           ].map((row) => {
             const value =
               typeof row.value === 'number'
@@ -805,33 +1022,16 @@ export function ActivitiesVideoAnalysis({
           })}
         </ProLibraryGradientFrame>
 
-        {coachingTips.length > 0 ? (
-          <View style={styles.coachingCard}>
-            <View style={styles.coachingHead}>
-              <LocalSvgAsset assetModule={COACHING_TIPS_TACTICS_SVG} width={28} height={28} />
-              <Text allowFontScaling={false} style={styles.coachingHeadTitle}>
-                Coaching tips
-              </Text>
-            </View>
-            {coachingTips.map((tip, i) => (
-              <View key={`tip-${i}`} style={styles.coachingTipRow}>
-                <Ionicons
-                  name={tip.variant === 'positive' ? 'checkmark-circle' : 'ellipse'}
-                  size={20}
-                  color={tip.variant === 'positive' ? VA.accent : VA.barAmber}
-                />
-                <Text allowFontScaling={false} style={styles.coachingTipText}>
-                  {tip.text}
-                </Text>
-              </View>
-            ))}
+        {coachInsightCards ? (
+          <View style={styles.insightCardsWrap}>
+            <CoachStrengthFocusInsightCards content={coachInsightCards} />
           </View>
         ) : null}
 
-        {(aiSections != null || hasNarrative || showWrittenEmpty) && (
+        {(accordionData != null || hasNotesExtra || showWrittenEmpty) && (
           <View style={styles.extraCard}>
             <Text allowFontScaling={false} style={styles.secondaryTitle}>
-              Analysis details
+              {t('analysis.aiCoachFeedback')}
             </Text>
             <Text allowFontScaling={false} style={styles.timeText}>
               {timeTag}
@@ -840,120 +1040,134 @@ export function ActivitiesVideoAnalysis({
               <>
                 <View style={styles.commentDivider} />
                 <Text allowFontScaling={false} style={styles.aiSubTitle}>
-                  Session
+                  {t('analysis.session')}
                 </Text>
                 <Text allowFontScaling={false} style={styles.commentBody}>
-                  Rating: {effectiveSession.rating ? toTitle(effectiveSession.rating) : '—'}
+                  {t('analysis.stroke')}: {aiSections.strokeLabel || shotTitle}
                   {'\n'}
-                  Stroke: {aiSections.strokePreset || shotTitle}
+                  {t('analysis.category')}: {aiSections.category || '—'}
                   {'\n'}
-                  Category: {aiSections.category || '—'}
-                  {'\n'}
-                  Level: {aiSections.level || '—'}
+                  {t('analysis.level')}: {aiSections.level || '—'}
                 </Text>
-                {aiSections.diagnosis && aiSections.diagnosis.trim().length > 0 ? (
-                  <>
-                    <Text allowFontScaling={false} style={styles.aiSubTitle}>
-                      Overview
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.commentBody}>
-                      {aiSections.diagnosis.trim()}
-                    </Text>
-                  </>
-                ) : null}
-                {aiSections.shotContext ? (
-                  <>
-                    <Text allowFontScaling={false} style={styles.aiSubTitle}>
-                      Technique analysis
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.commentBody}>
-                      {aiSections.shotContext}
-                    </Text>
-                  </>
-                ) : null}
-                {aiSections.technicalErrors.length > 0 ? (
-                  <>
-                    <Text allowFontScaling={false} style={styles.aiSubTitle}>
-                      Areas for improvement
-                    </Text>
-                    {aiSections.technicalErrors.map((line, idx) => (
-                      <Text key={`err-${idx}`} allowFontScaling={false} style={styles.aiBullet}>
-                        {'\u2022'} {line}
-                      </Text>
-                    ))}
-                  </>
-                ) : null}
               </>
             ) : null}
-            {hasNarrative ? (
+            {accordionData ? (
+              <View style={{ marginTop: 14 }}>
+                <CoachAnalysisAccordions data={accordionData} defaultExpanded />
+              </View>
+            ) : null}
+            {hasNotesExtra ? (
               <>
                 <Text allowFontScaling={false} style={styles.aiSubTitle}>
-                  Notes
+                  {t('analysis.fullCoachNotes')}
                 </Text>
                 <Text allowFontScaling={false} style={styles.commentBody}>
-                  {narrativeText}
+                  {notesExtra}
                 </Text>
               </>
             ) : null}
             {showWrittenEmpty ? (
               <Text allowFontScaling={false} style={[styles.commentBody, { color: VA.muted }]}>
-                No written summary yet.
+                {t('analysis.noWrittenSummary')}
               </Text>
             ) : null}
           </View>
         )}
 
-        {hasCorrections ? (
+        {showCorrectionsSection ? (
           <View style={styles.extraCard}>
             <Text allowFontScaling={false} style={styles.summarySectionTitle}>
-              Pose correction
+              {t('analysis.correctedImages')}
             </Text>
-            {correctionGemini.length > 0 && correctionFal.length > 0 ? (
-              <Text allowFontScaling={false} style={styles.correctionSubLabel}>
-                Gemini
+            {correctionsLoading ? (
+              <View style={styles.correctionsLoadingRow}>
+                <ActivityIndicator color={VA.accent} size="small" />
+              </View>
+            ) : null}
+            {!correctionsLoading &&
+            correctionGemini.length === 0 &&
+            correctionFal.length === 0 ? (
+              <Text allowFontScaling={false} style={[styles.commentBody, { color: VA.muted }]}>
+                {t('analysis.noCorrectedImages')}
               </Text>
             ) : null}
-            {correctionGemini.map((c, idx) => (
-              <View key={`g-${c.frame}-${idx}`} style={styles.correctionPairRow}>
-                {c.originalImage ? (
-                  <Image
-                    source={{ uri: c.originalImage }}
-                    style={styles.correctionFrameImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.correctionFrameImage} />
-                )}
-                <Image
-                  source={{ uri: c.correctedImage }}
-                  style={styles.correctionFrameImage}
-                  resizeMode="cover"
-                />
-              </View>
-            ))}
-            {correctionGemini.length > 0 && correctionFal.length > 0 ? (
-              <Text allowFontScaling={false} style={styles.correctionSubLabel}>
-                Fal
-              </Text>
+            {correctionCoaching?.diagnosis?.trim() ? (
+              <>
+                <Text allowFontScaling={false} style={styles.aiSubTitle}>
+                  {t('analysis.coachSummary')}
+                </Text>
+                <Text allowFontScaling={false} style={styles.commentBody}>
+                  {correctionCoaching.diagnosis.trim()}
+                </Text>
+              </>
             ) : null}
-            {correctionFal.map((c, idx) => (
-              <View key={`f-${c.frame}-${idx}`} style={styles.correctionPairRow}>
-                {c.originalImage ? (
-                  <Image
-                    source={{ uri: c.originalImage }}
-                    style={styles.correctionFrameImage}
-                    resizeMode="cover"
+            {correctionCoaching?.recommendations &&
+            correctionCoaching.recommendations.length > 0 ? (
+              <>
+                <Text allowFontScaling={false} style={styles.aiSubTitle}>
+                  Image-gen recommendations
+                </Text>
+                {correctionCoaching.recommendations.map((line, idx) => (
+                  <Text key={`corr-rec-${idx}`} allowFontScaling={false} style={styles.aiBullet}>
+                    {'\u2022'} {line}
+                  </Text>
+                ))}
+              </>
+            ) : null}
+            {correctionCoaching?.actionable_corrections &&
+            correctionCoaching.actionable_corrections.length > 0 ? (
+              <>
+                <Text allowFontScaling={false} style={styles.aiSubTitle}>
+                  Focus areas
+                </Text>
+                {correctionCoaching.actionable_corrections.map((line, idx) => (
+                  <Text key={`corr-tip-${idx}`} allowFontScaling={false} style={styles.aiBullet}>
+                    {'\u2022'} {line}
+                  </Text>
+                ))}
+              </>
+            ) : null}
+            {!correctionsLoading && correctionPairs.length > 0 ? (
+              <>
+                {displayCorrectionFrameInsights.length > 0 ? (
+                  <CorrectionFrameSelector
+                    frames={displayCorrectionFrameInsights}
+                    activeIndex={activeCorrection}
+                    onSelect={setActiveCorrection}
+                    proReferenceShot={proReferenceShot}
                   />
-                ) : (
-                  <View style={styles.correctionFrameImage} />
-                )}
-                <Image
-                  source={{ uri: c.correctedImage }}
-                  style={styles.correctionFrameImage}
-                  resizeMode="cover"
-                />
-              </View>
-            ))}
+                ) : null}
+                {correctionPairs[activeCorrection] ? (
+                  <View style={styles.correctionPairBlock}>
+                    <View style={styles.correctionPairRow}>
+                      <View style={styles.correctionPairCol}>
+                        <Text allowFontScaling={false} style={styles.correctionPairColLabel}>
+                          Original
+                        </Text>
+                        {correctionPairs[activeCorrection].originalImage ? (
+                          <CorrectionImageWithLoader
+                            source={{ uri: correctionPairs[activeCorrection].originalImage }}
+                            style={styles.correctionFrameImage}
+                            showLoader={false}
+                          />
+                        ) : (
+                          <View style={styles.correctionFrameImage} />
+                        )}
+                      </View>
+                      <View style={styles.correctionPairCol}>
+                        <Text allowFontScaling={false} style={styles.correctionPairColLabel}>
+                          Corrected
+                        </Text>
+                        <CorrectionImageWithLoader
+                          source={{ uri: correctionPairs[activeCorrection].correctedImage }}
+                          style={styles.correctionFrameImage}
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
           </View>
         ) : null}
 
@@ -961,7 +1175,7 @@ export function ActivitiesVideoAnalysis({
           <View style={styles.extraCard}>
             <View style={styles.commentHead}>
               <Text allowFontScaling={false} style={styles.commentHeadLeft}>
-                Coach review
+                {t('analysis.coachReview')}
               </Text>
               <View style={styles.commentHeadRight}>
                 <Ionicons name="checkmark-circle" size={16} color={VA.good} />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
@@ -8,22 +9,26 @@ import { SignUp, SignUpDraft } from "./SignUp";
 import { ProfileSetup } from "./ProfileSetup";
 import { AccountCreated } from "./AccountCreated";
 import { WelcomeIntro } from "./WelcomeIntro";
+import { useTranslation } from "react-i18next";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { WELCOME_SEEN_KEY } from "./WelcomeIntro";
 const Stack = createNativeStackNavigator();
 
 function SignInScreen({ navigation }: { navigation: any }) {
+  const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
+  const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
   return (
     <View style={styles.screenContainer}>
       <SignIn />
       <TouchableOpacity
-        style={styles.switchLink}
+        style={[styles.switchLink, { paddingBottom: insets.bottom + 20 }]}
         onPress={() => navigation.navigate("SignUp")}
       >
         <Text style={styles.switchText}>
-          Don't have an account? <Text style={styles.switchTextBold}>Sign up</Text>
+          {t("auth.noAccount")}{" "}
+          <Text style={styles.switchTextBold}>{t("auth.signUp")}</Text>
         </Text>
       </TouchableOpacity>
     </View>
@@ -39,7 +44,9 @@ function SignUpScreen({
   onContinue: (draft: SignUpDraft) => void;
   initialDraft: SignUpDraft | null;
 }) {
+  const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
+  const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
   return (
     <View style={styles.screenContainer}>
@@ -52,11 +59,12 @@ function SignUpScreen({
         }}
       />
       <TouchableOpacity
-        style={styles.switchLink}
+        style={[styles.switchLink, { paddingBottom: insets.bottom + 20 }]}
         onPress={() => navigation.navigate("SignIn")}
       >
         <Text style={styles.switchText}>
-          Already have an account? <Text style={styles.switchTextBold}>Sign in</Text>
+          {t("auth.hasAccount")}{" "}
+          <Text style={styles.switchTextBold}>{t("auth.signIn")}</Text>
         </Text>
       </TouchableOpacity>
     </View>
@@ -200,7 +208,8 @@ function getStyles(theme: any) {
       flex: 1,
     },
     switchLink: {
-      padding: 24,
+      paddingTop: 24,
+      paddingHorizontal: 24,
       alignItems: "center",
     },
     switchText: {

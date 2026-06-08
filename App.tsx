@@ -1,4 +1,5 @@
 import './global.css';
+import './src/i18n';
 import 'react-native-gesture-handler'
 import { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { DarkTheme, NavigationContainer, type Theme as NavigationTheme } from '@react-navigation/native'
@@ -34,6 +35,8 @@ import { authClient } from './src/lib/auth-client'
 import { Onboarding } from './src/screens'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
+import { I18nBootstrap } from './src/i18n/I18nBootstrap'
+import { useTranslation } from 'react-i18next'
 
 LogBox.ignoreLogs([
   'Key "cancelled" in the image picker result is deprecated and will be removed in SDK 48, use "canceled" instead',
@@ -127,6 +130,7 @@ export default function App() {
         themeName: theme,
         setTheme: _setTheme
       }}>
+        <I18nBootstrap backgroundColor={APP_NAV_BG}>
         <AuthGate
           bottomSheetModalRef={bottomSheetModalRef}
           bottomSheetStyles={bottomSheetStyles}
@@ -139,6 +143,7 @@ export default function App() {
           _setImageModel={_setImageModel}
           closeModal={closeModal}
         />
+        </I18nBootstrap>
       </ThemeContext.Provider>
       </KeyboardProvider>
     </GestureHandlerRootView>
@@ -218,11 +223,7 @@ function AuthGate(props: {
 
   if (session && (isPending || !profileChecked)) {
     return (
-      <AuthLoadingScreen
-        theme={theme}
-        title="Finalizing your account"
-        subtitle="Syncing your profile and preparing your Technique workspace."
-      />
+      <AuthLoadingScreen theme={theme} />
     )
   }
 
@@ -291,13 +292,12 @@ function AuthGate(props: {
 
 function AuthLoadingScreen({
   theme,
-  title,
-  subtitle,
 }: {
   theme: any
-  title: string
-  subtitle: string
 }) {
+  const { t } = useTranslation()
+  const title = t('appLoading.finalizingTitle')
+  const subtitle = t('appLoading.finalizingSub')
   const styles = getAuthLoadingStyles(theme)
   return (
     <SafeAreaProvider>

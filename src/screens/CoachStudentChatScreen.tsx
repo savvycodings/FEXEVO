@@ -23,6 +23,7 @@ import type { MyCoachTabStackParamList } from '../navigation/types'
 import { authClient } from '../lib/auth-client'
 import { MyCoachScoreRing } from './myCoach/ScoreRing'
 import { getCachedProfile } from '../lib/profile-cache'
+import { useTranslation } from 'react-i18next'
 import { DOMAIN } from '../../constants'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 
@@ -73,6 +74,7 @@ function profileImageToAbsoluteUri(raw: string | null | undefined): string | nul
 }
 
 export function CoachStudentChatScreen() {
+  const { t } = useTranslation()
   const { theme: ctx } = useContext(ThemeContext)
   const theme = ctx?.backgroundColor != null ? ctx : defaultTheme
   const insets = useSafeAreaInsets()
@@ -174,7 +176,7 @@ export function CoachStudentChatScreen() {
       })
       const body = unwrapFetchBody(res)
       if (body.error) {
-        Alert.alert('Send failed', String(body.error))
+        Alert.alert(t('coachFlow.sendFailed'), String(body.error))
         return
       }
       const msgRaw = body.message
@@ -190,7 +192,7 @@ export function CoachStudentChatScreen() {
       await fetchMessages()
       setDraft('')
     } catch (e: any) {
-      Alert.alert('Send failed', e?.message || 'Network error')
+      Alert.alert(t('coachFlow.sendFailed'), e?.message || t('coachFlow.networkError'))
     } finally {
       setSending(false)
     }
@@ -247,7 +249,7 @@ export function CoachStudentChatScreen() {
           >
             <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
             <Text allowFontScaling={false} style={[styles.backLabel, { fontFamily: fonts.regularFont }]}>
-              Back to Students
+              {t('coachChat.backToStudents')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -255,19 +257,19 @@ export function CoachStudentChatScreen() {
         {/* ── "Student" label + legend ── */}
         <View style={styles.legendBar}>
           <Text allowFontScaling={false} style={[styles.studentLabel, { fontFamily: fonts.regularFont }]}>
-            Student
+            {t('coachChat.student')}
           </Text>
           <View style={styles.legendRight}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#2AB4FF' }]} />
               <Text allowFontScaling={false} style={[styles.legendText, { fontFamily: fonts.regularFont }]}>
-                Actual Score
+                {t('myCoach.actualScore')}
               </Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#3D58FF' }]} />
               <Text allowFontScaling={false} style={[styles.legendText, { fontFamily: fonts.regularFont }]}>
-                Last score
+                {t('myCoach.lastScore')}
               </Text>
             </View>
           </View>
@@ -315,7 +317,7 @@ export function CoachStudentChatScreen() {
                   ellipsizeMode="tail"
                   style={[styles.chatTitle, { fontFamily: fonts.mediumFont }]}
                 >
-                  Send message to your student…
+                  {t('coachChat.chatTitle')}
                 </Text>
                 <TouchableOpacity
                   onPress={() => navigation.goBack()}
@@ -346,7 +348,7 @@ export function CoachStudentChatScreen() {
                   scrollEnabled={false}
                   ListEmptyComponent={
                     <Text allowFontScaling={false} style={[styles.emptyChat, { fontFamily: fonts.regularFont }]}>
-                      No messages yet. Say hello below.
+                      {t('coachChat.emptyChat')}
                     </Text>
                   }
                 />
@@ -358,7 +360,7 @@ export function CoachStudentChatScreen() {
                   <TextInput
                     value={draft}
                     onChangeText={setDraft}
-                    placeholder="Write your message"
+                    placeholder={t('coachChat.messagePlaceholder')}
                     placeholderTextColor="rgba(148,163,184,0.7)"
                     style={[styles.input, { fontFamily: fonts.regularFont }]}
                     multiline

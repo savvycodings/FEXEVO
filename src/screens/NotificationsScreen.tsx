@@ -17,6 +17,9 @@ import { Header } from '../components'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import type { MainStackParamList } from '../navigation/types'
 import { authClient } from '../lib/auth-client'
+import { navigateToActivityAnalysis } from '../lib/openActivityAnalysis'
+import { useSessionData } from '../context/SessionDataContext'
+import { useTranslation } from 'react-i18next'
 
 const TICK_ICON = require('../../assets/coachs/tickicon.svg')
 const MSG_ICON = require('../../assets/coachs/msgicon.svg')
@@ -44,11 +47,13 @@ function formatNotiTime(iso: string): string {
 type Nav = NativeStackNavigationProp<MainStackParamList>
 
 export function NotificationsScreen({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<Nav>()
   const styles = useMemo(() => getStyles(theme), [theme])
 
+  const { invalidate: invalidateSessionData } = useSessionData()
   const [notifications, setNotifications] = useState<ApiNotification[]>([])
   const [notiLoading, setNotiLoading] = useState(true)
 
@@ -103,7 +108,7 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
       >
         <View style={styles.titleRow}>
           <Text allowFontScaling={false} style={styles.screenTitle}>
-            Notifications
+            {t('notifications.title')}
           </Text>
         </View>
         <View style={styles.divider} />
@@ -111,32 +116,53 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
           <ActivityIndicator color="#00BBFF" style={{ marginVertical: 24 }} />
         ) : notifications.length === 0 ? (
           <Text allowFontScaling={false} style={[styles.empty, { fontFamily: theme.regularFont }]}>
-            No notifications yet.
+            {t('notifications.empty')}
           </Text>
         ) : (
           notifications.map((n) => {
             const icon =
               n.kind === 'coach_review_ready' && n.refType === 'coach_video_review'
                 ? TICK_ICON
-                : n.kind.includes('message')
-                  ? MSG_ICON
-                  : FOLLOWER_ICON
+                : n.kind === 'correction_images_ready'
+                  ? TICK_ICON
+                  : n.kind.includes('message')
+                    ? MSG_ICON
+                    : FOLLOWER_ICON
             return (
               <View key={n.id}>
                 <TouchableOpacity
                   activeOpacity={0.82}
                   onPress={() => {
-                    if (
-                      n.kind === 'coach_review_ready' &&
-                      n.refType === 'coach_video_review' &&
-                      n.refId
-                    ) {
-                      navigation.navigate('StudentCoachReview', {
-                        reviewId: n.refId,
-                        notificationId: n.id,
-                      })
-                      return
-                    }
+                    void (async () => {
+                      try {
+                        await authClient.$fetch(`/profile/notifications/${n.id}/read`, {
+                          method: 'POST',
+                        })
+                      } catch {
+                        /* best-effort */
+                      }
+                      if (
+                        n.kind === 'coach_review_ready' &&
+                        n.refType === 'coach_video_review' &&
+                        n.refId
+                      ) {
+                        navigation.navigate('StudentCoachReview', {
+                          reviewId: n.refId,
+                          notificationId: n.id,
+                        })
+                        onClose()
+                        return
+                      }
+                      if (
+                        n.kind === 'correction_images_ready' &&
+                        n.refType === 'technique_analysis' &&
+                        n.refId
+                      ) {
+                        invalidateSessionData()
+                        navigateToActivityAnalysis(navigation, n.refId)
+                        return
+                      }
+                    })()
                   }}
                   style={styles.row}
                 >
@@ -154,7 +180,7 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                     ) : null}
                     <Text allowFontScaling={false} style={styles.rowTime}>
                       {formatNotiTime(n.createdAt)}
-                      {n.readAt ? ' · Read' : ''}
+                      {n.readAt ? t('notifications.readSuffix') : ''}
                     </Text>
                   </View>
                 </TouchableOpacity>

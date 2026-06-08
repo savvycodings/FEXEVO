@@ -4,6 +4,8 @@ import Svg, { Circle, G } from 'react-native-svg'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import { TRAIN_CATEGORIES, type TrainCategory } from '../lib/train-taxonomy'
+import { pillarTwoLineLabels } from '../i18n/taxonomyLabels'
+import { useTranslation } from 'react-i18next'
 
 /** Outer ring = this week (matches MyCoachScoreRing actual / light). */
 const RING_THIS_WEEK = '#40C0FF'
@@ -34,14 +36,6 @@ const RING_CATEGORY_ORDER: TrainCategory[] = [
   'overhead',
 ]
 
-const TWO_LINE_LABELS: Record<string, { labelTop: string; labelBottom: string }> = {
-  save_return: { labelTop: 'Serve &', labelBottom: 'Return' },
-  ground_strokes: { labelTop: 'Ground-', labelBottom: 'strokes' },
-  net_play: { labelTop: 'Net', labelBottom: 'play' },
-  defence_glass: { labelTop: 'Defense &', labelBottom: 'Glass' },
-  overhead: { labelTop: 'Over', labelBottom: 'heads' },
-}
-
 const ABBR_BY_ID = Object.fromEntries(TRAIN_CATEGORIES.map((c) => [c.id, c.progressCode])) as Record<
   string,
   string
@@ -57,7 +51,7 @@ function mapApiToMetrics(categories: ApiCategoryRow[]): RatingMetricRow[] {
   const byId = new Map(categories.map((c) => [c.id, c]))
   return RING_CATEGORY_ORDER.map((id) => {
     const row = byId.get(id)
-    const labels = TWO_LINE_LABELS[id]
+    const labels = pillarTwoLineLabels(id)
     return {
       abbr: ABBR_BY_ID[id] ?? id,
       labelTop: labels.labelTop,
@@ -214,6 +208,7 @@ const EMPTY_METRICS = mapApiToMetrics(
 )
 
 export function ProfileRatingDashboard({ metrics: controlledMetrics }: Props) {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { width: winW } = useWindowDimensions()
   const session = useSessionData()
@@ -342,19 +337,19 @@ export function ProfileRatingDashboard({ metrics: controlledMetrics }: Props) {
     <View style={styles.card}>
       <View style={styles.header}>
         <Text allowFontScaling={false} style={styles.title}>
-          Rating
+          {t('profileRating.title')}
         </Text>
         <View style={styles.legend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: RING_THIS_WEEK }]} />
             <Text allowFontScaling={false} style={styles.legendText}>
-              This week
+              {t('profileRating.thisWeek')}
             </Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: RING_LAST_WEEK }]} />
             <Text allowFontScaling={false} style={styles.legendText}>
-              Last week
+              {t('profileRating.lastWeek')}
             </Text>
           </View>
         </View>

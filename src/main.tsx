@@ -7,6 +7,7 @@ import {
   AdminHub,
   AdminTrain,
   AdminFalLora,
+  AdminAccuracy,
   ActivitiesScreen,
   MyCoachScreen,
   ProgressScreen,
@@ -35,6 +36,7 @@ import { ThemeContext } from './context'
 import { vercel as defaultTheme } from './theme'
 import { authClient } from './lib/auth-client'
 import { DOMAIN } from '../constants'
+import { registerCorrectionNotificationDeepLink } from './lib/correctionImageNotifications'
 import { getCachedProfile, setCachedProfile } from './lib/profile-cache'
 import { SessionDataProvider, useSessionData } from './context/SessionDataContext'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
@@ -44,6 +46,7 @@ import type {
   NativeStackNavigationProp,
 } from '@react-navigation/native-stack'
 import { useFocusEffect, useNavigation, useNavigationState } from '@react-navigation/native'
+import { useTranslation } from 'react-i18next'
 import type {
   ProgressTabStackParamList,
   YouTabStackParamList,
@@ -65,14 +68,6 @@ export type {
 
 const TAB_BAR_ACTIVE = '#FFFFFF'
 const TAB_BAR_INACTIVE = '#5B9DFF'
-
-const TAB_LABELS: Record<keyof MainTabParamList, string> = {
-  AICoach: 'AI Coach',
-  MyCoach: 'My Coach',
-  Activities: 'Activities',
-  Progress: 'Progress',
-  You: 'You',
-}
 
 const Tab = createBottomTabNavigator<MainTabParamList>()
 const Stack = createNativeStackNavigator<MainStackParamList>()
@@ -154,8 +149,16 @@ function MainTabsLayoutInner({
   profileRefreshTick: number
   onProfileUpdated: () => void
 }) {
+  const { t } = useTranslation()
   const { onTabFocus } = useSessionData()
   const stackNavigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>()
+  const tabLabels: Record<keyof MainTabParamList, string> = {
+    AICoach: t('tabs.aiCoach'),
+    MyCoach: t('tabs.myCoach'),
+    Activities: t('tabs.activities'),
+    Progress: t('tabs.progress'),
+    You: t('tabs.you'),
+  }
   const { theme: ctxTheme } = useContext(ThemeContext)
   const theme = ctxTheme?.backgroundColor != null ? ctxTheme : defaultTheme
   const insets = useSafeAreaInsets()
@@ -296,6 +299,10 @@ function MainTabsLayoutInner({
     }
   }, [activeTabName, coachStudentRole, goToTab])
 
+  useEffect(() => {
+    return registerCorrectionNotificationDeepLink(stackNavigation)
+  }, [stackNavigation])
+
   const headerSearchLeft =
     activeTabName === 'Progress' || activeTabName === 'You' || activeTabName === 'Activities'
 
@@ -383,7 +390,7 @@ function MainTabsLayoutInner({
       <Tab.Navigator
         screenOptions={({ route }) => ({
           ...tabScreenOptions,
-          tabBarLabel: TAB_LABELS[route.name as keyof MainTabParamList],
+          tabBarLabel: tabLabels[route.name as keyof MainTabParamList],
           tabBarLabelStyle: {
             fontFamily: theme.mediumFont,
             fontSize: tabMetrics.labelFontSize,
@@ -427,15 +434,15 @@ function MainTabsLayoutInner({
           },
         })}
       >
-        <Tab.Screen name="AICoach" options={{ title: 'AI Coach' }}>
+        <Tab.Screen name="AICoach" options={{ title: tabLabels.AICoach }}>
           {() => (
             <Technique key={techniqueResetKey} />
           )}
         </Tab.Screen>
-        <Tab.Screen name="MyCoach" options={{ title: 'My Coach' }} component={MyCoachTabStack} />
-        <Tab.Screen name="Activities" options={{ title: 'Activities' }} component={ActivitiesScreen} />
-        <Tab.Screen name="Progress" options={{ title: 'Progress' }} component={ProgressTabStack} />
-        <Tab.Screen name="You" options={{ title: 'You' }}>
+        <Tab.Screen name="MyCoach" options={{ title: tabLabels.MyCoach }} component={MyCoachTabStack} />
+        <Tab.Screen name="Activities" options={{ title: tabLabels.Activities }} component={ActivitiesScreen} />
+        <Tab.Screen name="Progress" options={{ title: tabLabels.Progress }} component={ProgressTabStack} />
+        <Tab.Screen name="You" options={{ title: tabLabels.You }}>
           {() => (
             <YouTabStack
               onProfileUpdated={onProfileUpdated}
@@ -498,6 +505,7 @@ function AuthenticatedStack() {
             }}
             onOpenProLibraryVideo={() => navigation.navigate('AdminTrain')}
             onOpenLora={() => navigation.navigate('AdminFalLora')}
+            onOpenAccuracy={() => navigation.navigate('AdminAccuracy')}
           />
         )}
       </Stack.Screen>
@@ -506,6 +514,11 @@ function AuthenticatedStack() {
       </Stack.Screen>
       <Stack.Screen name="AdminFalLora">
         {({ navigation }) => <AdminFalLora skipPasswordGate onClose={() => navigation.goBack()} />}
+      </Stack.Screen>
+      <Stack.Screen name="AdminAccuracy">
+        {({ navigation }) => (
+          <AdminAccuracy skipPasswordGate onClose={() => navigation.goBack()} />
+        )}
       </Stack.Screen>
       <Stack.Screen name="ProfileSettings">
         {({ navigation }) => (

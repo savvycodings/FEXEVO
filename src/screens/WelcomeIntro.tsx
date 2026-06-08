@@ -13,7 +13,8 @@ import { ThemeContext } from '../context'
 import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { StatusBar } from 'expo-status-bar'
-import { WelcomeHeader } from '../components'
+import { WelcomeHeader, LanguageToggle } from '../components'
+import { useTranslation } from 'react-i18next'
 
 const WELCOME_SEEN_KEY = 'xevo_welcome_v1'
 
@@ -32,21 +33,6 @@ const ICON_MODULES = [
   require('../../assets/loading/3icon.svg'),
 ] as const
 
-const SLIDES = [
-  {
-    title: 'Upload or Record\nyour video',
-    body: null as string | null,
-  },
-  {
-    title: 'Analyse',
-    body: 'Our AI extracts your pose and\ncompares to PRO mechanics.',
-  },
-  {
-    title: 'Improve',
-    body: 'Get actionable feedback and drills to fix your technique.',
-  },
-] as const
-
 async function markWelcomeSeen() {
   try {
     await AsyncStorage.setItem(WELCOME_SEEN_KEY, '1')
@@ -58,6 +44,7 @@ async function markWelcomeSeen() {
 type Props = { navigation: { navigate: (n: string) => void; replace: (n: string) => void } }
 
 export function WelcomeIntro({ navigation }: Props) {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const styles = getStyles(theme)
   const [step, setStep] = React.useState(0)
@@ -65,8 +52,17 @@ export function WelcomeIntro({ navigation }: Props) {
   /** Edge-to-edge width; `cover` fills (no pillarboxing from `contain`) */
   const heroRegionHeight = Math.min(winH * 0.58, 560)
 
-  const slide = SLIDES[step]
-  const isLast = step === SLIDES.length - 1
+  const slides = React.useMemo(
+    () => [
+      { title: t('welcome.slide1Title'), body: null as string | null },
+      { title: t('welcome.slide2Title'), body: t('welcome.slide2Body') },
+      { title: t('welcome.slide3Title'), body: t('welcome.slide3Body') },
+    ],
+    [t]
+  )
+
+  const slide = slides[step]
+  const isLast = step === slides.length - 1
 
   return (
     <View style={styles.root}>
@@ -130,7 +126,7 @@ export function WelcomeIntro({ navigation }: Props) {
               end={{ x: 1, y: 1 }}
               style={styles.primaryBtnInner}
             >
-              <Text style={styles.primaryBtnText}>Free Trial</Text>
+              <Text style={styles.primaryBtnText}>{t('welcome.freeTrial')}</Text>
             </LinearGradient>
           </TouchableOpacity>
 
@@ -143,17 +139,18 @@ export function WelcomeIntro({ navigation }: Props) {
               }}
               activeOpacity={0.85}
             >
-              <Text style={styles.secondaryBtnText}>Login</Text>
+              <Text style={styles.secondaryBtnText}>{t('auth.login')}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
               style={styles.secondaryBtn}
-              onPress={() => setStep((s) => Math.min(s + 1, SLIDES.length - 1))}
+              onPress={() => setStep((s) => Math.min(s + 1, slides.length - 1))}
               activeOpacity={0.85}
             >
-              <Text style={styles.secondaryBtnText}>Next</Text>
+              <Text style={styles.secondaryBtnText}>{t('common.next')}</Text>
             </TouchableOpacity>
           )}
+          <LanguageToggle />
         </View>
       </ScrollView>
     </View>

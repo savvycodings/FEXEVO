@@ -14,6 +14,7 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Video, ResizeMode } from 'expo-av'
 import { ThemeContext } from '../context'
+import { useTranslation } from 'react-i18next'
 import { authClient } from '../lib/auth-client'
 import { DOMAIN } from '../../constants'
 import type { MainStackParamList } from '../navigation/types'
@@ -73,6 +74,7 @@ function parseCoachAnnotations(input: unknown): CoachAnnotation[] {
 }
 
 export function StudentCoachReviewScreen() {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const navigation = useNavigation<Nav>()
   const route = useRoute<R>()
@@ -104,7 +106,7 @@ export function StudentCoachReviewScreen() {
         status?: string
       }
       if (!body?.review) {
-        Alert.alert('Unavailable', body?.error || 'Could not load this review.')
+        Alert.alert(t('commonAlerts.unavailable'), body?.error || t('coachFlow.couldNotLoadReview'))
         navigation.goBack()
         return
       }

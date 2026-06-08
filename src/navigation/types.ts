@@ -33,7 +33,7 @@ export type MyCoachTabStackParamList = {
 export type MainTabParamList = {
   AICoach: undefined;
   MyCoach: NavigatorScreenParams<MyCoachTabStackParamList>;
-  Activities: undefined;
+  Activities: { openAnalysisId?: string } | undefined;
   Progress: NavigatorScreenParams<ProgressTabStackParamList>;
   You: NavigatorScreenParams<YouTabStackParamList>;
 };
@@ -47,6 +47,7 @@ export type MainStackParamList = {
   AdminHub: undefined;
   AdminTrain: undefined;
   AdminFalLora: undefined;
+  AdminAccuracy: undefined;
   ProfileSettings: undefined;
   Notifications: undefined;
   /** Coach: search users, add coach_student or club_member (see server schema). */

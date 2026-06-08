@@ -21,6 +21,7 @@ type Props = {
   onClose: () => void;
   onOpenProLibraryVideo: () => void;
   onOpenLora: () => void;
+  onOpenAccuracy: () => void;
   /** After one successful unlock, stays true until user leaves admin (parent resets). */
   hubUnlocked: boolean;
   onHubUnlocked: () => void;
@@ -30,6 +31,7 @@ export function AdminHub({
   onClose,
   onOpenProLibraryVideo,
   onOpenLora,
+  onOpenAccuracy,
   hubUnlocked,
   onHubUnlocked,
 }: Props) {
@@ -170,6 +172,24 @@ export function AdminHub({
                 Upload MP4/MOV clips with stroke labels. Used for embeddings, nearest-neighbor match on view
                 results, and Summary.
               </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.35)" />
+          </View>
+        </AdminGradientCard>
+
+        <AdminGradientCard
+          onPress={onOpenAccuracy}
+          style={styles.cardTouch}
+          accessibilityRole="button"
+          accessibilityLabel="Training accuracy tests"
+        >
+          <View style={styles.cardInner}>
+            <View style={styles.cardIconWrap}>
+              <Ionicons name="flask-outline" size={28} color="#00BBFF" />
+            </View>
+            <View style={styles.cardTextCol}>
+              <Text style={styles.cardTitle}>Training accuracy</Text>
+              <Text style={styles.cardBody}>Run retrieval checks.</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.35)" />
           </View>

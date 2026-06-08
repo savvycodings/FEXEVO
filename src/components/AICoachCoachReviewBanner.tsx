@@ -8,6 +8,7 @@ import {
 import { ProLibraryGradientFrame } from './ProLibraryGradientFrame'
 import { LocalSvgAsset } from './LocalSvgAsset'
 import { titleMedium } from '../theme/typography'
+import { useTranslation } from 'react-i18next'
 
 const COACH_PHOTO = require('../../assets/mycoach/mycoachpfp.png')
 const SHIELD_BADGE_SVG = require('../../assets/mycoach/shieldmycoach.svg')
@@ -94,6 +95,7 @@ export function AICoachCoachReviewBanner({
   fonts,
   interactionBusy = false,
 }: Props) {
+  const { t } = useTranslation()
   const coachImageUri = assignedCoach.imageUri
 
   return (
@@ -112,7 +114,7 @@ export function AICoachCoachReviewBanner({
           </View>
           <View style={styles.coachTextCol}>
             <Text allowFontScaling={false} style={[styles.coachSubtitle, { fontFamily: fonts.regularFont }]}>
-              Your Coach
+              {t('myCoach.yourCoach')}
             </Text>
             <Text
               allowFontScaling={false}
@@ -122,7 +124,7 @@ export function AICoachCoachReviewBanner({
               {assignedCoach.name}
             </Text>
             <Text allowFontScaling={false} style={[styles.premiumLabel, { fontFamily: fonts.mediumFont }]}>
-              PREMIUM COACH
+              {t('myCoach.premiumCoach')}
             </Text>
           </View>
         </View>
@@ -134,7 +136,7 @@ export function AICoachCoachReviewBanner({
             ellipsizeMode="tail"
             style={[styles.switchLabel, { fontFamily: fonts.regularFont }]}
           >
-            Send video to Coach
+            {t('coachBanner.sendVideoToCoach')}
           </Text>
           <View style={styles.toggleClip}>
             <SendToCoachToggle

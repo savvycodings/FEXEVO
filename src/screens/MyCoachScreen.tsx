@@ -27,6 +27,7 @@ import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
 import { MyCoachCoachHero } from './myCoach/CoachHero'
 import { MyCoachSwipeableStudentCard } from './myCoach/SwipeableStudentCard'
 import type { MyCoachStudent } from './myCoach/types'
+import { useTranslation } from 'react-i18next'
 
 const FALLBACK_STUDENT_AVATAR = require('../../assets/coachs/img1.png')
 
@@ -78,6 +79,7 @@ const ADD_NEW_BLUE = '#1F6CD0'
 const ADD_NEW_RING = '#0E2969'
 
 function AddNewStudentButtonPill({ mediumFont }: { mediumFont: string }) {
+  const { t } = useTranslation()
   return (
     <View
       style={[
@@ -113,7 +115,7 @@ function AddNewStudentButtonPill({ mediumFont }: { mediumFont: string }) {
           },
         ]}
       >
-        Add new
+        {t('myCoach.addNew')}
       </Text>
     </View>
   )
@@ -122,6 +124,7 @@ function AddNewStudentButtonPill({ mediumFont }: { mediumFont: string }) {
 const BG = '#030A17'
 
 export function MyCoachScreen() {
+  const { t } = useTranslation()
   const { theme: ctx } = useContext(ThemeContext)
   const theme = ctx?.backgroundColor != null ? ctx : defaultTheme
   const insets = useSafeAreaInsets()
@@ -272,14 +275,14 @@ export function MyCoachScreen() {
         <View style={styles.studentsBlock}>
           <View style={styles.studentsTitleRow}>
             <Text allowFontScaling={false} style={[styles.studentsTitle, { fontFamily: theme.regularFont }]}>
-              Students
+              {t('myCoach.students')}
             </Text>
             <TouchableOpacity
               onPress={onAddNewStudent}
               activeOpacity={0.85}
               style={styles.addNewTouch}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityLabel="Add new"
+              accessibilityLabel={t('myCoach.addNew')}
             >
               <AddNewStudentButtonPill mediumFont={theme.mediumFont} />
             </TouchableOpacity>
@@ -288,13 +291,13 @@ export function MyCoachScreen() {
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#2AB4FF' }]} />
               <Text allowFontScaling={false} style={[styles.legendText, { fontFamily: theme.regularFont }]}>
-                Actual Score
+                {t('myCoach.actualScore')}
               </Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#3D58FF' }]} />
               <Text allowFontScaling={false} style={[styles.legendText, { fontFamily: theme.regularFont }]}>
-                Last score
+                {t('myCoach.lastScore')}
               </Text>
             </View>
           </View>
@@ -304,7 +307,7 @@ export function MyCoachScreen() {
           <ActivityIndicator color="#00BBFF" style={{ marginVertical: 20 }} />
         ) : students.length === 0 ? (
           <Text allowFontScaling={false} style={[styles.emptyStudents, { fontFamily: theme.regularFont }]}>
-            No students yet. Tap Add new to add people from search.
+            {t('myCoach.noStudents')}
           </Text>
         ) : (
           students.map((student) => (

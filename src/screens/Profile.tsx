@@ -14,6 +14,8 @@ import { ProfileRatingDashboard } from "../components/ProfileRatingDashboard";
 import { ProfileHeroScoreBlock } from "../components/ProfileHeroScoreBlock";
 import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { Trans, useTranslation } from "react-i18next";
+import { trainCategoryLabel } from "../i18n/taxonomyLabels";
 
 const AI_INSIGHT_LOGO = require("../../assets/youpage/aiinsight.png");
 
@@ -26,21 +28,14 @@ function ProfileAiInsightBanner({
   insight: WeeklyInsight;
   onDismiss: () => void;
 }) {
-  const body = !insight.hasPriorWeek ? (
-    <>
-      Your {insight.pillarLabel.toLowerCase()} gained <Text style={styles.aiInsightHighlight}>{insight.highlight}</Text> this week
-    </>
-  ) : insight.improved ? (
-    <>
-      Your {insight.pillarLabel.toLowerCase()} improved <Text style={styles.aiInsightHighlight}>{insight.highlight}</Text>{" "}
-      this week
-    </>
-  ) : (
-    <>
-      Your {insight.pillarLabel.toLowerCase()} shifted <Text style={styles.aiInsightHighlight}>{insight.highlight}</Text> vs
-      last week
-    </>
-  );
+  const { t } = useTranslation();
+  const pillar = trainCategoryLabel(insight.pillarId);
+  const highlightWrap = <Text style={styles.aiInsightHighlight} />;
+  const insightKey = !insight.hasPriorWeek
+    ? "you.insightGained"
+    : insight.improved
+      ? "you.insightImproved"
+      : "you.insightShifted";
 
   return (
     <LinearGradient
@@ -57,22 +52,33 @@ function ProfileAiInsightBanner({
               <Image source={AI_INSIGHT_LOGO} style={styles.aiInsightLogo} resizeMode="contain" />
             </View>
             <Text allowFontScaling={false} style={styles.aiInsightTitle}>
-              AI INSIGHT
+              {t("you.aiInsightTitle")}
             </Text>
           </View>
-          <TouchableOpacity onPress={onDismiss} hitSlop={12} style={styles.aiInsightCloseHit} accessibilityLabel="Dismiss">
+          <TouchableOpacity
+            onPress={onDismiss}
+            hitSlop={12}
+            style={styles.aiInsightCloseHit}
+            accessibilityLabel={t("common.dismiss")}
+          >
             <Ionicons name="close" size={22} color="#006FFF" />
           </TouchableOpacity>
         </View>
         <View style={styles.aiInsightDivider} />
         <Text allowFontScaling={false} style={styles.aiInsightBody}>
-          {body}
+          <Trans
+            i18nKey={insightKey}
+            values={{ pillar, highlight: insight.highlight }}
+            components={{ highlight: highlightWrap }}
+          />
         </Text>
-        {typeof insight.subtitle === 'string' && insight.subtitle.trim() ? (
+        {insight.subtitlePillarId ? (
           <>
             <View style={styles.aiInsightDivider} />
             <Text allowFontScaling={false} style={styles.aiInsightSub}>
-              {insight.subtitle}
+              {t("you.insightLowestPillar", {
+                pillar: trainCategoryLabel(insight.subtitlePillarId),
+              })}
             </Text>
           </>
         ) : null}
@@ -116,9 +122,7 @@ export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => 
 
   return (
     <ActivitiesCalendarFlow
-      sectionTitle="Activities"
       monthNavStyle="pill"
-      dayDetailBackLabel="Back to Profile"
       showHeroRow={false}
       aboveActivitiesTitle={
         <>

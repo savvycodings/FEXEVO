@@ -1,3 +1,4 @@
+export { LanguageToggle } from './LanguageToggle'
 export { Icon } from './Icon'
 export { Header } from './Header'
 export { WelcomeHeader } from './WelcomeHeader'

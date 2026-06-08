@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { ThemeContext } from '../context'
+import { useTranslation } from 'react-i18next'
 import { Header } from '../components'
 import { getCachedProfile } from '../lib/profile-cache'
 import { DOMAIN, mainHeaderKeyboardOffset } from '../../constants'
@@ -43,6 +44,7 @@ function avatarUri(image: string | null): string | null {
 }
 
 export function CoachAddPeopleScreen() {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<Nav>()
@@ -81,7 +83,7 @@ export function CoachAddPeopleScreen() {
         error?: string
       }
       if (body?.error || !Array.isArray(body.users)) {
-        setLoadError(body?.error || 'Could not load people')
+        setLoadError(body?.error || t('coachAdd.couldNotLoadPeople'))
         setUsers([])
         return
       }
@@ -89,7 +91,7 @@ export function CoachAddPeopleScreen() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void loadDirectory()
@@ -99,12 +101,12 @@ export function CoachAddPeopleScreen() {
     let mounted = true
     void getCachedProfile().then((cached) => {
       if (!mounted || !cached?.user) return
-      setProfileName(cached.user?.name || 'Player')
+      setProfileName(cached.user?.name || t('coachAdd.player'))
       const levelText =
         cached?.profile?.level ||
         (cached?.profile?.rankingOrg && cached?.profile?.rankingValue
           ? `${cached.profile.rankingOrg}: ${cached.profile.rankingValue}`
-          : 'No rank yet')
+          : t('coachAdd.noRankYet'))
       setProfileRank(levelText)
       const raw = cached.user?.image
       if (typeof raw === 'string' && raw.length > 0) {
@@ -146,11 +148,11 @@ export function CoachAddPeopleScreen() {
           error?: string
         }
         if (!body?.ok) {
-          Alert.alert('Could not add student', body?.error || 'Unknown error')
+          Alert.alert(t('coachFlow.couldNotAddStudent'), body?.error || t('coachFlow.couldNotAddStudent'))
           return
         }
-        Alert.alert('Student added', `${u.name} is on your student list.`, [
-          { text: 'OK', onPress: () => navigation.goBack() },
+        Alert.alert(t('coachFlow.studentAdded'), t('coachFlow.studentAddedBody', { name: u.name }), [
+          { text: t('commonAlerts.ok'), onPress: () => navigation.goBack() },
         ])
       } finally {
         setAddingUserId(null)
@@ -169,7 +171,7 @@ export function CoachAddPeopleScreen() {
           activeOpacity={0.85}
           onPress={() => void onPickPerson(item)}
           disabled={!!addingUserId}
-          accessibilityLabel={`Add ${item.name}`}
+          accessibilityLabel={t('coachAdd.addPerson', { name: item.name })}
         >
           {uri ? (
             <Image source={{ uri }} style={styles.rowAvatar} resizeMode="cover" />
@@ -224,7 +226,7 @@ export function CoachAddPeopleScreen() {
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('coachAdd.goBack')}
             style={styles.backHit}
           >
             <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
@@ -237,7 +239,7 @@ export function CoachAddPeopleScreen() {
         <TextInput
           value={filter}
           onChangeText={setFilter}
-          placeholder="Filter by name…"
+          placeholder={t('common.filterByName')}
           placeholderTextColor="rgba(255,255,255,0.35)"
           autoCapitalize="none"
           autoCorrect={false}

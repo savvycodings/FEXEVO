@@ -1,4 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native'
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
+import type { MainTabParamList } from '../navigation/types'
 import {
   View,
   Text,
@@ -17,13 +20,17 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
+import { authClient } from '../lib/auth-client'
+import { storedAiScoreToPercent } from '../lib/techniqueScoreDisplay'
 import { DOMAIN } from '../../constants'
 import { ACTIVITIES_FAVORITES_STORAGE_KEY } from '../constants/activitiesFavorites'
 import { techniqueQualityTone } from '../lib/technique-quality'
 import type { ActivitySession } from '../lib/activitySession'
+import { displayTrainShotTitle } from '../lib/trainShotDisplay'
 import { ActivitiesVideoAnalysis } from './ActivitiesVideoAnalysis'
 import { ProLibraryGradientProgressBar } from '../components'
 import { ShieldProportionalFrame } from '../components/ShieldProportionalFrame'
+import { useTranslation } from 'react-i18next'
 
 const SCORE_BG = require('../../assets/aicoach/scorepng.png')
 const SMALL_SHIELD_CAP_REF_WIN_W = 430
@@ -114,15 +121,6 @@ function displayScoreWhole(score0to100: number): number {
   return Math.round(Math.max(0, Math.min(100, score0to100)))
 }
 
-function formatShotDisplayName(raw: string | null | undefined): string {
-  const s = (raw || 'Technique').trim() || 'Technique'
-  return s
-    .replace(/_/g, ' ')
-    .split(/\s+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ')
-}
-
 function isGoodRating(s: ActivitySession): boolean {
   const tone = techniqueQualityTone(s)
   if (tone === 'good') return true
@@ -199,7 +197,7 @@ function ActivitiesDayDetail({
   monthVideoCount,
   onShiftDay,
   onSessionPress,
-  backToCalendarLabel = 'Back to Profile',
+  backToCalendarLabel,
 }: {
   dateKey: string
   sessions: ActivitySession[]
@@ -210,9 +208,11 @@ function ActivitiesDayDetail({
   onSessionPress?: (s: ActivitySession) => void
   backToCalendarLabel?: string
 }) {
+  const { t } = useTranslation()
   const { width: winW } = useWindowDimensions()
   const insets = useSafeAreaInsets()
   const styles = useMemo(() => getDetailStyles(theme, winW), [theme, winW])
+  const backLabel = backToCalendarLabel ?? t('activities.backToProfile')
   const dayDate = parseDateKey(dateKey)
   const dayNum = dayDate.getDate()
   const monthName = dayDate.toLocaleDateString(undefined, { month: 'long' })
@@ -232,19 +232,19 @@ function ActivitiesDayDetail({
         <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12} activeOpacity={0.85}>
           <Ionicons name="chevron-back" size={22} color={C.sky} />
           <Text allowFontScaling={false} style={styles.backText}>
-            {backToCalendarLabel}
+            {backLabel}
           </Text>
         </TouchableOpacity>
       </View>
 
       <Text allowFontScaling={false} style={styles.videoActivitiesTitle}>
-        Video Activities
+        {t('activities.videoActivities')}
       </Text>
 
       <View style={styles.recordingsRow}>
         <View style={styles.recordingsStack}>
           <Text allowFontScaling={false} style={styles.recordingsLabel}>
-            Video recordings
+            {t('activitiesExtra.videoRecordings')}
           </Text>
           <Text allowFontScaling={false} style={styles.recordingsCountLine}>
             {monthVideoCount}
@@ -254,13 +254,13 @@ function ActivitiesDayDetail({
           <View style={styles.legendLine}>
             <View style={[styles.legendDot, { backgroundColor: C.sky }]} />
             <Text allowFontScaling={false} style={styles.legendText}>
-              Actual Score
+              {t('myCoach.actualScore')}
             </Text>
           </View>
           <View style={styles.legendLine}>
             <View style={[styles.legendDot, { backgroundColor: C.slateBar }]} />
             <Text allowFontScaling={false} style={styles.legendText}>
-              Last score
+              {t('myCoach.lastScore')}
             </Text>
           </View>
         </View>
@@ -293,13 +293,13 @@ function ActivitiesDayDetail({
         <View style={styles.wrongGoodLine}>
           <View style={[styles.wrongGoodDot, { backgroundColor: C.wrong }]} />
           <Text allowFontScaling={false} style={styles.wrongGoodLabel}>
-            Wrong
+            {t('common.wrong')}
           </Text>
         </View>
         <View style={styles.wrongGoodLine}>
           <View style={[styles.wrongGoodDot, { backgroundColor: C.good }]} />
           <Text allowFontScaling={false} style={styles.wrongGoodLabel}>
-            Good
+            {t('common.good')}
           </Text>
         </View>
       </View>
@@ -311,11 +311,14 @@ function ActivitiesDayDetail({
       >
         {visibleSessions.length === 0 ? (
           <Text allowFontScaling={false} style={styles.emptyDay}>
-            No AI Coach sessions on this day.
+            {t('activitiesExtra.noSessionsDay')}
           </Text>
         ) : (
           visibleSessions.map((s) => {
-            const shot = (s.shotLabel || 'Technique').trim() || 'Technique'
+            const shot = displayTrainShotTitle({
+              strokeLabel: s.shotLabel,
+              strokeName: s.shotLabel,
+            })
             const good = isGoodRating(s)
             const comments = commentCountHint(s.feedbackSnippet)
             const score = typeof s.score === 'number' ? s.score : null
@@ -434,6 +437,10 @@ export type ActivitiesCalendarFlowProps = {
   aboveActivitiesTitle?: ReactNode
   /** Profile uses `false` to drop the placeholder shield/score hero; Activities tab keeps the default. */
   showHeroRow?: boolean
+  /** Deep link from notifications — opens shot detail when activities list has the session. */
+  openAnalysisId?: string
+  /** Called when user leaves shot detail opened via deep link (clears latched id). */
+  onOpenAnalysisConsumed?: () => void
 }
 
 /**
@@ -441,16 +448,21 @@ export type ActivitiesCalendarFlowProps = {
  */
 export function ActivitiesCalendarFlow({
   layout = 'calendar',
-  sectionTitle = 'Activities',
-  dayDetailBackLabel = 'Back to Profile',
+  sectionTitle,
+  dayDetailBackLabel,
   belowCalendar,
   monthNavStyle = 'inline',
   aboveActivitiesTitle,
   showHeroRow = true,
+  openAnalysisId,
+  onOpenAnalysisConsumed,
 }: ActivitiesCalendarFlowProps) {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { width: winW } = useWindowDimensions()
   const insets = useSafeAreaInsets()
+  const resolvedSectionTitle = sectionTitle ?? t('activities.title')
+  const resolvedDayBackLabel = dayDetailBackLabel ?? t('activities.backToProfile')
   const styles = useMemo(() => getStyles(theme, winW), [theme, winW])
   const shotsStyles = useMemo(() => getShotsStyles(theme, winW), [theme, winW])
   const heroH = useMemo(() => Math.min(220, Math.max(160, winW * 0.42)), [winW])
@@ -535,6 +547,62 @@ export function ActivitiesCalendarFlow({
     [items]
   )
 
+  useEffect(() => {
+    if (!openAnalysisId || layout !== 'shots') return
+    const session = shotsSessionsAll.find((s) => s.analysisId === openAnalysisId)
+    if (session) {
+      setAnalysisSession(session)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await authClient
+          .$fetch<{
+            id?: string
+            status?: string
+            createdAt?: string
+            techniqueVideoId?: string
+            metrics?: Record<string, unknown>
+            aiSummary?: { score?: number | null; rating?: string | null }
+          }>(`/technique/analysis/${openAnalysisId}`, { method: 'GET' })
+          .catch(() => null)
+        const body: any = (res as any)?.data ?? res
+        if (cancelled || !body?.id) return
+        const videoId =
+          typeof body.techniqueVideoId === 'string'
+            ? body.techniqueVideoId
+            : typeof (body.metrics as any)?.technique_video_id === 'string'
+              ? (body.metrics as any).technique_video_id
+              : ''
+        const fallback: ActivitySession = {
+          analysisId: body.id,
+          techniqueVideoId: videoId,
+          status: String(body.status ?? 'completed'),
+          createdAt:
+            typeof body.createdAt === 'string'
+              ? body.createdAt
+              : new Date().toISOString(),
+          feedbackSnippet: null,
+          videoPath: videoId ? `/technique/video/${videoId}` : '',
+          score:
+            typeof body.aiSummary?.score === 'number'
+              ? body.aiSummary.score
+              : storedAiScoreToPercent(
+                  (body.metrics as any)?.ai_analysis as Record<string, unknown>
+                ),
+          rating: body.aiSummary?.rating ?? null,
+        }
+        setAnalysisSession(fallback)
+      } catch {
+        /* list may load on next activities refresh */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [openAnalysisId, layout, shotsSessionsAll])
+
   const shotsSessionsFiltered = useMemo(() => {
     if (shotsTab === 'all') return shotsSessionsAll
     return shotsSessionsAll.filter((s) => favoriteIds.has(s.analysisId))
@@ -616,7 +684,10 @@ export function ActivitiesCalendarFlow({
     return (
       <ActivitiesVideoAnalysis
         session={analysisSession}
-        onBack={() => setAnalysisSession(null)}
+        onBack={() => {
+          setAnalysisSession(null)
+          onOpenAnalysisConsumed?.()
+        }}
       />
     )
   }
@@ -637,7 +708,7 @@ export function ActivitiesCalendarFlow({
           showsVerticalScrollIndicator={false}
         >
           <Text allowFontScaling={false} style={shotsStyles.shotsPageTitle}>
-            Shots
+            {t('activities.shots')}
           </Text>
 
           <View style={shotsStyles.segmentWrap}>
@@ -650,7 +721,7 @@ export function ActivitiesCalendarFlow({
                 allowFontScaling={false}
                 style={[shotsStyles.segmentLabel, shotsTab === 'all' && shotsStyles.segmentLabelActive]}
               >
-                All Shots
+                {t('activities.allShots')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -665,7 +736,7 @@ export function ActivitiesCalendarFlow({
                   shotsTab === 'favorites' && shotsStyles.segmentLabelActive,
                 ]}
               >
-                Favorites
+                {t('activities.favorites')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -679,12 +750,15 @@ export function ActivitiesCalendarFlow({
           ) : shotsSessionsFiltered.length === 0 ? (
             <Text allowFontScaling={false} style={shotsStyles.emptyShots}>
               {shotsTab === 'favorites'
-                ? 'No favorites yet. Open a shot and tap the star in the top right.'
-                : 'No shots yet. Analyze a clip in AI Coach to see it here.'}
+                ? t('activities.noFavorites')
+                : t('activities.noShots')}
             </Text>
           ) : (
             shotsSessionsFiltered.map((s) => {
-              const shotTitle = formatShotDisplayName(s.shotLabel)
+              const shotTitle = displayTrainShotTitle({
+                strokeLabel: s.shotLabel,
+                strokeName: s.shotLabel,
+              })
               const score =
                 typeof s.score === 'number' ? displayScoreWhole(s.score) : null
               const pct = score != null ? Math.max(0, Math.min(100, score)) : 0
@@ -768,7 +842,7 @@ export function ActivitiesCalendarFlow({
         sessions={sessions}
         theme={theme}
         monthVideoCount={monthVideoCountForDetail}
-        backToCalendarLabel={dayDetailBackLabel}
+        backToCalendarLabel={resolvedDayBackLabel}
         onShiftDay={(delta) => {
           const next = shiftDateKey(detailDateKey, delta)
           setDetailDateKey(next)
@@ -855,7 +929,7 @@ export function ActivitiesCalendarFlow({
       {aboveActivitiesTitle}
 
       <Text allowFontScaling={false} style={styles.sectionTitle}>
-        {sectionTitle}
+        {resolvedSectionTitle}
       </Text>
 
       {error ? (
@@ -940,7 +1014,28 @@ export function ActivitiesCalendarFlow({
 }
 
 export function ActivitiesScreen() {
-  return <ActivitiesCalendarFlow layout="shots" monthNavStyle="pill" showHeroRow={false} />
+  const route = useRoute<RouteProp<MainTabParamList, 'Activities'>>()
+  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList, 'Activities'>>()
+  const routeOpenId = route.params?.openAnalysisId
+  const [latchedOpenAnalysisId, setLatchedOpenAnalysisId] = useState<string | undefined>()
+
+  useEffect(() => {
+    if (!routeOpenId) return
+    setLatchedOpenAnalysisId(routeOpenId)
+    navigation.setParams({ openAnalysisId: undefined })
+  }, [routeOpenId, navigation])
+
+  const openAnalysisId = latchedOpenAnalysisId
+
+  return (
+    <ActivitiesCalendarFlow
+      layout="shots"
+      monthNavStyle="pill"
+      showHeroRow={false}
+      openAnalysisId={openAnalysisId}
+      onOpenAnalysisConsumed={() => setLatchedOpenAnalysisId(undefined)}
+    />
+  )
 }
 
 function getStyles(theme: any, winW: number) {

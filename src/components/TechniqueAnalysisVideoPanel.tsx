@@ -128,6 +128,12 @@ export type TechniqueAnalysisVideoPanelProps = {
    * `default` = original strip styling (technique flow).
    */
   playerLayout?: 'default' | 'stacked'
+  /** Show Pose / Racket / Ball legend under stacked layout (AI Coach step 3 shows this by default). */
+  showLegendInStacked?: boolean
+  /** Quality scrub dots on stacked progress bar (matches AI Coach timeline). */
+  showScrubDotsInStacked?: boolean
+  /** Green arms / pink legs segment colors; `uniform` = single tone from session quality. */
+  skeletonColorMode?: 'uniform' | 'segment'
 }
 
 /**
@@ -145,6 +151,9 @@ export function TechniqueAnalysisVideoPanel({
   isLooping = true,
   showLegend = true,
   playerLayout = 'default',
+  showLegendInStacked = false,
+  showScrubDotsInStacked = false,
+  skeletonColorMode = 'uniform',
 }: TechniqueAnalysisVideoPanelProps) {
   const { theme } = useContext(ThemeContext)
   const videoRef = useRef<Video>(null)
@@ -354,7 +363,14 @@ export function TechniqueAnalysisVideoPanel({
           backgroundColor: 'transparent',
         },
         videoShell: { width: '100%', backgroundColor: '#000', alignItems: 'center' },
-        videoBox: { position: 'relative', overflow: 'visible' },
+        videoBox: { position: 'relative', overflow: 'visible', zIndex: 1 },
+        overlaySvg: {
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          zIndex: 4,
+          elevation: 8,
+        },
         controlsStrip: {
           flexDirection: 'row',
           alignItems: 'center',
@@ -450,6 +466,16 @@ export function TechniqueAnalysisVideoPanel({
           paddingBottom: 12,
           backgroundColor: 'rgba(5, 10, 24, 0.98)',
         },
+        overlayLegendRowStacked: {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 16,
+          marginTop: 10,
+          paddingHorizontal: 4,
+          paddingBottom: 4,
+          alignSelf: 'stretch',
+        },
         overlayLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
         overlayLegendDot: { width: 8, height: 8, borderRadius: 4 },
         overlayLegendText: {
@@ -461,8 +487,9 @@ export function TechniqueAnalysisVideoPanel({
     [theme.regularFont]
   )
 
-  /** Stacked shot UI: no Pose/Racket/Ball legend row. */
-  const showLegendUi = showLegend && !stacked
+  const showLegendUi = showLegend && (!stacked || showLegendInStacked)
+  const showScrubDotsUi = !stacked || showScrubDotsInStacked
+  const useUniformSkeleton = skeletonColorMode === 'uniform'
 
   /** Stacked: fixed-width column so controls align to video edges but sit outside the black frame. */
   const innerColumnStyle = stacked
@@ -483,7 +510,7 @@ export function TechniqueAnalysisVideoPanel({
             strokeWidth={STACKED_VIDEO_GRADIENT_STROKE}
             gradientVariant="accent"
             innerShadow={false}
-            innerStyle={{ backgroundColor: '#000000', padding: 0, overflow: 'hidden' }}
+            innerStyle={{ backgroundColor: '#000000', padding: 0, overflow: 'visible' }}
             style={{ width: '100%' }}
           >
             <View style={styles.videoShell}>
@@ -515,7 +542,7 @@ export function TechniqueAnalysisVideoPanel({
                   width={width}
                   height={videoH}
                   viewBox={`0 0 ${width} ${videoH}`}
-                  style={{ position: 'absolute', left: 0, top: 0, width, height: videoH }}
+                  style={[styles.overlaySvg, { width, height: videoH }]}
                   pointerEvents="none"
                 >
                   {landmarksForPoseOverlay ? (
@@ -527,7 +554,7 @@ export function TechniqueAnalysisVideoPanel({
                       naturalH={naturalSize?.h ?? null}
                       goodColor={VA.good}
                       wrongColor={VA.wrong}
-                      uniformStrokeColor={skeletonUniformColor}
+                      uniformStrokeColor={useUniformSkeleton ? skeletonUniformColor : undefined}
                       strokeWidth={lineStrokeW}
                     />
                   ) : null}
@@ -539,8 +566,8 @@ export function TechniqueAnalysisVideoPanel({
                       height={racketOverlayBox.h}
                       fill="transparent"
                       stroke="#FFD400"
-                      strokeWidth={Math.max(1.4, lineStrokeW * 0.75)}
-                      strokeOpacity={0.95}
+                      strokeWidth={Math.max(2, lineStrokeW * 0.9)}
+                      strokeOpacity={1}
                     />
                   ) : null}
                   {ballOverlayBox ? (
@@ -551,8 +578,8 @@ export function TechniqueAnalysisVideoPanel({
                       height={ballOverlayBox.h}
                       fill="transparent"
                       stroke="#00E5FF"
-                      strokeWidth={Math.max(1.2, lineStrokeW * 0.6)}
-                      strokeOpacity={0.95}
+                      strokeWidth={Math.max(2, lineStrokeW * 0.75)}
+                      strokeOpacity={1}
                     />
                   ) : null}
                 </Svg>
@@ -590,7 +617,7 @@ export function TechniqueAnalysisVideoPanel({
                   width={width}
                   height={videoH}
                   viewBox={`0 0 ${width} ${videoH}`}
-                  style={{ position: 'absolute', left: 0, top: 0, width, height: videoH }}
+                  style={[styles.overlaySvg, { width, height: videoH }]}
                   pointerEvents="none"
                 >
                   {landmarksForPoseOverlay ? (
@@ -602,7 +629,7 @@ export function TechniqueAnalysisVideoPanel({
                       naturalH={naturalSize?.h ?? null}
                       goodColor={VA.good}
                       wrongColor={VA.wrong}
-                      uniformStrokeColor={skeletonUniformColor}
+                      uniformStrokeColor={useUniformSkeleton ? skeletonUniformColor : undefined}
                       strokeWidth={lineStrokeW}
                     />
                   ) : null}
@@ -614,8 +641,8 @@ export function TechniqueAnalysisVideoPanel({
                       height={racketOverlayBox.h}
                       fill="transparent"
                       stroke="#FFD400"
-                      strokeWidth={Math.max(1.4, lineStrokeW * 0.75)}
-                      strokeOpacity={0.95}
+                      strokeWidth={Math.max(2, lineStrokeW * 0.9)}
+                      strokeOpacity={1}
                     />
                   ) : null}
                   {ballOverlayBox ? (
@@ -626,8 +653,8 @@ export function TechniqueAnalysisVideoPanel({
                       height={ballOverlayBox.h}
                       fill="transparent"
                       stroke="#00E5FF"
-                      strokeWidth={Math.max(1.2, lineStrokeW * 0.6)}
-                      strokeOpacity={0.95}
+                      strokeWidth={Math.max(2, lineStrokeW * 0.75)}
+                      strokeOpacity={1}
                     />
                   ) : null}
                 </Svg>
@@ -653,7 +680,7 @@ export function TechniqueAnalysisVideoPanel({
                   },
               ]}
             />
-            {!stacked &&
+            {showScrubDotsUi &&
               scrubDots.map((d, i) => (
                 <View
                   key={i}
@@ -676,9 +703,18 @@ export function TechniqueAnalysisVideoPanel({
         </View>
       </View>
       {showLegendUi ? (
-        <View style={styles.overlayLegendRow}>
+        <View style={[styles.overlayLegendRow, stacked && styles.overlayLegendRowStacked]}>
           <View style={styles.overlayLegendItem}>
-            <View style={[styles.overlayLegendDot, { backgroundColor: skeletonUniformColor }]} />
+            <View
+              style={[
+                styles.overlayLegendDot,
+                {
+                  backgroundColor: useUniformSkeleton
+                    ? skeletonUniformColor
+                    : VA.good,
+                },
+              ]}
+            />
             <Text allowFontScaling={false} style={styles.overlayLegendText}>
               Pose
             </Text>

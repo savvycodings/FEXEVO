@@ -19,6 +19,11 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useState, useContext, useRef, useEffect, useMemo, useCallback, useId } from 'react'
 import { ThemeContext } from '../context'
+import { useSessionData } from '../context/SessionDataContext'
+import {
+  ensureCorrectionNotificationPermission,
+  notifyCorrectionImagesReady,
+} from '../lib/correctionImageNotifications'
 import { DOMAIN } from '../../constants'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
@@ -44,6 +49,7 @@ import { authClient } from '../lib/auth-client'
 import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
+import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { LOADING_OVERLAY_SCRIM } from '../constants/loadingVideoFullscreen'
 import {
@@ -51,17 +57,33 @@ import {
   type AICoachAssignedCoach,
 } from '../components/AICoachCoachReviewBanner'
 import { VideoFrameCarousel, normalizeThumbnailImageUri } from '../components/VideoFrameCarousel'
+import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientFrame } from '../components/ProLibraryGradientFrame'
 import { ProLibraryGradientProgressBar } from '../components'
 import { proLibraryChrome } from '../theme/proLibraryChrome'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
+import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
+import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
+import { CorrectionFrameSelector } from '../components/CorrectionFrameSelector'
+import {
+  parseCorrectionFrameInsights,
+  insightForCorrectionIndex,
+  type CorrectionFrameInsight,
+} from '../types/correction'
+import { CoachStrengthFocusInsightCards } from '../components/CoachStrengthFocusInsightCards'
+import { buildCoachInsightCardsContent } from '../lib/coachInsightCards'
 import { normalizePoseData, resolveTotalFrames, type PoseFrameRow } from '../lib/techniquePose'
-import { TRAIN_CATEGORIES, trainStrokeLabel, type TrainStrokePreset } from '../lib/train-taxonomy'
 import {
   storedAiBreakdownToPercent,
   storedAiConfidenceToPercent,
   storedAiScoreToPercent,
 } from '../lib/techniqueScoreDisplay'
+import {
+  clampClipRangeMs,
+  MAX_ANALYZE_CLIP_MS,
+  MIN_ANALYZE_CLIP_MS,
+} from '../lib/techniqueClipLimits'
+import { uploadTechniqueVideo } from '../lib/techniqueVideoUpload'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const HORIZONTAL_PADDING = 24
@@ -86,16 +108,6 @@ const SCORE_3BARS_ICON = require('../../assets/afteranylize/3bars.svg')
 const CATEGORY_ICON_TECHNIQUE = require('../../assets/afteranylize/technique.svg')
 const CATEGORY_ICON_OUTCOME = require('../../assets/afteranylize/outcome.svg')
 const CATEGORY_ICON_TACTICS = require('../../assets/afteranylize/tactics.svg')
-const STRENGTH_CARD_ICON = require('../../assets/afteranylize/strength.svg')
-const FOCUS_CARD_ICON = require('../../assets/afteranylize/focus.svg')
-/** Insight cards — headline color for Strength / Focus titles. */
-const STEP3_INSIGHT_HEADLINE_COLOR = '#00B8FF'
-const INSIGHT_HEADLINE_MAX_WORDS = 3
-/** When the cue is longer than 3 words and has no short colon segment, show a whole fallback label (never a cut-off sentence). */
-const STRENGTH_HEADLINE_FALLBACK = 'Your shot'
-const FOCUS_HEADLINE_FALLBACK = 'Next focus'
-/** SVG assets include their own rounded chip; render larger — no extra wrapper box. */
-const STEP3_INSIGHT_ICON_PX = 42
 const HOWTO_HIDE_KEY = 'technique_hide_howto_prompt'
 const CHOOSE_FILE_ICON = require('../../assets/aicoach/choosefileicon.svg')
 const UPLOADING_STEP_ICON = require('../../assets/actiities/uploading.svg')
@@ -112,8 +124,14 @@ const STEP3_CARD_GRADIENT_LOCATIONS = [0, 0.33, 0.66, 1] as const
 /** Toggle to show dev pose actions again */
 const SHOW_GENERATE_POSES_TEST = false
 const SHOW_GENERATE_FAL_FLUX = false
-/** When true, show ComfyUI correction path (server must have COMFYUI_* env + reachable Comfy). */
-const SHOW_COMFY_CORRECTIONS = process.env.EXPO_PUBLIC_SHOW_COMFY_CORRECTIONS === 'true'
+/**
+ * When true, show ComfyUI correction path (server must have COMFYUI_* env + reachable Comfy).
+ * Baked in at build time (EAS `env` overrides `app/.env` for dev clients). Default off.
+ */
+const SHOW_COMFY_CORRECTIONS =
+  String(process.env.EXPO_PUBLIC_SHOW_COMFY_CORRECTIONS ?? '')
+    .trim()
+    .toLowerCase() === 'true'
 /**
  * Legacy correction providers (Gemini + fal.ai) — chips, retry buttons, and the
  * primary "Generate Corrected Poses" button (which historically routed to Gemini).
@@ -154,7 +172,6 @@ const RANKING_ORG_OPTIONS = [
   'Play by Point',
 ]
 const FRAME_SNAP_POINTS = 31
-const DEFAULT_CLIP_HALF_WINDOW_MS = 2000
 const CAROUSEL_FRAMES_EVERY = 5
 const CAROUSEL_FPS = 30
 type TechniqueClip = {
@@ -224,95 +241,11 @@ function DragModeIcon({ color, strokeOpacity = 1 }: CorrectionModeIconProps) {
 /** Retrieval metrics on analysis — includes `shot_hypothesis` for this clip from embeddings/pose. */
 type TechniqueRetrievalMetrics = {
   shot_hypothesis?: {
+    stroke_label?: string | null
     stroke_preset?: string | null
     category?: string | null
     skill_level?: string | null
   }
-}
-
-const TRAIN_CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
-  TRAIN_CATEGORIES.map((c) => [c.id, c.label])
-)
-
-function trainCategoryLabel(raw: string | undefined): string {
-  if (!raw?.trim()) return ''
-  const id = raw.trim()
-  return TRAIN_CATEGORY_LABELS[id] ?? id.replace(/_/g, ' ')
-}
-
-function clipInsightTitle(text: string, maxLen: number): string {
-  const t = text.trim()
-  if (!t) return ''
-  if (t.length <= maxLen) return t
-  return `${t.slice(0, Math.max(0, maxLen - 1)).trim()}…`
-}
-
-function firstInsightSentence(text: string | undefined, maxLen: number): string {
-  if (!text?.trim()) return ''
-  const t = text.trim()
-  const m = t.match(/^[^.!?]+[.!?]?/)
-  const s = (m ? m[0] : t.split('\n')[0]) ?? t
-  return clipInsightTitle(s, maxLen)
-}
-
-function strokePresetDisplayLabel(raw: string): string {
-  const id = raw.trim()
-  if (!id) return ''
-  return trainStrokeLabel(id as TrainStrokePreset)
-}
-
-function insightHeadlineWordCount(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length
-}
-
-/**
- * Headline is **only** full phrases ≤ maxWords — never the first N words of a long sentence.
- * If stripping filler still leaves > maxWords, tries a short segment after : or – ; else fallback.
- */
-function completeInsightHeadline(raw: string, maxWords: number, fallback: string): string {
-  const t = raw.trim()
-  if (!t) return fallback
-  const stripped = stripCoachingFillerForHeadline(t)
-  const base = stripped.length > 0 ? stripped : t
-  const n = insightHeadlineWordCount(base)
-  if (n >= 1 && n <= maxWords) return base
-
-  const segments = base.split(/\s*[:\u2013\u2014]\s*/)
-  for (let i = segments.length - 1; i >= 0; i--) {
-    const seg = segments[i].trim()
-    if (!seg) continue
-    const cn = insightHeadlineWordCount(seg)
-    if (cn >= 1 && cn <= maxWords && seg.length >= 2) return seg
-  }
-
-  return fallback
-}
-
-/**
- * Strip LLM-style filler so the first N words read as a punchy headline (not "You should work on…").
- */
-function stripCoachingFillerForHeadline(text: string): string {
-  let t = text.trim()
-  if (!t) return ''
-  const firstClause = t.split(/[.!?]\s+/)[0] ?? t
-  t = firstClause.split(/[,;]/)[0]?.trim() ?? firstClause
-  t = t
-    .replace(/^next\s+time,?\s+/i, '')
-    .replace(/^try\s+to\s+/i, '')
-    .replace(/^remember\s+to\s+/i, '')
-    .replace(/^aim\s+to\s+/i, '')
-    .replace(/^work\s+on\s+/i, '')
-    .replace(/^focus\s+on\s+/i, '')
-    .replace(/^you\s+should\s+/i, '')
-    .replace(/^you\s+need\s+to\s+/i, '')
-    .replace(/^you\s+must\s+/i, '')
-    .replace(/^your\s+priority\s+is\s+to\s+/i, '')
-    .replace(/^you(?:'re|\s+are)\s+(?:hitting|playing|executing|performing)\s+(?:a\s+)?/i, '')
-    .replace(/^this\s+(?:clip\s+)?(?:shows|is)\s+(?:a\s+)?/i, '')
-    .replace(/^the\s+main\s+issue\s+is\s+(?:that\s+)?/i, '')
-    .replace(/^the\s+technical\s+(?:issue|problem)\s+is\s+(?:that\s+)?/i, '')
-    .trim()
-  return t
 }
 
 /** `correctedImage`: API/data URIs (string), native `require()` id (number), or Expo/web `{ uri, width, height }` */
@@ -329,7 +262,8 @@ function isUsableCorrectionImageUri(uri: string): boolean {
     u.startsWith('http://') ||
     u.startsWith('https://') ||
     u.startsWith('data:image/') ||
-    u.startsWith('file:')
+    u.startsWith('file:') ||
+    u.startsWith('/uploads/')
   )
 }
 
@@ -366,6 +300,10 @@ function toImageSource(uriOrModule: string | number | ImageSourcePropType): Imag
     return uriOrModule as ImageSourcePropType
   }
   const s = uriOrModule.trim()
+  if (s.startsWith('/uploads/')) {
+    const base = DOMAIN.replace(/\/+$/, '')
+    return { uri: `${base}${s}` }
+  }
   if (s.startsWith('/') || /^https?:\/\//i.test(s) || s.startsWith('blob:')) {
     if (typeof window !== 'undefined' && s.startsWith('/') && !s.startsWith('//')) {
       return { uri: `${window.location.origin}${s}` }
@@ -418,7 +356,9 @@ function SideBySideModeIcon({ color, strokeOpacity = 1 }: CorrectionModeIconProp
 }
 
 export function Technique() {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
+  const { invalidate: invalidateSessionData } = useSessionData()
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
   const [scrollBodyH, setScrollBodyH] = useState(0)
@@ -442,7 +382,7 @@ export function Technique() {
   const [analysisJson, setAnalysisJson] = useState<any>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const trimVideoRef = useRef<Video | null>(null)
+  const trimPreviewRef = useRef<TrimClipPreviewHandle | null>(null)
   /** Pixel dimensions from the trim preview `Video` — box height = f(width, aspect) so overlays stay aligned with decode geometry. */
   const [trimPreviewNaturalSize, setTrimPreviewNaturalSize] = useState<{ w: number; h: number } | null>(
     null
@@ -462,11 +402,10 @@ export function Technique() {
   const [geminiCorrectionImages, setGeminiCorrectionImages] = useState<CorrectionPairRow[]>([])
   const [falCorrectionImages, setFalCorrectionImages] = useState<CorrectionPairRow[]>([])
   const [comfyCorrectionImages, setComfyCorrectionImages] = useState<CorrectionPairRow[]>([])
-  /** Which provider's results to show. Default is `comfy` (xevo production stack);
-   * Gemini/fal remain available as legacy chips when their results are present. */
+  /** Which cached correction set to show (internal; no vendor labels in UI). */
   const [correctionImageSource, setCorrectionImageSource] = useState<
     'gemini' | 'fal' | 'comfy' | 'test'
-  >('comfy')
+  >('gemini')
   const [correctionsLoadingGemini, setCorrectionsLoadingGemini] = useState(false)
   const [correctionsLoadingFal, setCorrectionsLoadingFal] = useState(false)
   const [correctionsLoadingComfy, setCorrectionsLoadingComfy] = useState(false)
@@ -478,6 +417,9 @@ export function Technique() {
   /** Server-extracted video frames paired with bundled testimgegen PNGs (no AI gen) */
   const [testPoseCorrectionImages, setTestPoseCorrectionImages] = useState<CorrectionPairRow[]>([])
   const [activeCorrection, setActiveCorrection] = useState(0)
+  const [correctionFrameInsights, setCorrectionFrameInsights] = useState<
+    CorrectionFrameInsight[]
+  >([])
 
   const visibleGeminiCorrectionImages = useMemo(
     () => filterValidCorrectionPairs(geminiCorrectionImages),
@@ -509,12 +451,15 @@ export function Technique() {
   const correctionProviderCount =
     (visibleGeminiCorrectionImages.length > 0 ? 1 : 0) +
     (visibleFalCorrectionImages.length > 0 ? 1 : 0) +
-    (visibleComfyCorrectionImages.length > 0 ? 1 : 0) +
+    (SHOW_COMFY_CORRECTIONS && visibleComfyCorrectionImages.length > 0 ? 1 : 0) +
     (testPoseCorrectionImages.length > 0 ? 1 : 0)
-  const canShowCorrectionSourceChips = correctionProviderCount >= 2
+  const canShowCorrectionSourceChips =
+    (SHOW_LEGACY_CORRECTIONS || SHOW_COMFY_CORRECTIONS) && correctionProviderCount >= 2
 
   const [compareSplit, setCompareSplit] = useState(0.5)
   const [correctionViewMode, setCorrectionViewMode] = useState<'sideBySide' | 'drag'>('drag')
+  const [regenerateModalVisible, setRegenerateModalVisible] = useState(false)
+  const [regenerateFeedbackMessage, setRegenerateFeedbackMessage] = useState('')
   const [compareCardLayout, setCompareCardLayout] = useState<{
     width: number
     height: number
@@ -556,13 +501,18 @@ export function Technique() {
     return { w: maxW, h }
   }, [step, winW, effectiveScrollBodyH])
 
-  const lastSeekMsRef = useRef(0)
   const isScrubbingRef = useRef(false)
+  const [trimCarouselScrubbing, setTrimCarouselScrubbing] = useState(false)
+  const trimRangeInitializedRef = useRef(false)
+  const pendingSeekProgressRef = useRef<number | null>(null)
+  const seekTrimRafRef = useRef<number | null>(null)
+  const trimPreviewUri = localVideoUri ?? uploadedVideoUrl
 
   useEffect(() => {
     setStep2CenterFrameUri(null)
     setTrimPreviewNaturalSize(null)
-  }, [uploadedVideoUrl])
+    trimRangeInitializedRef.current = false
+  }, [uploadedVideoUrl, localVideoUri])
 
   /**
    * Step 2 summary chip waited only on `VideoFrameCarousel` thumbnail extraction (sequential),
@@ -576,7 +526,10 @@ export function Technique() {
     const rawUri = localVideoUri ?? uploadedVideoUrl
     let cancelled = false
     const durationMs = videoDurationSeconds * 1000
-    const tMs = Math.min(Math.max(0, durationMs - 1), Math.round(durationMs * 0.5))
+    const tMs = Math.min(
+      Math.max(0, durationMs - 1),
+      Math.round(durationMs * clamp01(markerProgress))
+    )
 
     void (async () => {
       try {
@@ -599,7 +552,7 @@ export function Technique() {
     return () => {
       cancelled = true
     }
-  }, [step, uploadedVideoUrl, localVideoUri, videoDurationSeconds])
+  }, [step, uploadedVideoUrl, localVideoUri, videoDurationSeconds, markerProgress])
 
   /**
    * Trim-step preview: full width, height from aspect ratio but capped so portrait video
@@ -657,79 +610,91 @@ export function Technique() {
     ? enAnalysis.recommendations
     : []
 
-  /**
-   * Strength title = the shot in *this* clip: preset → shot_context → category.
-   * Only **whole** phrases ≤3 words (no sentence fragments); prefer real labels over fallback "Your shot".
-   */
-  const strengthInsightTitle = useMemo(() => {
-    const candidates: string[] = []
-    const fromHyp =
-      typeof retrieval?.shot_hypothesis?.stroke_preset === 'string'
-        ? retrieval.shot_hypothesis.stroke_preset.trim()
-        : ''
-    if (fromHyp) {
-      const label = strokePresetDisplayLabel(fromHyp)
-      if (label) {
-        candidates.push(
-          completeInsightHeadline(label, INSIGHT_HEADLINE_MAX_WORDS, STRENGTH_HEADLINE_FALLBACK)
-        )
+  const applyCorrectionContext = useCallback(
+    (ctx: unknown, imageCount: number) => {
+      const diagnosis =
+        typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : null
+      setCorrectionFrameInsights(parseCorrectionFrameInsights(ctx, imageCount, diagnosis))
+    },
+    [enAnalysis?.diagnosis]
+  )
+
+  const proReferenceShot = useMemo(() => {
+    const label = retrieval?.shot_hypothesis?.stroke_label
+    return typeof label === 'string' && label.trim() ? label.trim() : null
+  }, [retrieval?.shot_hypothesis?.stroke_label])
+
+  const displayCorrectionFrameInsights = useMemo((): CorrectionFrameInsight[] => {
+    const diagnosis =
+      typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : null
+    if (correctionImages.length === 0) return []
+    if (correctionFrameInsights.length === 0) {
+      return parseCorrectionFrameInsights(null, correctionImages.length, diagnosis)
+    }
+    const fallback = parseCorrectionFrameInsights(
+      null,
+      correctionImages.length,
+      diagnosis
+    )
+    return correctionImages.map((_, idx) => {
+      return (
+        insightForCorrectionIndex(correctionFrameInsights, correctionImages, idx) ??
+        fallback[idx]
+      )
+    })
+  }, [correctionImages, correctionFrameInsights, enAnalysis?.diagnosis])
+
+  const currentTrimClip = useMemo(() => {
+    if (videoDurationSeconds == null || videoDurationSeconds <= 0) return null
+    const totalMs = Math.round(videoDurationSeconds * 1000)
+    return clampClipRangeMs(trimRange.startMs, trimRange.endMs, totalMs)
+  }, [videoDurationSeconds, trimRange.startMs, trimRange.endMs])
+
+  const correctionRegenerateBullets = useMemo(() => {
+    const items: string[] = []
+    const pushUnique = (lines: string[] | undefined) => {
+      if (!Array.isArray(lines)) return
+      for (const line of lines) {
+        const t = typeof line === 'string' ? line.trim() : ''
+        if (t && !items.includes(t)) items.push(t)
       }
     }
-    const sc = typeof enAnalysis?.shot_context === 'string' ? enAnalysis.shot_context : ''
-    if (sc.trim()) {
-      const cleaned = sc.replace(/\s*\(?\s*(?:low|medium|high)\s*confidence\s*\)?\.?$/i, '').trim()
-      const phrase = cleaned.split(/[.!?]/)[0]?.trim() ?? cleaned
-      candidates.push(
-        completeInsightHeadline(phrase, INSIGHT_HEADLINE_MAX_WORDS, STRENGTH_HEADLINE_FALLBACK)
-      )
+    if (typeof enAnalysis?.diagnosis === 'string' && enAnalysis.diagnosis.trim()) {
+      items.push(enAnalysis.diagnosis.trim())
     }
-    const cat =
-      aiAnalysis && typeof (aiAnalysis as Record<string, unknown>).primary_train_category === 'string'
-        ? String((aiAnalysis as Record<string, unknown>).primary_train_category).trim()
-        : ''
-    if (cat) {
-      candidates.push(
-        completeInsightHeadline(trainCategoryLabel(cat), INSIGHT_HEADLINE_MAX_WORDS, STRENGTH_HEADLINE_FALLBACK)
-      )
-    }
-    const best =
-      candidates.find((c) => c.length > 0 && c !== STRENGTH_HEADLINE_FALLBACK) ??
-      candidates.find((c) => c.length > 0) ??
-      ''
-    return best || '—'
-  }, [retrieval?.shot_hypothesis?.stroke_preset, enAnalysis?.shot_context, aiAnalysis])
+    pushUnique(actionableCorrectionsList)
+    pushUnique(technicalErrorsList)
+    return items.slice(0, 10)
+  }, [enAnalysis?.diagnosis, actionableCorrectionsList, technicalErrorsList])
 
-  const strengthInsightBody = useMemo(() => {
-    if (strengthsList.length > 0) return strengthsList[0]
-    const obs = enAnalysis?.observations
-    const first = Array.isArray(obs) ? obs[0] : null
-    return typeof first === 'string' && first.trim() ? first : '—'
-  }, [strengthsList, enAnalysis?.observations])
-
-  /**
-   * Focus headline: actionable first, else technical error.
-   * Never truncate mid-sentence — only a **complete** phrase ≤3 words, a short `: · –` segment, or "Next focus".
-   */
-  const focusInsightTitle = useMemo(() => {
-    let raw = ''
-    if (actionableCorrectionsList.length > 0) {
-      raw = actionableCorrectionsList[0].trim()
-    }
-    if (!raw && technicalErrorsList.length > 0) {
-      raw = technicalErrorsList[0].trim()
-    }
-    if (!raw) return '—'
-    return completeInsightHeadline(raw, INSIGHT_HEADLINE_MAX_WORDS, FOCUS_HEADLINE_FALLBACK)
-  }, [technicalErrorsList, actionableCorrectionsList])
-
-  const focusInsightBody = useMemo(() => {
-    if (technicalErrorsList.length > 0 && actionableCorrectionsList.length > 0) {
-      return actionableCorrectionsList[0]
-    }
-    if (actionableCorrectionsList.length > 1) return actionableCorrectionsList[1]
-    const d = typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : ''
-    return d ? firstInsightSentence(d, 180) || '—' : '—'
-  }, [technicalErrorsList, actionableCorrectionsList, enAnalysis?.diagnosis])
+  const coachInsightCards = useMemo(
+    () =>
+      buildCoachInsightCardsContent({
+        strokeLabel: retrieval?.shot_hypothesis?.stroke_label ?? null,
+        strokePreset: retrieval?.shot_hypothesis?.stroke_preset ?? null,
+        shotContext: typeof enAnalysis?.shot_context === 'string' ? enAnalysis.shot_context : null,
+        primaryTrainCategory:
+          aiAnalysis && typeof (aiAnalysis as Record<string, unknown>).primary_train_category === 'string'
+            ? String((aiAnalysis as Record<string, unknown>).primary_train_category).trim()
+            : null,
+        strengths: strengthsList,
+        observations: Array.isArray(enAnalysis?.observations) ? enAnalysis.observations : undefined,
+        actionableCorrections: actionableCorrectionsList,
+        technicalErrors: technicalErrorsList,
+        diagnosis: typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : null,
+      }),
+    [
+      retrieval?.shot_hypothesis?.stroke_label,
+      retrieval?.shot_hypothesis?.stroke_preset,
+      enAnalysis?.shot_context,
+      enAnalysis?.observations,
+      enAnalysis?.diagnosis,
+      aiAnalysis,
+      strengthsList,
+      actionableCorrectionsList,
+      technicalErrorsList,
+    ]
+  )
 
   const step3PoseFrames: PoseFrameRow[] = useMemo(
     () => normalizePoseData(metrics?.pose_data),
@@ -817,8 +782,38 @@ export function Technique() {
   )
 
   useEffect(() => {
-    const m = analysisJson?.metrics as
-      | {
+    if (!analysisId || analysisJson?.status !== 'completed') return
+    if (geminiCorrectionImages.length > 0) return
+    if (analysisJson?.metrics?.has_correction_images !== true) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await authClient
+          .$fetch<{
+            correction_images?: Array<{
+              frame: number
+              originalImage: string
+              correctedImage: string
+            }>
+            correction_images_fal?: Array<{
+              frame: number
+              originalImage: string
+              correctedImage: string
+            }>
+            correction_images_comfy?: Array<{
+              frame: number
+              originalImage: string
+              correctedImage: string
+            }>
+            correction_context?: unknown
+            correction_context_fal?: unknown
+            correction_context_comfy?: unknown
+          }>(`/technique/analysis/${analysisId}/correction-images`, {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+          })
+          .catch(() => null)
+        const body = ((res as { data?: unknown })?.data ?? res) as {
           correction_images?: Array<{
             frame: number
             originalImage: string
@@ -834,22 +829,64 @@ export function Technique() {
             originalImage: string
             correctedImage: string
           }>
+          correction_context?: unknown
+          correction_context_fal?: unknown
+          correction_context_comfy?: unknown
+        } | null
+        if (cancelled || !body) return
+        if (Array.isArray(body.correction_images) && body.correction_images.length > 0) {
+          setGeminiCorrectionImages(body.correction_images)
+          if (!cancelled) {
+            applyCorrectionContext(
+              body.correction_context,
+              body.correction_images.length
+            )
+          }
         }
-      | undefined
-    if (!m) return
-    if (Array.isArray(m.correction_images) && m.correction_images.length > 0) {
-      setGeminiCorrectionImages(m.correction_images)
-    }
-    if (Array.isArray(m.correction_images_fal) && m.correction_images_fal.length > 0) {
-      setFalCorrectionImages(m.correction_images_fal)
-    }
-    if (Array.isArray(m.correction_images_comfy) && m.correction_images_comfy.length > 0) {
-      setComfyCorrectionImages(m.correction_images_comfy)
+        if (
+          SHOW_LEGACY_CORRECTIONS &&
+          Array.isArray(body.correction_images_fal) &&
+          body.correction_images_fal.length > 0
+        ) {
+          setFalCorrectionImages(body.correction_images_fal)
+        }
+        if (
+          SHOW_COMFY_CORRECTIONS &&
+          Array.isArray(body.correction_images_comfy) &&
+          body.correction_images_comfy.length > 0
+        ) {
+          setComfyCorrectionImages(body.correction_images_comfy)
+        }
+      } catch {
+        /* cached corrections optional */
+      }
+    })()
+    return () => {
+      cancelled = true
     }
   }, [
-    analysisJson?.metrics?.correction_images,
-    analysisJson?.metrics?.correction_images_fal,
-    analysisJson?.metrics?.correction_images_comfy,
+    analysisId,
+    analysisJson?.status,
+    analysisJson?.metrics?.has_correction_images,
+    geminiCorrectionImages.length,
+    applyCorrectionContext,
+  ])
+
+  useEffect(() => {
+    const m = analysisJson?.metrics as Record<string, unknown> | undefined
+    if (!m || correctionImages.length === 0) return
+    const ctx =
+      correctionImageSource === 'fal'
+        ? m.correction_context_fal
+        : correctionImageSource === 'comfy'
+          ? m.correction_context_comfy
+          : m.correction_context
+    applyCorrectionContext(ctx, correctionImages.length)
+  }, [
+    analysisJson?.metrics,
+    correctionImageSource,
+    correctionImages.length,
+    applyCorrectionContext,
   ])
 
   useEffect(() => {
@@ -858,27 +895,32 @@ export function Technique() {
   }, [analysisId])
 
   useEffect(() => {
+    if (!SHOW_COMFY_CORRECTIONS && correctionImageSource === 'comfy') {
+      setCorrectionImageSource(
+        visibleGeminiCorrectionImages.length > 0 ? 'gemini' : 'test'
+      )
+    }
+  }, [correctionImageSource, visibleGeminiCorrectionImages.length])
+
+  useEffect(() => {
     if (correctionProviderCount >= 2) {
       return
     }
-    if (
+    if (visibleGeminiCorrectionImages.length > 0) {
+      setCorrectionImageSource('gemini')
+    } else if (
       visibleFalCorrectionImages.length > 0 &&
       visibleGeminiCorrectionImages.length === 0 &&
-      visibleComfyCorrectionImages.length === 0
+      !SHOW_COMFY_CORRECTIONS
     ) {
       setCorrectionImageSource('fal')
     } else if (
+      SHOW_COMFY_CORRECTIONS &&
       visibleComfyCorrectionImages.length > 0 &&
       visibleGeminiCorrectionImages.length === 0 &&
       visibleFalCorrectionImages.length === 0
     ) {
       setCorrectionImageSource('comfy')
-    } else if (
-      visibleGeminiCorrectionImages.length > 0 &&
-      visibleFalCorrectionImages.length === 0 &&
-      visibleComfyCorrectionImages.length === 0
-    ) {
-      setCorrectionImageSource('gemini')
     } else if (
       testPoseCorrectionImages.length > 0 &&
       visibleGeminiCorrectionImages.length === 0 &&
@@ -925,24 +967,53 @@ export function Technique() {
     return `${min}:${sec.toString().padStart(2, '0')}`
   }
 
-  async function seekTrimToProgress(progress: number) {
-    if (!trimVideoRef.current || videoDurationSeconds == null) return
-    const p = clamp01(progress)
-    const ms = Math.round(videoDurationSeconds * 1000 * p)
-    const now = Date.now()
-    if (now - lastSeekMsRef.current < 16) return
-    lastSeekMsRef.current = now
-    try {
-      await trimVideoRef.current.setStatusAsync({ positionMillis: ms, shouldPlay: false })
-    } catch {
-    }
-  }
+  const applyTrimVideoSeek = useCallback(
+    async (progress: number) => {
+      if (videoDurationSeconds == null || videoDurationSeconds <= 0) return
+      const totalMs = Math.round(videoDurationSeconds * 1000)
+      const ms = Math.min(
+        Math.max(0, Math.round(totalMs * clamp01(progress))),
+        Math.max(0, totalMs - 1)
+      )
+      await trimPreviewRef.current?.seekMs(ms)
+    },
+    [videoDurationSeconds]
+  )
+
+  const seekTrimToProgress = useCallback(
+    (progress: number) => {
+      pendingSeekProgressRef.current = clamp01(progress)
+      if (seekTrimRafRef.current != null) return
+      seekTrimRafRef.current = requestAnimationFrame(() => {
+        seekTrimRafRef.current = null
+        const p = pendingSeekProgressRef.current
+        pendingSeekProgressRef.current = null
+        if (p == null) return
+        void applyTrimVideoSeek(p)
+      })
+    },
+    [applyTrimVideoSeek]
+  )
+
+  useEffect(
+    () => () => {
+      if (seekTrimRafRef.current != null) cancelAnimationFrame(seekTrimRafRef.current)
+    },
+    []
+  )
 
   function addClipAtCurrentMarker() {
     if (videoDurationSeconds == null || videoDurationSeconds <= 0) return
     const totalMs = videoDurationSeconds * 1000
-    const startMs = Math.max(0, Math.min(totalMs, trimRange.startMs))
-    const endMs = Math.max(startMs + 300, Math.min(totalMs, trimRange.endMs))
+    const { startMs, endMs } = clampClipRangeMs(trimRange.startMs, trimRange.endMs, totalMs)
+    const durationMs = endMs - startMs
+    if (durationMs > MAX_ANALYZE_CLIP_MS) {
+      Alert.alert(
+        t('technique.clipTooLong'),
+        t('technique.clipTooLongMsg', { seconds: MAX_ANALYZE_CLIP_MS / 1000 })
+      )
+      return
+    }
     const nextClip: TechniqueClip = {
       id: `${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       startMs,
@@ -977,23 +1048,35 @@ export function Technique() {
     setCorrectionViewMode('drag')
     setStep2CenterFrameUri(null)
     setTrimRange({ startMs: 0, endMs: 3000 })
+    trimRangeInitializedRef.current = false
     setStep(1)
   }, [])
 
   useEffect(() => {
     if (videoDurationSeconds == null || videoDurationSeconds <= 0) return
     const totalMs = videoDurationSeconds * 1000
-    const centerMs = Math.round(totalMs * clamp01(markerProgress))
-    const initialStart = Math.max(0, centerMs - DEFAULT_CLIP_HALF_WINDOW_MS * 2)
-    const initialEnd = Math.min(totalMs, Math.max(initialStart + 500, centerMs))
-    setTrimRange(prev => {
-      const minEnd = prev.startMs + 500
-      if (prev.endMs > 0 && prev.endMs <= totalMs && prev.startMs >= 0 && prev.endMs >= minEnd) {
-        return prev
-      }
-      return { startMs: initialStart, endMs: initialEnd }
-    })
-  }, [videoDurationSeconds, markerProgress])
+    if (!trimRangeInitializedRef.current) {
+      const windowMs = Math.min(MAX_ANALYZE_CLIP_MS, totalMs)
+      const startMs = Math.max(0, totalMs - windowMs)
+      const endMs = totalMs
+      setTrimRange({ startMs, endMs })
+      const centerProgress = (startMs + endMs) / 2 / totalMs
+      setMarkerProgressStable(centerProgress)
+      trimRangeInitializedRef.current = true
+      void applyTrimVideoSeek(centerProgress)
+    }
+  }, [videoDurationSeconds, applyTrimVideoSeek])
+
+  const handleTrimPreviewPositionMs = useCallback(
+    (positionMs: number) => {
+      if (isScrubbingRef.current) return
+      if (videoDurationSeconds == null || videoDurationSeconds <= 0) return
+      const totalMs = videoDurationSeconds * 1000
+      if (totalMs <= 0) return
+      setMarkerProgressStable(positionMs / totalMs)
+    },
+    [videoDurationSeconds]
+  )
 
   async function pickVideo() {
     let status = (await ImagePicker.requestCameraPermissionsAsync()).status
@@ -1083,136 +1166,58 @@ export function Technique() {
   }
 
   async function uploadVideo(uri: string, fileName: string, mimeType: string): Promise<void> {
-    let uploadProgressTimer: ReturnType<typeof setInterval> | null = null
-    const clearUploadProgressTimer = () => {
-      if (uploadProgressTimer != null) {
-        clearInterval(uploadProgressTimer)
-        uploadProgressTimer = null
-      }
-    }
     try {
       console.log('[Technique] Upload started', { fileName, mimeType, sendVideoToCoach })
       setUploading(true)
       setUploadProgress(0)
       setUploadError(null)
-      // Always remember the local picker URI so the carousel reads from it (blob:// on web,
-      // file:///content:// on native) instead of the cross-origin uploaded URL.
       console.log('[Technique] picker uri scheme', uri.slice(0, 24))
       setLocalVideoUri(uri)
-      if (Platform.OS !== 'web') {
-        void (async () => {
-          try {
-            const base = FileSystem.cacheDirectory ?? FileSystem.documentDirectory
-            if (!base || uri.startsWith('file://')) return
-            const dest = `${base}technique-strip-${Date.now()}.mp4`
-            await FileSystem.copyAsync({ from: uri, to: dest })
-            const stable = dest.startsWith('file://') ? dest : `file://${dest}`
-            setLocalVideoUri(stable)
-            console.log('[Technique] Stable file URI for thumbnails (sandbox copy)')
-          } catch (e) {
-            console.warn('[Technique] Sandbox copy failed; thumbnails use picker URI', e)
-          }
-        })()
-      }
 
-      const formData = new FormData()
-
-      if (Platform.OS === 'web') {
-        try {
-          const res = await fetch(uri)
-          const blob = await res.blob()
-          const file = new File([blob], fileName, { type: mimeType })
-          formData.append('video', file)
-        } catch (err) {
-          console.error('[Technique] Failed to load blob for web upload', err)
-          setUploading(false)
-          return
-        }
-      } else {
-        formData.append('video', { uri, name: fileName, type: mimeType })
-      }
-      formData.append('sendVideoToCoach', sendVideoToCoach ? '1' : '0')
-
-      setUploadProgress(5)
-      uploadProgressTimer = setInterval(() => {
-        setUploadProgress((p) => {
-          if (p >= 94) return p
-          const delta = Math.max(1.2, (94 - p) * 0.09)
-          return Math.min(94, p + delta)
-        })
-      }, 110)
-
-      const res = await authClient
-        .$fetch<{ id?: string; url?: string; error?: string }>('/technique/upload', {
-          method: 'POST',
-          body: formData,
-        })
-        .catch((err) => {
-          console.error('[Technique] Upload request error', err)
-          return { error: err?.message || 'Upload failed' } as any
-        })
-
-      const data = ((res as any)?.data ?? res) as {
-        id?: string
-        url?: string
-        error?: string
-      }
-      const responseText = JSON.stringify(data)
-      console.log('[Technique] Upload response', {
-        status: (res as any)?.status ?? null,
-        responseText: responseText.slice(0, 200),
+      const data = await uploadTechniqueVideo({
+        uri,
+        fileName,
+        mimeType,
+        sendVideoToCoach,
+        apiBase: API_BASE,
+        onProgress: setUploadProgress,
       })
 
-      if (!data?.id) {
-        console.error('[Technique] Upload failed body:', data)
-        setUploadError(data?.error || 'Upload failed. Please try again.')
-        return
-      }
+      console.log('[Technique] Upload success', {
+        id: data.id,
+        url: data.url ? `${data.url.slice(0, 50)}...` : '',
+        sendVideoToCoach,
+      })
 
-      try {
-        const url = data?.url
-        const id = data?.id
-        console.log('[Technique] Upload success', {
-          id,
-          url: url ? `${url.slice(0, 50)}...` : '',
-          sendVideoToCoach,
-        })
-        if (url) {
-          const absoluteUrl = url.startsWith('http') ? url : `${API_BASE}${url}`
-          setUploadedVideoUrl(absoluteUrl)
-        }
-        if (id) {
-          setUploadedVideoId(id)
-          console.log('[Technique] Stored uploadedVideoId', id)
-          setClips([])
-          setMarkerProgress(0.5)
-          setAnalysisId(null)
-          setAnalysisError(null)
-          setAnalysisJson(null)
-          setGeminiCorrectionImages([])
-          setFalCorrectionImages([])
-          setComfyCorrectionImages([])
-          setCorrectionsError(null)
-          setCorrectionsFalError(null)
-          setCorrectionsComfyError(null)
-          setActiveCorrection(0)
-          setCompareSplit(0.5)
-          setCorrectionViewMode('drag')
-          setStep(2)
-        } else {
-          console.log('[Technique] Upload succeeded but no id in response, not advancing to step 2')
-          setUploadError('Upload succeeded but no video id was returned. Please try again.')
-        }
-      } catch (err) {
-        console.error('[Technique] Failed to parse response JSON', err)
-        setUploadError('Upload failed: invalid server response.')
+      if (data.localUri) {
+        setLocalVideoUri(data.localUri)
       }
+      if (data.url) {
+        const absoluteUrl = data.url.startsWith('http') ? data.url : `${API_BASE}${data.url}`
+        setUploadedVideoUrl(absoluteUrl)
+      }
+      setUploadedVideoId(data.id)
+      setClips([])
+      setMarkerProgress(0.5)
+      setAnalysisId(null)
+      setAnalysisError(null)
+      setAnalysisJson(null)
+      setGeminiCorrectionImages([])
+      setFalCorrectionImages([])
+      setComfyCorrectionImages([])
+      setCorrectionsError(null)
+      setCorrectionsFalError(null)
+      setCorrectionsComfyError(null)
+      setActiveCorrection(0)
+      setCompareSplit(0.5)
+      setCorrectionViewMode('drag')
+      setStep(2)
     } catch (err) {
       console.error('[Technique] Upload error', err)
-      setUploadError('Upload failed due to a network error. Please try again.')
+      const message = err instanceof Error ? err.message : 'Upload failed. Please try again.'
+      setUploadError(message)
+      setUploadProgress(0)
     } finally {
-      clearUploadProgressTimer()
-      setUploadProgress(100)
       setUploading(false)
     }
   }
@@ -1252,7 +1257,25 @@ export function Technique() {
             'Content-Type': 'application/json',
             Accept: 'application/json',
           },
-          body: JSON.stringify({ techniqueVideoId: videoId }),
+          body: JSON.stringify({
+            techniqueVideoId: videoId,
+            ...(currentTrimClip
+              ? { clips: [currentTrimClip] }
+              : clips.length > 0
+                ? {
+                    clips: clips.map((c) => {
+                      const totalMs =
+                        videoDurationSeconds != null && videoDurationSeconds > 0
+                          ? Math.round(videoDurationSeconds * 1000)
+                          : c.endMs
+                      return clampClipRangeMs(c.startMs, c.endMs, totalMs)
+                    }),
+                  }
+                : {}),
+            ...(videoDurationSeconds != null && videoDurationSeconds > 0
+              ? { videoDurationMs: Math.round(videoDurationSeconds * 1000) }
+              : {}),
+          }),
         })
         .catch((err) => ({ error: err?.message || 'Analyze failed' } as any))
 
@@ -1268,7 +1291,7 @@ export function Technique() {
       const errorMsg = (body as any)?.error as string | undefined
 
       if (!analysisId) {
-        setAnalysisError(errorMsg || 'Analyze failed')
+        setAnalysisError(errorMsg || t('techniqueExtra.analyzeFailed'))
         setAnalysisLoading(false)
         return
       }
@@ -1353,12 +1376,15 @@ export function Technique() {
       }
     } catch (err: any) {
       console.error('[Technique] runAnalysis error', err)
-      setAnalysisError(err?.message || 'Analyze error')
+      setAnalysisError(err?.message || t('techniqueExtra.analyzeError'))
       setAnalysisLoading(false)
     }
   }
 
-  async function generateGeminiCorrectionImages() {
+  async function generateCorrectionImages(opts?: {
+    forceRegenerate?: boolean
+    regenerationFeedback?: string
+  }) {
     if (
       correctionsLoadingGemini ||
       correctionsLoadingFal ||
@@ -1370,20 +1396,53 @@ export function Technique() {
     try {
       setCorrectionsLoadingGemini(true)
       setCorrectionsError(null)
+      void ensureCorrectionNotificationPermission()
+
+      const savedFrameIndices = (() => {
+        const ctx = (analysisJson?.metrics as { correction_context?: { frame_indices?: number[] } })
+          ?.correction_context
+        if (Array.isArray(ctx?.frame_indices) && ctx.frame_indices.length > 0) {
+          return ctx.frame_indices
+        }
+        if (geminiCorrectionImages.length > 0) {
+          return geminiCorrectionImages.map((c) => c.frame)
+        }
+        return undefined
+      })()
 
       const res = await authClient
         .$fetch<{
           corrections?: Array<{ frame: number; originalImage: string; correctedImage: string }>
+          correction_context?: unknown
           error?: string
         }>('/technique/correction-images', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ analysisId, imageProvider: 'gemini' }),
+          body: JSON.stringify({
+            analysisId,
+            imageProvider: 'gemini',
+            ...(opts?.forceRegenerate ? { forceRegenerate: true } : {}),
+            ...(opts?.forceRegenerate &&
+            typeof opts.regenerationFeedback === 'string' &&
+            opts.regenerationFeedback.trim()
+              ? {
+                  regenerationFeedback: {
+                    message: opts.regenerationFeedback.trim(),
+                  },
+                }
+              : {}),
+            ...(opts?.forceRegenerate &&
+            savedFrameIndices &&
+            savedFrameIndices.length > 0
+              ? { frameIndices: savedFrameIndices }
+              : {}),
+          }),
         })
         .catch((err) => ({ error: err?.message || 'Failed to generate corrections' } as any))
 
       const body = ((res as any)?.data ?? res) as {
         corrections?: Array<{ frame: number; originalImage: string; correctedImage: string }>
+        correction_context?: unknown
         error?: unknown
       }
 
@@ -1393,6 +1452,30 @@ export function Technique() {
         setActiveCorrection(0)
         setCompareSplit(0.5)
         setCorrectionViewMode('drag')
+        applyCorrectionContext(body.correction_context, body.corrections.length)
+        if (opts?.forceRegenerate) {
+          setRegenerateModalVisible(false)
+          setRegenerateFeedbackMessage('')
+        }
+        void notifyCorrectionImagesReady({
+          analysisId,
+          frameCount: body.corrections.length,
+        })
+        invalidateSessionData()
+        setAnalysisJson((prev: typeof analysisJson) =>
+          prev?.metrics
+            ? {
+                ...prev,
+                metrics: {
+                  ...prev.metrics,
+                  has_correction_images: true,
+                  ...(body.correction_context != null
+                    ? { correction_context: body.correction_context }
+                    : {}),
+                },
+              }
+            : prev
+        )
       } else {
         const apiError = body?.error
         if (typeof apiError === 'string') {
@@ -1408,7 +1491,7 @@ export function Technique() {
         }
       }
     } catch (err: any) {
-      console.error('[Technique] generateGeminiCorrectionImages error', err)
+      console.error('[Technique] generateCorrectionImages error', err)
       if (typeof err?.message === 'string') {
         setCorrectionsError(err.message)
       } else if (typeof err?.error === 'string') {
@@ -1447,6 +1530,7 @@ export function Technique() {
 
       const body = ((res as any)?.data ?? res) as {
         corrections?: Array<{ frame: number; originalImage: string; correctedImage: string }>
+        correction_context?: unknown
         error?: unknown
       }
 
@@ -1456,6 +1540,7 @@ export function Technique() {
         setActiveCorrection(0)
         setCompareSplit(0.5)
         setCorrectionViewMode('drag')
+        applyCorrectionContext(body.correction_context, body.corrections.length)
       } else {
         const apiError = body?.error
         if (typeof apiError === 'string') {
@@ -1504,12 +1589,17 @@ export function Technique() {
         }>('/technique/correction-images', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ analysisId, imageProvider: 'comfy' }),
+          body: JSON.stringify({
+            analysisId,
+            imageProvider: 'comfy',
+            ...(typeof __DEV__ !== 'undefined' && __DEV__ ? { forceRegenerate: true } : {}),
+          }),
         })
         .catch((err) => ({ error: err?.message || 'Failed to generate ComfyUI corrections' } as any))
 
       const body = ((res as any)?.data ?? res) as {
         corrections?: Array<{ frame: number; originalImage: string; correctedImage: string }>
+        correction_context?: unknown
         error?: unknown
       }
 
@@ -1519,6 +1609,7 @@ export function Technique() {
         setActiveCorrection(0)
         setCompareSplit(0.5)
         setCorrectionViewMode('drag')
+        applyCorrectionContext(body.correction_context, body.corrections.length)
       } else {
         const apiError = body?.error
         if (typeof apiError === 'string') {
@@ -1681,6 +1772,7 @@ export function Technique() {
             bounces
             nestedScrollEnabled
             directionalLockEnabled
+            scrollEnabled={!trimCarouselScrubbing}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -1738,71 +1830,25 @@ export function Technique() {
                   </View>
                 </View>
 
-                {uploadedVideoUrl ? (
-                  <View
-                    style={[styles.trimImpactPreviewOuter, { height: trimPreviewLayout.height }]}
-                    collapsable={false}
-                  >
-                    <ProLibraryGradientFrame
-                      borderRadius={proLibraryChrome.radii.frameOuter}
-                      innerBorderRadius={proLibraryChrome.radii.frameInner}
-                      strokeWidth={2.5}
-                      gradientVariant="accent"
-                      innerShadow={false}
-                      stretchInner
-                      style={styles.trimImpactPreviewFrame}
-                      innerStyle={styles.trimImpactPreviewFrameInner}
-                    >
-                      <Video
-                        ref={trimVideoRef}
-                        source={{ uri: uploadedVideoUrl }}
-                        style={styles.trimImpactPreviewVideo}
-                        resizeMode={ResizeMode.CONTAIN}
-                        shouldPlay={false}
-                        isMuted
-                        onReadyForDisplay={(e) => {
-                          const ns = e.naturalSize
-                          if (ns?.width > 0 && ns?.height > 0) {
-                            setTrimPreviewNaturalSize((prev) =>
-                              prev?.w === ns.width && prev?.h === ns.height
-                                ? prev
-                                : { w: ns.width, h: ns.height }
-                            )
-                          }
-                        }}
-                        onPlaybackStatusUpdate={(status) => {
-                          if (
-                            status.isLoaded &&
-                            typeof status.durationMillis === 'number' &&
-                            status.durationMillis > 0
-                          ) {
-                            const sec = Math.round(status.durationMillis / 1000)
-                            setVideoDurationSeconds((prev) => (prev === sec ? prev : sec))
-                          }
-                          if (status.isLoaded && 'naturalSize' in status) {
-                            const ns = (
-                              status as {
-                                naturalSize?: { width: number; height: number }
-                              }
-                            ).naturalSize
-                            if (ns && ns.width > 0 && ns.height > 0) {
-                              setTrimPreviewNaturalSize((prev) =>
-                                prev?.w === ns.width && prev?.h === ns.height
-                                  ? prev
-                                  : { w: ns.width, h: ns.height }
-                              )
-                            }
-                          }
-                          if (!status.isLoaded && 'error' in status && status.error) {
-                            console.log('[Technique] Trim video error', status.error)
-                          }
-                        }}
-                        onError={(err) => {
-                          console.log('[Technique] Trim video onError', err)
-                        }}
-                      />
-                    </ProLibraryGradientFrame>
-                  </View>
+                {trimPreviewUri ? (
+                  <TrimClipPreview
+                    ref={trimPreviewRef}
+                    videoUri={trimPreviewUri}
+                    height={trimPreviewLayout.height}
+                    selectionStartMs={trimRange.startMs}
+                    selectionEndMs={trimRange.endMs}
+                    style={styles.trimImpactPreviewOuter}
+                    onNaturalSize={(ns) => {
+                      setTrimPreviewNaturalSize((prev) =>
+                        prev?.w === ns.w && prev?.h === ns.h ? prev : ns
+                      )
+                    }}
+                    onDurationMs={(durationMs) => {
+                      const sec = Math.round(durationMs / 1000)
+                      setVideoDurationSeconds((prev) => (prev === sec ? prev : sec))
+                    }}
+                    onPositionMsChange={handleTrimPreviewPositionMs}
+                  />
                 ) : null}
 
                 <View style={styles.trimCard}>
@@ -1823,18 +1869,32 @@ export function Technique() {
                         maxFrames={60}
                         trimStartMs={trimRange.startMs}
                         trimEndMs={trimRange.endMs}
-                        minClipDurationMs={500}
+                        minClipDurationMs={MIN_ANALYZE_CLIP_MS}
+                        maxClipDurationMs={MAX_ANALYZE_CLIP_MS}
                         onTrimChange={({ startMs, endMs }) => {
-                          setTrimRange({ startMs, endMs })
+                          void trimPreviewRef.current?.pause()
+                          if (videoDurationSeconds == null || videoDurationSeconds <= 0) {
+                            setTrimRange({ startMs, endMs })
+                            return
+                          }
+                          const totalMs = videoDurationSeconds * 1000
+                          setTrimRange(clampClipRangeMs(startMs, endMs, totalMs))
                         }}
                         onScrubStart={() => {
                           isScrubbingRef.current = true
-                          void trimVideoRef.current?.setStatusAsync({ shouldPlay: false })
+                          setTrimCarouselScrubbing(true)
+                          void trimPreviewRef.current?.pause()
                         }}
                         onScrubEnd={() => {
+                          const p =
+                            pendingSeekProgressRef.current != null
+                              ? pendingSeekProgressRef.current
+                              : markerProgress
+                          void applyTrimVideoSeek(p)
                           setTimeout(() => {
                             isScrubbingRef.current = false
-                          }, 700)
+                            setTrimCarouselScrubbing(false)
+                          }, 120)
                         }}
                         onCenterFrameImageUriChange={setStep2CenterFrameUri}
                       />
@@ -1848,6 +1908,15 @@ export function Technique() {
                     )
                   ) : null}
 
+                  {currentTrimClip ? (
+                    <Text allowFontScaling={false} style={styles.trimRangeText}>
+                      Analysis uses the blue handles: {formatTimeFromMs(currentTrimClip.startMs)} –{' '}
+                      {formatTimeFromMs(currentTrimClip.endMs)} (
+                      {((currentTrimClip.endMs - currentTrimClip.startMs) / 1000).toFixed(1)}s, max{' '}
+                      {MAX_ANALYZE_CLIP_MS / 1000}s)
+                    </Text>
+                  ) : null}
+
                   <View style={styles.setClipControlRow}>
                     <TouchableOpacity
                       style={[styles.step2TrimTrashBtn, clips.length === 0 && styles.step2TrimTrashBtnDisabled]}
@@ -1855,12 +1924,12 @@ export function Technique() {
                       activeOpacity={0.85}
                       disabled={clips.length === 0}
                       accessibilityRole="button"
-                      accessibilityLabel="Clear all clips"
+                      accessibilityLabel={t('techniqueExtra.clearAllClips')}
                     >
                       <FeatherIcon name="trash-2" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.setClipButton} onPress={addClipAtCurrentMarker} activeOpacity={0.9}>
-                      <Text style={styles.setClipButtonText}>Set Clip</Text>
+                      <Text style={styles.setClipButtonText}>{t('technique.setClip')}</Text>
                     </TouchableOpacity>
                   </View>
                   {clips.length > 0 && (
@@ -1885,7 +1954,7 @@ export function Technique() {
                     onPress={resetToNewVideo}
                     activeOpacity={0.85}
                     accessibilityRole="button"
-                    accessibilityLabel="Try a new video"
+                    accessibilityLabel={t('techniqueExtra.tryNewVideo')}
                   >
                     <Text style={styles.step2TryNewVideoText} numberOfLines={2}>
                       Try a new video
@@ -1903,7 +1972,12 @@ export function Technique() {
                       void runAnalysis(undefined, { navigateOnDone: true, resetState: false })
                     }}
                     activeOpacity={0.9}
-                    disabled={!uploadedVideoId || analysisLoading || clips.length === 0}
+                    disabled={
+                      !uploadedVideoId ||
+                      analysisLoading ||
+                      currentTrimClip == null ||
+                      currentTrimClip.endMs <= currentTrimClip.startMs
+                    }
                   >
                     <LinearGradient
                       colors={['#4B2CFF', '#00B4FF']}
@@ -2091,7 +2165,7 @@ export function Technique() {
                 <TextInput
                   value={rankingValue}
                   onChangeText={setRankingValue}
-                  placeholder="Please put your rating"
+                  placeholder={t('profileSetup.ratingPlaceholder')}
                   placeholderTextColor={theme.mutedForegroundColor}
                   style={styles.rankInput}
                 />
@@ -2110,7 +2184,7 @@ export function Technique() {
                 end={{ x: 1, y: 1 }}
                 style={styles.profileNextButtonInner}
               >
-                <Text style={styles.profileNextButtonText}>Go to Upload</Text>
+                <Text style={styles.profileNextButtonText}>{t('techniqueExtra.goToUpload')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -2131,9 +2205,6 @@ export function Technique() {
                     ]}
                   />
                 </View>
-                <Text allowFontScaling={false} style={styles.uploadProgressCaption}>
-                  Uploading your video
-                </Text>
               </View>
             ) : (
               <View style={styles.frameWrap}>
@@ -2203,7 +2274,7 @@ export function Technique() {
                   </Svg>
                   <View style={styles.frameInner}>
                     <View style={styles.uploadSection}>
-                      <Text style={styles.uploadTitle}>Upload your video</Text>
+                      <Text style={styles.uploadTitle}>{t('technique.uploadTitle')}</Text>
                       <LocalSvgAsset
                         assetModule={CHOOSE_FILE_ICON}
                         width={Math.min(130, Math.round(step1FrameDims.w * 0.42))}
@@ -2214,11 +2285,11 @@ export function Technique() {
                         onPress={() => startHowToFlow('gallery')}
                         activeOpacity={0.85}
                       >
-                        <Text style={styles.chooseFileBtnText}>Choose File</Text>
+                        <Text style={styles.chooseFileBtnText}>{t('technique.chooseFile')}</Text>
                       </TouchableOpacity>
                     </View>
                     <View style={styles.recordSection}>
-                      <Text style={styles.recordLabel}>Or start recording a new video</Text>
+                      <Text style={styles.recordLabel}>{t('techniqueExtra.recordNewVideo')}</Text>
                       <TouchableOpacity
                         style={styles.recordButton}
                         onPress={() => startHowToFlow('record')}
@@ -2331,12 +2402,12 @@ export function Technique() {
                 <View style={styles.scoreBreakdownInner}>
                   {(
                     [
-                      { label: 'Technique', value: scoreBreakdown.technique, icon: CATEGORY_ICON_TECHNIQUE },
-                      { label: 'Outcome', value: scoreBreakdown.outcome, icon: CATEGORY_ICON_OUTCOME },
-                      { label: 'Tactics', value: scoreBreakdown.tactics, icon: CATEGORY_ICON_TACTICS },
+                      { label: t('activities.technique'), value: scoreBreakdown.technique, icon: CATEGORY_ICON_TECHNIQUE },
+                      { label: t('activities.outcome'), value: scoreBreakdown.outcome, icon: CATEGORY_ICON_OUTCOME },
+                      { label: t('activities.tactics'), value: scoreBreakdown.tactics, icon: CATEGORY_ICON_TACTICS },
                       /** Hidden row — keeps confidence wired; toggle `hide` to show again */
                       {
-                        label: 'Confidence',
+                        label: t('activities.confidence'),
                         value: confidenceBreakdown.score,
                         icon: CATEGORY_ICON_TECHNIQUE,
                         hide: true,
@@ -2410,64 +2481,7 @@ export function Technique() {
                       {metrics && aiAnalysis?.en && (
                         <View style={styles.retrievalSectionWrap}>
                           <View style={styles.retrievalSectionInner}>
-                            <View style={styles.step3InsightCardsStack}>
-                              <View style={[styles.step3InsightCard, styles.step3InsightCardStrength]}>
-                                <View style={styles.step3InsightIconAsset}>
-                                  <LocalSvgAsset
-                                    assetModule={STRENGTH_CARD_ICON}
-                                    width={STEP3_INSIGHT_ICON_PX}
-                                    height={STEP3_INSIGHT_ICON_PX}
-                                  />
-                                </View>
-                                <View style={styles.step3InsightTextCol}>
-                                  <Text allowFontScaling={false} style={styles.step3InsightSectionLabel}>
-                                    Strength
-                                  </Text>
-                                  <Text
-                                    allowFontScaling={false}
-                                    style={styles.step3InsightHeadline}
-                                    numberOfLines={2}
-                                  >
-                                    {strengthInsightTitle}
-                                  </Text>
-                                  <Text
-                                    allowFontScaling={false}
-                                    style={styles.step3InsightBody}
-                                    numberOfLines={3}
-                                  >
-                                    {strengthInsightBody}
-                                  </Text>
-                                </View>
-                              </View>
-                              <View style={[styles.step3InsightCard, styles.step3InsightCardFocus]}>
-                                <View style={styles.step3InsightIconAsset}>
-                                  <LocalSvgAsset
-                                    assetModule={FOCUS_CARD_ICON}
-                                    width={STEP3_INSIGHT_ICON_PX}
-                                    height={STEP3_INSIGHT_ICON_PX}
-                                  />
-                                </View>
-                                <View style={styles.step3InsightTextCol}>
-                                  <Text allowFontScaling={false} style={styles.step3InsightSectionLabel}>
-                                    Focus
-                                  </Text>
-                                  <Text
-                                    allowFontScaling={false}
-                                    style={styles.step3InsightHeadline}
-                                    numberOfLines={2}
-                                  >
-                                    {focusInsightTitle}
-                                  </Text>
-                                  <Text
-                                    allowFontScaling={false}
-                                    style={styles.step3InsightBody}
-                                    numberOfLines={3}
-                                  >
-                                    {focusInsightBody}
-                                  </Text>
-                                </View>
-                              </View>
-                            </View>
+                            <CoachStrengthFocusInsightCards content={coachInsightCards} />
                           </View>
                         </View>
                       )}
@@ -2475,9 +2489,39 @@ export function Technique() {
                       {aiAnalysis?.en && (
                         <View style={styles.correctionSection}>
                           <View style={styles.correctionSectionTitleRow}>
-                            <Text style={styles.correctionSectionTitle}>Pose Corrections</Text>
-                            {correctionImages.length > 0 && (
+                            <View style={styles.correctionTitleBlock}>
+                              <View style={styles.correctionEyebrowRow}>
+                                <Text style={styles.correctionSectionEyebrow}>{t('technique.poseCorrections')}</Text>
+                                <View style={styles.correctionBetaPill}>
+                                  <Text style={styles.correctionBetaPillText}>{t('common.beta')}</Text>
+                                </View>
+                              </View>
+                            </View>
+                            {(geminiCorrectionImages.length > 0 && !correctionsLoadingGemini) ||
+                            correctionImages.length > 0 ? (
                               <View style={styles.correctionModeIcons}>
+                                {geminiCorrectionImages.length > 0 && !correctionsLoadingGemini ? (
+                                  <TouchableOpacity
+                                    onPress={() => {
+                                      setRegenerateFeedbackMessage('')
+                                      setRegenerateModalVisible(true)
+                                    }}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    style={styles.correctionRegenCompactBtn}
+                                    activeOpacity={0.85}
+                                    disabled={correctionsLoadingGemini}
+                                  >
+                                    <FeatherIcon name="refresh-cw" size={14} color="#00BBFF" />
+                                    <Text
+                                      allowFontScaling={false}
+                                      style={styles.correctionRegenCompactText}
+                                    >
+                                      {t('correctionModal.regenerate')}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ) : null}
+                                {correctionImages.length > 0 ? (
+                                  <>
                                 <TouchableOpacity
                                   onPress={() => setCorrectionViewMode('sideBySide')}
                                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -2514,8 +2558,10 @@ export function Technique() {
                                     strokeOpacity={correctionViewMode === 'drag' ? 1 : 0.65}
                                   />
                                 </TouchableOpacity>
+                                  </>
+                                ) : null}
                               </View>
-                            )}
+                            ) : null}
                           </View>
                           <View style={styles.correctionSectionBody}>
                             {SHOW_GENERATE_POSES_TEST ? (
@@ -2582,7 +2628,7 @@ export function Technique() {
                                     <Text style={styles.correctionSourceChipText}>fal.ai</Text>
                                   </TouchableOpacity>
                                 )}
-                                {(SHOW_COMFY_CORRECTIONS || visibleComfyCorrectionImages.length > 0) && (
+                                {SHOW_COMFY_CORRECTIONS ? (
                                   <TouchableOpacity
                                     onPress={() => {
                                       if (visibleComfyCorrectionImages.length > 0) {
@@ -2601,7 +2647,7 @@ export function Technique() {
                                   >
                                     <Text style={styles.correctionSourceChipText}>ComfyUI</Text>
                                   </TouchableOpacity>
-                                )}
+                                ) : null}
                                 <TouchableOpacity
                                   onPress={() => {
                                     if (testPoseCorrectionImages.length > 0) {
@@ -2655,14 +2701,14 @@ export function Technique() {
                               </View>
                             )}
 
-                            {SHOW_LEGACY_CORRECTIONS && correctionsError && (
+                            {correctionsError && (
                               <View>
                                 <Text style={[styles.placeholderHint, { color: '#FF6B6B' }]}>
                                   {correctionsError}
                                 </Text>
                                 <TouchableOpacity
                                   style={[styles.correctionGenerateButton, { marginTop: 8 }]}
-                                  onPress={generateGeminiCorrectionImages}
+                                  onPress={() => void generateCorrectionImages()}
                                   activeOpacity={0.9}
                                 >
                                   <LinearGradient
@@ -2671,28 +2717,30 @@ export function Technique() {
                                     end={{ x: 1, y: 1 }}
                                     style={styles.correctionGenerateButtonInner}
                                   >
-                                    <Text style={styles.correctionGenerateButtonText}>Retry (Gemini)</Text>
+                                    <Text style={styles.correctionGenerateButtonText}>{t('technique.retry')}</Text>
                                   </LinearGradient>
                                 </TouchableOpacity>
                               </View>
                             )}
 
-                            {SHOW_LEGACY_CORRECTIONS && correctionsLoadingGemini && (
+                            {correctionsLoadingGemini && (
                               <View style={styles.correctionLoadingWrap}>
                                 <ActivityIndicator size="small" color="#00BBFF" />
                                 <Text style={[styles.correctionLoadingText, { marginTop: 8 }]}>
+                                  Generating corrected images…
+                                </Text>
+                                <Text style={[styles.correctionLoadingText, { fontSize: 11, marginTop: 4 }]}>
                                   This may take 30–60 seconds
                                 </Text>
                               </View>
                             )}
 
-                            {SHOW_LEGACY_CORRECTIONS &&
-                              geminiCorrectionImages.length === 0 &&
+                            {geminiCorrectionImages.length === 0 &&
                               !correctionsLoadingGemini &&
                               !correctionsError && (
                                 <TouchableOpacity
                                   style={styles.correctionGenerateButton}
-                                  onPress={generateGeminiCorrectionImages}
+                                  onPress={() => void generateCorrectionImages()}
                                   activeOpacity={0.9}
                                 >
                                   <LinearGradient
@@ -2703,7 +2751,7 @@ export function Technique() {
                                   >
                                     <FeatherIcon name="zap" size={16} color="#fff" />
                                     <Text style={styles.correctionGenerateButtonText}>
-                                      Generate Corrected Poses
+                                      {t('technique.generateImages')}
                                     </Text>
                                   </LinearGradient>
                                 </TouchableOpacity>
@@ -2761,7 +2809,7 @@ export function Technique() {
                                 </TouchableOpacity>
                               )}
 
-                            {correctionsComfyError && (
+                            {SHOW_COMFY_CORRECTIONS && correctionsComfyError && (
                               <View style={{ marginTop: 10 }}>
                                 <Text style={[styles.placeholderHint, { color: '#FF6B6B' }]}>
                                   {correctionsComfyError}
@@ -2777,19 +2825,17 @@ export function Technique() {
                                     end={{ x: 1, y: 1 }}
                                     style={styles.correctionGenerateButtonInner}
                                   >
-                                    <Text style={styles.correctionGenerateButtonText}>
-                                      Retry (ComfyUI)
-                                    </Text>
+                                    <Text style={styles.correctionGenerateButtonText}>{t('technique.retry')}</Text>
                                   </LinearGradient>
                                 </TouchableOpacity>
                               </View>
                             )}
 
-                            {correctionsLoadingComfy && (
+                            {SHOW_COMFY_CORRECTIONS && correctionsLoadingComfy && (
                               <View style={[styles.correctionLoadingWrap, { marginTop: 8 }]}>
                                 <ActivityIndicator size="small" color="#00BBFF" />
                                 <Text style={styles.correctionLoadingText}>
-                                  Running local ComfyUI workflow…
+                                  Generating corrected images…
                                 </Text>
                                 <Text style={[styles.correctionLoadingText, { fontSize: 11, marginTop: 4 }]}>
                                   GPU time varies (often 1–10 minutes)
@@ -2828,7 +2874,7 @@ export function Technique() {
                                   >
                                     <FeatherIcon name="zap" size={16} color="#fff" />
                                     <Text style={styles.correctionGenerateButtonText}>
-                                      Generate Corrected Poses
+                                      {t('technique.generateCorrectedPoses')}
                                     </Text>
                                   </LinearGradient>
                                 </TouchableOpacity>
@@ -2836,29 +2882,39 @@ export function Technique() {
 
                             {correctionImages.length > 0 && (
                               <View style={styles.correctionCarousel}>
+                                {displayCorrectionFrameInsights.length > 0 ? (
+                                  <CorrectionFrameSelector
+                                    frames={displayCorrectionFrameInsights}
+                                    activeIndex={activeCorrection}
+                                    onSelect={(idx) => {
+                                      setActiveCorrection(idx)
+                                      setCompareSplit(0.5)
+                                    }}
+                                    proReferenceShot={proReferenceShot}
+                                  />
+                                ) : null}
                                 <View style={styles.correctionTabHeader}>
-                                  <Text style={styles.correctionTabLabel}>Current</Text>
+                                  <Text style={styles.correctionTabLabel}>{t('technique.current')}</Text>
                                   <Text style={[styles.correctionTabLabel, styles.correctionTabLabelRight]}>
-                                    Corrected
+                                    {t('technique.corrected')}
                                   </Text>
                                 </View>
 
                                 {correctionViewMode === 'sideBySide' ? (
                                   <View style={styles.correctionSideBySideRow}>
                                     <View style={styles.correctionSideBySideCol}>
-                                      <Image
+                                      <CorrectionImageWithLoader
                                         key={`side-current-${correctionImages[activeCorrection].frame}`}
                                         source={toImageSource(correctionImages[activeCorrection].originalImage)}
                                         style={styles.correctionSideBySideImage}
-                                        resizeMode="cover"
+                                        showLoader={false}
                                       />
                                     </View>
                                     <View style={styles.correctionSideBySideCol}>
-                                      <Image
+                                      <CorrectionImageWithLoader
                                         key={`side-corrected-${correctionImages[activeCorrection].frame}`}
                                         source={toImageSource(correctionImages[activeCorrection].correctedImage)}
                                         style={styles.correctionSideBySideImage}
-                                        resizeMode="cover"
                                       />
                                     </View>
                                   </View>
@@ -2888,7 +2944,7 @@ export function Technique() {
                                   >
                                     {compareCardLayout ? (
                                       <>
-                                        <Image
+                                        <CorrectionImageWithLoader
                                           key={`corrected-main-${correctionImages[activeCorrection].frame}`}
                                           source={toImageSource(correctionImages[activeCorrection].correctedImage)}
                                           style={{
@@ -2898,7 +2954,6 @@ export function Technique() {
                                             width: compareCardLayout.width,
                                             height: compareCardLayout.height,
                                           }}
-                                          resizeMode="cover"
                                         />
                                         <View
                                           style={{
@@ -2910,7 +2965,7 @@ export function Technique() {
                                             overflow: 'hidden',
                                           }}
                                         >
-                                          <Image
+                                          <CorrectionImageWithLoader
                                             key={`current-main-${correctionImages[activeCorrection].frame}`}
                                             source={toImageSource(correctionImages[activeCorrection].originalImage)}
                                             style={{
@@ -2920,7 +2975,7 @@ export function Technique() {
                                               width: compareCardLayout.width,
                                               height: compareCardLayout.height,
                                             }}
-                                            resizeMode="cover"
+                                            showLoader={false}
                                           />
                                         </View>
                                         <View
@@ -2962,10 +3017,9 @@ export function Technique() {
                                         }}
                                         activeOpacity={0.85}
                                       >
-                                        <Image
+                                        <CorrectionImageWithLoader
                                           source={toImageSource(c.correctedImage)}
                                           style={styles.correctionThumbImage}
-                                          resizeMode="cover"
                                         />
                                         {idx === activeCorrection && (
                                           <View style={styles.correctionThumbCheck}>
@@ -3001,7 +3055,7 @@ export function Technique() {
                               onPress={() => setRatingOpen(!ratingOpen)}
                             >
                               <View>
-                                <Text style={styles.accordionTitle}>Technique Rating</Text>
+                                <Text style={styles.accordionTitle}>{t('technique.techniqueRating')}</Text>
                                 <Text style={styles.accordionSubtitle}>
                                   {aiAnalysis.rating
                                     ? String(aiAnalysis.rating).replace('_', ' ').toUpperCase()
@@ -3044,9 +3098,9 @@ export function Technique() {
                               onPress={() => setStrengthsOpen(!strengthsOpen)}
                             >
                               <View>
-                                <Text style={styles.accordionTitle}>What is done well</Text>
+                                <Text style={styles.accordionTitle}>{t('technique.doneWell')}</Text>
                                 <Text style={styles.accordionSubtitle}>
-                                  {strengthsList.length} strengths
+                                  {t('coachAccordions.strengthsCount', { count: strengthsList.length })}
                                 </Text>
                               </View>
                               <View style={styles.accordionRight}>
@@ -3091,9 +3145,9 @@ export function Technique() {
                               onPress={() => setTechnicalErrorsOpen(!technicalErrorsOpen)}
                             >
                               <View>
-                                <Text style={styles.accordionTitle}>Technical errors</Text>
+                                <Text style={styles.accordionTitle}>{t('technique.technicalErrors')}</Text>
                                 <Text style={styles.accordionSubtitle}>
-                                  {technicalErrorsList.length} issues
+                                  {t('coachAccordions.issuesCount', { count: technicalErrorsList.length })}
                                 </Text>
                               </View>
                               <View style={styles.accordionRight}>
@@ -3140,9 +3194,9 @@ export function Technique() {
                               onPress={() => setActionableOpen(!actionableOpen)}
                             >
                               <View>
-                                <Text style={styles.accordionTitle}>Actionable corrections</Text>
+                                <Text style={styles.accordionTitle}>{t('technique.actionableCorrections')}</Text>
                                 <Text style={styles.accordionSubtitle}>
-                                  {actionableCorrectionsList.length} coaching cues
+                                  {t('coachAccordions.cuesCount', { count: actionableCorrectionsList.length })}
                                 </Text>
                               </View>
                               <View style={styles.accordionRight}>
@@ -3187,7 +3241,7 @@ export function Technique() {
                   onPress={resetToNewVideo}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.startOverButtonText}>Start over</Text>
+                  <Text style={styles.startOverButtonText}>{t('technique.startOver')}</Text>
                 </TouchableOpacity>
               </View>
             ) : null}
@@ -3269,10 +3323,8 @@ export function Technique() {
                 />
               </Svg>
             ) : null}
-            <Text style={styles.howToTitle}>How to upload your video</Text>
-            <Text style={styles.howToSubtitle}>
-              Make sure your video recording/{'\n'}file is close to the player
-            </Text>
+            <Text style={styles.howToTitle}>{t('technique.howToTitle')}</Text>
+            <Text style={styles.howToSubtitle}>{t('technique.howToSubtitle')}</Text>
             <View style={styles.howToBadgeRow}>
               <View style={styles.howToBadgeCol}>
                 <View style={[styles.howToBadgeCircle, styles.howToBadgeWrong]}>
@@ -3319,7 +3371,7 @@ export function Technique() {
               <View style={[styles.howToCheckbox, hideHowToNextTime && styles.howToCheckboxChecked]}>
                 {hideHowToNextTime && <Ionicons name="checkmark" size={14} color="#03112B" />}
               </View>
-              <Text style={styles.howToCheckboxText}>Hide this warning</Text>
+              <Text style={styles.howToCheckboxText}>{t('technique.hideHowTo')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.9}
@@ -3332,12 +3384,30 @@ export function Technique() {
                 end={{ x: 1, y: 1 }}
                 style={styles.howToAcceptInner}
               >
-                <Text style={styles.howToAcceptText}>Accept</Text>
+                <Text style={styles.howToAcceptText}>{t('technique.accept')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+      <CorrectionRegenerateModal
+        visible={regenerateModalVisible}
+        onClose={() => {
+          if (!correctionsLoadingGemini) {
+            setRegenerateModalVisible(false)
+          }
+        }}
+        coachingBullets={correctionRegenerateBullets}
+        message={regenerateFeedbackMessage}
+        onChangeMessage={setRegenerateFeedbackMessage}
+        loading={correctionsLoadingGemini}
+        onRegenerate={() =>
+          void generateCorrectionImages({
+            forceRegenerate: true,
+            regenerationFeedback: regenerateFeedbackMessage,
+          })
+        }
+      />
     </View>
   )
 }
@@ -3714,13 +3784,6 @@ function getStyles(theme: any) {
       borderRadius: 4,
       backgroundColor: '#00BBFF',
     },
-    uploadProgressCaption: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 15,
-      color: '#FFFFFF',
-      textAlign: 'center',
-      letterSpacing: 0.2,
-    },
     step2: { position: 'relative' as const, flexShrink: 1, gap: 20, minHeight: 0 },
     /** Step 2: scroll region + pinned actions above tab bar */
     step2SplitRoot: {
@@ -3828,10 +3891,22 @@ function getStyles(theme: any) {
       padding: 0,
       overflow: 'hidden',
     },
-    trimImpactPreviewVideo: {
+    trimImpactPreviewMediaStack: {
       flex: 1,
       width: '100%',
       minHeight: 0,
+      position: 'relative',
+      backgroundColor: '#000000',
+    },
+    trimImpactPreviewVideo: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    trimImpactPreviewFrameOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: '#000000',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 2,
     },
     step2VideoSummaryCard: {
       flexDirection: 'row',
@@ -4111,52 +4186,6 @@ function getStyles(theme: any) {
     retrievalSectionInner: {
       width: '100%',
       paddingVertical: 14,
-    },
-    step3InsightCardsStack: {
-      width: '100%',
-      gap: 10,
-    },
-    step3InsightCard: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      width: '100%',
-      borderRadius: 18,
-      paddingVertical: 16,
-      paddingHorizontal: 16,
-      gap: 14,
-    },
-    step3InsightCardStrength: {
-      backgroundColor: 'rgba(0, 34, 255, 0.5)',
-    },
-    step3InsightCardFocus: {
-      backgroundColor: 'rgba(0, 110, 255, 0.5)',
-    },
-    step3InsightIconAsset: {
-      flexShrink: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    step3InsightTextCol: {
-      flex: 1,
-      minWidth: 0,
-      gap: 4,
-    },
-    step3InsightSectionLabel: {
-      fontFamily: theme.regularFont,
-      fontSize: 12,
-      color: theme.textColor,
-    },
-    step3InsightHeadline: {
-      fontFamily: theme.boldFont ?? theme.semiBoldFont,
-      fontSize: 22,
-      lineHeight: 28,
-      color: STEP3_INSIGHT_HEADLINE_COLOR,
-    },
-    step3InsightBody: {
-      fontFamily: theme.regularFont,
-      fontSize: 13,
-      lineHeight: 18,
-      color: '#86A7D2',
     },
     retrievalSectionTitle: {
       fontFamily: theme.semiBoldFont,
@@ -4683,10 +4712,40 @@ function getStyles(theme: any) {
     },
     correctionSectionTitleRow: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
       marginBottom: 10,
       width: '100%',
+    },
+    correctionTitleBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+    correctionEyebrowRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    },
+    correctionSectionEyebrow: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 15,
+      color: theme.textColor,
+    },
+    correctionBetaPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: 'rgba(0, 187, 255, 0.55)',
+      backgroundColor: 'transparent',
+    },
+    correctionBetaPillText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 11,
+      color: '#00BBFF',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
     },
     correctionSectionTitle: {
       fontFamily: theme.semiBoldFont,
@@ -4698,7 +4757,25 @@ function getStyles(theme: any) {
     correctionModeIcons: {
       flexDirection: 'row',
       alignItems: 'center',
+      gap: 6,
+      flexShrink: 0,
+    },
+    correctionRegenCompactBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: 4,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: 'rgba(0, 187, 255, 0.35)',
+      backgroundColor: 'rgba(0, 110, 255, 0.12)',
+      marginRight: 2,
+    },
+    correctionRegenCompactText: {
+      fontFamily: theme.mediumFont,
+      fontSize: 12,
+      color: '#00BBFF',
     },
     correctionModeIconWrap: {
       padding: 6,

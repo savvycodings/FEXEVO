@@ -15,8 +15,11 @@ const STORAGE_KEY_DISMISS_UNTIL = 'xevo_ai_insight_dismiss_until_ms'
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 export type WeeklyInsight = {
+  pillarId: string
   /** Short label e.g. "Net play" */
   pillarLabel: string
+  /** When subtitle references another pillar */
+  subtitlePillarId?: string
   /** False when we only have this week's analyses (no prior-week baseline for any pillar). */
   hasPriorWeek: boolean
   /** Week-over-week only: gain vs drop */
@@ -122,11 +125,14 @@ export function computeWeeklyInsightFromRatingRows(
     }
 
     return {
+      pillarId: chosen.id,
       pillarLabel: chosen.label,
       hasPriorWeek: true,
       improved,
       highlight,
       subtitle,
+      subtitlePillarId:
+        subtitle && weakest && weakest.id !== chosen.id ? weakest.id : undefined,
     }
   }
 
@@ -152,11 +158,14 @@ export function computeWeeklyInsightFromRatingRows(
   }
 
   return {
+    pillarId: chosen.id,
     pillarLabel: chosen.label,
     hasPriorWeek: false,
     improved: true,
     highlight,
     subtitle,
+    subtitlePillarId:
+      subtitle && weakest && weakest.id !== chosen.id ? weakest.id : undefined,
   }
 }
 

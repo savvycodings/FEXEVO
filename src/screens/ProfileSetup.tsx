@@ -15,27 +15,21 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { ThemeContext } from "../context";
 import { authClient } from "../lib/auth-client";
-import { Header } from "../components";
+import { Header, LanguageToggle } from "../components";
 import { SignUpDraft } from "./SignUp";
+import { useTranslation } from "react-i18next";
+import {
+  GENDER_OPTION_VALUES,
+  genderTranslationKey,
+  LEVEL_OPTION_VALUES,
+  levelTranslationKey,
+} from "../i18n/profileOptionValues";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
 
 const COURT_IMAGE = require("../../assets/court.png");
 const BALL_IMAGE = require("../../assets/ball.png");
-
-const LEVEL_OPTIONS = [
-  "Beginner",
-  "High Beginner",
-  "Low Intermediate",
-  "Intermediate",
-  "High Intermediate",
-  "Low Advanced",
-  "Advanced",
-  "High Advanced",
-  "Competition/Open",
-  "Other",
-];
 
 const RANKING_ORG_OPTIONS = [
   "Playtomic",
@@ -48,8 +42,6 @@ const RANKING_ORG_OPTIONS = [
   "Tie Player",
   "Spain Federation",
 ];
-
-const GENDER_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 
 const RANKING_ORG_LOGOS: Record<string, any> = {
   Playtomic: require("../../assets/logos/playtomic.svg"),
@@ -77,6 +69,7 @@ type ProfileSetupProps = {
 };
 
 export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onBack }: ProfileSetupProps) {
+  const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
@@ -199,7 +192,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         if (!looksLikeExistingUser) {
           setSaving(false);
           setSubmittingOverlay(false);
-          Alert.alert("Sign up failed", error.message || "Could not create account.");
+          Alert.alert(t("auth.signUpFailed"), error.message || t("profileSetup.setupFailedMsg"));
           return;
         }
 
@@ -210,10 +203,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         if (signInRes?.error) {
           setSaving(false);
           setSubmittingOverlay(false);
-          Alert.alert(
-            "Account exists",
-            "This email already exists and password did not match. Try signing in."
-          );
+          Alert.alert(t("profileSetup.accountExists"), t("profileSetup.accountExistsMsg"));
           return;
         }
       }
@@ -222,7 +212,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
       if (!hasSessionAfterAuth) {
         setSaving(false);
         setSubmittingOverlay(false);
-        Alert.alert("Session error", "Could not establish a session. Please try again.");
+        Alert.alert(t("profileSetup.sessionError"), t("profileSetup.sessionErrorMsg"));
         return;
       }
     }
@@ -263,7 +253,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
 
     if (!body?.ok) {
       setSubmittingOverlay(false);
-      Alert.alert("Setup failed", body?.error || "Could not save your profile setup.");
+      Alert.alert(t("profileSetup.setupFailed"), body?.error || t("profileSetup.setupFailedMsg"));
       return;
     }
 
@@ -271,10 +261,10 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
   }
 
   if (loading || submittingOverlay) {
-    const loadingTitle = loading ? "Loading profile..." : "Setting up your profile...";
+    const loadingTitle = loading ? t("profileSetup.loadingProfile") : t("profileSetup.settingUp");
     const loadingSubtitle = loading
-      ? "Fetching your latest player data."
-      : "Saving your account details and preparing your experience.";
+      ? t("profileSetup.loadingProfileSub")
+      : t("profileSetup.settingUpSub");
     return (
       <View style={styles.screen}>
         <Svg pointerEvents="none" style={[styles.heroGlow, { height: 430 + insets.top }]}>
@@ -332,20 +322,20 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             ))}
           </View>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.stepTitle}>
-          {step === 1 ? "Set your dominant hand and court side." : "Set ranking and level."}
+          {step === 1 ? t("profileSetup.step1Title") : t("profileSetup.step2Title")}
           </Text>
         </View>
       ) : (
         <View style={styles.progressSection}>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.stepTitle}>
-            Set your profile.
+            {t("profileSetup.editTitle")}
           </Text>
         </View>
       )}
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {!isEditMode ? (
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.title}>
-            Complete your profile
+            {t("profileSetup.completeTitle")}
           </Text>
         ) : null}
 
@@ -358,12 +348,12 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             )}
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text allowFontScaling={false} style={styles.inputLabel}>Name</Text>
+            <Text allowFontScaling={false} style={styles.inputLabel}>{t("auth.name")}</Text>
             <TextInput
               value={displayName}
               onChangeText={setDisplayName}
               style={styles.input}
-              placeholder="Your name"
+              placeholder={t("profileSetup.yourName")}
               placeholderTextColor={theme.mutedForegroundColor}
             />
           </View>
@@ -371,20 +361,20 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         {isEditMode ? (
           <>
             <View>
-              <Text allowFontScaling={false} style={styles.inputLabel}>Username</Text>
+              <Text allowFontScaling={false} style={styles.inputLabel}>{t("profileSetup.username")}</Text>
               <TextInput
                 value={username}
                 onChangeText={setUsername}
                 style={styles.input}
-                placeholder="Username"
+                placeholder={t("profileSetup.username")}
                 placeholderTextColor={theme.mutedForegroundColor}
                 autoCapitalize="none"
               />
             </View>
             <View>
-              <Text allowFontScaling={false} style={styles.inputLabel}>Gender</Text>
+              <Text allowFontScaling={false} style={styles.inputLabel}>{t("profileSetup.gender")}</Text>
               <View style={styles.chipWrap}>
-                {GENDER_OPTIONS.map((opt) => (
+                {GENDER_OPTION_VALUES.map((opt) => (
                   <TouchableOpacity
                     key={opt}
                     style={[styles.chip, gender === opt && styles.chipActive]}
@@ -397,7 +387,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                       ellipsizeMode="tail"
                       style={[styles.chipText, gender === opt && styles.chipTextActive]}
                     >
-                      {opt}
+                      {t(genderTranslationKey(opt))}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -409,17 +399,17 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         {step === 1 && (
           <View style={styles.card}>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>
-            What's your dominant hand?
+            {t("profileSetup.dominantHand")}
           </Text>
           <View style={styles.row}>
             <ChoicePill
-              label="Left hand"
+              label={t("profileSetup.leftHand")}
               active={dominantHand === "left"}
               onPress={() => selectDominantHand("left")}
               styles={styles}
             />
             <ChoicePill
-              label="Right hand"
+              label={t("profileSetup.rightHand")}
               active={dominantHand === "right"}
               onPress={() => selectDominantHand("right")}
               styles={styles}
@@ -430,17 +420,17 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             maxFontSizeMultiplier={1.05}
             style={[styles.cardTitle, { marginTop: 18 }]}
           >
-            What side of court do you play?
+            {t("profileSetup.courtSide")}
           </Text>
           <View style={styles.row}>
             <ChoicePill
-              label="Left"
+              label={t("common.left")}
               active={courtSide === "left"}
               onPress={() => setCourtSide("left")}
               styles={styles}
             />
             <ChoicePill
-              label="Right"
+              label={t("common.right")}
               active={courtSide === "right"}
               onPress={() => setCourtSide("right")}
               styles={styles}
@@ -466,7 +456,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               style={styles.backButton}
               onPress={onBack}
               activeOpacity={0.85}
-              accessibilityLabel="Go back"
+              accessibilityLabel={t("profileSetup.goBack")}
             >
               <Ionicons name="chevron-back" size={22} color="#00BBFF" />
             </TouchableOpacity>
@@ -482,7 +472,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 end={{ x: 1, y: 1 }}
                 style={styles.primaryInner}
               >
-                <Text allowFontScaling={false} style={styles.primaryText}>Set your Ranking</Text>
+                <Text allowFontScaling={false} style={styles.primaryText}>{t("profileSetup.setYourRankingBtn")}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -491,10 +481,10 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
 
         {step === 2 && (
           <View style={styles.card}>
-          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>Set your Ranking</Text>
+          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>{t("profileSetup.setRanking")}</Text>
           <View style={styles.row}>
             <ChoicePill
-              label="No"
+              label={t("common.no")}
               active={hasRanking === false}
               onPress={() => {
                 setHasRanking(false);
@@ -504,7 +494,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               styles={styles}
             />
             <ChoicePill
-              label="Yes"
+              label={t("common.yes")}
               active={hasRanking === true}
               onPress={() => {
                 setHasRanking(true);
@@ -516,8 +506,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
 
           {hasRanking === false && (
             <View style={{ gap: 8, marginTop: 12 }}>
-              <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>Set your Level</Text>
-              {LEVEL_OPTIONS.map((opt) => (
+              <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>{t("profileSetup.setLevel")}</Text>
+              {LEVEL_OPTION_VALUES.map((opt) => (
                 <TouchableOpacity
                   key={opt}
                   style={[styles.levelOption, level === opt && styles.levelOptionActive]}
@@ -525,7 +515,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                   activeOpacity={0.85}
                 >
                   <Text allowFontScaling={false} style={[styles.levelText, level === opt && styles.levelTextActive]}>
-                    {opt}
+                    {t(levelTranslationKey(opt))}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -566,7 +556,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 value={rankingValue}
                 onChangeText={setRankingValue}
                 style={styles.input}
-                placeholder="Please put your rating"
+                placeholder={t("profileSetup.ratingPlaceholder")}
                 placeholderTextColor={theme.mutedForegroundColor}
               />
             </View>
@@ -579,7 +569,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 setStep(1);
               }}
               activeOpacity={0.85}
-              accessibilityLabel="Go back"
+              accessibilityLabel={t("profileSetup.goBack")}
             >
               <Ionicons name="chevron-back" size={22} color="#00BBFF" />
             </TouchableOpacity>
@@ -596,13 +586,15 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 style={styles.primaryInner}
               >
                 <Text allowFontScaling={false} style={styles.primaryText}>
-                  {isEditMode ? "Done" : "Finish Setup"}
+                  {isEditMode ? t("common.done") : t("profileSetup.finishSetup")}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
           </View>
         )}
+
+        <LanguageToggle />
       </ScrollView>
     </View>
   );

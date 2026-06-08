@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-na
 import * as ImagePicker from 'expo-image-picker'
 import { ProLibraryGradientFrame } from '../../components/ProLibraryGradientFrame'
 import { LocalSvgAsset } from '../../components/LocalSvgAsset'
+import { useTranslation } from 'react-i18next'
 
 const COACH_PHOTO = require('../../../assets/mycoach/mycoachpfp.png')
 const SHIELD_BADGE_SVG = require('../../../assets/mycoach/shieldmycoach.svg')
@@ -19,6 +20,7 @@ const CARD_MIN_HEIGHT = 86
 
 type Props = {
   coachName: string
+  /** Defaults to translated "Your Coach" when omitted. */
   coachSubtitle?: string
   coachImageUri?: string | null
   fonts: { semiBoldFont: string; mediumFont: string; regularFont: string }
@@ -27,15 +29,16 @@ type Props = {
 
 export function MyCoachCoachHero({
   coachName,
-  coachSubtitle = 'Your Coach',
+  coachSubtitle,
   coachImageUri,
   fonts,
   onUploadedVideo,
 }: Props) {
+  const { t } = useTranslation()
   async function onUploadPress() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
-      Alert.alert('Permission needed', 'Allow photo library access to pick a technique video.')
+      Alert.alert(t('commonAlerts.permissionNeeded'), t('coachFlow.permissionPhotos'))
       return
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -45,7 +48,9 @@ export function MyCoachCoachHero({
     if (result.canceled || !result.assets?.[0]?.uri) return
     const uri = result.assets[0].uri
     onUploadedVideo?.(uri)
-    Alert.alert('Video selected', 'Use this clip in AI Coach to analyze your technique.', [{ text: 'OK' }])
+    Alert.alert(t('coachFlow.videoSelected'), t('coachFlow.videoSelectedBody'), [
+      { text: t('commonAlerts.ok') },
+    ])
   }
 
   const frameCommon = {
@@ -72,13 +77,13 @@ export function MyCoachCoachHero({
           </View>
           <View style={styles.coachTextCol}>
             <Text allowFontScaling={false} style={[styles.coachSubtitle, { fontFamily: fonts.regularFont }]}>
-              {coachSubtitle}
+              {coachSubtitle ?? t('myCoach.yourCoach')}
             </Text>
             <Text allowFontScaling={false} numberOfLines={1} style={[styles.coachName, { fontFamily: fonts.semiBoldFont }]}>
               {coachName}
             </Text>
             <Text allowFontScaling={false} style={[styles.premiumLabel, { fontFamily: fonts.mediumFont }]}>
-              PREMIUM COACH
+              {t('myCoach.premiumCoach')}
             </Text>
           </View>
         </View>
@@ -89,10 +94,10 @@ export function MyCoachCoachHero({
           <LocalSvgAsset assetModule={UPLOAD_ICON_SVG} width={UPLOAD_ICON_SIZE} height={UPLOAD_ICON_SIZE} />
           <View style={styles.uploadTextCol}>
             <Text allowFontScaling={false} style={[styles.uploadTitle, { fontFamily: fonts.mediumFont }]}>
-              Upload
+              {t('myCoach.uploadTitle')}
             </Text>
             <Text allowFontScaling={false} style={[styles.uploadSubtitle, { fontFamily: fonts.regularFont }]}>
-              new video
+              {t('myCoach.uploadSubtitle')}
             </Text>
           </View>
         </TouchableOpacity>

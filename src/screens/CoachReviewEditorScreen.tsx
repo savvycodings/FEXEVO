@@ -24,6 +24,7 @@ import { DOMAIN } from '../../constants'
 import type { MainStackParamList } from '../navigation/types'
 import { VideoReviewModal, type ReviewAnnotation } from '../components/VideoReviewModal'
 import * as FileSystemLegacy from 'expo-file-system/legacy'
+import { useTranslation } from 'react-i18next'
 
 type Nav = NativeStackNavigationProp<MainStackParamList>
 type R = RouteProp<MainStackParamList, 'CoachReviewEditor'>
@@ -121,6 +122,7 @@ function formatTime(ms: number): string {
 }
 
 export function CoachReviewEditorScreen() {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const navigation = useNavigation<Nav>()
   const route = useRoute<R>()
@@ -161,7 +163,7 @@ export function CoachReviewEditorScreen() {
         error?: string
       }
       if (!body?.review) {
-        Alert.alert('Unavailable', body?.error || 'Could not load this review.')
+        Alert.alert(t('commonAlerts.unavailable'), body?.error || t('coachFlow.couldNotLoadReview'))
         navigation.goBack()
         return
       }
@@ -205,11 +207,11 @@ export function CoachReviewEditorScreen() {
         .catch((e) => ({ error: e?.message || 'Request failed' }))
       const body = ((res as { data?: unknown })?.data ?? res) as { ok?: boolean; error?: string }
       if (!body?.ok) {
-        Alert.alert('Submit failed', body?.error || 'Unknown error')
+        Alert.alert(t('coachFlow.submitFailed'), body?.error || t('coachFlow.submitFailed'))
         return
       }
-      Alert.alert('Review sent', 'Your student will see this in notifications.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+      Alert.alert(t('coachFlow.reviewSent'), t('coachFlow.reviewSentBody'), [
+        { text: t('commonAlerts.ok'), onPress: () => navigation.goBack() },
       ])
     } finally {
       setSubmitting(false)
@@ -235,11 +237,11 @@ export function CoachReviewEditorScreen() {
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backRow} activeOpacity={0.85} hitSlop={8}>
         <Ionicons name="chevron-back" size={22} color="#00BBFF" />
         <Text allowFontScaling={false} style={[styles.backText, { fontFamily: theme.mediumFont }]}>
-          Back
+          {t('coachReview.back')}
         </Text>
       </TouchableOpacity>
       <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.semiBoldFont }]}>
-        Coach review
+        {t('coachReview.title')}
       </Text>
 
       {videoUri ? (
@@ -265,18 +267,18 @@ export function CoachReviewEditorScreen() {
         >
           <Ionicons name="brush-outline" size={18} color="#FFFFFF" />
           <Text allowFontScaling={false} style={[styles.openToolsText, { fontFamily: theme.semiBoldFont }]}>
-            Open drawing tools
+            {t('coachReview.openDrawingTools')}
           </Text>
         </LinearGradient>
       </TouchableOpacity>
 
       <Text allowFontScaling={false} style={[styles.label, { fontFamily: theme.mediumFont }]}>
-        Feedback
+        {t('coachReview.feedback')}
       </Text>
       <TextInput
         value={feedback}
         onChangeText={setFeedback}
-        placeholder="Written feedback for your student…"
+        placeholder={t('coachReview.feedbackPlaceholder')}
         placeholderTextColor={theme.mutedForegroundColor}
         multiline
         style={[styles.input, { fontFamily: theme.regularFont }]}
@@ -284,7 +286,7 @@ export function CoachReviewEditorScreen() {
 
       <View style={styles.annotationHeaderRow}>
         <Text allowFontScaling={false} style={[styles.label, { fontFamily: theme.mediumFont, marginBottom: 0 }]}>
-          Annotations
+          {t('common.annotations')}
         </Text>
         <Text allowFontScaling={false} style={[styles.annotationCount, { fontFamily: theme.regularFont }]}>
           {annotations.length}
@@ -292,7 +294,7 @@ export function CoachReviewEditorScreen() {
       </View>
       {annotations.length === 0 ? (
         <Text allowFontScaling={false} style={[styles.emptyText, { fontFamily: theme.regularFont }]}>
-          No annotations yet.
+          {t('coachReview.noAnnotations')}
         </Text>
       ) : (
         annotations.map((ann, idx) => (
@@ -302,7 +304,7 @@ export function CoachReviewEditorScreen() {
             ) : null}
             <View style={styles.annotationMetaRow}>
               <Text allowFontScaling={false} style={[styles.annotationTime, { fontFamily: theme.mediumFont }]}>
-                Frame {formatTime(ann.timeMs)}
+                {t('coachReview.frameAt', { time: formatTime(ann.timeMs) })}
               </Text>
               <TouchableOpacity
                 onPress={() => setAnnotations((prev) => prev.filter((_, i) => i !== idx))}
@@ -336,7 +338,7 @@ export function CoachReviewEditorScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text allowFontScaling={false} style={[styles.submitText, { fontFamily: theme.semiBoldFont }]}>
-              Submit review
+              {t('coachReview.submit')}
             </Text>
           )}
         </LinearGradient>

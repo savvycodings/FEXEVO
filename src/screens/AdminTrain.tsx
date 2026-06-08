@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,13 @@ import {
   NavIconProgress,
   NavIconYou,
 } from "../components/NavTabIcons";
+import {
+  ADMIN_TRAIN_CATEGORY_CHOICES,
+  ADMIN_TRAIN_SCREEN_TITLE,
+  ADMIN_TRAIN_SHOTS_BY_CATEGORY,
+} from "../lib/adminTrainShotCatalog";
+import { formatApiError } from "../lib/formatApiError";
+import { displayTrainShotTitle } from "../lib/trainShotDisplay";
 import { formatTrainSkillLevel, TRAIN_SKILL_LEVEL_IDS } from "../lib/trainSkillLevel";
 import {
   TRAIN_CATEGORIES,
@@ -39,203 +46,6 @@ const ADMIN_HEADER_SECRET = "xevodev";
 type ViewProfile = "front" | "side" | "behind";
 
 type TrainSkillLevel = "beginner" | "intermediate" | "advanced";
-type TrainCategoryChoice = {
-  id: TrainCategory;
-  label: string;
-};
-type StrokeChoiceGroup = {
-  title: string;
-  items: { presetId: TrainStrokePreset; label: string }[];
-};
-
-const TRAIN_CATEGORY_CHOICES: TrainCategoryChoice[] = [
-  { id: "save_return", label: "save & return" },
-  { id: "ground_strokes", label: "ground storekes" },
-  { id: "net_play", label: "net play" },
-  { id: "defence_glass", label: "defence(walls)" },
-  { id: "overhead", label: "overheads" },
-  { id: "tactical_specials", label: "tactical & specials" },
-];
-
-const CATEGORY_SCREEN_TITLE: Record<TrainCategory, string> = {
-  save_return: "Serve & Return",
-  ground_strokes: "Groundstrokes",
-  net_play: "Net Play",
-  defence_glass: "Defense (Walls)",
-  overhead: "Overheads",
-  tactical_specials: "Tactical & Specials",
-};
-
-const CATEGORY_STROKE_CHOICES: Record<TrainCategory, StrokeChoiceGroup[]> = {
-  save_return: [
-    {
-      title: "Serve",
-      items: [
-        { presetId: "forehand_drive", label: "Flat serve" },
-        { presetId: "backhand_drive_with_wall", label: "Slice serve" },
-        { presetId: "forehand_lob", label: "Kick serve" },
-      ],
-    },
-    {
-      title: "Return",
-      items: [
-        { presetId: "forehand_return_with_lob", label: "Forehand return" },
-        { presetId: "backhand_return", label: "Backhand return" },
-        { presetId: "backhand_return_with_lob", label: "Backhand return lob" },
-        { presetId: "forehand_return_with_lob", label: "Forehand return lob" },
-        { presetId: "forehand_chiquita", label: "Chiquita return" },
-      ],
-    },
-  ],
-  ground_strokes: [
-    {
-      title: "Drives",
-      items: [
-        { presetId: "forehand_drive", label: "Forehand drive" },
-        { presetId: "backhand_drive", label: "Backhand drive" },
-        { presetId: "forehand_drive", label: "Forehand drive (wall exit)" },
-        { presetId: "backhand_drive_with_wall", label: "Backhand drive (wall exit)" },
-      ],
-    },
-    {
-      title: "Lobs",
-      items: [
-        { presetId: "forehand_lob", label: "Forehand lob" },
-        { presetId: "backhand_lob", label: "Backhand lob" },
-      ],
-    },
-    {
-      title: "Control Shots",
-      items: [
-        { presetId: "forehand_chiquita", label: "Forehand chiquita" },
-        { presetId: "backhand_drive", label: "Backhand chiquita" },
-        { presetId: "contrapared_boast", label: "Drop shot (dejada)" },
-      ],
-    },
-  ],
-  net_play: [
-    {
-      title: "Volleys",
-      items: [
-        { presetId: "forehand_volley", label: "Forehand volley" },
-        { presetId: "backhand_volley", label: "Backhand volley" },
-        { presetId: "half_volley", label: "Block volley" },
-      ],
-    },
-    {
-      title: "Transition",
-      items: [
-        { presetId: "half_volley", label: "Half volley" },
-      ],
-    },
-    {
-      title: "Control & Finishing",
-      items: [
-        { presetId: "contrapared_boast", label: "Drop volley (dormilona)" },
-        { presetId: "forehand_chiquita", label: "Angle volley" },
-        { presetId: "backhand_return", label: "Deep volley" },
-      ],
-    },
-  ],
-  defence_glass: [
-    {
-      title: "Back Wall",
-      items: [
-        { presetId: "back_wall_forehand", label: "Back wall forehand" },
-        { presetId: "back_wall_backhand", label: "Back wall backhand" },
-      ],
-    },
-    {
-      title: "Side Wall",
-      items: [
-        { presetId: "side_wall_forehand", label: "Side wall forehand" },
-        { presetId: "side_wall_backhand", label: "Side wall backhand" },
-      ],
-    },
-    {
-      title: "Double Wall",
-      items: [
-        { presetId: "back_wall_forehand", label: "Double wall forehand" },
-        { presetId: "back_wall_backhand", label: "Double wall backhand" },
-      ],
-    },
-    {
-      title: "Wall Combinations",
-      items: [
-        { presetId: "side_wall_forehand", label: "Back wall -> side wall" },
-        { presetId: "side_wall_backhand", label: "Side wall -> back wall" },
-      ],
-    },
-    {
-      title: "Advanced Defense",
-      items: [
-        { presetId: "contrapared_boast", label: "Contrapared (boast)" },
-        { presetId: "back_wall_forehand", label: "Counter-wall forehand" },
-        { presetId: "back_wall_backhand", label: "Counter-wall backhand" },
-        { presetId: "side_wall_forehand", label: "Glass exit (salida de pared)" },
-      ],
-    },
-  ],
-  overhead: [
-    {
-      title: "Control",
-      items: [
-        { presetId: "forehand_volley", label: "Bandeja" },
-        { presetId: "backhand_volley", label: "Vibora" },
-      ],
-    },
-    {
-      title: "Power",
-      items: [
-        { presetId: "forehand_drive", label: "Flat smash" },
-        { presetId: "backhand_drive", label: "Kick smash" },
-      ],
-    },
-    {
-      title: "Winners",
-      items: [
-        { presetId: "forehand_lob", label: "Por 3 smash" },
-        { presetId: "backhand_lob", label: "Por 4 smash" },
-      ],
-    },
-    {
-      title: "Advanced",
-      items: [
-        { presetId: "forehand_chiquita", label: "Gancho" },
-        { presetId: "backhand_return", label: "Rulo" },
-        { presetId: "contrapared_boast", label: "Bajada" },
-        { presetId: "backhand_return_with_lob", label: "Cuchilla" },
-      ],
-    },
-  ],
-  tactical_specials: [
-    {
-      title: "Transition",
-      items: [
-        { presetId: "half_volley", label: "Bajada (wall to attack)" },
-        { presetId: "backhand_return", label: "Approach shot" },
-      ],
-    },
-    {
-      title: "Tactical",
-      items: [
-        { presetId: "forehand_chiquita", label: "Passing shot" },
-        { presetId: "contrapared_boast", label: "Body shot" },
-        { presetId: "backhand_drive", label: "Shot to feet" },
-        { presetId: "forehand_lob", label: "Tactical lob" },
-      ],
-    },
-    {
-      title: "Creative / Emergency",
-      items: [
-        { presetId: "backhand_return_with_lob", label: "Off-court recovery" },
-        { presetId: "forehand_return_with_lob", label: "Behind-the-back (cadete)" },
-        { presetId: "side_wall_forehand", label: "Fake shot / feint" },
-      ],
-    },
-  ],
-};
-
 function absoluteBackendUrl(relativeOrAbsolute: string): string {
   if (relativeOrAbsolute.startsWith("http://") || relativeOrAbsolute.startsWith("https://")) {
     return relativeOrAbsolute;
@@ -248,6 +58,7 @@ function absoluteBackendUrl(relativeOrAbsolute: string): string {
 async function postTrainUpload(opts: {
   category: TrainCategory;
   strokePreset: TrainStrokePreset;
+  strokeLabel: string;
   skillLevel: TrainSkillLevel;
   viewProfile: ViewProfile;
   uri: string;
@@ -266,6 +77,7 @@ async function postTrainUpload(opts: {
   const form = new FormData();
   form.append("category", opts.category);
   form.append("strokePreset", opts.strokePreset);
+  form.append("strokeLabel", opts.strokeLabel);
   form.append("skillLevel", opts.skillLevel);
   form.append("viewProfile", opts.viewProfile);
   if (Platform.OS === "web") {
@@ -282,6 +94,7 @@ async function postTrainUpload(opts: {
     console.log("[AdminTrain] POST", `${DOMAIN.replace(/\/+$/, "")}${path}`, {
       category: opts.category,
       strokePreset: opts.strokePreset,
+      strokeLabel: opts.strokeLabel,
       skillLevel: opts.skillLevel,
       viewProfile: opts.viewProfile,
       fileName: opts.fileName,
@@ -307,7 +120,7 @@ async function postTrainUpload(opts: {
         "X-Admin-Train-Secret": ADMIN_HEADER_SECRET,
       },
     })
-    .catch((err) => ({ error: err?.message || "Upload failed" } as any));
+    .catch((err) => ({ error: formatApiError(err, "Upload failed") } as any));
 
   const data = ((res as any)?.data ?? res) as {
     id?: string;
@@ -324,8 +137,11 @@ async function postTrainUpload(opts: {
     console.log("[AdminTrain] Response", data);
   }
 
+  if (data?.error != null) {
+    throw new Error(formatApiError(data.error, "Upload failed"));
+  }
   if (!data?.id || !data?.url) {
-    throw new Error(data?.error || "Upload failed");
+    throw new Error(formatApiError(data?.error, "Upload failed"));
   }
   return {
     id: data.id,
@@ -348,12 +164,40 @@ async function deleteTrainVideo(id: string): Promise<void> {
         "X-Admin-Train-Secret": ADMIN_HEADER_SECRET,
       },
     })
-    .catch((err) => ({ error: err?.message || "Delete failed" } as any));
+    .catch((err) => ({ error: formatApiError(err, "Delete failed") } as any));
 
   const data = ((res as any)?.data ?? res) as { ok?: boolean; error?: string };
   if (!data?.ok) {
-    throw new Error(data?.error || "Delete failed");
+    throw new Error(formatApiError(data?.error, "Delete failed"));
   }
+}
+
+type TrainSampleRow = {
+  status: string;
+  frameCount?: number | null;
+  errorMessage?: string | null;
+};
+
+async function fetchTrainSample(sampleId: string): Promise<TrainSampleRow> {
+  const path = `/train/sample/${encodeURIComponent(sampleId)}`;
+  const res = await authClient
+    .$fetch<TrainSampleRow & { error?: unknown }>(path, {
+      method: "GET",
+      headers: {
+        "X-Admin-Train-Secret": ADMIN_HEADER_SECRET,
+      },
+    })
+    .catch((err) => ({ error: formatApiError(err, "Request failed") } as any));
+
+  const data = ((res as any)?.data ?? res) as TrainSampleRow & { error?: unknown };
+  if (data?.error != null || !data?.status) {
+    throw new Error(formatApiError(data?.error, "Failed to load sample status"));
+  }
+  return {
+    status: data.status,
+    frameCount: data.frameCount ?? null,
+    errorMessage: data.errorMessage ?? null,
+  };
 }
 
 type PoseLandmarksCoverageRow = {
@@ -364,6 +208,7 @@ type PoseLandmarksCoverageRow = {
   skillLevel: string;
   viewProfile: string;
   strokeName: string;
+  strokeLabel?: string | null;
   status: string;
   poseFrameCount: number | null;
   sampleCount?: number;
@@ -389,16 +234,16 @@ async function fetchPoseLandmarksCoverage(): Promise<{
         "X-Admin-Train-Secret": ADMIN_HEADER_SECRET,
       },
     })
-    .catch((err) => ({ error: err?.message || "Request failed" } as any));
+    .catch((err) => ({ error: formatApiError(err, "Request failed") } as any));
 
   const data = ((res as any)?.data ?? res) as {
     rows?: PoseLandmarksCoverageRow[];
     comboKeys?: string[];
     categoryHasPoseLandmarks?: Record<string, boolean>;
-    error?: string;
+    error?: unknown;
   };
-  if (data?.error || !Array.isArray(data?.rows)) {
-    throw new Error(data?.error || "Failed to load pose coverage");
+  if (data?.error != null || !Array.isArray(data?.rows)) {
+    throw new Error(formatApiError(data?.error, "Failed to load pose coverage"));
   }
   return {
     rows: data.rows,
@@ -410,17 +255,8 @@ async function fetchPoseLandmarksCoverage(): Promise<{
   };
 }
 
-function trainComboKey(
-  category: TrainCategory,
-  strokePreset: TrainStrokePreset,
-  skillLevel: TrainSkillLevel,
-  viewProfile: ViewProfile
-): string {
-  return `${category}|${strokePreset}|${skillLevel}|${viewProfile}`;
-}
-
-function presetShortLabel(preset: string): string {
-  return TRAIN_STROKE_PRESETS.find((p) => p.id === preset)?.label ?? preset;
+function strokeChoiceKey(label: string): string {
+  return label;
 }
 
 function categoryLabel(id: string): string {
@@ -441,6 +277,8 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
   const [gatePassword, setGatePassword] = useState("");
   const [category, setCategory] = useState<TrainCategory>("ground_strokes");
   const [strokePreset, setStrokePreset] = useState<TrainStrokePreset>("forehand_drive");
+  const [selectedStrokeChoiceKey, setSelectedStrokeChoiceKey] = useState("");
+  const [selectedStrokeLabel, setSelectedStrokeLabel] = useState("");
   const [skillLevel, setSkillLevel] = useState<TrainSkillLevel>("intermediate");
   const [viewProfile, setViewProfile] = useState<ViewProfile>("side");
   const [pickedUri, setPickedUri] = useState<string | null>(null);
@@ -462,15 +300,54 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
   const [showUploadEditor, setShowUploadEditor] = useState(false);
 
   const [poseCoverageRows, setPoseCoverageRows] = useState<PoseLandmarksCoverageRow[]>([]);
-  const [poseComboKeys, setPoseComboKeys] = useState<string[]>([]);
-  const [categoryHasPoseLandmarks, setCategoryHasPoseLandmarks] = useState<Record<string, boolean>>(
-    {}
-  );
   const [poseCoverageLoading, setPoseCoverageLoading] = useState(false);
   const [poseCoverageError, setPoseCoverageError] = useState<string | null>(null);
   const [poseCoverageRefreshKey, setPoseCoverageRefreshKey] = useState(0);
+  const [sampleTraining, setSampleTraining] = useState<TrainSampleRow | null>(null);
 
-  const trainedComboSet = useMemo(() => new Set(poseComboKeys), [poseComboKeys]);
+  const trainingInProgress =
+    sampleTraining?.status === "queued" || sampleTraining?.status === "processing";
+
+  useEffect(() => {
+    const sampleId = lastUpload?.sampleId;
+    if (!sampleId || !unlocked) {
+      setSampleTraining(null);
+      return;
+    }
+    const pollSampleId = sampleId;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function poll() {
+      try {
+        const row = await fetchTrainSample(pollSampleId);
+        if (cancelled) return;
+        setSampleTraining(row);
+        if (row.status === "completed") {
+          setPoseCoverageRefreshKey((k) => k + 1);
+          return;
+        }
+        if (row.status === "failed") return;
+        if (row.status === "queued" || row.status === "processing") {
+          timer = setTimeout(poll, 3500);
+        }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setSampleTraining({
+            status: "failed",
+            errorMessage: formatApiError(e, "Could not load training status"),
+          });
+        }
+      }
+    }
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [lastUpload?.sampleId, unlocked]);
 
   useEffect(() => {
     if (!unlocked) return;
@@ -482,12 +359,10 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
         const out = await fetchPoseLandmarksCoverage();
         if (!cancelled) {
           setPoseCoverageRows(out.rows);
-          setPoseComboKeys(out.comboKeys);
-          setCategoryHasPoseLandmarks(out.categoryHasPoseLandmarks);
         }
       } catch (e: unknown) {
         if (!cancelled) {
-          setPoseCoverageError(e instanceof Error ? e.message : "Failed to load coverage");
+          setPoseCoverageError(formatApiError(e, "Failed to load coverage"));
         }
       } finally {
         if (!cancelled) setPoseCoverageLoading(false);
@@ -497,34 +372,6 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
       cancelled = true;
     };
   }, [unlocked, poseCoverageRefreshKey]);
-
-  function strokePresetHasPoseLandmarks(preset: TrainStrokePreset): boolean {
-    return trainedComboSet.has(trainComboKey(category, preset, skillLevel, viewProfile));
-  }
-
-  function skillLevelHasPoseLandmarks(level: TrainSkillLevel): boolean {
-    const groups = CATEGORY_STROKE_CHOICES[category];
-    for (const g of groups) {
-      for (const item of g.items) {
-        if (trainedComboSet.has(trainComboKey(category, item.presetId, level, viewProfile))) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  function viewProfileHasPoseLandmarks(v: ViewProfile): boolean {
-    const groups = CATEGORY_STROKE_CHOICES[category];
-    for (const g of groups) {
-      for (const item of g.items) {
-        if (trainedComboSet.has(trainComboKey(category, item.presetId, skillLevel, v))) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
 
   function tryUnlock() {
     if (gatePassword.trim() === ADMIN_UI_PASSWORD) {
@@ -537,39 +384,52 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
 
   async function pickVideo() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (perm.status !== "granted") return;
+    if (perm.status !== "granted") {
+      Alert.alert("Permission needed", "Allow photo library access to pick a training video.");
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
       quality: 1,
     });
     if (result.canceled || !result.assets?.[0]?.uri) return;
     const a = result.assets[0];
-    setPickedUri(a.uri);
     const name = a.fileName || "video.mp4";
-    setPickedName(name);
     const mt =
       name.toLowerCase().endsWith(".mov") || name.toLowerCase().endsWith(".qt")
         ? "video/quicktime"
         : "video/mp4";
+    setPickedUri(a.uri);
+    setPickedName(name);
     setPickedMime(mt);
+    await runUpload({ uri: a.uri, fileName: name, mimeType: mt });
   }
 
-  async function upload() {
-    if (!pickedUri) {
+  async function runUpload(video?: { uri: string; fileName: string; mimeType: string }) {
+    const uri = video?.uri ?? pickedUri;
+    const fileName = video?.fileName ?? pickedName;
+    const mimeType = video?.mimeType ?? pickedMime;
+    if (!uri) {
       Alert.alert("Video", "Pick a video first.");
       return;
     }
+    if (!selectedStrokeChoiceKey || !selectedStrokeLabel.trim()) {
+      Alert.alert("Shot", "Select a shot label before uploading.");
+      return;
+    }
+    if (uploading) return;
     setUploading(true);
     try {
       if (__DEV__) console.log("[AdminTrain] Starting upload…");
       const out = await postTrainUpload({
         category,
         strokePreset,
+        strokeLabel: selectedStrokeLabel.trim(),
         skillLevel,
         viewProfile,
-        uri: pickedUri,
-        fileName: pickedName,
-        mimeType: pickedMime,
+        uri,
+        fileName,
+        mimeType,
       });
       const streamUrl = absoluteBackendUrl(out.url);
       setLastId(out.id);
@@ -583,6 +443,24 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
         viewProfile: out.viewProfile || viewProfile,
         streamUrl,
       });
+      // strokeName is "{label} · Level"; UI titles use catalog label via displayTrainShotTitle
+      if (out.sampleId) {
+        try {
+          const row = await fetchTrainSample(out.sampleId);
+          setSampleTraining(row);
+          if (row.status === "completed") {
+            setPoseCoverageRefreshKey((k) => k + 1);
+          }
+        } catch {
+          setSampleTraining({
+            status: "processing",
+            frameCount: null,
+            errorMessage: null,
+          });
+        }
+      } else {
+        setSampleTraining(null);
+      }
       if (__DEV__) {
         console.log("[AdminTrain] Upload success", {
           id: out.id,
@@ -599,10 +477,9 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
       if (Platform.OS !== "web") {
         Alert.alert("Saved", `id: ${out.id}\nsample: ${out.sampleId || "-"}\n${out.strokeName}\n${streamUrl}`);
       }
-      setPoseCoverageRefreshKey((k) => k + 1);
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (__DEV__) console.warn("[AdminTrain] Upload error", e);
-      Alert.alert("Upload failed", e?.message || "Unknown error");
+      Alert.alert("Upload failed", formatApiError(e, "Unknown error"));
     } finally {
       setUploading(false);
     }
@@ -613,15 +490,30 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
       Alert.alert("Nothing", "No last upload id in this session.");
       return;
     }
-    try {
-      await deleteTrainVideo(lastId);
-      setLastUpload((prev) => (prev?.id === lastId ? null : prev));
-      setLastId(null);
-      setPoseCoverageRefreshKey((k) => k + 1);
-      Alert.alert("Deleted", lastId);
-    } catch (e: any) {
-      Alert.alert("Delete failed", e?.message || "Unknown error");
+    const doDelete = async () => {
+      try {
+        await deleteTrainVideo(lastId);
+        setLastUpload((prev) => (prev?.id === lastId ? null : prev));
+        setLastId(null);
+        setSampleTraining(null);
+        setPoseCoverageRefreshKey((k) => k + 1);
+        Alert.alert("Deleted", lastId);
+      } catch (e: unknown) {
+        Alert.alert("Delete failed", formatApiError(e, "Unknown error"));
+      }
+    };
+    if (trainingInProgress) {
+      Alert.alert(
+        "Training in progress",
+        "Pose landmark extraction is still running. Delete anyway?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete anyway", style: "destructive", onPress: () => void doDelete() },
+        ]
+      );
+      return;
     }
+    await doDelete();
   }
 
   const chromeBottom = (
@@ -703,8 +595,8 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
           </TouchableOpacity>
           <Text style={styles.label}>Model coverage already trained</Text>
           <Text style={styles.hintBelowLabel}>
-            These are global combos the company AI model has completed pose-landmark training on.
-            Green highlights match this model coverage.
+            Reference list of completed pose-landmark training in the library (submissions tracked
+            separately).
           </Text>
           {poseCoverageLoading ? (
             <ActivityIndicator color="#2ecc71" style={{ marginVertical: 12 }} />
@@ -739,7 +631,11 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
                     style={[styles.coverageCell, styles.coverageColStroke]}
                     numberOfLines={3}
                   >
-                    {presetShortLabel(row.strokePreset)}
+                    {displayTrainShotTitle({
+                      strokeLabel: row.strokeLabel,
+                      strokeName: row.strokeName,
+                      strokePreset: row.strokePreset,
+                    })}
                   </Text>
                   <Text style={[styles.coverageCell, styles.coverageColLvl]}>
                     {row.skillLevel.slice(0, 3)}
@@ -757,23 +653,14 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
           ) : null}
           <Text style={[styles.label, { marginTop: 18 }]}>Choose training category</Text>
           <View style={styles.categoryList}>
-            {TRAIN_CATEGORY_CHOICES.map((choice) => {
-              const hasPose = categoryHasPoseLandmarks[choice.id] === true;
-              return (
+            {ADMIN_TRAIN_CATEGORY_CHOICES.map((choice) => (
                 <AdminGradientCard
                   key={choice.id}
                   style={styles.categoryCardTouch}
-                  innerStyle={
-                    hasPose
-                      ? {
-                          borderLeftWidth: 4,
-                          borderLeftColor: "#2ecc71",
-                          paddingLeft: 12,
-                        }
-                      : undefined
-                  }
                   onPress={() => {
                     setCategory(choice.id);
+                    setSelectedStrokeChoiceKey("");
+                    setSelectedStrokeLabel("");
                     setShowUploadEditor(true);
                   }}
                   accessibilityRole="button"
@@ -781,16 +668,10 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
                 >
                   <View style={styles.categoryCardInner}>
                     <Text style={styles.categoryCardTitle}>{choice.label}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      {hasPose ? (
-                        <Ionicons name="checkmark-circle" size={22} color="#2ecc71" />
-                      ) : null}
-                      <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.35)" />
-                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.35)" />
                   </View>
                 </AdminGradientCard>
-              );
-            })}
+            ))}
           </View>
         </KeyboardAwareScrollView>
         {chromeBottom}
@@ -812,64 +693,49 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
           <Ionicons name="chevron-back" size={16} color="rgba(255,255,255,0.72)" />
           <Text style={styles.detailBackText}>Back to category</Text>
         </TouchableOpacity>
-        <Text style={styles.detailScreenTitle}>{CATEGORY_SCREEN_TITLE[category]}</Text>
-        <Text style={styles.label}>Select a sub-category</Text>
+        <Text style={styles.detailScreenTitle}>{ADMIN_TRAIN_SCREEN_TITLE[category]}</Text>
+        <Text style={styles.label}>Select shot</Text>
         <View style={styles.subCategoryPanel}>
-          {CATEGORY_STROKE_CHOICES[category].map((group) => (
-            <View key={group.title} style={styles.strokeGroup}>
-              <Text style={styles.strokeGroupTitle}>{group.title}</Text>
-              <View style={styles.pillGrid}>
-                {group.items.map((item) => {
-                  const active = strokePreset === item.presetId;
-                  const poseReady = strokePresetHasPoseLandmarks(item.presetId);
-                  return (
-                    <TouchableOpacity
-                      key={`${group.title}-${item.presetId}-${item.label}`}
-                      style={[
-                        styles.taxonomyPill,
-                        poseReady && styles.taxonomyPillPoseReady,
-                        active && styles.taxonomyPillActive,
-                      ]}
-                      onPress={() => setStrokePreset(item.presetId)}
-                      activeOpacity={0.85}
-                    >
-                      <Text
-                        style={[
-                          styles.taxonomyPillText,
-                          poseReady && !active && styles.taxonomyPillTextPoseReady,
-                          active && styles.taxonomyPillTextActive,
-                        ]}
-                        numberOfLines={3}
-                      >
-                        {item.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          ))}
+          <View style={styles.pillGrid}>
+            {ADMIN_TRAIN_SHOTS_BY_CATEGORY[category].map((item) => {
+              const choiceKey = strokeChoiceKey(item.label);
+              const active = selectedStrokeChoiceKey === choiceKey;
+              return (
+                <TouchableOpacity
+                  key={choiceKey}
+                  style={[styles.taxonomyPill, active && styles.taxonomyPillActive]}
+                  onPress={() => {
+                    setSelectedStrokeChoiceKey(choiceKey);
+                    setSelectedStrokeLabel(item.label);
+                    setStrokePreset(item.presetId);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[styles.taxonomyPillText, active && styles.taxonomyPillTextActive]}
+                    numberOfLines={3}
+                  >
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
         <Text style={styles.label}>Level</Text>
         <View style={styles.pillGrid}>
           {TRAIN_SKILL_LEVEL_IDS.map((id) => {
             const active = skillLevel === id;
-            const poseReady = skillLevelHasPoseLandmarks(id);
             return (
               <TouchableOpacity
                 key={id}
-                style={[
-                  styles.taxonomyPill,
-                  poseReady && styles.taxonomyPillPoseReady,
-                  active && styles.taxonomyPillActive,
-                ]}
+                style={[styles.taxonomyPill, active && styles.taxonomyPillActive]}
                 onPress={() => setSkillLevel(id)}
                 activeOpacity={0.85}
               >
                 <Text
                   style={[
                     styles.taxonomyPillText,
-                    poseReady && !active && styles.taxonomyPillTextPoseReady,
                     active && styles.taxonomyPillTextActive,
                   ]}
                   numberOfLines={2}
@@ -884,24 +750,15 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
         <View style={styles.pillGrid}>
           {(["front", "side", "behind"] as ViewProfile[]).map((v) => {
             const active = viewProfile === v;
-            const poseReady = viewProfileHasPoseLandmarks(v);
             return (
               <TouchableOpacity
                 key={v}
-                style={[
-                  styles.taxonomyPill,
-                  poseReady && styles.taxonomyPillPoseReady,
-                  active && styles.taxonomyPillActive,
-                ]}
+                style={[styles.taxonomyPill, active && styles.taxonomyPillActive]}
                 onPress={() => setViewProfile(v)}
                 activeOpacity={0.85}
               >
                 <Text
-                  style={[
-                    styles.taxonomyPillText,
-                    poseReady && !active && styles.taxonomyPillTextPoseReady,
-                    active && styles.taxonomyPillTextActive,
-                  ]}
+                  style={[styles.taxonomyPillText, active && styles.taxonomyPillTextActive]}
                 >
                   {v}
                 </Text>
@@ -912,10 +769,15 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
         <TouchableOpacity style={styles.secondaryBtn} onPress={pickVideo} activeOpacity={0.85}>
           <Text style={styles.secondaryBtnText}>{pickedUri ? "Change video" : "Pick video"}</Text>
         </TouchableOpacity>
-        {pickedUri ? <Text style={styles.fileHint}>{pickedName}</Text> : null}
+        {pickedUri ? (
+          <Text style={styles.fileHint}>
+            {uploading ? "Uploading… " : ""}
+            {pickedName}
+          </Text>
+        ) : null}
         <TouchableOpacity
           style={[styles.primaryBtn, uploading && { opacity: 0.6 }]}
-          onPress={upload}
+          onPress={() => void runUpload()}
           disabled={uploading}
           activeOpacity={0.85}
         >
@@ -928,11 +790,49 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
         {lastUpload ? (
           <View style={styles.successBox}>
             <Text style={styles.successTitle}>Saved — last upload</Text>
+            {!lastUpload.sampleId ? (
+              <Text style={styles.trainingWarning}>
+                Sample id missing — cannot track training status.
+              </Text>
+            ) : sampleTraining ? (
+              <View style={styles.trainingStatusBlock}>
+                {(sampleTraining.status === "queued" ||
+                  sampleTraining.status === "processing") && (
+                  <View style={styles.trainingStatusRow}>
+                    <ActivityIndicator size="small" color="#00B8FF" />
+                    <Text style={styles.trainingStatusText}>
+                      {sampleTraining.status === "queued"
+                        ? "Upload complete — pose training started (Modal)…"
+                        : "Training pose landmarks (Modal)… stay on this screen until ready."}
+                    </Text>
+                  </View>
+                )}
+                {sampleTraining.status === "completed" && (
+                  <View style={styles.trainingStatusRow}>
+                    <Ionicons name="checkmark-circle" size={18} color="#2ecc71" />
+                    <Text style={styles.trainingStatusTextSuccess}>
+                      Training complete · {sampleTraining.frameCount ?? 0} frames — ready for
+                      retrieval
+                    </Text>
+                  </View>
+                )}
+                {sampleTraining.status === "failed" && (
+                  <Text style={styles.trainingStatusTextFailed} selectable>
+                    Training failed:{" "}
+                    {sampleTraining.errorMessage?.trim() || "Unknown error"}
+                  </Text>
+                )}
+              </View>
+            ) : null}
             <Text style={styles.successMeta}>{lastUpload.strokeName}</Text>
             <Text style={styles.successMetaSmall}>
               {TRAIN_CATEGORIES.find((c) => c.id === lastUpload.category)?.label} ·{" "}
-              {TRAIN_STROKE_PRESETS.find((s) => s.id === lastUpload.strokePreset)?.label} ·{" "}
-              {formatTrainSkillLevel(lastUpload.skillLevel)} · {lastUpload.viewProfile}
+              {displayTrainShotTitle({
+                strokeLabel: selectedStrokeLabel || undefined,
+                strokeName: lastUpload.strokeName,
+                strokePreset: lastUpload.strokePreset,
+              })}{" "}
+              · {formatTrainSkillLevel(lastUpload.skillLevel)} · {lastUpload.viewProfile}
             </Text>
             <Text style={styles.successMeta}>
               id <Text style={styles.successMono}>{lastUpload.id}</Text>
@@ -1278,6 +1178,61 @@ function getStyles(theme: any) {
     },
     taxonomyPillTextPoseReady: {
       color: "#2ecc71",
+    },
+    taxonomyPillDisabled: {
+      opacity: 0.55,
+    },
+    taxonomyPillActiveMuted: {
+      backgroundColor: "rgba(46, 204, 113, 0.15)",
+      borderColor: "rgba(46, 204, 113, 0.4)",
+      borderWidth: 1,
+    },
+    taxonomyPillTextDisabled: {
+      color: "rgba(255,255,255,0.45)",
+    },
+    uploadBlockedHint: {
+      color: theme.mutedForegroundColor,
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 4,
+    },
+    trainingStatusBlock: {
+      marginBottom: 10,
+      gap: 6,
+    },
+    trainingStatusRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+    },
+    trainingStatusText: {
+      flex: 1,
+      color: "#00B8FF",
+      fontFamily: theme.mediumFont,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    trainingStatusTextSuccess: {
+      flex: 1,
+      color: "#2ecc71",
+      fontFamily: theme.mediumFont,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    trainingStatusTextFailed: {
+      color: "#FF6B6B",
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      lineHeight: 17,
+      marginBottom: 8,
+    },
+    trainingWarning: {
+      color: "#f39c12",
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      lineHeight: 17,
+      marginBottom: 8,
     },
   });
 }

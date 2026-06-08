@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
+import { useTranslation } from "react-i18next";
+import { LanguageToggle } from "../components/LanguageToggle";
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
 
 const APP_LOGO = require("../../assets/logo.png");
@@ -12,6 +14,7 @@ type AccountCreatedProps = {
 };
 
 export function AccountCreated({ onDone }: AccountCreatedProps) {
+  const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const styles = getStyles(theme);
 
@@ -32,17 +35,17 @@ export function AccountCreated({ onDone }: AccountCreatedProps) {
       </View>
 
       <View style={styles.bottomBlock}>
-        <Text allowFontScaling={false} style={styles.kicker}>Account created</Text>
-        <Text allowFontScaling={false} style={styles.title}>Welcome to{"\n"}Xevo Padel</Text>
+        <Text allowFontScaling={false} style={styles.kicker}>{t("accountCreated.kicker")}</Text>
+        <Text allowFontScaling={false} style={styles.title}>{t("accountCreated.title")}</Text>
         <Text allowFontScaling={false} style={styles.subtitle}>
-          Your account has been created successfully
+          {t("accountCreated.subtitle")}
         </Text>
 
         <TouchableOpacity
           style={styles.buttonOuter}
           onPress={onDone}
           activeOpacity={0.9}
-          accessibilityLabel="Continue to profile setup"
+          accessibilityLabel={t("accountCreated.continueSetup")}
         >
           <LinearGradient
             colors={["#18B8F3", "#0A2DFF"]}
@@ -50,9 +53,10 @@ export function AccountCreated({ onDone }: AccountCreatedProps) {
             end={{ x: 1, y: 1 }}
             style={styles.button}
           >
-            <Text allowFontScaling={false} style={styles.buttonText}>Done</Text>
+            <Text allowFontScaling={false} style={styles.buttonText}>{t("common.done")}</Text>
           </LinearGradient>
         </TouchableOpacity>
+        <LanguageToggle />
       </View>
     </View>
   );

@@ -23,10 +23,13 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useTranslation } from "react-i18next";
+import { LanguageToggle } from "../components/LanguageToggle";
 
 const APP_LOGO = require("../../assets/logo.png");
 
 export function SignIn() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { theme } = useContext(ThemeContext);
   const [email, setEmail] = useState("");
@@ -38,7 +41,7 @@ export function SignIn() {
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) {
-      Alert.alert("Error", "Please enter email and password.");
+      Alert.alert(t("common.error"), t("auth.enterEmailPassword"));
       return;
     }
     console.log("[Auth] SignIn pressed", {
@@ -56,7 +59,7 @@ export function SignIn() {
         hasUser: false,
         hasSessionId: false,
       });
-      Alert.alert("Sign in failed", error.message || "Could not establish a session.");
+      Alert.alert(t("auth.signInFailed"), error.message || t("auth.sessionErrorMsg"));
       return;
     }
 
@@ -72,10 +75,7 @@ export function SignIn() {
         hasUser: !!sessionData?.user,
         hasSessionId: !!sessionData?.session?.id,
       });
-      Alert.alert(
-        "Sign in failed",
-        "Could not establish a session. Please try again."
-      );
+      Alert.alert(t("auth.signInFailed"), t("auth.sessionErrorMsg"));
       return;
     }
     console.log("[Auth] SignIn success", {
@@ -91,16 +91,13 @@ export function SignIn() {
       const { error } = await signInWithSocial(provider);
       if (error) {
         console.log("[Auth] Sociall sign-in error", { provider, message: error.message });
-        Alert.alert("Sign in failed", formatSocialAuthError(error));
+        Alert.alert(t("auth.signInFailed"), formatSocialAuthError(error));
         return;
       }
       const sessionResult = await authClient.getSession().catch(() => null);
       const sessionData: any = (sessionResult as any)?.data ?? sessionResult;
       if (!sessionData?.user?.id || !sessionData?.session?.id) {
-        Alert.alert(
-          "Sign in failed",
-          "Could not establish a session. Please try again."
-        );
+        Alert.alert(t("auth.signInFailed"), t("auth.sessionErrorMsg"));
         return;
       }
       console.log("[Auth] Social sign-in success", {
@@ -143,7 +140,7 @@ export function SignIn() {
 
         <TextInput
           style={styles.input}
-          placeholder="Email"
+          placeholder={t("auth.email")}
           placeholderTextColor={theme.placeholderTextColor}
           value={email}
           onChangeText={setEmail}
@@ -154,7 +151,7 @@ export function SignIn() {
         />
         <TextInput
           style={styles.input}
-          placeholder="Password"
+          placeholder={t("auth.password")}
           placeholderTextColor={theme.placeholderTextColor}
           value={password}
           onChangeText={setPassword}
@@ -177,20 +174,20 @@ export function SignIn() {
             {loading ? (
               <ActivityIndicator color={theme.tintTextColor} />
             ) : (
-              <Text allowFontScaling={false} style={styles.buttonText}>Sign in</Text>
+              <Text allowFontScaling={false} style={styles.buttonText}>{t("auth.signIn")}</Text>
             )}
           </LinearGradient>
         </TouchableOpacity>
 
         <TouchableOpacity activeOpacity={0.8} style={styles.forgotWrap}>
-          <Text allowFontScaling={false} style={styles.forgotText}>Forgot my password</Text>
+          <Text allowFontScaling={false} style={styles.forgotText}>{t("auth.forgotPassword")}</Text>
         </TouchableOpacity>
 
         {enabledSocialProviders.length > 0 ? (
           <>
             <View style={styles.socialDividerRow}>
               <View style={styles.socialDividerLine} />
-              <Text allowFontScaling={false} style={styles.socialDividerText}>Or sign in with</Text>
+              <Text allowFontScaling={false} style={styles.socialDividerText}>{t("auth.orSignInWith")}</Text>
               <View style={styles.socialDividerLine} />
             </View>
 
@@ -226,6 +223,7 @@ export function SignIn() {
             </View>
           </>
         ) : null}
+        <LanguageToggle />
       </View>
     </KeyboardAwareScrollView>
   );

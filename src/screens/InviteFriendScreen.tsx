@@ -26,6 +26,7 @@ import { ClubBannerImage } from "../components/ClubBannerImage";
 import { ClubPfpImage } from "../components/ClubPfpImage";
 import { CLUB_LIST_ROWS } from "../lib/club-detail-data";
 import { COACH_CARD_ASPECT, COACH_INVITE_CARDS } from "../lib/coach-invite-data";
+import { useTranslation } from "react-i18next";
 
 const INVITE_SVG = require("../../assets/youpage/invitebutton.svg");
 type InviteSegment = "friends" | "coaches" | "clubs";
@@ -47,6 +48,7 @@ const CLUB_AVATAR = 44;
 type InviteSearchNav = NativeStackNavigationProp<MainStackParamList, "InviteSearch">;
 
 export function InviteFriendScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<InviteSearchNav>();
   const { theme } = useContext(ThemeContext);
   const { width: winW } = useWindowDimensions();
@@ -63,10 +65,10 @@ export function InviteFriendScreen() {
 
   const searchPlaceholder =
     segment === "friends"
-      ? "Search friends"
+      ? t("invite.searchFriends")
       : segment === "coaches"
-        ? "Search coach"
-        : "Search clubs";
+        ? t("invite.searchCoach")
+        : t("invite.searchClubs");
 
   const showRanking = segment === "friends";
   const showInviteFooter = segment === "friends";
@@ -85,7 +87,7 @@ export function InviteFriendScreen() {
   async function onInvitePress() {
     try {
       await Share.share({
-        message: "Join me on Xevo — train smarter with padel technique feedback.",
+        message: t("invite.shareMessage"),
       });
     } catch {
       /* dismissed */
@@ -156,9 +158,9 @@ export function InviteFriendScreen() {
         <View style={styles.segmentRow}>
           {(
             [
-              { key: "friends" as const, label: "Friends" },
-              { key: "coaches" as const, label: "Coaches" },
-              { key: "clubs" as const, label: "Clubs" },
+              { key: "friends" as const, label: t("invite.friends") },
+              { key: "coaches" as const, label: t("invite.coaches") },
+              { key: "clubs" as const, label: t("invite.clubs") },
             ] as const
           ).map(({ key, label }) => {
             const active = segment === key;
@@ -184,7 +186,7 @@ export function InviteFriendScreen() {
             style={styles.rankingPill}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="Ranking"
+            accessibilityLabel={t("inviteExtra.ranking")}
           >
             <Text style={styles.rankingLabel}>Ranking</Text>
           </TouchableOpacity>
@@ -277,7 +279,7 @@ export function InviteFriendScreen() {
                 activeOpacity={0.9}
                 onPress={() => void onInvitePress()}
                 accessibilityRole="button"
-                accessibilityLabel="Invite a friend"
+                accessibilityLabel={t("invite.inviteFriend")}
                 style={styles.inviteHit}
               >
                 <LocalSvgAsset assetModule={INVITE_SVG} width={btnW} height={btnH} />

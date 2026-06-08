@@ -16,6 +16,7 @@ import { useSessionData } from '../context/SessionDataContext'
 import { ProLibraryGradientProgressBar } from '../components'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import type { ActivitySession } from '../lib/activitySession'
+import { useTranslation } from 'react-i18next'
 
 const ACTIVITIES_TICK_SVG = require('../../assets/actiities/tick.svg')
 
@@ -48,18 +49,18 @@ const TRAINING_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const
 type PeriodKey = 4 | 8 | 12 | 'all'
 type ChartMetric = 'overall' | 'technique' | 'outcome' | 'tactics'
 
-const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
-  { key: 4, label: '4 Weeks' },
-  { key: 8, label: '8 Weeks' },
-  { key: 12, label: '12 Weeks' },
-  { key: 'all', label: 'All Time' },
+const PERIOD_OPTION_KEYS: { key: PeriodKey; labelKey: string }[] = [
+  { key: 4, labelKey: 'progress.weeks4' },
+  { key: 8, labelKey: 'progress.weeks8' },
+  { key: 12, labelKey: 'progress.weeks12' },
+  { key: 'all', labelKey: 'progress.allTime' },
 ]
 
-const METRIC_OPTIONS: { key: ChartMetric; label: string }[] = [
-  { key: 'overall', label: 'Overall' },
-  { key: 'technique', label: 'Technique' },
-  { key: 'outcome', label: 'Outcome' },
-  { key: 'tactics', label: 'Tactics' },
+const METRIC_OPTION_KEYS: { key: ChartMetric; labelKey: string }[] = [
+  { key: 'overall', labelKey: 'progress.metricOverall' },
+  { key: 'technique', labelKey: 'progress.metricTechnique' },
+  { key: 'outcome', labelKey: 'progress.metricOutcome' },
+  { key: 'tactics', labelKey: 'progress.metricTactics' },
 ]
 
 function mondayLocal(d: Date): Date {
@@ -363,6 +364,7 @@ const chartStyles = StyleSheet.create({
 })
 
 export function ProgressScreen() {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { activities } = useSessionData()
   const { showActionSheetWithOptions } = useActionSheet()
@@ -428,18 +430,18 @@ export function ProgressScreen() {
   const weekHits = useMemo(() => activityDaysThisWeek(activities), [activities])
 
   const onPickMetric = useCallback(() => {
-    const labels = METRIC_OPTIONS.map((m) => m.label)
+    const labels = METRIC_OPTION_KEYS.map((m) => t(m.labelKey))
     showActionSheetWithOptions(
       {
-        options: [...labels, 'Cancel'],
+        options: [...labels, t('common.cancel')],
         cancelButtonIndex: labels.length,
       },
       (idx) => {
-        if (idx == null || idx >= METRIC_OPTIONS.length) return
-        setChartMetric(METRIC_OPTIONS[idx].key)
+        if (idx == null || idx >= METRIC_OPTION_KEYS.length) return
+        setChartMetric(METRIC_OPTION_KEYS[idx].key)
       }
     )
-  }, [showActionSheetWithOptions])
+  }, [showActionSheetWithOptions, t])
 
   return (
     <View style={styles.root}>
@@ -459,11 +461,11 @@ export function ProgressScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text allowFontScaling={false} style={styles.pageTitle}>
-          Progress
+          {t('progress.title')}
         </Text>
 
         <View style={styles.segmentTrack}>
-          {PERIOD_OPTIONS.map((opt) => {
+          {PERIOD_OPTION_KEYS.map((opt) => {
             const active = period === opt.key
             return (
               <TouchableOpacity
@@ -478,7 +480,7 @@ export function ProgressScreen() {
                     style={[styles.segmentTxt, active && styles.segmentTxtOn]}
                     numberOfLines={1}
                   >
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -489,11 +491,14 @@ export function ProgressScreen() {
         <View style={[styles.card, styles.cardSized, { width: cardW }]}>
           <View style={styles.cardHeadRow}>
             <Text allowFontScaling={false} style={styles.cardHeadTitle}>
-              Overall Score
+              {t('progress.overallScore')}
             </Text>
             <TouchableOpacity style={styles.dropdownHit} onPress={onPickMetric} activeOpacity={0.8}>
               <Text allowFontScaling={false} style={styles.dropdownTxt}>
-                {METRIC_OPTIONS.find((m) => m.key === chartMetric)?.label ?? 'Overall'}
+                {t(
+                  METRIC_OPTION_KEYS.find((m) => m.key === chartMetric)?.labelKey ??
+                    'progress.metricOverall'
+                )}
               </Text>
               <Text allowFontScaling={false} style={styles.chevron}>
                 ▼
@@ -519,13 +524,13 @@ export function ProgressScreen() {
 
         <View style={[styles.card, styles.cardSized, { width: cardW }]}>
           <Text allowFontScaling={false} style={styles.categoryBreakdownHeading}>
-            Category Breakdown
+            {t('progress.categoryBreakdown')}
           </Text>
           {(
             [
-              { key: 'technique' as const, label: 'Technique', val: pillarNow.technique },
-              { key: 'outcome' as const, label: 'Outcome', val: pillarNow.outcome },
-              { key: 'tactics' as const, label: 'Tactics', val: pillarNow.tactics },
+              { key: 'technique' as const, labelKey: 'progress.metricTechnique', val: pillarNow.technique },
+              { key: 'outcome' as const, labelKey: 'progress.metricOutcome', val: pillarNow.outcome },
+              { key: 'tactics' as const, labelKey: 'progress.metricTactics', val: pillarNow.tactics },
             ] as const
           ).map((row) => {
             const v = row.val
@@ -535,7 +540,7 @@ export function ProgressScreen() {
             return (
               <View key={row.key} style={styles.breakRow}>
                 <Text allowFontScaling={false} style={styles.breakLabel}>
-                  {row.label}
+                  {t(row.labelKey)}
                 </Text>
                 <View style={styles.breakBarRow}>
                   <ProLibraryGradientProgressBar
@@ -556,7 +561,7 @@ export function ProgressScreen() {
 
         <View style={[styles.card, styles.cardSized, { width: cardW }]}>
           <Text allowFontScaling={false} style={styles.trainingConsistencyHeading}>
-            Training Consistency
+            {t('progress.trainingConsistency')}
           </Text>
           <View style={styles.consistencyMain}>
             <View style={styles.consistencyLeftCol}>
@@ -566,11 +571,11 @@ export function ProgressScreen() {
                     {sessionsThisWeek}
                   </Text>
                   <Text allowFontScaling={false} style={styles.consistencySessions}>
-                    Sessions
+                    {t('progress.sessions')}
                   </Text>
                 </View>
                 <Text allowFontScaling={false} style={styles.consistencySub}>
-                  This Week
+                  {t('progress.thisWeek')}
                 </Text>
               </View>
             </View>

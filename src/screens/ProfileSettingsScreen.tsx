@@ -28,6 +28,8 @@ import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { ShieldHeroRow } from "../components/ShieldHeroRow";
 import { authClient } from "../lib/auth-client";
+import { useTranslation } from "react-i18next";
+import { genderTranslationKey } from "../i18n/profileOptionValues";
 import { LinearGradient } from "expo-linear-gradient";
 import { DOMAIN } from "../../constants";
 import * as ImagePicker from "expo-image-picker";
@@ -158,6 +160,7 @@ function rankingLogoModule(org: string | null): number | null {
 }
 
 export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; onClose: () => void }) {
+  const { t } = useTranslation();
   const { onProfileUpdated, onClose } = props;
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { theme } = useContext(ThemeContext);
@@ -481,12 +484,12 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     const y0 = String(birthYearInput ?? "").trim();
     const anyBirth = !!(d0 || m0 || y0);
     if (anyBirth && (d0.length < 2 || m0.length < 2 || y0.length < 4)) {
-      Alert.alert("Birthdate", "Enter day, month, and year, or clear all birthdate fields.");
+      Alert.alert(t("commonAlerts.birthdate"), t("profileSettings.birthdateIncomplete"));
       return;
     }
     const birthResolved = tryBuildIsoBirthDate(birthDayInput, birthMonthInput, birthYearInput);
     if (birthResolved === undefined) {
-      Alert.alert("Birthdate", "That date is not valid. Please check day, month, and year.");
+      Alert.alert(t("commonAlerts.birthdate"), t("profileSettings.birthdateInvalid"));
       return;
     }
 
@@ -505,7 +508,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     const body = ((res as any)?.data ?? res) as { ok?: boolean; error?: string };
     setSaving(false);
     if (!body?.ok) {
-      Alert.alert("Save failed", body?.error || "Could not save profile.");
+      Alert.alert(t("commonAlerts.saveFailed"), body?.error || t("profileSettings.saveFailedProfile"));
       return;
     }
     await loadRemote();
@@ -515,18 +518,18 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   async function saveAccountProfile() {
     const emailTrim = accountEmailInput.trim();
     if (emailTrim.length > 0 && !emailTrim.includes("@")) {
-      Alert.alert("Invalid email", "Please enter a valid email address.");
+      Alert.alert(t("commonAlerts.invalidEmail"), t("profileSettings.invalidEmail"));
       return;
     }
     const cur = accountPasswordCurrent.trim();
     const neu = accountPasswordNew.trim();
     if (cur || neu) {
       if (!cur || !neu) {
-        Alert.alert("Password", "Enter both your current password and your new password.");
+        Alert.alert(t("commonAlerts.password"), t("profileSettings.passwordBoth"));
         return;
       }
       if (cur === neu) {
-        Alert.alert("Password", "New password must be different from your current password.");
+        Alert.alert(t("commonAlerts.password"), t("profileSettings.passwordDifferent"));
         return;
       }
     }
@@ -546,13 +549,15 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               },
             } as any
           )
-          .catch((e) => ({ error: { message: e?.message || "Password change failed." } } as any));
+          .catch((e) => ({
+            error: { message: e?.message || t("profileSettingsUi.passwordChangeFailed") },
+          } as any));
         const pwBody = ((pwRes as any)?.data ?? pwRes) as {
           error?: { message?: string };
           token?: string | null;
         };
         if (pwBody?.error?.message) {
-          Alert.alert("Password", pwBody.error.message);
+          Alert.alert(t("commonAlerts.password"), pwBody.error.message);
           return;
         }
         setAccountPasswordCurrent("");
@@ -573,12 +578,12 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         .catch((e) => ({ error: e?.message || "Failed to save account." } as any));
       const body = ((res as any)?.data ?? res) as { ok?: boolean; error?: string };
       if (!body?.ok) {
-        Alert.alert("Save failed", body?.error || "Could not save account.");
+        Alert.alert(t("commonAlerts.saveFailed"), body?.error || t("profileSettings.saveFailedAccount"));
         return;
       }
       await loadRemote();
       onProfileUpdated?.();
-      Alert.alert("Saved", "Account updated.");
+      Alert.alert(t("commonAlerts.saved"), t("profileSettings.accountUpdated"));
     } finally {
       setAccountSaving(false);
     }
@@ -604,25 +609,25 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     const body = ((res as any)?.data ?? res) as { ok?: boolean; error?: string };
     setLocationSaving(false);
     if (!body?.ok) {
-      Alert.alert("Save failed", body?.error || "Could not save location.");
+      Alert.alert(t("commonAlerts.saveFailed"), body?.error || t("profileSettings.saveFailedLocation"));
       return;
     }
     await loadRemote();
     onProfileUpdated?.();
-    Alert.alert("Saved", "Your coaches can see this under your name on My Coach.");
+    Alert.alert(t("commonAlerts.saved"), t("profileSettings.locationSaved"));
   }
 
   async function saveGameSettings() {
     if (hasRankingInput === null) {
-      Alert.alert("Missing info", "Select if you have a ranking.");
+      Alert.alert(t("commonAlerts.missingInfo"), t("profileSettings.selectRanking"));
       return;
     }
     if (hasRankingInput === false && !levelInput) {
-      Alert.alert("Missing level", "Select your level.");
+      Alert.alert(t("commonAlerts.missingLevel"), t("profileSettings.selectLevel"));
       return;
     }
     if (hasRankingInput === true && (!rankingOrgInput || !rankingValueInput.trim())) {
-      Alert.alert("Missing ranking", "Select organization and enter rating.");
+      Alert.alert(t("commonAlerts.missingRanking"), t("profileSettings.selectRankingOrg"));
       return;
     }
 
@@ -641,21 +646,21 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     const body = ((res as any)?.data ?? res) as { ok?: boolean; error?: string };
     setGameSaving(false);
     if (!body?.ok) {
-      Alert.alert("Save failed", body?.error || "Could not save game settings.");
+      Alert.alert(t("commonAlerts.saveFailed"), body?.error || t("profileSettings.saveFailedGame"));
       return;
     }
     await loadRemote();
     onProfileUpdated?.();
-    Alert.alert("Saved", "Game settings updated.");
+    Alert.alert(t("commonAlerts.saved"), t("profileSettings.gameUpdated"));
   }
 
   const sectionTitleMap: Record<NonNullable<typeof activeSection>, string> = {
-    personal: "Personal Data",
-    account: "Account",
-    location: "Location",
-    game: "Game Settings",
+    personal: t("profileSettingsUi.personalData"),
+    account: t("profileSettingsUi.account"),
+    location: t("profileSettingsUi.location"),
+    game: t("profileSettingsUi.gameSettings"),
   };
-  const currentTitle = activeSection ? sectionTitleMap[activeSection] : "Profile Edit";
+  const currentTitle = activeSection ? sectionTitleMap[activeSection] : t("profileSettingsUi.profileEdit");
 
   const MenuRow = ({
     title,
@@ -701,7 +706,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         style={styles.subsectionBackBtn}
         onPress={onBack}
         activeOpacity={0.85}
-        accessibilityLabel="Go back"
+        accessibilityLabel={t("common.goBack")}
       >
         <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
       </TouchableOpacity>
@@ -774,7 +779,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             <TouchableOpacity
               onPress={pickAndUploadAvatar}
               activeOpacity={0.88}
-              accessibilityLabel="Change profile photo"
+              accessibilityLabel={t("profileSettingsUi.changeProfilePhoto")}
             >
               {profileImageUri ? (
                 <Image source={{ uri: profileImageUri }} style={styles.personalHeroAvatar} />
@@ -807,7 +812,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 onFocus={() => commitPersonalFieldFocus("name")}
                 onBlur={() => scheduleBlurClearField()}
                 style={styles.personalFieldInput}
-                placeholder="First name"
+                placeholder={t("profileSettingsUi.firstName")}
                 placeholderTextColor={phColor}
               />
             </View>
@@ -831,7 +836,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 onFocus={() => commitPersonalFieldFocus("lastname")}
                 onBlur={() => scheduleBlurClearField()}
                 style={styles.personalFieldInput}
-                placeholder="Last name"
+                placeholder={t("profileSettingsUi.lastName")}
                 placeholderTextColor={phColor}
               />
             </View>
@@ -859,7 +864,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   onFocus={() => commitPersonalFieldFocus("username")}
                   onBlur={() => scheduleBlurClearField()}
                   style={[styles.personalFieldInput, styles.personalUsernameInput]}
-                  placeholder="username"
+                  placeholder={t("profileSettingsUi.username")}
                   placeholderTextColor={phColor}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -974,7 +979,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
 
           <SubsectionFooter
             onBack={() => setActiveSection(null)}
-            primaryLabel="Save"
+            primaryLabel={t("common.save")}
             onPrimary={saveBasicProfile}
             primaryDisabled={saving}
             primaryLoading={saving}
@@ -991,12 +996,12 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             <Pressable style={StyleSheet.absoluteFill} onPress={() => setGenderPickerOpen(false)} />
             <View style={[styles.countryModalCard, { maxHeight: winH * 0.5 }]}>
               <View style={styles.countryModalHeader}>
-                <Text style={styles.countryModalTitle}>Gender</Text>
+                <Text style={styles.countryModalTitle}>{t("profileSettingsUi.gender")}</Text>
                 <TouchableOpacity
                   onPress={() => setGenderPickerOpen(false)}
                   hitSlop={12}
                   accessibilityRole="button"
-                  accessibilityLabel="Close"
+                  accessibilityLabel={t("profileSettingsUi.close")}
                 >
                   <Ionicons name="close" size={22} color={PERSONAL_LABEL_COLOR} />
                 </TouchableOpacity>
@@ -1020,7 +1025,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                         style={[styles.countryRowText, selected && styles.countryRowTextActive]}
                         numberOfLines={1}
                       >
-                        {item}
+                        {t(genderTranslationKey(item))}
                       </Text>
                       {selected ? (
                         <Ionicons name="checkmark" size={18} color="#18C0FF" />
@@ -1070,7 +1075,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             <TouchableOpacity
               onPress={pickAndUploadAvatar}
               activeOpacity={0.88}
-              accessibilityLabel="Change profile photo"
+              accessibilityLabel={t("profileSettingsUi.changeProfilePhoto")}
             >
               {profileImageUri ? (
                 <Image source={{ uri: profileImageUri }} style={styles.personalHeroAvatar} />
@@ -1103,7 +1108,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 onFocus={() => commitAccountFieldFocus("email")}
                 onBlur={() => scheduleAccountBlurClear()}
                 style={styles.personalFieldInput}
-                placeholder="you@email.com"
+                placeholder={t("profileSettingsUi.emailPlaceholder")}
                 placeholderTextColor={phColor}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -1130,7 +1135,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 onFocus={() => commitAccountFieldFocus("phone")}
                 onBlur={() => scheduleAccountBlurClear()}
                 style={styles.personalFieldInput}
-                placeholder="Phone number"
+                placeholder={t("profileSettingsUi.phone")}
                 placeholderTextColor={phColor}
                 keyboardType="phone-pad"
               />
@@ -1156,7 +1161,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   onFocus={() => commitAccountFieldFocus("passwordCurrent")}
                   onBlur={() => scheduleAccountBlurClear()}
                   style={[styles.personalFieldInput, styles.personalUsernameInput]}
-                  placeholder="Current password"
+                  placeholder={t("profileSettingsUi.currentPassword")}
                   placeholderTextColor={phColor}
                   secureTextEntry={!showAccountCurrentPassword}
                   autoCapitalize="none"
@@ -1168,7 +1173,9 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   onPress={() => setShowAccountCurrentPassword((v) => !v)}
                   activeOpacity={0.75}
                   accessibilityLabel={
-                    showAccountCurrentPassword ? "Hide password" : "Show password"
+                    showAccountCurrentPassword
+                      ? t("profileSettingsUi.hidePassword")
+                      : t("profileSettingsUi.showPassword")
                   }
                 >
                   <LocalSvgAsset
@@ -1202,7 +1209,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   onFocus={() => commitAccountFieldFocus("passwordNew")}
                   onBlur={() => scheduleAccountBlurClear()}
                   style={[styles.personalFieldInput, styles.personalUsernameInput]}
-                  placeholder="New password"
+                  placeholder={t("profileSettingsUi.newPassword")}
                   placeholderTextColor={phColor}
                   secureTextEntry={!showAccountNewPassword}
                   autoCapitalize="none"
@@ -1213,7 +1220,11 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   hitSlop={10}
                   onPress={() => setShowAccountNewPassword((v) => !v)}
                   activeOpacity={0.75}
-                  accessibilityLabel={showAccountNewPassword ? "Hide password" : "Show password"}
+                  accessibilityLabel={
+                    showAccountNewPassword
+                      ? t("profileSettingsUi.hidePassword")
+                      : t("profileSettingsUi.showPassword")
+                  }
                 >
                   <LocalSvgAsset
                     assetModule={
@@ -1229,7 +1240,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
 
           <SubsectionFooter
             onBack={() => setActiveSection(null)}
-            primaryLabel="Save"
+            primaryLabel={t("common.save")}
             onPrimary={() => void saveAccountProfile()}
             primaryDisabled={accountSaving}
             primaryLoading={accountSaving}
@@ -1272,7 +1283,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             }}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="Select country"
+            accessibilityLabel={t("profileSettingsUi.selectCountry")}
           >
               {locationCountry ? (
                 <>
@@ -1283,14 +1294,14 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 </>
               ) : (
                 <Text style={styles.countryTriggerPlaceholder} numberOfLines={1}>
-                  {locationInput ? locationInput : "Select your country"}
+                  {locationInput ? locationInput : t("profileSettingsUi.selectYourCountry")}
                 </Text>
               )}
               <Ionicons name="chevron-down" size={18} color="rgba(200, 220, 255, 0.85)" />
           </TouchableOpacity>
           <SubsectionFooter
             onBack={() => setActiveSection(null)}
-            primaryLabel="Save location"
+            primaryLabel={t("profileSettingsUi.saveLocation")}
             onPrimary={() => void saveLocationProfile()}
             primaryDisabled={locationSaving}
             primaryLoading={locationSaving}
@@ -1329,7 +1340,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   <TextInput
                     value={countrySearch}
                     onChangeText={setCountrySearch}
-                    placeholder="Search country"
+                    placeholder={t("profileSettingsUi.searchCountry")}
                     placeholderTextColor={PERSONAL_LABEL_COLOR}
                     style={styles.countrySearchInput}
                     autoCorrect={false}
@@ -1485,7 +1496,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                     value={rankingValueInput}
                     onChangeText={setRankingValueInput}
                     style={styles.input}
-                    placeholder="Please put your rating"
+                    placeholder={t("profileSetup.ratingPlaceholder")}
                     placeholderTextColor={theme.placeholderTextColor ?? theme.mutedForegroundColor}
                   />
                 </View>
@@ -1493,7 +1504,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             </View>
           <SubsectionFooter
             onBack={() => setActiveSection(null)}
-            primaryLabel="Save Game Settings"
+            primaryLabel={t("profileSettingsUi.saveGameSettings")}
             onPrimary={saveGameSettings}
             primaryDisabled={gameSaving}
             primaryLoading={gameSaving}
@@ -1536,7 +1547,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         <View style={styles.profileEditHeaderRow}>
           <View style={styles.profileEditTitleRow}>
             <Text allowFontScaling={false} style={styles.profileEditTitleInline}>
-              Profile Edit
+              {t("profileSettingsUi.profileEdit")}
             </Text>
           </View>
         </View>
@@ -1548,7 +1559,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               coachName={data.user?.name || "Player"}
               coachImageUri={!loading ? profileImageUri : null}
               onSharePress={() => void shareProfile()}
-              shareAccessibilityLabel="Share profile"
+              shareAccessibilityLabel={t("profileSettingsUi.shareProfile")}
               shareIconModule={SHARE_BUTTON_SVG}
               shareIconSize={36}
               shieldCardProps={{
@@ -1577,7 +1588,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               ]}
               onPress={pickAndUploadAvatar}
               activeOpacity={0.88}
-              accessibilityLabel="Change profile photo"
+              accessibilityLabel={t("profileSettingsUi.changeProfilePhoto")}
             >
               <LocalSvgAsset assetModule={CAMERA_ICON_SVG} width={18} height={18} />
             </TouchableOpacity>
@@ -1593,35 +1604,35 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           <View style={styles.quickInfoItem}>
             <LocalSvgAsset assetModule={BIRTHDAY_ICON_SVG} width={16} height={16} />
             <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
-              {shieldQuickBirthLabel ?? "Date not set"}
+              {shieldQuickBirthLabel ?? t("profileSettingsUi.dateNotSet")}
             </Text>
           </View>
           <View style={styles.quickInfoItem}>
             <LocalSvgAsset assetModule={LOCATION_PIN_ICON_SVG} width={16} height={16} />
             <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
-              {shieldQuickLocationLabel ?? "Location not set"}
+              {shieldQuickLocationLabel ?? t("profileSettingsUi.locationNotSet")}
             </Text>
           </View>
         </View>
 
         <AdminGradientCard innerStyle={{ overflow: "hidden" }}>
           <MenuRow
-            title="Personal Data"
+            title={t("profileSettingsUi.personalData")}
             iconModule={MENU_SVG.personal}
             onPress={() => setActiveSection("personal")}
           />
           <MenuRow
-            title="Account"
+            title={t("profileSettingsUi.account")}
             iconModule={MENU_SVG.account}
             onPress={() => setActiveSection("account")}
           />
           <MenuRow
-            title="Location"
+            title={t("profileSettingsUi.location")}
             iconModule={MENU_SVG.location}
             onPress={() => setActiveSection("location")}
           />
           <MenuRow
-            title="Game Settings"
+            title={t("profileSettingsUi.gameSettings")}
             iconModule={MENU_SVG.game}
             onPress={() => setActiveSection("game")}
           />

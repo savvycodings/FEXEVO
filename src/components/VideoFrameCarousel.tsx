@@ -16,7 +16,6 @@ const FRAME_GAP = 2
 const FRAME_STEP = FRAME_WIDTH + FRAME_GAP
 const HANDLE_WIDTH = 20
 const HANDLE_CORNER_RADIUS = 3
-const HANDLE_EDGE_INSET = 1
 /** Nudge left handle slightly past inner edge to kill subpixel seam (stripInner overflow visible). */
 const HANDLE_LEFT_EDGE_BLEED = 2
 const MIN_HANDLE_HIT_SLOP = 22
@@ -40,6 +39,8 @@ export type VideoFrameCarouselProps = {
   trimStartMs: number
   trimEndMs: number
   minClipDurationMs?: number
+  /** Cap selected range length (AI Coach: 3s max to Modal). */
+  maxClipDurationMs?: number
   onTrimChange: (next: { startMs: number; endMs: number }) => void
   onScrubStart?: () => void
   onScrubEnd?: () => void
@@ -55,6 +56,31 @@ function fmt(ms: number) {
   const m = Math.floor(total / 60)
   const s = total % 60
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function timeMsToStripX(ms: number, durationMs: number, viewportW: number): number {
+  if (durationMs <= 0 || viewportW <= 0) return 0
+  return (Math.max(0, Math.min(durationMs, ms)) / durationMs) * viewportW
+}
+
+function applyMaxClipDuration(
+  startMs: number,
+  endMs: number,
+  durationMs: number,
+  minClipDurationMs: number,
+  maxClipDurationMs: number | undefined,
+  anchor: 'start' | 'end'
+): { startMs: number; endMs: number } {
+  let start = Math.max(0, Math.min(durationMs, startMs))
+  let end = Math.max(start + minClipDurationMs, Math.min(durationMs, endMs))
+  const cap = maxClipDurationMs
+  if (cap == null || cap <= 0 || end - start <= cap) return { startMs: start, endMs: end }
+  if (anchor === 'end') {
+    start = Math.max(0, end - cap)
+  } else {
+    end = Math.min(durationMs, start + cap)
+  }
+  return { startMs: start, endMs: end }
 }
 
 export function normalizeThumbnailImageUri(raw: string): string {
@@ -249,6 +275,7 @@ export function VideoFrameCarousel({
   trimStartMs,
   trimEndMs,
   minClipDurationMs = 400,
+  maxClipDurationMs,
   onTrimChange,
   onScrubStart,
   onScrubEnd,
@@ -289,6 +316,7 @@ export function VideoFrameCarousel({
     durationMs: 0,
     msPerPx: 0,
     minClipDurationMs: 0,
+    maxClipDurationMs: 0,
   })
 
   const intervalSec = useMemo(() => {
@@ -466,19 +494,20 @@ export function VideoFrameCarousel({
     }
   }, [videoUri, durationMs, times])
 
-  const leftX = dragTrimStartMs * pxPerMs
-  const rightX = dragTrimEndMs * pxPerMs
-  const clampedLeftX = Math.max(HANDLE_WIDTH / 2, Math.min(viewportW - HANDLE_WIDTH / 2, leftX))
-  const clampedRightX = Math.max(HANDLE_WIDTH / 2, Math.min(viewportW - HANDLE_WIDTH / 2, rightX))
+  const startStripX = timeMsToStripX(safeStartMs, durationMs, viewportW)
+  const endStripX = timeMsToStripX(safeEndMs, durationMs, viewportW)
+  const leftHandleCenterX = startStripX + HANDLE_WIDTH / 2
+  const rightHandleCenterX = endStripX - HANDLE_WIDTH / 2
   latestRef.current = {
-    clampedLeftX,
-    clampedRightX,
+    clampedLeftX: leftHandleCenterX,
+    clampedRightX: rightHandleCenterX,
     currentTimeMs,
     dragTrimStartMs,
     dragTrimEndMs,
     durationMs,
     msPerPx,
     minClipDurationMs,
+    maxClipDurationMs: maxClipDurationMs ?? 0,
   }
 
   const onScrubStartRef = useRef(onScrubStart)
@@ -527,8 +556,14 @@ export function VideoFrameCarousel({
       },
       onPanResponderMove: (_evt, gestureState) => {
         const mode = dragModeRef.current
-        const { durationMs: d, msPerPx: mpp, minClipDurationMs: minDur, dragTrimStartMs: s, dragTrimEndMs: e } =
-          latestRef.current
+        const {
+          durationMs: d,
+          msPerPx: mpp,
+          minClipDurationMs: minDur,
+          maxClipDurationMs: maxDur,
+          dragTrimStartMs: s,
+          dragTrimEndMs: e,
+        } = latestRef.current
         if (!mode || d <= 0 || mpp <= 0) return
         const dx = gestureState.dx
 
@@ -544,18 +579,30 @@ export function VideoFrameCarousel({
         if (mode === 'left') {
           const raw = dragStartTrimRef.current.startMs + dx * mpp
           const maxStart = Math.max(0, e - minDur)
-          const nextStart = Math.round(Math.max(0, Math.min(maxStart, raw)))
-          setDragTrimStartMs(nextStart)
-          pendingTrimRef.current = { startMs: nextStart, endMs: e }
+          let nextStart = Math.round(Math.max(0, Math.min(maxStart, raw)))
+          let nextEnd = e
+          if (maxDur > 0 && nextEnd - nextStart > maxDur) {
+            nextEnd = Math.min(d, nextStart + maxDur)
+          }
+          const capped = applyMaxClipDuration(nextStart, nextEnd, d, minDur, maxDur || undefined, 'start')
+          setDragTrimStartMs(capped.startMs)
+          setDragTrimEndMs(capped.endMs)
+          pendingTrimRef.current = capped
           scheduleFlushRef.current()
           return
         }
 
         const raw = dragStartTrimRef.current.endMs + dx * mpp
         const minEnd = Math.min(d, s + minDur)
-        const nextEnd = Math.round(Math.max(minEnd, Math.min(d, raw)))
-        setDragTrimEndMs(nextEnd)
-        pendingTrimRef.current = { startMs: s, endMs: nextEnd }
+        let nextEnd = Math.round(Math.max(minEnd, Math.min(d, raw)))
+        let nextStart = s
+        if (maxDur > 0 && nextEnd - nextStart > maxDur) {
+          nextStart = Math.max(0, nextEnd - maxDur)
+        }
+        const capped = applyMaxClipDuration(nextStart, nextEnd, d, minDur, maxDur || undefined, 'end')
+        setDragTrimStartMs(capped.startMs)
+        setDragTrimEndMs(capped.endMs)
+        pendingTrimRef.current = capped
         scheduleFlushRef.current()
       },
       onPanResponderRelease: () => {
@@ -575,26 +622,31 @@ export function VideoFrameCarousel({
     })
   ).current
 
+  const selectionMs = Math.max(0, safeEndMs - safeStartMs)
+  const selectionSecLabel =
+    selectionMs >= 1000
+      ? `${(selectionMs / 1000).toFixed(1)}s`
+      : `${Math.max(1, Math.round(selectionMs))}ms`
+  const maxClipSec =
+    typeof maxClipDurationMs === 'number' && maxClipDurationMs > 0
+      ? maxClipDurationMs / 1000
+      : null
   const lengthLabel =
-    durationSec != null && durationSec > 0 ? `Actual length: ${durationSec}s` : 'Actual length: —'
-  const edgeLeftX = Math.max(HANDLE_WIDTH / 2, Math.min(viewportW - HANDLE_WIDTH / 2, safeStartMs * pxPerMs))
-  const edgeRightX = Math.max(HANDLE_WIDTH / 2, Math.min(viewportW - HANDLE_WIDTH / 2, safeEndMs * pxPerMs))
-  const selectedLeft = Math.max(0, Math.min(viewportW, edgeLeftX))
-  const selectedRight = Math.max(0, Math.min(viewportW, edgeRightX))
-  const leftHandleLeft = Math.max(0, Math.min(Math.max(0, viewportW - HANDLE_WIDTH), selectedLeft - HANDLE_WIDTH / 2))
-  const rightHandleLeft = Math.max(0, Math.min(Math.max(0, viewportW - HANDLE_WIDTH), selectedRight - HANDLE_WIDTH / 2))
-  const leftAtStartEdge = leftHandleLeft <= 0.5
-  const rightAtEndEdge = rightHandleLeft >= Math.max(0, viewportW - HANDLE_WIDTH - 0.5)
-  const selectedLeftEdge = leftAtStartEdge ? 0 : selectedLeft
-  const selectedRightEdge = rightAtEndEdge ? Math.max(0, viewportW - HANDLE_EDGE_INSET) : selectedRight
-  const leftHandleRenderLeft = leftAtStartEdge
-    ? -HANDLE_LEFT_EDGE_BLEED
-    : Math.max(0, Math.min(Math.max(0, viewportW - HANDLE_WIDTH), leftHandleLeft))
-  const rightHandleRenderLeft = rightAtEndEdge
-    ? Math.max(0, viewportW - HANDLE_WIDTH - HANDLE_EDGE_INSET)
-    : Math.max(0, Math.min(Math.max(0, viewportW - HANDLE_WIDTH - HANDLE_EDGE_INSET), rightHandleLeft))
+    durationSec != null && durationSec > 0
+      ? maxClipSec != null
+        ? `Selected ${selectionSecLabel} (max ${maxClipSec}s) · full video ${durationSec}s`
+        : `Selected ${selectionSecLabel} · full video ${durationSec}s`
+      : `Selected ${selectionSecLabel}`
+  const selectedLeftEdge = startStripX
+  const selectedRightEdge = endStripX
+  const leftHandleRenderLeft =
+    safeStartMs <= 0 ? -HANDLE_LEFT_EDGE_BLEED : Math.max(0, Math.min(viewportW - HANDLE_WIDTH, startStripX))
+  const rightHandleRenderLeft = Math.max(
+    0,
+    Math.min(viewportW - HANDLE_WIDTH, endStripX - HANDLE_WIDTH)
+  )
 
-  const playheadLineX = Math.max(selectedLeft, Math.min(selectedRight, playheadX))
+  const playheadLineX = Math.max(selectedLeftEdge, Math.min(selectedRightEdge, playheadX))
 
   return (
     <View style={styles.shell}>
@@ -702,6 +754,8 @@ export function VideoFrameCarousel({
         </Text>
         <Text allowFontScaling={false} style={styles.timeTextCenter}>
           {fmt(playheadTimeMs)}
+          {' · '}
+          {selectionSecLabel}
         </Text>
         <Text allowFontScaling={false} style={styles.timeText}>
           {fmt(dragTrimEndMs)}
