@@ -25,13 +25,15 @@ import { MyCoachScoreRing } from './myCoach/ScoreRing'
 import { getCachedProfile } from '../lib/profile-cache'
 import { useTranslation } from 'react-i18next'
 import { DOMAIN } from '../../constants'
+import Svg, { Path } from 'react-native-svg'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 
 const BG = '#030A17'
+const MUTED = '#86A7D2'
+const SEND_ICON_COLOR = '#336AB4'
 const CHAT_PANEL_BG = '#041641'
 const FALLBACK_PEER_AVATAR = require('../../assets/coachs/img1.png')
 const CHAT_MSG_ICON_SVG = require('../../assets/chat/msgicon1.svg')
-const CHAT_SEND_ICON_SVG = require('../../assets/chat/sendicon1.svg')
 const NEWVIDEO_SVG = require('../../assets/chat/newvideo.svg')
 /** Native SVG 72×13 — scale by height for the student row. */
 const NEWVIDEO_ROW_H = 16
@@ -39,6 +41,19 @@ const NEWVIDEO_ROW_W = Math.round((72 / 13) * NEWVIDEO_ROW_H)
 
 type ChatStackNav = NativeStackNavigationProp<MyCoachTabStackParamList>
 type R = RouteProp<MyCoachTabStackParamList, 'CoachStudentChat'>
+
+function ChatSendIcon({ size = 24, color = SEND_ICON_COLOR }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21.0477 3.05293C18.8697 0.707361 2.48648 6.4532 2.50001 8.551C2.51535 10.9299 8.89809 11.6617 10.6672 12.1581C11.7311 12.4565 12.016 12.7625 12.2613 13.8781C13.3723 18.9305 13.9301 21.4435 15.2014 21.4996C17.2278 21.5892 23.1733 5.342 21.0477 3.05293Z"
+        stroke={color}
+        strokeWidth={1.5}
+      />
+      <Path d="M11.5 12.5L15 9" stroke={color} strokeWidth={1.5} />
+    </Svg>
+  )
+}
 
 type ChatRow = {
   id: string
@@ -230,6 +245,21 @@ export function CoachStudentChatScreen() {
 
   return (
     <View style={styles.screen}>
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.85}
+          style={styles.backRow}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityLabel={t('coachChat.backToStudents')}
+        >
+          <Ionicons name="chevron-back" size={22} color={MUTED} />
+          <Text allowFontScaling={false} style={[styles.backLabel, { fontFamily: fonts.regularFont }]}>
+            {t('coachChat.backToStudents')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <KeyboardAwareScrollView
         style={styles.keyboardWrap}
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 16 + insets.bottom }}
@@ -238,22 +268,6 @@ export function CoachStudentChatScreen() {
         bounces={false}
         bottomOffset={insets.bottom + 20}
       >
-        {/* ── Back button ── */}
-        <View style={[styles.topPad, { paddingTop: 10 + insets.top }]}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.85}
-            style={styles.backRow}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityLabel="Back to Students"
-          >
-            <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
-            <Text allowFontScaling={false} style={[styles.backLabel, { fontFamily: fonts.regularFont }]}>
-              {t('coachChat.backToStudents')}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         {/* ── "Student" label + legend ── */}
         <View style={styles.legendBar}>
           <Text allowFontScaling={false} style={[styles.studentLabel, { fontFamily: fonts.regularFont }]}>
@@ -371,13 +385,13 @@ export function CoachStudentChatScreen() {
                     onPress={() => void onSend()}
                     disabled={sending || !draft.trim()}
                     activeOpacity={0.88}
-                    style={[styles.sendBtn, (!draft.trim() || sending) && styles.sendBtnDisabled]}
+                    style={styles.sendBtn}
                     accessibilityLabel="Send message"
                   >
                     {sending ? (
-                      <ActivityIndicator color="#00B8FF" size="small" />
+                      <ActivityIndicator color={SEND_ICON_COLOR} size="small" />
                     ) : (
-                      <LocalSvgAsset assetModule={CHAT_SEND_ICON_SVG} width={30} height={30} />
+                      <ChatSendIcon size={24} color={SEND_ICON_COLOR} />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -399,20 +413,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  /* ── Top ── */
-  topPad: {
+  topBar: {
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   backRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 24,
   },
   backLabel: {
-    color: '#FFFFFF',
+    color: MUTED,
     fontSize: 14,
+    lineHeight: 22,
+    includeFontPadding: false,
   },
 
   /* ── Legend bar ── */
@@ -421,10 +436,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
+    paddingTop: 16,
     marginBottom: 16,
   },
   studentLabel: {
-    color: 'rgba(148,163,184,0.95)',
+    color: MUTED,
     fontSize: 13,
   },
   legendRight: {
@@ -442,7 +458,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   legendText: {
-    color: 'rgba(200,220,255,0.9)',
+    color: MUTED,
     fontSize: 12,
   },
 
@@ -625,22 +641,19 @@ const styles = StyleSheet.create({
     color: '#F1F5F9',
     fontSize: 15,
     maxHeight: 100,
-    paddingTop: 16,
-    paddingBottom: 2,
+    paddingVertical: 0,
     textAlign: 'left',
     ...Platform.select({
-      android: { textAlignVertical: 'top' as const },
+      android: { textAlignVertical: 'center' as const, includeFontPadding: false },
+      ios: { paddingTop: 0 },
       default: {},
     }),
   },
   sendBtn: {
-    marginLeft: 8,
-    width: 42,
-    height: 42,
+    marginLeft: 6,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  sendBtnDisabled: {
-    opacity: 0.35,
   },
 })

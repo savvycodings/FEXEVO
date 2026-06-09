@@ -95,7 +95,7 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
       <Header
         flatOverlay
         onBackPress={onClose}
-        onLogoPress={() => navigateMainTab('AICoach')}
+        onProPress={() => navigation.navigate('ProSubscription')}
         onSettingsPress={() => navigation.navigate('ProfileSettings')}
       />
       <ScrollView

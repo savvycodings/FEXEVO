@@ -89,7 +89,7 @@ export function CoachDetailScreen() {
         <Header
           flatOverlay
           onBackPress={() => navigation.goBack()}
-          onLogoPress={() => navigateMainTab("AICoach")}
+          onProPress={() => navigation.navigate("ProSubscription")}
           onSettingsPress={() => navigation.navigate("ProfileSettings")}
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
@@ -118,7 +118,7 @@ export function CoachDetailScreen() {
       <Header
         flatOverlay
         onBackPress={() => navigation.goBack()}
-        onLogoPress={() => navigateMainTab("AICoach")}
+        onProPress={() => navigation.navigate("ProSubscription")}
         onSettingsPress={() => navigation.navigate("ProfileSettings")}
         onNotificationsPress={() => navigation.navigate("Notifications")}
       />

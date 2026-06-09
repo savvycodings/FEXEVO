@@ -24,25 +24,28 @@ async function loadNotifications(): Promise<ExpoNotificationsModule | null> {
   try {
     const Notifications = await import('expo-notifications')
     if (!handlerConfigured) {
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldPlaySound: true,
-          shouldSetBadge: false,
-          shouldShowBanner: true,
-          shouldShowList: true,
-        }),
-      })
-      handlerConfigured = true
+      try {
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+            shouldShowBanner: true,
+            shouldShowList: true,
+          }),
+        })
+        handlerConfigured = true
+      } catch {
+        // Expo Go (SDK 53+) does not support remote push — ignore in dev.
+        notificationsUnavailable = true
+        return null
+      }
     }
     notificationsMod = Notifications
     return notificationsMod
   } catch (err) {
     notificationsUnavailable = true
-    if (__DEV__) {
-      console.warn(
-        '[correctionImageNotifications] expo-notifications unavailable (rebuild dev client: npx expo run:android or run:ios)',
-        isNativeModuleError(err) ? err : err
-      )
+    if (__DEV__ && !isNativeModuleError(err)) {
+      console.warn('[correctionImageNotifications] expo-notifications unavailable', err)
     }
     return null
   }

@@ -24,6 +24,8 @@ const HORIZONTAL_PADDING = 16
 const HEADER_BOTTOM_STROKE = 'rgba(0, 102, 255, 0.2)'
 
 type HeaderProps = {
+  /** Opens Pro subscription screen (top-right PRO badge). */
+  onProPress?: () => void
   onLogoPress?: () => void
   onProfilePress?: () => void
   profileName?: string
@@ -43,6 +45,7 @@ type HeaderProps = {
 }
 
 export function Header({
+  onProPress,
   onLogoPress,
   onProfilePress,
   profileName,
@@ -151,8 +154,8 @@ export function Header({
         <TouchableOpacity
           style={styles.rightButton}
           activeOpacity={0.6}
-          onPress={onLogoPress ?? handlePresentModalPress}
-          accessibilityLabel="Open home and app options"
+          onPress={onProPress ?? onLogoPress ?? handlePresentModalPress}
+          accessibilityLabel="Open Pro subscription"
         >
           <LocalSvgAsset assetModule={HEADER_MARK_SVG} width={65} height={24} />
         </TouchableOpacity>

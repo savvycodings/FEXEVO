@@ -41,6 +41,8 @@ function deriveOverallPillarScore(rows: RatingCategoryRow[]): number | null {
   return values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null
 }
 
+type CoachStudentRole = 'none' | 'coach' | 'student'
+
 type SessionDataContextValue = {
   activities: ActivitySession[]
   activitiesLoading: boolean
@@ -52,6 +54,10 @@ type SessionDataContextValue = {
   profileImageUri: string | null
   /** Saved `profile.areaLocation` (country name or ISO code); drives the shield flag. */
   profileAreaLocation: string | null
+  coachStudentRole: CoachStudentRole
+  viewerIsCoach: boolean
+  /** True after cache or `/profile/me` has resolved coach vs student role. */
+  profileRoleLoaded: boolean
   overallPillarScore: number | null
   /** When user focuses Activities / You / Progress — refreshes stale slices (cooldown). */
   onTabFocus: () => void
@@ -85,7 +91,10 @@ export function SessionDataProvider({
   const [profileName, setProfileName] = useState<string | null>(null)
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
   const [profileAreaLocation, setProfileAreaLocation] = useState<string | null>(null)
+  const [coachStudentRole, setCoachStudentRole] = useState<CoachStudentRole>('none')
+  const [profileRoleLoaded, setProfileRoleLoaded] = useState(false)
   const [overallPillarScore, setOverallPillarScore] = useState<number | null>(null)
+  const viewerIsCoach = coachStudentRole === 'coach'
 
   const lastActivitiesOkAt = useRef(0)
   const lastRatingOkAt = useRef(0)
@@ -177,7 +186,7 @@ export function SessionDataProvider({
       }
       const body = ((res as { data?: unknown })?.data ?? res) as {
         user?: { name?: string; image?: string | null }
-        profile?: { areaLocation?: string | null } | null
+        profile?: { areaLocation?: string | null; coachStudentRole?: string | null } | null
       }
       if (!body?.user) {
         return
@@ -188,6 +197,11 @@ export function SessionDataProvider({
       setProfileImageUri(profileImageToAbsoluteUri(body.user.image))
       const area = body.profile?.areaLocation
       setProfileAreaLocation(typeof area === 'string' && area.trim() ? area.trim() : null)
+      if (body.profile != null) {
+        const cr = body.profile.coachStudentRole
+        setCoachStudentRole(cr === 'coach' || cr === 'student' ? cr : 'none')
+      }
+      setProfileRoleLoaded(true)
       lastProfileOkAt.current = Date.now()
     } catch {
       /* keep previous */
@@ -203,6 +217,11 @@ export function SessionDataProvider({
     const area = cached?.profile?.areaLocation
     if (typeof area === 'string' && area.trim()) {
       setProfileAreaLocation(area.trim())
+    }
+    const cr = cached?.profile?.coachStudentRole
+    if (cr === 'coach' || cr === 'student' || cr === 'none') {
+      setCoachStudentRole(cr)
+      setProfileRoleLoaded(true)
     }
   }, [])
 
@@ -265,6 +284,9 @@ export function SessionDataProvider({
       profileName,
       profileImageUri,
       profileAreaLocation,
+      coachStudentRole,
+      viewerIsCoach,
+      profileRoleLoaded,
       overallPillarScore,
       onTabFocus,
       invalidate,
@@ -279,6 +301,9 @@ export function SessionDataProvider({
       profileName,
       profileImageUri,
       profileAreaLocation,
+      coachStudentRole,
+      viewerIsCoach,
+      profileRoleLoaded,
       overallPillarScore,
       onTabFocus,
       invalidate,

@@ -29,11 +29,13 @@ import type { ActivitySession } from '../lib/activitySession'
 import { displayTrainShotTitle } from '../lib/trainShotDisplay'
 import { ActivitiesVideoAnalysis } from './ActivitiesVideoAnalysis'
 import { ProLibraryGradientProgressBar } from '../components'
-import { ShieldProportionalFrame } from '../components/ShieldProportionalFrame'
+import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
+import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { useTranslation } from 'react-i18next'
 
-const SCORE_BG = require('../../assets/aicoach/scorepng.png')
-const SMALL_SHIELD_CAP_REF_WIN_W = 430
+const AI_COACH_PLACEHOLDER = require('../../assets/actiities/aicoachplacehokder.svg')
+/** Matches My Students scroll + hero horizontal inset. */
+const HERO_HORIZONTAL_PAD = 20
 
 /** Shots tab — progress high scores */
 const SHOTS_BAR_CYAN = '#00B8FF'
@@ -108,6 +110,30 @@ function shiftDateKey(dateKey: string, deltaDays: number): string {
   const d = parseDateKey(dateKey)
   d.setDate(d.getDate() + deltaDays)
   return localDateKey(d)
+}
+
+function ActivitiesNoShotsPlaceholder({
+  styles,
+}: {
+  styles: ReturnType<typeof getShotsStyles>
+}) {
+  const { t } = useTranslation()
+  return (
+    <View style={styles.emptyShotsWrap}>
+      <Text allowFontScaling={false} style={styles.emptyShotsText}>
+        {t('activities.emptyShotsPlaceholderLine1')}
+        {'\n'}
+        {t('activities.emptyShotsPlaceholderLine2')}
+        {'\n'}
+        {t('activities.emptyShotsPlaceholderLine3Prefix')}
+        <Text allowFontScaling={false} style={styles.emptyShotsAccent}>
+          {t('activities.emptyShotsPlaceholderAccent')}
+        </Text>
+        {t('activities.emptyShotsPlaceholderLine3Suffix')}
+      </Text>
+      <LocalSvgAsset assetModule={AI_COACH_PLACEHOLDER} width={70} height={70} />
+    </View>
+  )
 }
 
 function commentCountHint(snippet: string | null): number {
@@ -465,26 +491,14 @@ export function ActivitiesCalendarFlow({
   const resolvedDayBackLabel = dayDetailBackLabel ?? t('activities.backToProfile')
   const styles = useMemo(() => getStyles(theme, winW), [theme, winW])
   const shotsStyles = useMemo(() => getShotsStyles(theme, winW), [theme, winW])
-  const heroH = useMemo(() => Math.min(220, Math.max(160, winW * 0.42)), [winW])
-  const shieldMaxW = useMemo(() => {
-    const pad = Math.max(16, Math.min(24, winW * 0.05))
-    const heroRowInnerW = winW - pad * 2
-    const approxColW = (heroRowInnerW - 10) / 2
-    const current = Math.min(approxColW, winW * 0.44)
-    const refPad = Math.max(16, Math.min(24, SMALL_SHIELD_CAP_REF_WIN_W * 0.05))
-    const refHeroRowInnerW = SMALL_SHIELD_CAP_REF_WIN_W - refPad * 2
-    const refApproxColW = (refHeroRowInnerW - 10) / 2
-    const reference = Math.min(refApproxColW, SMALL_SHIELD_CAP_REF_WIN_W * 0.44)
-    return Math.min(current, reference)
-  }, [winW])
+  const scrollHorizontalPad = showHeroRow
+    ? HERO_HORIZONTAL_PAD
+    : Math.max(16, Math.min(24, winW * 0.05))
 
   const {
     activities: items,
     activitiesLoading: loading,
     activitiesError: error,
-    profileName,
-    profileImageUri,
-    overallPillarScore,
   } = useSessionData()
 
   const [viewMonth, setViewMonth] = useState(() => {
@@ -701,6 +715,7 @@ export function ActivitiesCalendarFlow({
           contentContainerStyle={{
             // Sits below the global <Header/> in main.tsx, which already pads insets.top.
             // Re-adding insets.top here doubled the gap above the "Shots" title.
+            flexGrow: 1,
             paddingTop: 8,
             paddingHorizontal: pad,
             paddingBottom: 32 + insets.bottom,
@@ -748,11 +763,15 @@ export function ActivitiesCalendarFlow({
           ) : loading ? (
             <ActivityIndicator color={SHOTS_BAR_CYAN} style={{ marginTop: 36 }} />
           ) : shotsSessionsFiltered.length === 0 ? (
-            <Text allowFontScaling={false} style={shotsStyles.emptyShots}>
-              {shotsTab === 'favorites'
-                ? t('activities.noFavorites')
-                : t('activities.noShots')}
-            </Text>
+            shotsTab === 'favorites' ? (
+              <Text allowFontScaling={false} style={shotsStyles.emptyShots}>
+                {t('activities.noFavorites')}
+              </Text>
+            ) : (
+              <ActivitiesNoShotsPlaceholder
+                styles={shotsStyles}
+              />
+            )
           ) : (
             shotsSessionsFiltered.map((s) => {
               const shotTitle = displayTrainShotTitle({
@@ -861,69 +880,11 @@ export function ActivitiesCalendarFlow({
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={styles.scrollInner}
+      contentContainerStyle={[styles.scrollInner, { paddingHorizontal: scrollHorizontalPad }]}
       showsVerticalScrollIndicator={false}
     >
       {showHeroRow ? (
-        <View style={styles.heroRow}>
-          <View style={styles.shieldCol}>
-            <View style={[styles.shieldSlot, { height: heroH }]}>
-              <ShieldProportionalFrame
-                maxWidth={shieldMaxW}
-                maxHeight={heroH}
-                variant="small"
-                coachName={profileName?.trim() ?? ''}
-                coachImageUri={profileImageUri}
-                showName={false}
-                showScore={false}
-                showCrest={false}
-                showFlag
-                showPillarScores
-              />
-            </View>
-          </View>
-          <View style={styles.scoreCol}>
-            <View style={styles.scoreCard}>
-              <Image source={SCORE_BG} style={styles.scoreImg} resizeMode="contain" />
-              <View style={styles.scoreOverlay}>
-                <View style={styles.scoreTopCluster}>
-                  <Text allowFontScaling={false} numberOfLines={1} style={styles.scoreUserName}>
-                    {profileName ?? ''}
-                  </Text>
-                  <Text allowFontScaling={false} style={styles.scorePremiumLabel}>
-                    Premium
-                  </Text>
-                </View>
-                <View style={styles.scoreCenterCluster}>
-                  <Text allowFontScaling={false} style={styles.scoreNumber}>
-                    {overallPillarScore != null ? overallPillarScore : 'N/A'}
-                  </Text>
-                  <Text allowFontScaling={false} style={styles.scoreLabel}>
-                    Score
-                  </Text>
-                </View>
-                <View style={styles.scoreStatsRow}>
-                  <View style={styles.scoreStatCol}>
-                    <Text allowFontScaling={false} style={styles.scoreStatNumber}>
-                      0
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.scoreStatLabel}>
-                      Following
-                    </Text>
-                  </View>
-                  <View style={styles.scoreStatCol}>
-                    <Text allowFontScaling={false} style={styles.scoreStatNumber}>
-                      0
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.scoreStatLabel}>
-                      Followers
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-        </View>
+        <ProfileHeroScoreBlock horizontalPadding={HERO_HORIZONTAL_PAD} premiumLabelNudgeUp={4} />
       ) : null}
 
       {aboveActivitiesTitle}
@@ -1014,6 +975,7 @@ export function ActivitiesCalendarFlow({
 }
 
 export function ActivitiesScreen() {
+  const { viewerIsCoach } = useSessionData()
   const route = useRoute<RouteProp<MainTabParamList, 'Activities'>>()
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList, 'Activities'>>()
   const routeOpenId = route.params?.openAnalysisId
@@ -1029,20 +991,17 @@ export function ActivitiesScreen() {
 
   return (
     <ActivitiesCalendarFlow
-      layout="shots"
+      layout={viewerIsCoach ? 'calendar' : 'shots'}
       monthNavStyle="pill"
-      showHeroRow={false}
       openAnalysisId={openAnalysisId}
       onOpenAnalysisConsumed={() => setLatchedOpenAnalysisId(undefined)}
     />
   )
 }
 
-function getStyles(theme: any, winW: number) {
-  const pad = Math.max(16, Math.min(24, winW * 0.05))
+function getStyles(theme: any, _winW: number) {
   /** Fixed 7 columns; percentage basis is more stable than pixel math in iOS release builds. */
   const dayColumnPct = '14.285714%'
-  const heroH = Math.min(220, Math.max(160, winW * 0.42))
   return StyleSheet.create({
     scroll: {
       flex: 1,
@@ -1050,118 +1009,7 @@ function getStyles(theme: any, winW: number) {
     },
     scrollInner: {
       paddingBottom: 32,
-      paddingHorizontal: pad,
       paddingTop: 8,
-    },
-    heroRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      justifyContent: 'space-between',
-      gap: 10,
-      marginBottom: 20,
-    },
-    shieldCol: {
-      flex: 1,
-      alignItems: 'center',
-      maxWidth: winW * 0.44,
-    },
-    scoreCol: {
-      flex: 1,
-      alignItems: 'center',
-      maxWidth: winW * 0.5,
-    },
-    shieldImg: {
-      width: '100%',
-      height: heroH,
-    },
-    shieldSlot: {
-      width: '100%',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    scoreCard: {
-      width: '100%',
-      aspectRatio: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    scoreImg: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-    },
-    scoreOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      alignItems: 'center',
-      transform: [{ translateX: -5 }],
-    },
-    scoreTopCluster: {
-      alignItems: 'center',
-      marginTop: 10,
-    },
-    scoreCenterCluster: {
-      position: 'absolute',
-      top: '50%',
-      alignItems: 'center',
-      transform: [{ translateY: -27 }],
-    },
-    scoreUserName: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 13,
-      color: '#FFFFFF',
-      marginBottom: 1,
-    },
-    scorePremiumLabel: {
-      fontFamily: theme.mediumFont,
-      fontSize: 10,
-      color: '#00BBFF',
-      letterSpacing: 0.5,
-      marginBottom: 6,
-    },
-    scoreNumber: {
-      fontFamily: theme.boldFont ?? theme.semiBoldFont,
-      fontSize: 36,
-      color: '#FFFFFF',
-      lineHeight: 40,
-    },
-    scoreLabel: {
-      fontFamily: theme.regularFont,
-      fontSize: 11,
-      color: 'rgba(200,220,255,0.7)',
-      marginTop: -1,
-    },
-    scoreStatsRow: {
-      position: 'absolute',
-      bottom: 12,
-      flexDirection: 'row',
-      gap: 20,
-    },
-    scoreStatCol: {
-      alignItems: 'center',
-    },
-    scoreStatNumber: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 15,
-      color: '#FFFFFF',
-      lineHeight: 18,
-    },
-    scoreStatLabel: {
-      fontFamily: theme.regularFont,
-      fontSize: 9,
-      color: 'rgba(200,220,255,0.6)',
-      marginTop: 1,
-    },
-    heroName: {
-      marginTop: 6,
-      fontFamily: theme.semiBoldFont,
-      fontSize: 13,
-      color: 'rgba(255,255,255,0.85)',
     },
     sectionTitle: {
       fontFamily: theme.semiBoldFont,
@@ -1355,6 +1203,26 @@ function getShotsStyles(theme: any, winW: number) {
       marginTop: 28,
       textAlign: 'center',
       lineHeight: 20,
+    },
+    emptyShotsWrap: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 32,
+      minHeight: Math.max(280, winW * 0.85),
+    },
+    emptyShotsText: {
+      fontFamily: theme.regularFont,
+      fontSize: 16,
+      color: '#FFFFFF',
+      textAlign: 'center',
+      lineHeight: 24,
+      marginBottom: 12,
+    },
+    emptyShotsAccent: {
+      color: '#00B8FF',
+      fontFamily: theme.semiBoldFont,
     },
     shotCard: {
       backgroundColor: SHOTS_CARD_BG,

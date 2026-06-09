@@ -13,12 +13,17 @@ const HERO_GAP = 10
 type Props = {
   /** Must match parent scroll `paddingHorizontal` (You / My Coach use 20). */
   horizontalPadding?: number
+  /** Nudge “Premium” slightly closer to the name (My Students hero). */
+  premiumLabelNudgeUp?: number
 }
 
 /**
  * Shield + score hero row (You / Profile tab). Shared with My Coach so layout stays identical.
  */
-export function ProfileHeroScoreBlock({ horizontalPadding = DEFAULT_HORIZONTAL_PAD }: Props) {
+export function ProfileHeroScoreBlock({
+  horizontalPadding = DEFAULT_HORIZONTAL_PAD,
+  premiumLabelNudgeUp = 0,
+}: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { width: winW } = useWindowDimensions()
@@ -80,7 +85,11 @@ export function ProfileHeroScoreBlock({ horizontalPadding = DEFAULT_HORIZONTAL_P
                 </Text>
                 <Text
                   allowFontScaling={false}
-                  style={[styles.scorePremiumLabel, { fontFamily: theme.mediumFont }]}
+                  style={[
+                    styles.scorePremiumLabel,
+                    premiumLabelNudgeUp > 0 && { marginTop: -premiumLabelNudgeUp },
+                    { fontFamily: theme.mediumFont },
+                  ]}
                 >
                   {t('common.premium')}
                 </Text>

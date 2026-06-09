@@ -11,20 +11,18 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, interpolate, runOnJS } from 'react-native-reanimated'
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated'
 import Ionicons from '@expo/vector-icons/Ionicons'
+import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../../components/LocalSvgAsset'
 import type { MyCoachStudent } from './types'
 import { MyCoachScoreRing } from './ScoreRing'
 
-const SWIPE_MSG_SVG = require('../../../assets/mycoach/messegeicon.svg')
-const SWIPE_VIDEO_SVG = require('../../../assets/mycoach/videocallicon.svg')
-const SWIPE_PIN_SVG = require('../../../assets/mycoach/pinicon1.svg')
-/** Native SVG ratios: 48×50, 54×49, 36×49 — scale to common height for the action strip. */
-const SWIPE_ACTION_ICON_H = 48
-const SWIPE_MSG_W = Math.round((48 / 50) * SWIPE_ACTION_ICON_H)
-const SWIPE_VIDEO_W = Math.round((54 / 49) * SWIPE_ACTION_ICON_H)
-const SWIPE_PIN_W = Math.round((36 / 49) * SWIPE_ACTION_ICON_H)
+const SWIPE_MSG_SVG = require('../../../assets/mystudents/message.svg')
+const SWIPE_VIDEO_SVG = require('../../../assets/mystudents/videocall.svg')
+const SWIPE_PIN_SVG = require('../../../assets/mystudents/pin.svg')
+const STUDENT_PIN_ICON = require('../../../assets/mystudents/pinicon.svg')
+const SWIPE_ACTION_ICON_SIZE = 36
 
 const SPRING_CFG = { damping: 22, stiffness: 220, mass: 0.8 } as const
 const ACTION_BTN_WIDTH = 78
@@ -39,6 +37,35 @@ type ThemeFonts = {
   regularFont: string
 }
 
+function SwipeActionCell({
+  iconModule,
+  label,
+  onPress,
+  regularFont,
+}: {
+  iconModule: number
+  label: string
+  onPress: () => void
+  regularFont: string
+}) {
+  return (
+    <Pressable style={styles.actionBtn} android_ripple={{ color: 'rgba(255,255,255,0.2)' }} onPress={onPress}>
+      <View style={styles.actionBtnInner}>
+        <LocalSvgAsset assetModule={iconModule} width={SWIPE_ACTION_ICON_SIZE} height={SWIPE_ACTION_ICON_SIZE} />
+        <Text
+          allowFontScaling={false}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
+          style={[styles.actionLabel, { fontFamily: regularFont }]}
+        >
+          {label}
+        </Text>
+      </View>
+    </Pressable>
+  )
+}
+
 export function MyCoachSwipeableStudentCard({
   student,
   openId,
@@ -46,6 +73,8 @@ export function MyCoachSwipeableStudentCard({
   fonts,
   onOpenCoachReview,
   onOpenChat,
+  onOpenProfile,
+  onTogglePin,
   viewerIsCoach,
   onMakeCoach,
 }: {
@@ -57,9 +86,14 @@ export function MyCoachSwipeableStudentCard({
   onOpenCoachReview?: (reviewId: string) => void
   /** Swipe “Message” — private coach ↔ student thread. */
   onOpenChat?: (student: MyCoachStudent) => void
+  /** Tap avatar or name — student profile page. */
+  onOpenProfile?: (student: MyCoachStudent) => void
+  /** Swipe pin / unpin — toggles roster pin and card badge. */
+  onTogglePin?: (student: MyCoachStudent) => void
   viewerIsCoach?: boolean
   onMakeCoach?: (studentUserId: string) => void
 }) {
+  const { t } = useTranslation()
   const translateX = useSharedValue(0)
   const startX = useSharedValue(0)
   const cardWidthSV = useSharedValue(0)
@@ -90,6 +124,18 @@ export function MyCoachSwipeableStudentCard({
     onOpenChat?.(student)
   }, [close, onOpenChat, student])
 
+  const onProfilePress = useCallback(() => {
+    close()
+    onOpenProfile?.(student)
+  }, [close, onOpenProfile, student])
+
+  const onPinPress = useCallback(() => {
+    close()
+    onTogglePin?.(student)
+  }, [close, onTogglePin, student])
+
+  const isPinned = student.pinned === true
+
   const pan = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-10, 10])
@@ -114,14 +160,6 @@ export function MyCoachSwipeableStudentCard({
   const cardAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }))
-
-  const actionsAnimStyle = useAnimatedStyle(() => {
-    const progress = interpolate(-translateX.value, [0, ACTIONS_WIDTH], [0, 1])
-    return {
-      opacity: progress,
-      transform: [{ scale: interpolate(progress, [0, 1], [0.85, 1]) }],
-    }
-  })
 
   const pinkLeftBarStyle = useAnimatedStyle(() => ({
     position: 'absolute',
@@ -154,45 +192,51 @@ export function MyCoachSwipeableStudentCard({
           </Text>
         </Pressable>
       ) : null}
-      <Animated.View style={[styles.actionsRow, actionsAnimStyle]}>
+      <View style={styles.actionsRow}>
         <Animated.View style={pinkLeftBarStyle} pointerEvents="none">
           <View style={styles.pinkBarEdge} />
         </Animated.View>
         <View style={[styles.actionsStrip, { width: ACTIONS_WIDTH }]}>
-          <Pressable
-            style={styles.actionBtn}
-            android_ripple={{ color: 'rgba(255,255,255,0.2)' }}
+          <SwipeActionCell
+            iconModule={SWIPE_MSG_SVG}
+            label={t('myCoach.swipeMessage')}
             onPress={onOpenChat ? onMessagePress : () => onSwipeAction('Message')}
-          >
-            <LocalSvgAsset assetModule={SWIPE_MSG_SVG} width={SWIPE_MSG_W} height={SWIPE_ACTION_ICON_H} />
-          </Pressable>
-          <Pressable
-            style={styles.actionBtn}
-            android_ripple={{ color: 'rgba(255,255,255,0.2)' }}
+            regularFont={fonts.regularFont}
+          />
+          <SwipeActionCell
+            iconModule={SWIPE_VIDEO_SVG}
+            label={t('myCoach.swipeVideoCall')}
             onPress={() => onSwipeAction('Video call')}
-          >
-            <LocalSvgAsset assetModule={SWIPE_VIDEO_SVG} width={SWIPE_VIDEO_W} height={SWIPE_ACTION_ICON_H} />
-          </Pressable>
-          <Pressable
-            style={styles.actionBtn}
-            android_ripple={{ color: 'rgba(255,255,255,0.2)' }}
-            onPress={() => onSwipeAction('Pin')}
-          >
-            <LocalSvgAsset assetModule={SWIPE_PIN_SVG} width={SWIPE_PIN_W} height={SWIPE_ACTION_ICON_H} />
-          </Pressable>
+            regularFont={fonts.regularFont}
+          />
+          <SwipeActionCell
+            iconModule={SWIPE_PIN_SVG}
+            label={isPinned ? t('myCoach.unpin') : t('myCoach.pin')}
+            onPress={onTogglePin ? onPinPress : () => onSwipeAction('Pin')}
+            regularFont={fonts.regularFont}
+          />
         </View>
-      </Animated.View>
+      </View>
 
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.studentCard, cardAnimStyle]}>
-          <Image source={student.avatar} style={styles.studentAvatar} resizeMode="cover" />
+          <Pressable onPress={onOpenProfile ? onProfilePress : undefined} accessibilityRole="button">
+            <Image source={student.avatar} style={styles.studentAvatar} resizeMode="cover" />
+          </Pressable>
           <View style={styles.studentInfo}>
-            <Text allowFontScaling={false} style={[styles.studentName, { fontFamily: fonts.semiBoldFont }]}>
-              {student.name}
-            </Text>
+            <Pressable onPress={onOpenProfile ? onProfilePress : undefined} accessibilityRole="button">
+              <Text allowFontScaling={false} style={[styles.studentName, { fontFamily: fonts.semiBoldFont }]}>
+                {student.name}
+              </Text>
+            </Pressable>
             <Text allowFontScaling={false} style={[styles.studentLocation, { fontFamily: fonts.regularFont }]}>
               {student.location}
             </Text>
+            {isPinned ? (
+              <View style={styles.studentPinRow}>
+                <LocalSvgAsset assetModule={STUDENT_PIN_ICON} width={12} height={12} />
+              </View>
+            ) : null}
             {student.notiRow !== 'none' && (
               <View style={styles.studentNotiRow}>
                 {student.notiRow === 'pin-msg-noti' && (
@@ -230,9 +274,11 @@ export function MyCoachSwipeableStudentCard({
               </TouchableOpacity>
             ) : null}
           </View>
-          <MyCoachScoreRing actualScore={student.actualScore} lastScore={student.lastScore} semiBoldFont={fonts.semiBoldFont} />
-          <View style={styles.studentBarRightEdge} pointerEvents="none">
-            <View style={styles.blueBarEdge} />
+          <View style={styles.studentTrailing}>
+            <MyCoachScoreRing actualScore={student.actualScore} lastScore={student.lastScore} semiBoldFont={fonts.semiBoldFont} />
+            <View style={styles.studentBarRightEdge} pointerEvents="none">
+              <View style={styles.blueBarEdge} />
+            </View>
           </View>
         </Animated.View>
       </GestureDetector>
@@ -273,15 +319,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'stretch',
-    borderRadius: 20,
-    overflow: 'hidden',
     backgroundColor: '#E94560',
   },
   actionsStrip: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
     backgroundColor: '#E94560',
-    overflow: 'hidden',
   },
   actionBtn: {
     width: ACTION_BTN_WIDTH,
@@ -289,6 +332,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
     backgroundColor: 'transparent',
+  },
+  actionBtnInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    lineHeight: 12,
+    marginTop: 4,
+    textAlign: 'center',
+    maxWidth: ACTION_BTN_WIDTH - 8,
+    includeFontPadding: false,
   },
   pinkBarEdge: {
     width: '100%',
@@ -304,12 +360,15 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 3,
     backgroundColor: '#3B82F6',
   },
+  studentTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 4,
+    marginRight: -4,
+  },
   studentBarRightEdge: {
-    position: 'absolute',
-    right: 4,
-    top: '50%',
     height: BAR_EDGE_HEIGHT,
-    marginTop: -BAR_EDGE_CENTER_OFFSET,
     width: BAR_EDGE_WIDTH,
     zIndex: 10,
     elevation: 4,
@@ -359,6 +418,9 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 13,
     marginTop: 1,
+  },
+  studentPinRow: {
+    marginTop: 4,
   },
   studentNotiRow: {
     flexDirection: 'row',

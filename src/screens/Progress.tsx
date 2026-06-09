@@ -14,9 +14,15 @@ import { useActionSheet } from '@expo/react-native-action-sheet'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import { ProLibraryGradientProgressBar } from '../components'
+import { AchievementsHeroBlock } from '../components/AchievementsHeroBlock'
+import { AchievementsDailyQuestBanner } from '../components/AchievementsDailyQuestBanner'
+import { AchievementsBadgesSection } from '../components/AchievementsBadgesSection'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import type { ActivitySession } from '../lib/activitySession'
 import { useTranslation } from 'react-i18next'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { ProgressTabStackParamList } from '../navigation/types'
 
 const ACTIVITIES_TICK_SVG = require('../../assets/actiities/tick.svg')
 
@@ -48,6 +54,12 @@ const TRAINING_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const
 
 type PeriodKey = 4 | 8 | 12 | 'all'
 type ChartMetric = 'overall' | 'technique' | 'outcome' | 'tactics'
+type ProgressView = 'score' | 'achievements'
+
+const VIEW_OPTION_KEYS: { key: ProgressView; labelKey: string }[] = [
+  { key: 'score', labelKey: 'progress.tabScore' },
+  { key: 'achievements', labelKey: 'progress.tabAchievements' },
+]
 
 const PERIOD_OPTION_KEYS: { key: PeriodKey; labelKey: string }[] = [
   { key: 4, labelKey: 'progress.weeks4' },
@@ -365,12 +377,14 @@ const chartStyles = StyleSheet.create({
 
 export function ProgressScreen() {
   const { t } = useTranslation()
+  const navigation = useNavigation<NativeStackNavigationProp<ProgressTabStackParamList>>()
   const { theme } = useContext(ThemeContext)
   const { activities } = useSessionData()
   const { showActionSheetWithOptions } = useActionSheet()
   const insets = useSafeAreaInsets()
   const { width: winW } = useWindowDimensions()
 
+  const [progressView, setProgressView] = useState<ProgressView>('score')
   const [period, setPeriod] = useState<PeriodKey>(8)
   const [chartMetric, setChartMetric] = useState<ChartMetric>('overall')
 
@@ -464,25 +478,47 @@ export function ProgressScreen() {
           {t('progress.title')}
         </Text>
 
+        <View style={[styles.segmentTrack, styles.viewSegmentTrack]}>
+          {VIEW_OPTION_KEYS.map((opt) => {
+            const active = progressView === opt.key
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.segmentPill, active && styles.segmentPillActive]}
+                onPress={() => setProgressView(opt.key)}
+                activeOpacity={0.88}
+              >
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.segmentTxt, active && styles.segmentTxtOn]}
+                  numberOfLines={1}
+                >
+                  {t(opt.labelKey)}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
+        {progressView === 'score' ? (
+          <>
         <View style={styles.segmentTrack}>
           {PERIOD_OPTION_KEYS.map((opt) => {
             const active = period === opt.key
             return (
               <TouchableOpacity
                 key={String(opt.key)}
-                style={styles.segmentCell}
+                style={[styles.segmentPill, active && styles.segmentPillActive]}
                 onPress={() => setPeriod(opt.key)}
                 activeOpacity={0.88}
               >
-                <View style={[styles.segmentCellInner, active && styles.segmentCellInnerOn]}>
-                  <Text
-                    allowFontScaling={false}
-                    style={[styles.segmentTxt, active && styles.segmentTxtOn]}
-                    numberOfLines={1}
-                  >
-                    {t(opt.labelKey)}
-                  </Text>
-                </View>
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.segmentTxt, active && styles.segmentTxtOn]}
+                  numberOfLines={1}
+                >
+                  {t(opt.labelKey)}
+                </Text>
               </TouchableOpacity>
             )
           })}
@@ -615,6 +651,14 @@ export function ProgressScreen() {
             </View>
           </View>
         </View>
+          </>
+        ) : (
+          <>
+            <AchievementsHeroBlock horizontalPadding={horizontalPad} activities={activities} />
+            <AchievementsDailyQuestBanner onPress={() => navigation.navigate('DailyQuest')} />
+            <AchievementsBadgesSection onViewAllPress={() => navigation.navigate('AllAchievements')} />
+          </>
+        )}
       </ScrollView>
     </View>
   )
@@ -636,26 +680,27 @@ function getStyles(theme: any) {
     },
     segmentTrack: {
       flexDirection: 'row',
-      alignItems: 'stretch',
+      alignItems: 'center',
       alignSelf: 'stretch',
       backgroundColor: PG.card,
       borderRadius: 28,
       padding: 4,
       marginBottom: 18,
+      overflow: 'hidden',
     },
-    segmentCell: {
+    viewSegmentTrack: {
+      marginBottom: 12,
+    },
+    segmentPill: {
       flex: 1,
       minWidth: 0,
-      justifyContent: 'center',
-    },
-    segmentCellInner: {
       paddingVertical: 10,
       paddingHorizontal: 6,
-      borderRadius: 22,
+      borderRadius: 999,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    segmentCellInnerOn: {
+    segmentPillActive: {
       backgroundColor: PG.segmentActive,
     },
     segmentTxt: {

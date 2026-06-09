@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useContext, useMemo } from "react";
 import {
   View,
   Text,
@@ -16,22 +16,16 @@ import {
   NavIconAICoach,
   NavIconActivities,
   NavIconMyCoach,
+  NavIconMyStudents,
   NavIconProgress,
   NavIconYou,
 } from "./NavTabIcons";
-import { getCachedProfile } from "../lib/profile-cache";
+import { useTranslation } from "react-i18next";
+import { useSessionData } from "../context/SessionDataContext";
 import type { MainStackParamList, MainTabParamList } from "../navigation/types";
 
 const TAB_BAR_ACTIVE = "#FFFFFF";
 const TAB_BAR_INACTIVE = "#5B9DFF";
-
-const TAB_LABELS: Record<keyof MainTabParamList, string> = {
-  AICoach: "AI Coach",
-  MyCoach: "My Coach",
-  Activities: "Activities",
-  Progress: "Progress",
-  You: "You",
-};
 
 const TAB_ORDER: (keyof MainTabParamList)[] = [
   "AICoach",
@@ -46,11 +40,12 @@ type Props = {
 };
 
 export function MainTabBarChrome({ activeTab }: Props) {
+  const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { width: winW } = useWindowDimensions();
-  const [coachStudentRole, setCoachStudentRole] = useState<"none" | "coach" | "student">("none");
+  const { viewerIsCoach } = useSessionData();
 
   const tabBarBottomPad = insets.bottom + 10;
   const tabBarHeight = 66 + tabBarBottomPad;
@@ -100,18 +95,6 @@ export function MainTabBarChrome({ activeTab }: Props) {
     [tabBarBottomPad, tabBarHeight, tabMetrics.labelFontSize, theme.mediumFont]
   );
 
-  useEffect(() => {
-    let mounted = true;
-    void getCachedProfile().then((cached) => {
-      if (!mounted) return;
-      const cr = cached?.profile?.coachStudentRole;
-      setCoachStudentRole(cr === "coach" || cr === "student" ? cr : "none");
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   const goToTab = useCallback(
     (screen: keyof MainTabParamList) => {
       if (screen === "You") {
@@ -136,7 +119,14 @@ export function MainTabBarChrome({ activeTab }: Props) {
     [navigation]
   );
 
-  const visibleTabs = TAB_ORDER.filter((tab) => tab !== "MyCoach" || coachStudentRole === "coach");
+  const tabLabels: Record<keyof MainTabParamList, string> = {
+    AICoach: t("tabs.aiCoach"),
+    MyCoach: viewerIsCoach ? t("tabs.myStudents") : t("tabs.myCoach"),
+    Activities: viewerIsCoach ? t("tabs.calendar") : t("tabs.activities"),
+    Progress: t("tabs.progress"),
+    You: t("tabs.you"),
+  };
+  const visibleTabs = TAB_ORDER.filter((tab) => !(viewerIsCoach && tab === "AICoach"));
 
   return (
     <View style={styles.bar}>
@@ -149,7 +139,11 @@ export function MainTabBarChrome({ activeTab }: Props) {
           tab === "AICoach" ? (
             <NavIconAICoach color={color} size={iconSize} />
           ) : tab === "MyCoach" ? (
-            <NavIconMyCoach color={color} size={iconSize} />
+            viewerIsCoach ? (
+              <NavIconMyStudents color={color} size={iconSize} />
+            ) : (
+              <NavIconMyCoach color={color} size={iconSize} />
+            )
           ) : tab === "Activities" ? (
             <NavIconActivities color={color} size={iconSize} />
           ) : tab === "Progress" ? (
@@ -165,16 +159,18 @@ export function MainTabBarChrome({ activeTab }: Props) {
             activeOpacity={0.85}
             onPress={() => goToTab(tab)}
             accessibilityRole="button"
-            accessibilityLabel={TAB_LABELS[tab]}
+            accessibilityLabel={tabLabels[tab]}
             accessibilityState={{ selected: focused }}
           >
             {icon}
             <Text
               allowFontScaling={false}
               numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
               style={[styles.label, focused ? styles.labelActive : styles.labelInactive]}
             >
-              {TAB_LABELS[tab]}
+              {tabLabels[tab]}
             </Text>
           </TouchableOpacity>
         );

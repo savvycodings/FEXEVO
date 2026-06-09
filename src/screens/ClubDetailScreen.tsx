@@ -82,7 +82,7 @@ export function ClubDetailScreen() {
         <Header
           flatOverlay
           onBackPress={() => navigation.goBack()}
-          onLogoPress={() => navigateMainTab("AICoach")}
+          onProPress={() => navigation.navigate("ProSubscription")}
           onSettingsPress={() => navigation.navigate("ProfileSettings")}
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
@@ -111,7 +111,7 @@ export function ClubDetailScreen() {
       <Header
         flatOverlay
         onBackPress={() => navigation.goBack()}
-        onLogoPress={() => navigateMainTab("AICoach")}
+        onProPress={() => navigation.navigate("ProSubscription")}
         onSettingsPress={() => navigation.navigate("ProfileSettings")}
         onNotificationsPress={() => navigation.navigate("Notifications")}
       />

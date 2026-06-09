@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo, useState } from 'react'
+import React, { useCallback, useContext, useMemo, useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -18,15 +18,22 @@ import { DOMAIN } from '../../constants'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { MainStackParamList, MainTabParamList, MyCoachTabStackParamList } from '../navigation/types'
+import { getMainStackNavigation } from '../lib/mainStackNavigation'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import { vercel as defaultTheme } from '../theme'
-import { getCachedProfile } from '../lib/profile-cache'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
 import { MyCoachCoachHero } from './myCoach/CoachHero'
 import { MyCoachSwipeableStudentCard } from './myCoach/SwipeableStudentCard'
 import type { MyCoachStudent } from './myCoach/types'
+import {
+  loadPinnedStudentIds,
+  pinStudentId,
+  savePinnedStudentIds,
+  sortStudentsWithPins,
+  unpinStudentId,
+} from '../lib/coachPinnedStudents'
 import { useTranslation } from 'react-i18next'
 
 const FALLBACK_STUDENT_AVATAR = require('../../assets/coachs/img1.png')
@@ -129,17 +136,22 @@ export function MyCoachScreen() {
   const theme = ctx?.backgroundColor != null ? ctx : defaultTheme
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<MyCoachScreenNav>()
-  const { onTabFocus } = useSessionData()
-
-  const rootStackNavigation = useCallback(
-    () => navigation.getParent()?.getParent() as NativeStackNavigationProp<MainStackParamList> | undefined,
-    [navigation]
-  )
+  const { onTabFocus, viewerIsCoach, profileRoleLoaded } = useSessionData()
 
   const [openStudentId, setOpenStudentId] = useState<string | null>(null)
   const [students, setStudents] = useState<MyCoachStudent[]>([])
+  const [pinnedStudentIds, setPinnedStudentIds] = useState<string[]>([])
   const [studentsLoading, setStudentsLoading] = useState(true)
-  const [viewerIsCoach, setViewerIsCoach] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void loadPinnedStudentIds().then((ids) => {
+      if (!cancelled) setPinnedStudentIds(ids)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const loadCoachStudents = useCallback(async () => {
     setStudentsLoading(true)
@@ -197,23 +209,7 @@ export function MyCoachScreen() {
   useFocusEffect(
     useCallback(() => {
       onTabFocus()
-      let mounted = true
-      void getCachedProfile().then((cached) => {
-        if (!mounted) return
-        const cr = cached?.profile?.coachStudentRole
-        setViewerIsCoach(cr === 'coach')
-      })
-      void authClient.$fetch('/profile/me', { method: 'GET' }).then((res) => {
-        if (!mounted) return
-        const body = ((res as { data?: unknown })?.data ?? res) as {
-          profile?: { coachStudentRole?: string }
-        }
-        setViewerIsCoach(body?.profile?.coachStudentRole === 'coach')
-      })
       void loadCoachStudents()
-      return () => {
-        mounted = false
-      }
     }, [loadCoachStudents, onTabFocus])
   )
 
@@ -234,32 +230,79 @@ export function MyCoachScreen() {
   )
 
   const onAddNewStudent = useCallback(() => {
-    rootStackNavigation()?.navigate('CoachAddPeople')
-  }, [rootStackNavigation])
+    const stack = getMainStackNavigation(navigation)
+    if (stack) {
+      stack.navigate('CoachAddPeople')
+      return
+    }
+    ;(navigation as NativeStackNavigationProp<MainStackParamList>).navigate('CoachAddPeople')
+  }, [navigation])
 
   const onOpenCoachReview = useCallback(
     (reviewId: string) => {
-      rootStackNavigation()?.navigate('CoachReviewEditor', { reviewId })
+      const stack = getMainStackNavigation(navigation)
+      if (stack) {
+        stack.navigate('CoachReviewEditor', { reviewId })
+        return
+      }
+      ;(navigation as NativeStackNavigationProp<MainStackParamList>).navigate('CoachReviewEditor', {
+        reviewId,
+      })
     },
-    [rootStackNavigation]
+    [navigation]
+  )
+
+  const studentNavParams = useCallback(
+    (student: MyCoachStudent) => ({
+      peerUserId: student.id,
+      peerName: student.name,
+      peerLocation: student.location,
+      actualScore: student.actualScore,
+      lastScore: student.lastScore,
+      peerImageUri: student.imageUri ?? null,
+      pendingCoachReviewId: student.pendingCoachReviewId ?? null,
+      showNewVideoBadge: student.notiRow !== 'none',
+    }),
+    []
+  )
+
+  const onOpenStudentProfile = useCallback(
+    (student: MyCoachStudent) => {
+      setOpenStudentId(null)
+      navigation.navigate('StudentProfile', studentNavParams(student))
+    },
+    [navigation, studentNavParams]
   )
 
   const onOpenStudentChat = useCallback(
     (student: MyCoachStudent) => {
       setOpenStudentId(null)
       navigation.navigate('CoachStudentChat', {
-        peerUserId: student.id,
-        peerName: student.name,
-        peerLocation: student.location,
-        actualScore: student.actualScore,
-        lastScore: student.lastScore,
-        peerImageUri: student.imageUri ?? null,
-        pendingCoachReviewId: student.pendingCoachReviewId ?? null,
-        showNewVideoBadge: student.notiRow !== 'none',
+        ...studentNavParams(student),
       })
     },
-    [navigation]
+    [navigation, studentNavParams]
   )
+
+  const onTogglePinStudent = useCallback((student: MyCoachStudent) => {
+    setOpenStudentId(null)
+    setPinnedStudentIds((prev) => {
+      const isPinned = prev.includes(student.id)
+      const next = isPinned ? unpinStudentId(prev, student.id) : pinStudentId(prev, student.id)
+      void savePinnedStudentIds(next)
+      return next
+    })
+  }, [])
+
+  const pinnedIdSet = useMemo(() => new Set(pinnedStudentIds), [pinnedStudentIds])
+
+  const displayStudents = useMemo(() => {
+    const withPinFlag = students.map((student) => ({
+      ...student,
+      pinned: pinnedIdSet.has(student.id),
+    }))
+    return sortStudentsWithPins(withPinFlag, pinnedStudentIds)
+  }, [students, pinnedIdSet, pinnedStudentIds])
 
   return (
     <View style={styles.screen}>
@@ -268,9 +311,11 @@ export function MyCoachScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 28 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        <MyCoachCoachHero coachName="David Blow" fonts={fonts} onUploadedVideo={onVideoPicked} />
+        {profileRoleLoaded && !viewerIsCoach ? (
+          <MyCoachCoachHero coachName="David Blow" fonts={fonts} onUploadedVideo={onVideoPicked} />
+        ) : null}
 
-        <ProfileHeroScoreBlock horizontalPadding={20} />
+        <ProfileHeroScoreBlock horizontalPadding={20} premiumLabelNudgeUp={4} />
 
         <View style={styles.studentsBlock}>
           <View style={styles.studentsTitleRow}>
@@ -305,12 +350,12 @@ export function MyCoachScreen() {
 
         {studentsLoading ? (
           <ActivityIndicator color="#00BBFF" style={{ marginVertical: 20 }} />
-        ) : students.length === 0 ? (
+        ) : displayStudents.length === 0 ? (
           <Text allowFontScaling={false} style={[styles.emptyStudents, { fontFamily: theme.regularFont }]}>
             {t('myCoach.noStudents')}
           </Text>
         ) : (
-          students.map((student) => (
+          displayStudents.map((student) => (
             <MyCoachSwipeableStudentCard
               key={student.id}
               student={student}
@@ -319,6 +364,8 @@ export function MyCoachScreen() {
               fonts={fonts}
               onOpenCoachReview={onOpenCoachReview}
               onOpenChat={onOpenStudentChat}
+              onOpenProfile={onOpenStudentProfile}
+              onTogglePin={onTogglePinStudent}
               viewerIsCoach={viewerIsCoach}
             />
           ))

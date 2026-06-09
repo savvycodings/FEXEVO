@@ -756,7 +756,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         <Header
           flatOverlay
           onBackPress={() => setActiveSection(null)}
-          onLogoPress={() => navigateMainTab("AICoach")}
+          onProPress={() => navigation.navigate("ProSubscription")}
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
         <KeyboardAwareScrollView
@@ -1052,7 +1052,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         <Header
           flatOverlay
           onBackPress={() => setActiveSection(null)}
-          onLogoPress={() => navigateMainTab("AICoach")}
+          onProPress={() => navigation.navigate("ProSubscription")}
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
         <KeyboardAwareScrollView
@@ -1257,7 +1257,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         <Header
           flatOverlay
           onBackPress={() => setActiveSection(null)}
-          onLogoPress={() => navigateMainTab("AICoach")}
+          onProPress={() => navigation.navigate("ProSubscription")}
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
         <KeyboardAwareScrollView
@@ -1399,7 +1399,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         <Header
           flatOverlay
           onBackPress={() => setActiveSection(null)}
-          onLogoPress={() => navigateMainTab("AICoach")}
+          onProPress={() => navigation.navigate("ProSubscription")}
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
         <KeyboardAwareScrollView
@@ -1530,7 +1530,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
       <Header
         flatOverlay
         onBackPress={onClose}
-        onLogoPress={() => navigateMainTab("AICoach")}
+        onProPress={() => navigation.navigate("ProSubscription")}
         onNotificationsPress={() => navigation.navigate("Notifications")}
       />
       <KeyboardAwareScrollView

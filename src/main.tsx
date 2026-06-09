@@ -1,5 +1,5 @@
 import { useContext, useState, useEffect, useCallback, useMemo } from 'react'
-import { StyleSheet, View, Platform, useWindowDimensions } from 'react-native'
+import { StyleSheet, View, Text, Platform, useWindowDimensions } from 'react-native'
 import {
   Technique,
   Profile,
@@ -11,9 +11,13 @@ import {
   ActivitiesScreen,
   MyCoachScreen,
   ProgressScreen,
+  DailyQuestScreen,
+  AllAchievementsScreen,
   NotificationsScreen,
+  ProScreen,
   CoachAddPeopleScreen,
   CoachStudentChatScreen,
+  StudentProfileScreen,
   CoachReviewEditorScreen,
   StudentCoachReviewScreen,
   AdminMembersScreen,
@@ -27,6 +31,7 @@ import {
   NavIconAICoach,
   NavIconActivities,
   NavIconMyCoach,
+  NavIconMyStudents,
   NavIconProgress,
   NavIconYou,
 } from './components/NavTabIcons'
@@ -89,6 +94,8 @@ function ProgressTabStack() {
   return (
     <ProgressStack.Navigator screenOptions={screenOptions}>
       <ProgressStack.Screen name="ProgressMain" component={ProgressScreen} />
+      <ProgressStack.Screen name="DailyQuest" component={DailyQuestScreen} />
+      <ProgressStack.Screen name="AllAchievements" component={AllAchievementsScreen} />
     </ProgressStack.Navigator>
   )
 }
@@ -107,6 +114,7 @@ function MyCoachTabStack() {
   return (
     <MyCoachStack.Navigator initialRouteName="MyCoachMain" screenOptions={screenOptions}>
       <MyCoachStack.Screen name="MyCoachMain" component={MyCoachScreen} />
+      <MyCoachStack.Screen name="StudentProfile" component={StudentProfileScreen} />
       <MyCoachStack.Screen name="CoachStudentChat" component={CoachStudentChatScreen} />
     </MyCoachStack.Navigator>
   )
@@ -150,15 +158,8 @@ function MainTabsLayoutInner({
   onProfileUpdated: () => void
 }) {
   const { t } = useTranslation()
-  const { onTabFocus } = useSessionData()
+  const { onTabFocus, viewerIsCoach, invalidate } = useSessionData()
   const stackNavigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>()
-  const tabLabels: Record<keyof MainTabParamList, string> = {
-    AICoach: t('tabs.aiCoach'),
-    MyCoach: t('tabs.myCoach'),
-    Activities: t('tabs.activities'),
-    Progress: t('tabs.progress'),
-    You: t('tabs.you'),
-  }
   const { theme: ctxTheme } = useContext(ThemeContext)
   const theme = ctxTheme?.backgroundColor != null ? ctxTheme : defaultTheme
   const insets = useSafeAreaInsets()
@@ -166,7 +167,13 @@ function MainTabsLayoutInner({
   const [profileName, setProfileName] = useState('Player')
   const [profileRank, setProfileRank] = useState('No rank yet')
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
-  const [coachStudentRole, setCoachStudentRole] = useState<'none' | 'coach' | 'student'>('none')
+  const tabLabels: Record<keyof MainTabParamList, string> = {
+    AICoach: t('tabs.aiCoach'),
+    MyCoach: viewerIsCoach ? t('tabs.myStudents') : t('tabs.myCoach'),
+    Activities: viewerIsCoach ? t('tabs.calendar') : t('tabs.activities'),
+    Progress: t('tabs.progress'),
+    You: t('tabs.you'),
+  }
 
   const goToTab = useCallback(
     (screen: keyof MainTabParamList) => {
@@ -198,8 +205,6 @@ function MainTabsLayoutInner({
       const cached = await getCachedProfile()
       if (!mounted || !cached?.user) return
 
-      const cr = cached?.profile?.coachStudentRole
-      setCoachStudentRole(cr === 'coach' || cr === 'student' ? cr : 'none')
       setProfileName(cached.user?.name || 'Player')
       const levelText =
         cached?.profile?.level ||
@@ -247,8 +252,6 @@ function MainTabsLayoutInner({
       setProfileImageUri(null)
     }
 
-    const cr = body?.profile?.coachStudentRole
-    setCoachStudentRole(cr === 'coach' || cr === 'student' ? cr : 'none')
     void setCachedProfile({
       user: {
         name: body.user?.name || null,
@@ -264,7 +267,8 @@ function MainTabsLayoutInner({
         coachStudentRole: body?.profile?.coachStudentRole ?? null,
       },
     })
-  }, [])
+    invalidate()
+  }, [invalidate])
 
   useEffect(() => {
     void refreshProfile()
@@ -294,10 +298,10 @@ function MainTabsLayoutInner({
   }, [activeTabName, onTabFocus])
 
   useEffect(() => {
-    if (coachStudentRole !== 'coach' && activeTabName === 'MyCoach') {
-      goToTab('AICoach')
+    if (viewerIsCoach && activeTabName === 'AICoach') {
+      goToTab('MyCoach')
     }
-  }, [activeTabName, coachStudentRole, goToTab])
+  }, [activeTabName, viewerIsCoach, goToTab])
 
   useEffect(() => {
     return registerCorrectionNotificationDeepLink(stackNavigation)
@@ -322,6 +326,31 @@ function MainTabsLayoutInner({
   const tabBarHeight = 66 + tabBarBottomPad
 
   const tabBg = theme.backgroundColor ?? '#030A17'
+
+  const renderCoachTabLabel = useCallback(
+    (label: string) =>
+      ({ color }: { color: string }) => (
+        <Text
+          allowFontScaling={false}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
+          style={{
+            color,
+            fontFamily: theme.mediumFont,
+            fontSize: tabMetrics.labelFontSize,
+            lineHeight: tabMetrics.labelFontSize + (Platform.OS === 'android' ? 6 : 4),
+            textAlign: 'center',
+            marginTop: 0,
+            marginBottom: 0,
+            ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
+          }}
+        >
+          {label}
+        </Text>
+      ),
+    [theme.mediumFont, tabMetrics.labelFontSize]
+  )
 
   const tabScreenOptions = useMemo(
     () =>
@@ -374,10 +403,7 @@ function MainTabsLayoutInner({
       <View style={styles.container}>
       <Header
         flatOverlay
-        onLogoPress={() => {
-          setTechniqueResetKey((k) => k + 1)
-          goToTab('AICoach')
-        }}
+        onProPress={() => stackNavigation.navigate('ProSubscription')}
         onProfilePress={headerSearchLeft ? undefined : () => goToTab('You')}
         profileName={profileName}
         profileRank={profileRank}
@@ -388,18 +414,16 @@ function MainTabsLayoutInner({
         onSearchPress={headerSearchLeft ? () => stackNavigation.navigate('InviteSearch') : undefined}
       />
       <Tab.Navigator
+        key={viewerIsCoach ? 'coach-tabs' : 'student-tabs'}
         screenOptions={({ route }) => ({
           ...tabScreenOptions,
-          tabBarLabel: tabLabels[route.name as keyof MainTabParamList],
-          tabBarLabelStyle: {
-            fontFamily: theme.mediumFont,
-            fontSize: tabMetrics.labelFontSize,
-            lineHeight: tabMetrics.labelFontSize + (Platform.OS === 'android' ? 6 : 4),
-            marginTop: 0,
-            marginBottom: 0,
-            ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
-          },
-          ...(route.name === 'MyCoach' && coachStudentRole !== 'coach'
+          tabBarLabel:
+            route.name === 'MyCoach' && viewerIsCoach
+              ? renderCoachTabLabel(tabLabels.MyCoach)
+              : route.name === 'Activities' && viewerIsCoach
+                ? renderCoachTabLabel(tabLabels.Activities)
+                : tabLabels[route.name as keyof MainTabParamList],
+          ...(route.name === 'AICoach' && viewerIsCoach
             ? {
                 tabBarButton: () => null,
                 tabBarItemStyle: {
@@ -414,6 +438,14 @@ function MainTabsLayoutInner({
                 },
               }
             : {}),
+          tabBarLabelStyle: {
+            fontFamily: theme.mediumFont,
+            fontSize: tabMetrics.labelFontSize,
+            lineHeight: tabMetrics.labelFontSize + (Platform.OS === 'android' ? 6 : 4),
+            marginTop: 0,
+            marginBottom: 0,
+            ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
+          },
           tabBarIcon: ({ focused }) => {
             const c = focused ? TAB_BAR_ACTIVE : TAB_BAR_INACTIVE
             const s = tabMetrics.iconSize
@@ -421,7 +453,11 @@ function MainTabsLayoutInner({
               case 'AICoach':
                 return <NavIconAICoach color={c} size={s} />
               case 'MyCoach':
-                return <NavIconMyCoach color={c} size={s} />
+                return viewerIsCoach ? (
+                  <NavIconMyStudents color={c} size={s} />
+                ) : (
+                  <NavIconMyCoach color={c} size={s} />
+                )
               case 'Activities':
                 return <NavIconActivities color={c} size={s} />
               case 'Progress':
@@ -446,7 +482,7 @@ function MainTabsLayoutInner({
           {() => (
             <YouTabStack
               onProfileUpdated={onProfileUpdated}
-              onDone={() => goToTab('AICoach')}
+              onDone={() => goToTab(viewerIsCoach ? 'MyCoach' : 'AICoach')}
             />
           )}
         </Tab.Screen>
@@ -524,6 +560,9 @@ function AuthenticatedStack() {
         {({ navigation }) => (
           <ProfileSettingsScreen onProfileUpdated={onProfileUpdated} onClose={() => navigation.goBack()} />
         )}
+      </Stack.Screen>
+      <Stack.Screen name="ProSubscription">
+        {({ navigation }) => <ProScreen onClose={() => navigation.goBack()} />}
       </Stack.Screen>
       <Stack.Screen name="Notifications">
         {({ navigation }) => <NotificationsScreen onClose={() => navigation.goBack()} />}

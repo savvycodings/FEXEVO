@@ -6,6 +6,8 @@ export type CoachId = "steve" | "carlos" | "slama";
 
 export type ProgressTabStackParamList = {
   ProgressMain: undefined;
+  DailyQuest: undefined;
+  AllAchievements: undefined;
 };
 
 export type YouTabStackParamList = {
@@ -27,6 +29,7 @@ export type CoachStudentChatParams = {
 
 export type MyCoachTabStackParamList = {
   MyCoachMain: undefined;
+  StudentProfile: CoachStudentChatParams;
   CoachStudentChat: CoachStudentChatParams;
 };
 
@@ -49,6 +52,7 @@ export type MainStackParamList = {
   AdminFalLora: undefined;
   AdminAccuracy: undefined;
   ProfileSettings: undefined;
+  ProSubscription: undefined;
   Notifications: undefined;
   /** Coach: search users, add coach_student or club_member (see server schema). */
   CoachAddPeople: undefined;

@@ -126,7 +126,7 @@ export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => 
       showHeroRow={false}
       aboveActivitiesTitle={
         <>
-          <ProfileHeroScoreBlock />
+          <ProfileHeroScoreBlock premiumLabelNudgeUp={4} />
           <ProfileRatingDashboard />
           {showAiInsight && insight ? (
             <ProfileAiInsightBanner styles={styles} insight={insight} onDismiss={onDismissInsight} />

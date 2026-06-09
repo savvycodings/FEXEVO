@@ -17,4 +17,6 @@ export type MyCoachStudent = {
   pendingCoachReviewId?: string | null
   /** Target user’s `user_profile.coachStudentRole` (for “Make coach” visibility). */
   coachStudentRole?: 'none' | 'coach' | 'student'
+  /** Coach pinned this student to the top of the roster (local persistence). */
+  pinned?: boolean
 }

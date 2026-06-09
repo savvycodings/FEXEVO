@@ -209,7 +209,7 @@ export function CoachAddPeopleScreen() {
     <View style={[styles.root, { backgroundColor: theme.backgroundColor }]}>
       <Header
         flatOverlay
-        onLogoPress={() => navigateMainTab('AICoach')}
+        onProPress={() => navigation.navigate('ProSubscription')}
         onProfilePress={() => navigateMainTab('You')}
         profileName={profileName}
         profileRank={profileRank}

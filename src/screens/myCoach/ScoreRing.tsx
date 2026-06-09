@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native'
 import Svg, { Circle, G } from 'react-native-svg'
 
-const SCORE_RING_SIZE = 56
+const DEFAULT_RING_SIZE = 56
 const SCORE_RING_STROKE = 3 * 1.15
 
 function scoreToProgress(n: number) {
@@ -13,23 +13,24 @@ type Props = {
   lastScore: number
   /** Theme font names */
   semiBoldFont: string
+  size?: number
 }
 
-export function MyCoachScoreRing({ actualScore, lastScore, semiBoldFont }: Props) {
+export function MyCoachScoreRing({ actualScore, lastScore, semiBoldFont, size = DEFAULT_RING_SIZE }: Props) {
   const actualP = scoreToProgress(actualScore)
   const lastP = scoreToProgress(lastScore)
-  const cx = SCORE_RING_SIZE / 2
-  const cy = SCORE_RING_SIZE / 2
+  const cx = size / 2
+  const cy = size / 2
   const w = SCORE_RING_STROKE
-  const outerR = SCORE_RING_SIZE / 2 - w / 2
+  const outerR = size / 2 - w / 2
   const innerR = outerR - w
   const lenOuter = 2 * Math.PI * outerR
   const lenInner = 2 * Math.PI * innerR
   const rotateTop = `rotate(-90 ${cx} ${cy})`
 
   return (
-    <View style={styles.ringWrap}>
-      <Svg width={SCORE_RING_SIZE} height={SCORE_RING_SIZE} style={StyleSheet.absoluteFillObject}>
+    <View style={[styles.ringWrap, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFillObject}>
         <Circle cx={cx} cy={cy} r={outerR} stroke="rgba(64, 192, 255, 0.28)" strokeWidth={w} fill="none" />
         <G transform={rotateTop}>
           <Circle
@@ -73,9 +74,6 @@ export function MyCoachScoreRing({ actualScore, lastScore, semiBoldFont }: Props
 
 const styles = StyleSheet.create({
   ringWrap: {
-    width: SCORE_RING_SIZE,
-    height: SCORE_RING_SIZE,
-    borderRadius: SCORE_RING_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
