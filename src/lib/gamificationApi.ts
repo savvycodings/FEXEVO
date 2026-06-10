@@ -1,11 +1,15 @@
 import { authClient } from './auth-client'
 
+export type QuestCadence = 'daily' | 'weekly' | 'season'
+
 export type GamificationQuestRow = {
   questKey: string
   progress: number
   goal: number
   xp: number
   claimed: boolean
+  cadence?: QuestCadence
+  periodKey?: string
 }
 
 export type GamificationState = {
@@ -18,7 +22,11 @@ export type GamificationState = {
   achievements: { key: string; unlockedAt: string; claimedAt: string }[]
   claimableAchievements: { key: string; earnedAt: string }[]
   dailyQuests: GamificationQuestRow[]
+  weeklyQuests: GamificationQuestRow[]
+  seasonQuests: GamificationQuestRow[]
   dateKey: string
+  weeklyPeriodKey: string
+  seasonPeriodKey: string
   newlyEarnedAchievements?: string[]
 }
 
@@ -43,14 +51,18 @@ export async function fetchGamificationState(
 
 export async function claimDailyQuest(
   questKey: string,
-  dateKey?: string
+  opts?: {
+    cadence?: QuestCadence
+    periodKey?: string
+    dateKey?: string
+  }
 ): Promise<{ state: GamificationState; xpAwarded: number } | null> {
   const res = await authClient
     .$fetch<{ ok?: boolean; error?: string; xpAwarded?: number } & GamificationState>(
       `/profile/gamification/daily-quests/${encodeURIComponent(questKey)}/claim`,
       {
         method: 'POST',
-        body: dateKey ? { dateKey } : {},
+        body: opts ?? {},
       }
     )
     .catch(() => null)
@@ -81,25 +93,6 @@ export async function trackGamificationQuest(
 
   if (res == null) return null
   const body = ((res as { data?: unknown })?.data ?? res) as { ok?: boolean; error?: string } & GamificationState
-  if (!body.ok || body.error) return null
-  return body
-}
-
-export async function claimAchievement(
-  achievementKey: string
-): Promise<GamificationState | null> {
-  const res = await authClient
-    .$fetch<{ ok?: boolean; error?: string } & GamificationState>(
-      `/profile/gamification/achievements/${encodeURIComponent(achievementKey)}/claim`,
-      { method: 'POST', body: {} }
-    )
-    .catch(() => null)
-
-  if (res == null) return null
-  const body = ((res as { data?: unknown })?.data ?? res) as {
-    ok?: boolean
-    error?: string
-  } & GamificationState
   if (!body.ok || body.error) return null
   return body
 }

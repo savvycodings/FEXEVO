@@ -656,7 +656,10 @@ export function ProgressScreen() {
           <>
             <AchievementsHeroBlock horizontalPadding={horizontalPad} activities={activities} />
             <AchievementsDailyQuestBanner onPress={() => navigation.navigate('DailyQuest')} />
-            <AchievementsBadgesSection onViewAllPress={() => navigation.navigate('AllAchievements')} />
+            <AchievementsBadgesSection
+              onViewAllPress={() => navigation.navigate('AllAchievements')}
+              onRankingPress={() => navigation.navigate('Ranking')}
+            />
           </>
         )}
       </ScrollView>

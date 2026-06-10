@@ -73,6 +73,10 @@ type SessionDataContextValue = {
   claimedAchievementKeys: Set<string>
   claimableAchievementKeys: Set<string>
   dailyQuests: GamificationQuestRow[]
+  weeklyQuests: GamificationQuestRow[]
+  seasonQuests: GamificationQuestRow[]
+  weeklyPeriodKey: string
+  seasonPeriodKey: string
   gamificationLoading: boolean
   refreshGamification: () => Promise<void>
   /** When user focuses Activities / You / Progress — refreshes stale slices (cooldown). */
@@ -123,6 +127,10 @@ export function SessionDataProvider({
     () => new Set()
   )
   const [dailyQuests, setDailyQuests] = useState<GamificationQuestRow[]>([])
+  const [weeklyQuests, setWeeklyQuests] = useState<GamificationQuestRow[]>([])
+  const [seasonQuests, setSeasonQuests] = useState<GamificationQuestRow[]>([])
+  const [weeklyPeriodKey, setWeeklyPeriodKey] = useState('')
+  const [seasonPeriodKey, setSeasonPeriodKey] = useState('')
   const [gamificationLoading, setGamificationLoading] = useState(true)
   const viewerIsCoach = coachStudentRole === 'coach'
 
@@ -219,7 +227,11 @@ export function SessionDataProvider({
     setClaimableAchievementKeys(
       new Set((state.claimableAchievements ?? []).map((a) => a.key))
     )
-    setDailyQuests(state.dailyQuests)
+    setDailyQuests(state.dailyQuests ?? [])
+    setWeeklyQuests(state.weeklyQuests ?? [])
+    setSeasonQuests(state.seasonQuests ?? [])
+    setWeeklyPeriodKey(state.weeklyPeriodKey ?? '')
+    setSeasonPeriodKey(state.seasonPeriodKey ?? '')
     lastGamificationOkAt.current = Date.now()
   }, [])
 
@@ -369,6 +381,10 @@ export function SessionDataProvider({
       claimedAchievementKeys,
       claimableAchievementKeys,
       dailyQuests,
+      weeklyQuests,
+      seasonQuests,
+      weeklyPeriodKey,
+      seasonPeriodKey,
       gamificationLoading,
       refreshGamification,
       onTabFocus,
@@ -397,6 +413,10 @@ export function SessionDataProvider({
       claimedAchievementKeys,
       claimableAchievementKeys,
       dailyQuests,
+      weeklyQuests,
+      seasonQuests,
+      weeklyPeriodKey,
+      seasonPeriodKey,
       gamificationLoading,
       refreshGamification,
       onTabFocus,

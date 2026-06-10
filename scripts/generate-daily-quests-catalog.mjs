@@ -38,10 +38,8 @@ function toKey(base) {
     Uploadandanalyzeafullvideo: 'upload-analyze-full-video',
     uploadfor3consecutivedays: 'upload-3-consecutive-days',
     uploud1backhandshot: 'upload-1-backhand',
-    uploud1forehandshots: 'upload-1-forehand',
     uploud3volleyshots: 'upload-3-volley-shots',
     uploudafullvideo: 'upload-a-full-video',
-    uploudasuccessfulserve: 'upload-successful-serve',
     WatchAIreplay: 'watch-ai-replay',
   }
   const clean = base.replace(/%/g, '')
@@ -57,24 +55,83 @@ function parseXp(f) {
   return m ? parseInt(m[1], 10) : 0
 }
 
-function toLabelKey(key) {
-  return key
-    .split('-')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join('')
-    .replace(/^./, (c) => c.toLowerCase())
+const GOAL_OVERRIDES = {
+  'complete-3-before-midday': 3,
+  'complete-3-daily-quests': 3,
+  'upload-3-volley-shots': 3,
+  'get-streak-50-points': 3,
+  'upload-3-consecutive-days': 3,
+  'maintain-5-day-streak': 5,
+  'maintain-7-day-streak': 7,
+  'complete-perfect-week': 7,
 }
 
-const quests = files
-  .map((f) => {
-    const base = f.split(LS)[0]
-    const key = toKey(base)
-    const xp = parseXp(f)
-    const escaped = f.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-    const labelSuffix = toLabelKey(key)
-    return { key, xp, escaped, labelSuffix, titleKey: `progress.dailyQuest_${key.replace(/-/g, '_')}` }
-  })
-  .sort((a, b) => a.key.localeCompare(b.key))
+/** XP + cadence — keep in sync with `server/src/gamification/definitions.ts`. */
+const XP_BY_KEY = {
+  'first-login-of-day': 15,
+  'login-to-app': 20,
+  'share-your-profile': 20,
+  'complete-3-before-midday': 25,
+  'complete-3-daily-quests': 30,
+  'complete-an-upload': 35,
+  'watch-ai-replay': 35,
+  'get-over-70-score': 40,
+  'share-result': 45,
+  'improve-ai-score-yesterday': 50,
+  'upload-1-backhand': 50,
+  'get-ai-score-above-80': 55,
+  'score-above-60-serves': 55,
+  'complete-1-ai-analysis': 60,
+  'upload-3-volley-shots': 180,
+  'upload-a-full-video': 200,
+  'hit-perfect-bandejas': 220,
+  'get-streak-50-points': 250,
+  'invite-a-friend': 280,
+  'get-80-above-smashes': 280,
+  'get-perfect-volleys': 300,
+  'upload-analyze-full-video': 320,
+  'upload-3-consecutive-days': 350,
+  'complete-all-daily-quests': 380,
+  'achieve-s-rank-ai': 900,
+  'improve-shot-accuracy-15': 1100,
+  'maintain-5-day-streak': 1300,
+  'maintain-7-day-streak': 1600,
+  'complete-perfect-week': 1900,
+  'reach-new-division': 2400,
+}
+
+const CADENCE_BY_KEY = {
+  'first-login-of-day': 'daily',
+  'login-to-app': 'daily',
+  'share-your-profile': 'daily',
+  'complete-3-before-midday': 'daily',
+  'complete-3-daily-quests': 'daily',
+  'complete-an-upload': 'daily',
+  'watch-ai-replay': 'daily',
+  'get-over-70-score': 'daily',
+  'share-result': 'daily',
+  'improve-ai-score-yesterday': 'daily',
+  'upload-1-backhand': 'daily',
+  'get-ai-score-above-80': 'daily',
+  'score-above-60-serves': 'daily',
+  'complete-1-ai-analysis': 'daily',
+  'upload-3-volley-shots': 'weekly',
+  'upload-a-full-video': 'weekly',
+  'hit-perfect-bandejas': 'weekly',
+  'get-streak-50-points': 'weekly',
+  'invite-a-friend': 'weekly',
+  'get-80-above-smashes': 'weekly',
+  'get-perfect-volleys': 'weekly',
+  'upload-analyze-full-video': 'weekly',
+  'upload-3-consecutive-days': 'weekly',
+  'complete-all-daily-quests': 'weekly',
+  'achieve-s-rank-ai': 'season',
+  'improve-shot-accuracy-15': 'season',
+  'maintain-5-day-streak': 'season',
+  'maintain-7-day-streak': 'season',
+  'complete-perfect-week': 'season',
+  'reach-new-division': 'season',
+}
 
 const TITLE_OVERRIDES = {
   'achieve-s-rank-ai': 'Achieve S Rank in AI',
@@ -102,16 +159,59 @@ const TITLE_OVERRIDES = {
   'share-result': 'Share a Result',
   'share-your-profile': 'Share Your Profile',
   'upload-1-backhand': 'Upload 1 Backhand Shot',
-  'upload-1-forehand': 'Upload 1 Forehand Shot',
   'upload-3-consecutive-days': 'Upload for 3 Consecutive Days',
   'upload-3-volley-shots': 'Upload 3 Volley Shots',
   'upload-a-full-video': 'Upload a Full Video',
   'upload-analyze-full-video': 'Upload and Analyze a Full Video',
-  'upload-successful-serve': 'Upload a Successful Serve',
   'watch-ai-replay': 'Watch AI Replay',
 }
 
-const i18nEn = quests
+function stemFromFilename(filename) {
+  return filename.split(LS)[0].replace(/\.svg$/i, '')
+}
+
+function keyFromFile(filename) {
+  const stem = stemFromFilename(filename)
+  if (TITLE_OVERRIDES[stem]) return stem
+  return toKey(stem)
+}
+
+/** Rename legacy SVGs (with U+2028 in the name) to stable ASCII `{key}.svg` for Metro. */
+const quests = files
+  .map((f) => {
+    const key = keyFromFile(f)
+    const xp = XP_BY_KEY[key] ?? parseXp(f)
+    const safeName = `${key}.svg`
+    const srcPath = path.join(dir, f)
+    const destPath = path.join(dir, safeName)
+    if (f !== safeName && f.includes(LS)) {
+      if (fs.existsSync(destPath)) {
+        fs.unlinkSync(srcPath)
+      } else {
+        fs.renameSync(srcPath, destPath)
+      }
+      console.log('Renamed', f, '->', safeName)
+    }
+    return {
+      key,
+      xp,
+      cadence: CADENCE_BY_KEY[key] ?? 'daily',
+      safeName,
+      titleKey: `progress.dailyQuest_${key.replace(/-/g, '_')}`,
+      goal: GOAL_OVERRIDES[key] ?? 1,
+    }
+  })
+  .filter((q) => TITLE_OVERRIDES[q.key])
+  .sort((a, b) => a.key.localeCompare(b.key))
+
+const seenKeys = new Set()
+const uniqueQuests = quests.filter((q) => {
+  if (seenKeys.has(q.key)) return false
+  seenKeys.add(q.key)
+  return true
+})
+
+const i18nEn = uniqueQuests
   .map((q) => {
     const title = TITLE_OVERRIDES[q.key] ?? q.key
     return `    dailyQuest_${q.key.replace(/-/g, '_')}: "${title}",`
@@ -121,9 +221,13 @@ const i18nEn = quests
 const body = `/** Auto-generated from app/assets/dailyquests — run: node scripts/generate-daily-quests-catalog.mjs */
 import type { ImageSourcePropType } from 'react-native'
 
-export const DAILY_QUESTS_PER_DAY = 4
+export type QuestCadence = 'daily' | 'weekly' | 'season'
 
-export const QUEST_XP_BADGE = require('../../assets/dailyquests/blueXP.png') as number
+export const DAILY_QUESTS_PER_DAY = 4
+export const WEEKLY_QUESTS_PER_WEEK = 3
+export const SEASON_QUESTS_PER_SEASON = 2
+
+export { QUEST_XP_BADGE } from './dailyQuestXpBadge'
 
 export type DailyQuestDef = {
   key: string
@@ -131,27 +235,58 @@ export type DailyQuestDef = {
   titleKey: string
   xp: number
   goal: number
+  cadence: QuestCadence
 }
 
-export const ALL_DAILY_QUESTS: DailyQuestDef[] = [
-${quests
+export const ALL_QUESTS: DailyQuestDef[] = [
+${uniqueQuests
   .map(
     (q) => `  {
     key: '${q.key}',
-    icon: require('../../assets/dailyquests/${q.escaped}'),
+    icon: require('../../assets/dailyquests/${q.safeName}'),
     titleKey: '${q.titleKey}',
     xp: ${q.xp},
-    goal: 1,
+    goal: ${q.goal},
+    cadence: '${q.cadence}',
   },`
   )
   .join('\n')}
 ]
+
+/** @deprecated Use ALL_QUESTS */
+export const ALL_DAILY_QUESTS = ALL_QUESTS
+
+const DAILY_POOL = ALL_QUESTS.filter((q) => q.cadence === 'daily')
+const WEEKLY_POOL = ALL_QUESTS.filter((q) => q.cadence === 'weekly')
+const SEASON_POOL = ALL_QUESTS.filter((q) => q.cadence === 'season')
 
 export function localDateKey(d = new Date()): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return \`\${y}-\${m}-\${day}\`
+}
+
+/** ISO week (Monday start), e.g. W2026-23 */
+export function weeklyPeriodKey(d = new Date()): string {
+  const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const day = utc.getUTCDay() || 7
+  utc.setUTCDate(utc.getUTCDate() + 4 - day)
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1))
+  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
+  return \`W\${utc.getUTCFullYear()}-\${String(week).padStart(2, '0')}\`
+}
+
+/** Four-month seasons: Jan–Apr, May–Aug, Sep–Dec */
+export function seasonPeriodKey(d = new Date()): string {
+  const season = Math.floor(d.getMonth() / 4) + 1
+  return \`S\${d.getFullYear()}-\${season}\`
+}
+
+export function periodKeyForCadence(cadence: QuestCadence, d = new Date()): string {
+  if (cadence === 'weekly') return weeklyPeriodKey(d)
+  if (cadence === 'season') return seasonPeriodKey(d)
+  return localDateKey(d)
 }
 
 function hashString(input: string): number {
@@ -163,24 +298,43 @@ function hashString(input: string): number {
   return h >>> 0
 }
 
-/** Same 4 quests for everyone on a given calendar day; changes at local midnight. */
-export function pickDailyQuestsForDate(dateKey: string, count = DAILY_QUESTS_PER_DAY): DailyQuestDef[] {
-  const pool = [...ALL_DAILY_QUESTS]
-  let seed = hashString(dateKey)
-  for (let i = pool.length - 1; i > 0; i--) {
+function pickFromPool(pool: DailyQuestDef[], periodKey: string, count: number): DailyQuestDef[] {
+  const copy = [...pool]
+  let seed = hashString(periodKey)
+  for (let i = copy.length - 1; i > 0; i--) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
     const j = seed % (i + 1)
-    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
   }
-  return pool.slice(0, Math.min(count, pool.length))
+  return copy.slice(0, Math.min(count, copy.length))
+}
+
+export function pickDailyQuestsForDate(dateKey: string, count = DAILY_QUESTS_PER_DAY): DailyQuestDef[] {
+  return pickFromPool(DAILY_POOL, dateKey, count)
+}
+
+export function pickWeeklyQuestsForPeriod(periodKey = weeklyPeriodKey(), count = WEEKLY_QUESTS_PER_WEEK): DailyQuestDef[] {
+  return pickFromPool(WEEKLY_POOL, periodKey, count)
+}
+
+export function pickSeasonQuestsForPeriod(periodKey = seasonPeriodKey(), count = SEASON_QUESTS_PER_SEASON): DailyQuestDef[] {
+  return pickFromPool(SEASON_POOL, periodKey, count)
 }
 
 export function getTodaysDailyQuests(now = new Date()): DailyQuestDef[] {
   return pickDailyQuestsForDate(localDateKey(now))
 }
+
+export function getThisWeeksQuests(now = new Date()): DailyQuestDef[] {
+  return pickWeeklyQuestsForPeriod(weeklyPeriodKey(now))
+}
+
+export function getThisSeasonQuests(now = new Date()): DailyQuestDef[] {
+  return pickSeasonQuestsForPeriod(seasonPeriodKey(now))
+}
 `
 
 fs.writeFileSync(out, body)
-console.log('Wrote', out, 'with', quests.length, 'quests')
+console.log('Wrote', out, 'with', uniqueQuests.length, 'quests')
 console.log('Add i18n keys under progress:')
 console.log(i18nEn)

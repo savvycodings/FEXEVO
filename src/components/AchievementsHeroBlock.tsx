@@ -15,11 +15,60 @@ const SMALL_SHIELD_CAP_REF_WIN_W = 430
 const DEFAULT_HORIZONTAL_PAD = 20
 const HERO_GAP = 10
 
-/** XP / level come from `/profile/gamification/state`. */
-const WIN_RATE_PLACEHOLDER = 67
-const WIN_STREAK_PLACEHOLDER = 6
-
 const { accent: SHIELD_GLOW } = proLibraryChrome
+
+function localDateKey(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function addDays(dateKey: string, delta: number): string {
+  const [y, m, d] = dateKey.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + delta)
+  return localDateKey(dt)
+}
+
+/** Mean AI score (0–100) across completed analyses. */
+function averageCompletedScore(sessions: ActivitySession[]): number | null {
+  const scores = sessions
+    .filter(
+      (s) =>
+        s.status === 'completed' && typeof s.score === 'number' && Number.isFinite(s.score)
+    )
+    .map((s) => Math.round(Math.max(0, Math.min(100, s.score!))))
+  if (scores.length === 0) return null
+  return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+}
+
+/** Consecutive calendar days with at least one upload, ending today or yesterday. */
+function currentUploadStreak(sessions: ActivitySession[]): number {
+  const uploadDays = new Set<string>()
+  for (const s of sessions) {
+    const d = new Date(s.createdAt)
+    if (!Number.isNaN(d.getTime())) uploadDays.add(localDateKey(d))
+  }
+  if (uploadDays.size === 0) return 0
+
+  const today = localDateKey(new Date())
+  const yesterday = addDays(today, -1)
+  const anchor = uploadDays.has(today)
+    ? today
+    : uploadDays.has(yesterday)
+      ? yesterday
+      : null
+  if (!anchor) return 0
+
+  let streak = 0
+  let cursor = anchor
+  while (uploadDays.has(cursor)) {
+    streak += 1
+    cursor = addDays(cursor, -1)
+  }
+  return streak
+}
 
 type Props = {
   /** Must match parent scroll `paddingHorizontal`. */
@@ -41,8 +90,16 @@ export function AchievementsHeroBlock({
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { width: winW } = useWindowDimensions()
-  const { profileName, profileImageUri, profileAreaLocation, xpInLevel, xpGoal, playerLevel, playerTier } =
-    useSessionData()
+  const {
+    profileName,
+    profileImageUri,
+    profileAreaLocation,
+    xpInLevel,
+    xpGoal,
+    playerLevel,
+    playerTier,
+    overallPillarScore,
+  } = useSessionData()
   const [rowWidth, setRowWidth] = useState(0)
 
   const contentW = rowWidth > 0 ? rowWidth : Math.max(1, winW - horizontalPadding * 2)
@@ -68,6 +125,11 @@ export function AchievementsHeroBlock({
 
   const xpPct = Math.max(0, Math.min(100, Math.round((xpInLevel / Math.max(1, xpGoal)) * 100)))
   const matchCount = completedCount(activities)
+  const avgScore = useMemo(
+    () => averageCompletedScore(activities) ?? overallPillarScore,
+    [activities, overallPillarScore]
+  )
+  const uploadStreak = useMemo(() => currentUploadStreak(activities), [activities])
 
   return (
     <View
@@ -179,13 +241,15 @@ export function AchievementsHeroBlock({
                 allowFontScaling={false}
                 style={[styles.statLabel, { fontFamily: theme.regularFont }]}
               >
-                {t('progress.statWinRate')}
+                {t('progress.statAvgScore')}
               </Text>
               <Text
                 allowFontScaling={false}
                 style={[styles.statValue, { fontFamily: theme.semiBoldFont }]}
               >
-                {t('progress.statWinRateValue', { rate: WIN_RATE_PLACEHOLDER })}
+                {avgScore != null
+                  ? t('progress.statAvgScoreValue', { score: avgScore })
+                  : '—'}
               </Text>
             </View>
             <View style={styles.statCol}>
@@ -193,13 +257,13 @@ export function AchievementsHeroBlock({
                 allowFontScaling={false}
                 style={[styles.statLabel, { fontFamily: theme.regularFont }]}
               >
-                {t('progress.statWinStreak')}
+                {t('progress.statStreak')}
               </Text>
               <Text
                 allowFontScaling={false}
                 style={[styles.statValue, { fontFamily: theme.semiBoldFont }]}
               >
-                {WIN_STREAK_PLACEHOLDER}
+                {uploadStreak}
               </Text>
             </View>
           </View>

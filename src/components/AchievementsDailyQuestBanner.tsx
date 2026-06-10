@@ -1,10 +1,10 @@
 import React, { useContext, useMemo } from 'react'
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
 import { ThemeContext } from '../context'
-import { getTodaysDailyQuests, QUEST_XP_BADGE } from '../lib/dailyQuestsCatalog'
+import { useSessionData } from '../context/SessionDataContext'
+import { DailyQuestXpBadge } from './DailyQuestXpBadge'
+import { getTodaysDailyQuests } from '../lib/dailyQuestsCatalog'
 import { useTranslation } from 'react-i18next'
-
-const BADGE_SIZE = 56
 
 type Props = {
   onPress?: () => void
@@ -13,13 +13,21 @@ type Props = {
 export function AchievementsDailyQuestBanner({ onPress }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
+  const { dailyQuests } = useSessionData()
 
   const featured = useMemo(() => getTodaysDailyQuests()[0], [])
-  const current = 0
-  const goal = featured?.goal ?? 1
-  const pct = Math.max(0, Math.min(100, Math.round((current / goal) * 100)))
+  const progress = useMemo(
+    () => dailyQuests.find((q) => q.questKey === featured?.key),
+    [dailyQuests, featured?.key]
+  )
 
   if (!featured) return null
+
+  const current = progress?.progress ?? 0
+  const goal = progress?.goal ?? featured.goal
+  const claimed = progress?.claimed ?? false
+  const isComplete = claimed || current >= goal
+  const pct = Math.max(0, Math.min(100, Math.round((current / Math.max(1, goal)) * 100)))
 
   return (
     <TouchableOpacity style={styles.banner} onPress={onPress} activeOpacity={onPress ? 0.9 : 1} disabled={!onPress}>
@@ -39,30 +47,46 @@ export function AchievementsDailyQuestBanner({ onPress }: Props) {
             {t(featured.titleKey)}
           </Text>
           <View style={styles.progressTextRow}>
-            <Text
-              allowFontScaling={false}
-              style={[styles.progressCurrent, { fontFamily: theme.regularFont }]}
-            >
-              {current}
-            </Text>
-            <Text
-              allowFontScaling={false}
-              style={[styles.progressGoalSuffix, { fontFamily: theme.regularFont }]}
-            >
-              {t('progress.dailyQuestProgressSuffix', { goal })}
-            </Text>
+            {claimed ? (
+              <Text
+                allowFontScaling={false}
+                style={[styles.claimedTxt, { fontFamily: theme.semiBoldFont }]}
+              >
+                {t('progress.questClaimed')}
+              </Text>
+            ) : (
+              <>
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.progressCurrent, { fontFamily: theme.regularFont }]}
+                >
+                  {current}
+                </Text>
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.progressGoalSuffix, { fontFamily: theme.regularFont }]}
+                >
+                  {t('progress.dailyQuestProgressSuffix', { goal })}
+                </Text>
+              </>
+            )}
           </View>
         </View>
         <View style={styles.track}>
-          <View style={[styles.fill, { width: `${pct}%` }]} />
+          <View
+            style={[
+              styles.fill,
+              { width: `${pct}%`, backgroundColor: isComplete ? '#05DF78' : '#00B8FF' },
+            ]}
+          />
         </View>
       </View>
-      <View style={styles.badgeSlot}>
-        <Image source={QUEST_XP_BADGE} style={styles.badgeImg} resizeMode="contain" />
-        <Text allowFontScaling={false} style={[styles.badgeXp, { fontFamily: theme.semiBoldFont }]}>
-          +{featured.xp}
-        </Text>
-      </View>
+      <DailyQuestXpBadge
+        xp={featured.xp}
+        completed={isComplete}
+        fontFamily={theme.semiBoldFont}
+        size="banner"
+      />
     </TouchableOpacity>
   )
 }
@@ -121,6 +145,11 @@ const styles = StyleSheet.create({
     color: '#86A7D2',
     lineHeight: 15,
   },
+  claimedTxt: {
+    fontSize: 12,
+    color: '#05DF78',
+    lineHeight: 15,
+  },
   track: {
     width: '100%',
     height: 6,
@@ -131,24 +160,5 @@ const styles = StyleSheet.create({
   fill: {
     height: '100%',
     borderRadius: 3,
-    backgroundColor: '#00B8FF',
-  },
-  badgeSlot: {
-    width: BADGE_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    alignSelf: 'stretch',
-  },
-  badgeImg: {
-    position: 'absolute',
-    width: BADGE_SIZE,
-    height: BADGE_SIZE,
-  },
-  badgeXp: {
-    fontSize: 11,
-    color: '#FFFFFF',
-    lineHeight: 13,
-    marginTop: 12,
   },
 })
