@@ -47,7 +47,7 @@ type ApiCategoryRow = {
   lastWeek: number
 }
 
-function mapApiToMetrics(categories: ApiCategoryRow[]): RatingMetricRow[] {
+export function mapApiToMetrics(categories: ApiCategoryRow[]): RatingMetricRow[] {
   const byId = new Map(categories.map((c) => [c.id, c]))
   return RING_CATEGORY_ORDER.map((id) => {
     const row = byId.get(id)

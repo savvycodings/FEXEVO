@@ -94,6 +94,8 @@ type Props = {
   showTopShieldName?: boolean
   /** SR / GS / NP / DG / OH row under the name; loads `/profile/rating-by-category` (this week → 0–100). */
   showPillarScores?: boolean
+  /** When set, pillar scores load for this user instead of the signed-in session. */
+  ratingUserId?: string
   /** Optional wide mark at the shield tip, under crest/flag (e.g. Xevo wordmark on profile settings). */
   brandLogoSource?: ImageSourcePropType | null
   /** Optional multiplier for the top name text only (e.g. 1.15). */
@@ -128,6 +130,7 @@ export function ShieldCoachCard({
   topShieldName,
   showTopShieldName = true,
   showPillarScores = false,
+  ratingUserId,
   brandLogoSource,
   topNameScale = 1,
   variant = 'default',
@@ -163,8 +166,11 @@ export function ShieldCoachCard({
   const loadPillarScores = useCallback(async () => {
     if (!showPillarScores) return
     try {
+      const query = ratingUserId
+        ? `?userId=${encodeURIComponent(ratingUserId)}`
+        : ''
       const res = await authClient
-        .$fetch<{ categories?: ApiCategoryRow[] }>('/profile/rating-by-category', {
+        .$fetch<{ categories?: ApiCategoryRow[] }>(`/profile/rating-by-category${query}`, {
           method: 'GET',
           headers: { Accept: 'application/json' },
         })
@@ -178,7 +184,7 @@ export function ShieldCoachCard({
     } catch {
       setPillarScores(defaultPillarDisplay())
     }
-  }, [showPillarScores])
+  }, [showPillarScores, ratingUserId])
 
   useFocusEffect(
     useCallback(() => {

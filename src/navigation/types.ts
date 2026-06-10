@@ -10,6 +10,15 @@ export type ProgressTabStackParamList = {
   AllAchievements: undefined;
   AchievementDetail: { achievementKey: string };
   Ranking: undefined;
+  LeaderboardPlayer: {
+    userId: string;
+    name: string;
+    image: string | null;
+    areaLocation: string | null;
+    totalXp: number;
+    rank: number;
+    overallScore: number | null;
+  };
 };
 
 export type YouTabStackParamList = {

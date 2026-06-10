@@ -13,6 +13,7 @@ import {
   ProgressScreen,
   DailyQuestScreen,
   RankingScreen,
+  LeaderboardPlayerScreen,
   AllAchievementsScreen,
   NotificationsScreen,
   ProScreen,
@@ -99,6 +100,7 @@ function ProgressTabStack() {
       <ProgressStack.Screen name="DailyQuest" component={DailyQuestScreen} />
       <ProgressStack.Screen name="AllAchievements" component={AllAchievementsScreen} />
       <ProgressStack.Screen name="Ranking" component={RankingScreen} />
+      <ProgressStack.Screen name="LeaderboardPlayer" component={LeaderboardPlayerScreen} />
       <ProgressStack.Screen
         name="AchievementDetail"
         component={AchievementDetailScreen}

@@ -16,8 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
-import { ShieldHeroRow } from '../components/ShieldHeroRow'
-import { ShieldProportionalFrame } from '../components/ShieldProportionalFrame'
+import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
 import {
   fetchXpLeaderboard,
   type LeaderboardEntry,
@@ -30,14 +29,20 @@ import { useTranslation } from 'react-i18next'
 const SPARKLES = require('../../assets/ranking/sparkles.png')
 const UPLOAD_ICON = require('../../assets/ranking/upload.svg')
 const LIGHTNING_SVG = require('../../assets/achivemnets/lightning.svg')
-const XEVO_BLUE_WORDMARK = require('../../assets/actiities/xevoblue.png')
+const GOLD_BADGE = require('../../assets/ranking/goldbadge.png')
+const SILVER_BADGE = require('../../assets/ranking/silverbadge.png')
+const COPPER_BADGE = require('../../assets/ranking/copperbadge.png')
 
 const PG = {
   bg: '#050A18',
   card: '#041641',
-  segmentActive: '#0059FF',
-  segmentBorder: '#0066FF',
+  segmentActiveFill: '#041641',
+  segmentIdleBorder: '#0E2969',
+  segmentActiveText: '#00B8FF',
+  segmentIdleText: '#1F6CD0',
   muted: '#86A7D2',
+  colHeadBg: 'rgba(4, 18, 43, 0.9)',
+  colHeadStroke: 'rgba(0, 102, 255, 0.25)',
   divider: 'rgba(0, 89, 255, 0.35)',
   gold: '#FFD700',
   silver: '#C8D4E8',
@@ -59,38 +64,27 @@ function formatXpLabel(xp: number): string {
   return `${Math.max(0, Math.floor(xp)).toLocaleString()} XP`
 }
 
-function rankTint(rank: number): string | null {
-  if (rank === 1) return 'rgba(255, 215, 0, 0.22)'
-  if (rank === 2) return 'rgba(200, 212, 232, 0.28)'
-  if (rank === 3) return 'rgba(205, 127, 50, 0.28)'
+function rankBadgeSource(rank: number): number | null {
+  if (rank === 1) return GOLD_BADGE
+  if (rank === 2) return SILVER_BADGE
+  if (rank === 3) return COPPER_BADGE
   return null
 }
 
 function RankMedal({ rank }: { rank: number }) {
-  const tint = rankTint(rank)
-  if (rank > 3) {
+  const badge = rankBadgeSource(rank)
+  if (badge != null) {
     return (
-      <View style={styles.rankNumWrap}>
-        <Text allowFontScaling={false} style={styles.rankNumTxt}>
-          {rank}
-        </Text>
+      <View style={styles.rankBadgeWrap}>
+        <Image source={badge} style={styles.rankBadgeImg} resizeMode="contain" />
       </View>
     )
   }
   return (
-    <View style={styles.rankMedalWrap}>
-      <ShieldProportionalFrame
-        maxWidth={40}
-        maxHeight={52}
-        coachName=""
-        showName={false}
-        showScore={false}
-        showFlag={false}
-        showCrest
-        showPillarScores={false}
-        variant="small"
-      />
-      {tint ? <View style={[styles.rankMedalTint, { backgroundColor: tint }]} /> : null}
+    <View style={styles.rankNumWrap}>
+      <Text allowFontScaling={false} style={styles.rankNumTxt}>
+        {rank}
+      </Text>
     </View>
   )
 }
@@ -98,13 +92,16 @@ function RankMedal({ rank }: { rank: number }) {
 function LeaderboardRow({
   entry,
   theme,
+  onPress,
 }: {
   entry: LeaderboardEntry
   theme: { regularFont: string; mediumFont: string; semiBoldFont: string }
+  onPress: () => void
 }) {
   const avatarUri = resolveUploadUrl(entry.image)
+  const locationLabel = entry.areaLocation?.trim() ?? ''
   return (
-    <View style={styles.listRow}>
+    <TouchableOpacity style={styles.listRow} onPress={onPress} activeOpacity={0.75}>
       <RankMedal rank={entry.rank} />
       <View style={styles.avatarWrap}>
         {avatarUri ? (
@@ -121,13 +118,13 @@ function LeaderboardRow({
         >
           {entry.name}
         </Text>
-        {entry.areaLocation ? (
+        {locationLabel ? (
           <Text
             allowFontScaling={false}
             numberOfLines={1}
             style={[styles.listLocation, { fontFamily: theme.regularFont }]}
           >
-            {entry.areaLocation}
+            {locationLabel}
           </Text>
         ) : null}
       </View>
@@ -137,7 +134,7 @@ function LeaderboardRow({
           {formatXpLabel(entry.totalXp)}
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   )
 }
 
@@ -191,9 +188,7 @@ export function RankingScreen() {
   }, [scope])
 
   const topPlayer = rankedEntries[0] ?? null
-  const listEntries = rankedEntries.slice(1)
   const topImageUri = resolveUploadUrl(topPlayer?.image ?? null)
-  const topXpLabel = topPlayer ? formatXpLabel(topPlayer.totalXp) : '—'
 
   const onShareTop = useCallback(async () => {
     if (!topPlayer) return
@@ -260,7 +255,12 @@ export function RankingScreen() {
           })}
         </View>
 
-        <View style={styles.colHead}>
+        <View
+          style={[
+            styles.colHead,
+            { marginHorizontal: -horizontalPad, paddingHorizontal: horizontalPad },
+          ]}
+        >
           <Text allowFontScaling={false} style={[styles.colHeadTxt, styles.colNo, { fontFamily: theme.mediumFont }]}>
             {t('progress.rankingColumnNo')}
           </Text>
@@ -272,64 +272,85 @@ export function RankingScreen() {
           </Text>
         </View>
 
-        <View style={styles.colDivider} />
-
         {loading ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator color="#00B8FF" />
           </View>
         ) : topPlayer ? (
           <>
-            <View style={[styles.heroBlock, { width: heroRowW }]}>
+            <TouchableOpacity
+              style={[styles.heroBlock, { width: heroRowW }]}
+              activeOpacity={0.92}
+              onPress={() =>
+                topPlayer &&
+                navigation.navigate('LeaderboardPlayer', {
+                  userId: topPlayer.userId,
+                  name: topPlayer.name,
+                  image: topPlayer.image,
+                  areaLocation: topPlayer.areaLocation,
+                  totalXp: topPlayer.totalXp,
+                  rank: topPlayer.rank,
+                  overallScore: topPlayer.overallScore,
+                })
+              }
+            >
               <Image
                 source={SPARKLES}
                 style={[styles.sparkles, { width: heroRowW, height: Math.round(heroRowW * 0.42) }]}
                 resizeMode="contain"
               />
               <View style={styles.heroShieldLayer}>
-                <ShieldHeroRow
-                  rowWidth={heroRowW}
-                  coachName={topPlayer.name}
-                  coachImageUri={topImageUri}
+                <ProfileHeroScoreBlock
+                  horizontalPadding={horizontalPad}
+                  premiumLabelNudgeUp={4}
+                  marginBottom={0}
+                  showScoreCard={false}
+                  playerOverride={{
+                    name: topPlayer.name,
+                    imageUri: topImageUri,
+                    areaLocation: topPlayer.areaLocation,
+                  }}
                   onSharePress={() => void onShareTop()}
                   shareAccessibilityLabel={t('progress.rankingShare')}
                   shareIconModule={UPLOAD_ICON}
                   shareIconSize={32}
-                  maxHeightFrac={0.34}
-                  maxShieldHeightCap={260}
-                  shieldCardProps={{
-                    variant: 'profileSettings',
-                    showName: true,
-                    showScore: true,
-                    scoreLabel: 'XP',
-                    scoreValue: topXpLabel,
-                    showFlag: true,
-                    showCrest: false,
-                    showPillarScores: false,
-                    flagCode: topPlayer.areaLocation,
-                    brandLogoSource: XEVO_BLUE_WORDMARK,
-                    topNameScale: 1.85,
-                  }}
                 />
               </View>
-            </View>
+            </TouchableOpacity>
 
-            <Text allowFontScaling={false} style={[styles.heroRankNum, { fontFamily: theme.semiBoldFont }]}>
-              1
-            </Text>
-            <Text allowFontScaling={false} style={[styles.heroName, { fontFamily: theme.semiBoldFont }]}>
-              {topPlayer.name}
-            </Text>
-            {topPlayer.areaLocation ? (
-              <Text allowFontScaling={false} style={[styles.heroLocation, { fontFamily: theme.regularFont }]}>
-                {topPlayer.areaLocation}
+            <View style={styles.heroCaption}>
+              <Text allowFontScaling={false} style={[styles.heroRankNum, { fontFamily: theme.semiBoldFont }]}>
+                1
               </Text>
-            ) : null}
+              <Text allowFontScaling={false} style={[styles.heroName, { fontFamily: theme.semiBoldFont }]}>
+                {topPlayer.name}
+              </Text>
+              {topPlayer.areaLocation ? (
+                <Text allowFontScaling={false} style={[styles.heroLocation, { fontFamily: theme.regularFont }]}>
+                  {topPlayer.areaLocation}
+                </Text>
+              ) : null}
+            </View>
 
             <View style={styles.listDivider} />
 
-            {listEntries.map((entry) => (
-              <LeaderboardRow key={entry.userId} entry={entry} theme={theme} />
+            {rankedEntries.map((entry) => (
+              <LeaderboardRow
+                key={entry.userId}
+                entry={entry}
+                theme={theme}
+                onPress={() =>
+                  navigation.navigate('LeaderboardPlayer', {
+                    userId: entry.userId,
+                    name: entry.name,
+                    image: entry.image,
+                    areaLocation: entry.areaLocation,
+                    totalXp: entry.totalXp,
+                    rank: entry.rank,
+                    overallScore: entry.overallScore,
+                  })
+                }
+              />
             ))}
           </>
         ) : (
@@ -391,27 +412,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   segmentPillActive: {
-    backgroundColor: PG.segmentActive,
-    borderColor: PG.segmentActive,
+    backgroundColor: PG.segmentActiveFill,
+    borderColor: PG.segmentActiveFill,
   },
   segmentPillIdle: {
-    backgroundColor: PG.card,
-    borderColor: PG.segmentBorder,
+    backgroundColor: 'transparent',
+    borderColor: PG.segmentIdleBorder,
   },
   segmentTxt: {
     fontSize: 11,
     textAlign: 'center',
   },
   segmentTxtOn: {
-    color: '#FFFFFF',
+    color: PG.segmentActiveText,
   },
   segmentTxtOff: {
-    color: '#00B8FF',
+    color: PG.segmentIdleText,
   },
   colHead: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingBottom: 8,
+    alignSelf: 'stretch',
+    backgroundColor: PG.colHeadBg,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderTopColor: PG.colHeadStroke,
+    borderBottomColor: PG.colHeadStroke,
+    paddingVertical: 10,
+    marginBottom: 16,
   },
   colHeadTxt: {
     fontSize: 11,
@@ -428,11 +456,6 @@ const styles = StyleSheet.create({
     minWidth: 108,
     textAlign: 'right',
   },
-  colDivider: {
-    height: 1,
-    backgroundColor: PG.divider,
-    marginBottom: 18,
-  },
   loadingWrap: {
     paddingVertical: 48,
     alignItems: 'center',
@@ -441,7 +464,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 200,
     marginBottom: 8,
   },
   sparkles: {
@@ -454,19 +476,23 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  heroCaption: {
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 4,
+  },
   heroRankNum: {
-    fontSize: 42,
+    fontSize: 18,
     color: PG.gold,
     textAlign: 'center',
-    lineHeight: 48,
-    marginTop: 4,
+    lineHeight: 22,
   },
   heroName: {
     fontSize: 22,
     color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 28,
-    marginTop: 2,
+    marginTop: 4,
   },
   heroLocation: {
     fontSize: 13,
@@ -474,7 +500,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
     marginTop: 4,
-    marginBottom: 8,
   },
   listDivider: {
     height: 1,
@@ -483,24 +508,27 @@ const styles = StyleSheet.create({
   },
   listRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
     marginBottom: 16,
   },
-  rankMedalWrap: {
+  rankBadgeWrap: {
     width: 44,
-    height: 52,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 2,
   },
-  rankMedalTint: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 8,
+  rankBadgeImg: {
+    width: 40,
+    height: 40,
   },
   rankNumWrap: {
     width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 2,
   },
   rankNumTxt: {
     fontSize: 16,
@@ -524,6 +552,8 @@ const styles = StyleSheet.create({
   listBody: {
     flex: 1,
     minWidth: 0,
+    justifyContent: 'center',
+    minHeight: 44,
   },
   listName: {
     fontSize: 14,
@@ -531,16 +561,17 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   listLocation: {
-    fontSize: 11,
+    fontSize: 13,
     color: PG.muted,
-    lineHeight: 15,
-    marginTop: 2,
+    lineHeight: 18,
+    marginTop: 4,
   },
   listXpCol: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     flexShrink: 0,
+    marginTop: 12,
   },
   listXp: {
     fontSize: 12,
