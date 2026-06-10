@@ -1,28 +1,25 @@
-import React, { useContext } from 'react'
+import React, { useContext, useMemo } from 'react'
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native'
 import { ThemeContext } from '../context'
+import { getTodaysDailyQuests, QUEST_XP_BADGE } from '../lib/dailyQuestsCatalog'
 import { useTranslation } from 'react-i18next'
 
-const XP_BADGE = require('../../assets/achivemnets/xp150.png')
-
-const QUEST_CURRENT = 80
-const QUEST_GOAL = 100
 const BADGE_SIZE = 56
 
 type Props = {
-  current?: number
-  goal?: number
   onPress?: () => void
 }
 
-export function AchievementsDailyQuestBanner({
-  current = QUEST_CURRENT,
-  goal = QUEST_GOAL,
-  onPress,
-}: Props) {
+export function AchievementsDailyQuestBanner({ onPress }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
+
+  const featured = useMemo(() => getTodaysDailyQuests()[0], [])
+  const current = 0
+  const goal = featured?.goal ?? 1
   const pct = Math.max(0, Math.min(100, Math.round((current / goal) * 100)))
+
+  if (!featured) return null
 
   return (
     <TouchableOpacity style={styles.banner} onPress={onPress} activeOpacity={onPress ? 0.9 : 1} disabled={!onPress}>
@@ -36,10 +33,10 @@ export function AchievementsDailyQuestBanner({
         <View style={styles.taskRow}>
           <Text
             allowFontScaling={false}
-            numberOfLines={1}
+            numberOfLines={2}
             style={[styles.taskText, { fontFamily: theme.regularFont }]}
           >
-            {t('progress.dailyQuestTask', { count: goal })}
+            {t(featured.titleKey)}
           </Text>
           <View style={styles.progressTextRow}>
             <Text
@@ -61,7 +58,10 @@ export function AchievementsDailyQuestBanner({
         </View>
       </View>
       <View style={styles.badgeSlot}>
-        <Image source={XP_BADGE} style={styles.badgeImg} resizeMode="contain" />
+        <Image source={QUEST_XP_BADGE} style={styles.badgeImg} resizeMode="contain" />
+        <Text allowFontScaling={false} style={[styles.badgeXp, { fontFamily: theme.semiBoldFont }]}>
+          +{featured.xp}
+        </Text>
       </View>
     </TouchableOpacity>
   )
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   },
   taskRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
     marginBottom: 8,
@@ -109,6 +109,7 @@ const styles = StyleSheet.create({
   progressTextRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
   },
   progressCurrent: {
     fontSize: 12,
@@ -140,7 +141,14 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   badgeImg: {
+    position: 'absolute',
     width: BADGE_SIZE,
     height: BADGE_SIZE,
+  },
+  badgeXp: {
+    fontSize: 11,
+    color: '#FFFFFF',
+    lineHeight: 13,
+    marginTop: 12,
   },
 })

@@ -1,4 +1,4 @@
-import React, { useContext, useMemo } from 'react'
+import React, { useContext, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   useWindowDimensions,
+  Pressable,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
@@ -15,12 +16,19 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
+import {
+  ACHIEVEMENTS,
+  ACHIEVEMENTS_GRID_PREVIEW_COUNT,
+  TOTAL_ACHIEVEMENTS,
+  countUnlockedAchievements,
+  getAchievementGridImage,
+  withAchievementState,
+  type AchievementDef,
+} from '../lib/achievementsCatalog'
+import { useSessionData } from '../context/SessionDataContext'
 import type { ProgressTabStackParamList } from '../navigation/types'
 import { useTranslation } from 'react-i18next'
 
-const BADGE_FIRST_MATCH = require('../../assets/achivemnets/firstmatch.png')
-const BADGE_3_DAYS_STREAK = require('../../assets/achivemnets/3daysstreak.png')
-const LOCKED_ACHIEVEMENT = require('../../assets/achivemnets/lockedachivment.png')
 const TICK_ICON = require('../../assets/achivemnets/tickicon.svg')
 
 const PG = {
@@ -33,66 +41,17 @@ const COL_GAP = 10
 const ROW_GAP = 18
 const UNLOCKED_NATIVE_W = 86
 const UNLOCKED_NATIVE_H = 96
-const LOCKED_NATIVE_W = 104
-const LOCKED_NATIVE_H = 130
-const TOTAL_ACHIEVEMENTS = 28
-
-type AchievementItem =
-  | { key: string; kind: 'unlocked'; image: number; labelKey: string }
-  | { key: string; kind: 'locked'; image: number; labelKey: string }
-
-const ACHIEVEMENTS: AchievementItem[] = [
-  { key: 'first-match', kind: 'unlocked', image: BADGE_FIRST_MATCH, labelKey: 'progress.badgeFirstMatch' },
-  {
-    key: '3-days-streak',
-    kind: 'unlocked',
-    image: BADGE_3_DAYS_STREAK,
-    labelKey: 'progress.badge3DaysStreak',
-  },
-  {
-    key: 'tie-break-king',
-    kind: 'locked',
-    image: LOCKED_ACHIEVEMENT,
-    labelKey: 'progress.badgeTieBreakKing',
-  },
-  { key: 'net-master', kind: 'locked', image: LOCKED_ACHIEVEMENT, labelKey: 'progress.badgeNetMaster' },
-  {
-    key: 'invincible-locked',
-    kind: 'locked',
-    image: LOCKED_ACHIEVEMENT,
-    labelKey: 'progress.badgeInvincible',
-  },
-  {
-    key: 'perfect-smash',
-    kind: 'locked',
-    image: LOCKED_ACHIEVEMENT,
-    labelKey: 'progress.badgePerfectSmash',
-  },
-  {
-    key: 'first-ia-analysis',
-    kind: 'locked',
-    image: LOCKED_ACHIEVEMENT,
-    labelKey: 'progress.badgeFirstIaAnalysis',
-  },
-  { key: 'score-80', kind: 'locked', image: LOCKED_ACHIEVEMENT, labelKey: 'progress.badgeScore80' },
-  {
-    key: '7-days-streak',
-    kind: 'locked',
-    image: LOCKED_ACHIEVEMENT,
-    labelKey: 'progress.badge7DaysStreak',
-  },
-]
+const LOCKED_GRID_NATIVE_W = 104
+const LOCKED_GRID_NATIVE_H = 130
 
 type Nav = NativeStackNavigationProp<ProgressTabStackParamList>
 
 function LockedCardLabel({
   label,
   fontFamily,
-  emphasizeSecondLine = false,
 }: {
   label: string
   fontFamily: string
-  emphasizeSecondLine?: boolean
 }) {
   const lines = label.split('\n')
   if (lines.length > 1) {
@@ -101,14 +60,7 @@ function LockedCardLabel({
         <Text allowFontScaling={false} style={[styles.lockedLabelLine, { fontFamily }]}>
           {lines[0]}
         </Text>
-        <Text
-          allowFontScaling={false}
-          style={[
-            styles.lockedLabelLine,
-            emphasizeSecondLine && styles.lockedLabelLineSecond,
-            { fontFamily },
-          ]}
-        >
+        <Text allowFontScaling={false} style={[styles.lockedLabelLine, { fontFamily }]}>
           {lines[1]}
         </Text>
       </View>
@@ -121,15 +73,89 @@ function LockedCardLabel({
   )
 }
 
+function AchievementGridCell({
+  item,
+  gridSizes,
+  fontFamily,
+  onPress,
+}: {
+  item: AchievementDef
+  gridSizes: {
+    colW: number
+    unlockedW: number
+    unlockedH: number
+    lockedW: number
+    lockedH: number
+    slotH: number
+  }
+  fontFamily: string
+  onPress: () => void
+}) {
+  const { t } = useTranslation()
+  const isUnlocked = item.kind === 'unlocked'
+  const label = t(item.labelKey)
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.gridCell, { width: gridSizes.colW }]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {isUnlocked ? (
+        <>
+          <View style={[styles.iconSlot, { height: gridSizes.slotH }]}>
+            <Image
+              source={getAchievementGridImage(item)}
+              style={{ width: gridSizes.unlockedW, height: gridSizes.unlockedH }}
+              resizeMode="contain"
+            />
+            <View style={styles.tickWrap}>
+              <LocalSvgAsset assetModule={TICK_ICON} width={18} height={18} />
+            </View>
+          </View>
+          <Text
+            allowFontScaling={false}
+            numberOfLines={2}
+            style={[styles.itemLabel, { fontFamily }]}
+          >
+            {label}
+          </Text>
+        </>
+      ) : (
+        <View style={[styles.lockedCard, { width: gridSizes.lockedW, height: gridSizes.lockedH }]}>
+          <Image
+            source={getAchievementGridImage(item)}
+            style={{ width: gridSizes.lockedW, height: gridSizes.lockedH }}
+            resizeMode="contain"
+          />
+          <LockedCardLabel label={label} fontFamily={fontFamily} />
+        </View>
+      )}
+    </Pressable>
+  )
+}
+
 export function AllAchievementsScreen() {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<Nav>()
   const { width: winW } = useWindowDimensions()
+  const [expanded, setExpanded] = useState(false)
+
+  const { claimedAchievementKeys, claimableAchievementKeys } = useSessionData()
+  const achievements = useMemo(
+    () => withAchievementState(claimedAchievementKeys, claimableAchievementKeys),
+    [claimedAchievementKeys, claimableAchievementKeys]
+  )
 
   const horizontalPad = Math.max(20, insets.left, insets.right)
-  const unlockedCount = ACHIEVEMENTS.filter((a) => a.kind === 'unlocked').length
+  const unlockedCount = countUnlockedAchievements(claimedAchievementKeys)
+  const showExpandToggle = achievements.length > ACHIEVEMENTS_GRID_PREVIEW_COUNT
+  const visibleAchievements = expanded
+    ? achievements
+    : achievements.slice(0, ACHIEVEMENTS_GRID_PREVIEW_COUNT)
 
   const gridSizes = useMemo(() => {
     const contentW = Math.max(1, winW - horizontalPad * 2)
@@ -137,8 +163,9 @@ export function AllAchievementsScreen() {
     const unlockedW = Math.floor(colW * 0.88)
     const unlockedH = Math.round((unlockedW * UNLOCKED_NATIVE_H) / UNLOCKED_NATIVE_W)
     const lockedW = colW
-    const lockedH = Math.round((lockedW * LOCKED_NATIVE_H) / LOCKED_NATIVE_W)
-    return { colW, unlockedW, unlockedH, lockedW, lockedH }
+    const lockedH = Math.round((lockedW * LOCKED_GRID_NATIVE_H) / LOCKED_GRID_NATIVE_W)
+    const slotH = Math.max(unlockedH, lockedH)
+    return { colW, unlockedW, unlockedH, lockedW, lockedH, slotH }
   }, [winW, horizontalPad])
 
   return (
@@ -181,69 +208,41 @@ export function AllAchievementsScreen() {
           styles.scrollInner,
           {
             paddingHorizontal: horizontalPad,
-            paddingBottom: 24 + insets.bottom + 74,
+            paddingBottom: 24 + insets.bottom + (showExpandToggle ? 74 : 24),
           },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.grid}>
-          {ACHIEVEMENTS.map((item) => (
-            <View key={item.key} style={[styles.gridCell, { width: gridSizes.colW }]}>
-              {item.kind === 'unlocked' ? (
-                <>
-                  <View style={[styles.unlockedSlot, { height: gridSizes.unlockedH }]}>
-                    <Image
-                      source={item.image}
-                      style={{ width: gridSizes.unlockedW, height: gridSizes.unlockedH }}
-                      resizeMode="contain"
-                    />
-                    <View style={styles.tickWrap}>
-                      <LocalSvgAsset assetModule={TICK_ICON} width={18} height={18} />
-                    </View>
-                  </View>
-                  <Text
-                    allowFontScaling={false}
-                    numberOfLines={2}
-                    style={[styles.itemLabel, { fontFamily: theme.regularFont }]}
-                  >
-                    {t(item.labelKey)}
-                  </Text>
-                </>
-              ) : (
-                <View
-                  style={[
-                    styles.lockedCard,
-                    { width: gridSizes.lockedW, height: gridSizes.lockedH },
-                  ]}
-                >
-                  <Image
-                    source={item.image}
-                    style={{ width: gridSizes.lockedW, height: gridSizes.lockedH }}
-                    resizeMode="contain"
-                  />
-                  <LockedCardLabel
-                    label={t(item.labelKey)}
-                    fontFamily={theme.regularFont}
-                    emphasizeSecondLine={item.key === 'tie-break-king'}
-                  />
-                </View>
-              )}
-            </View>
+          {visibleAchievements.map((item) => (
+            <AchievementGridCell
+              key={item.key}
+              item={item}
+              gridSizes={gridSizes}
+              fontFamily={theme.regularFont}
+              onPress={() => navigation.navigate('AchievementDetail', { achievementKey: item.key })}
+            />
           ))}
         </View>
 
-        <TouchableOpacity activeOpacity={0.9} style={styles.viewAllBtnOuter}>
-          <LinearGradient
-            colors={['#006EFF', '#00B8FF']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.viewAllBtn}
+        {showExpandToggle ? (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={styles.viewAllBtnOuter}
+            onPress={() => setExpanded((v) => !v)}
           >
-            <Text allowFontScaling={false} style={[styles.viewAllTxt, { fontFamily: theme.semiBoldFont }]}>
-              {t('progress.viewAll')}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
+            <LinearGradient
+              colors={['#006EFF', '#00B8FF']}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.viewAllBtn}
+            >
+              <Text allowFontScaling={false} style={[styles.viewAllTxt, { fontFamily: theme.semiBoldFont }]}>
+                {expanded ? t('progress.viewLess') : t('progress.viewAll')}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
     </View>
   )
@@ -343,15 +342,12 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     textAlign: 'center',
   },
-  lockedLabelLineSecond: {
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  unlockedSlot: {
+  iconSlot: {
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     overflow: 'visible',
+    width: '100%',
   },
   tickWrap: {
     position: 'absolute',
@@ -359,7 +355,7 @@ const styles = StyleSheet.create({
     right: -4,
   },
   itemLabel: {
-    marginTop: -2,
+    marginTop: 2,
     fontSize: 11,
     color: '#FFFFFF',
     lineHeight: 14,

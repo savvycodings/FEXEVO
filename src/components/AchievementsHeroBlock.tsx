@@ -15,11 +15,7 @@ const SMALL_SHIELD_CAP_REF_WIN_W = 430
 const DEFAULT_HORIZONTAL_PAD = 20
 const HERO_GAP = 10
 
-/** Placeholder until achievements XP is wired to the API. */
-const XP_CURRENT = 2400
-const XP_GOAL = 3000
-const LEVEL_NUMBER = 14
-const LEVEL_TIER = 'Elite'
+/** XP / level come from `/profile/gamification/state`. */
 const WIN_RATE_PLACEHOLDER = 67
 const WIN_STREAK_PLACEHOLDER = 6
 
@@ -45,7 +41,8 @@ export function AchievementsHeroBlock({
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { width: winW } = useWindowDimensions()
-  const { profileName, profileImageUri, profileAreaLocation } = useSessionData()
+  const { profileName, profileImageUri, profileAreaLocation, xpInLevel, xpGoal, playerLevel, playerTier } =
+    useSessionData()
   const [rowWidth, setRowWidth] = useState(0)
 
   const contentW = rowWidth > 0 ? rowWidth : Math.max(1, winW - horizontalPadding * 2)
@@ -69,7 +66,7 @@ export function AchievementsHeroBlock({
   const shieldInfoGap = horizontalPadding
   const infoColW = Math.max(1, contentW - shieldInfoGap - shieldColW)
 
-  const xpPct = Math.max(0, Math.min(100, Math.round((XP_CURRENT / XP_GOAL) * 100)))
+  const xpPct = Math.max(0, Math.min(100, Math.round((xpInLevel / Math.max(1, xpGoal)) * 100)))
   const matchCount = completedCount(activities)
 
   return (
@@ -120,13 +117,13 @@ export function AchievementsHeroBlock({
                 allowFontScaling={false}
                 style={[styles.levelMuted, { fontFamily: theme.regularFont }]}
               >
-                {t('progress.achievementsLevelPrefix', { level: LEVEL_NUMBER })}{' '}
+                {t('progress.achievementsLevelPrefix', { level: playerLevel })}{' '}
               </Text>
               <Text
                 allowFontScaling={false}
                 style={[styles.levelTier, { fontFamily: theme.regularFont }]}
               >
-                {LEVEL_TIER}
+                {playerTier}
               </Text>
             </View>
 
@@ -137,14 +134,14 @@ export function AchievementsHeroBlock({
                   allowFontScaling={false}
                   style={[styles.xpAmount, { fontFamily: theme.semiBoldFont }]}
                 >
-                  {t('progress.achievementsXp', { xp: XP_CURRENT.toLocaleString() })}
+                  {t('progress.achievementsXp', { xp: xpInLevel.toLocaleString() })}
                 </Text>
               </View>
               <Text
                 allowFontScaling={false}
                 style={[styles.xpGoal, { fontFamily: theme.regularFont }]}
               >
-                {XP_GOAL.toLocaleString()}
+                {xpGoal.toLocaleString()}
               </Text>
             </View>
             <View style={styles.xpBarRow}>

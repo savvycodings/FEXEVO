@@ -11,6 +11,11 @@ import React, {
 import { authClient } from '../lib/auth-client'
 import { getCachedProfile } from '../lib/profile-cache'
 import { TAB_REFETCH_COOLDOWN_MS } from '../lib/tab-refetch-cooldown'
+import {
+  fetchGamificationState,
+  type GamificationQuestRow,
+  type GamificationState,
+} from '../lib/gamificationApi'
 import type { ActivitySession } from '../lib/activitySession'
 import { DOMAIN } from '../../constants'
 
@@ -59,6 +64,17 @@ type SessionDataContextValue = {
   /** True after cache or `/profile/me` has resolved coach vs student role. */
   profileRoleLoaded: boolean
   overallPillarScore: number | null
+  totalXp: number
+  xpInLevel: number
+  xpGoal: number
+  playerLevel: number
+  playerTier: string
+  loginStreak: number
+  claimedAchievementKeys: Set<string>
+  claimableAchievementKeys: Set<string>
+  dailyQuests: GamificationQuestRow[]
+  gamificationLoading: boolean
+  refreshGamification: () => Promise<void>
   /** When user focuses Activities / You / Progress — refreshes stale slices (cooldown). */
   onTabFocus: () => void
   /** After profile edit or when you need fresh server data. */
@@ -94,11 +110,26 @@ export function SessionDataProvider({
   const [coachStudentRole, setCoachStudentRole] = useState<CoachStudentRole>('none')
   const [profileRoleLoaded, setProfileRoleLoaded] = useState(false)
   const [overallPillarScore, setOverallPillarScore] = useState<number | null>(null)
+  const [totalXp, setTotalXp] = useState(0)
+  const [xpInLevel, setXpInLevel] = useState(0)
+  const [xpGoal, setXpGoal] = useState(2500)
+  const [playerLevel, setPlayerLevel] = useState(1)
+  const [playerTier, setPlayerTier] = useState('Rookie')
+  const [loginStreak, setLoginStreak] = useState(0)
+  const [claimedAchievementKeys, setClaimedAchievementKeys] = useState<Set<string>>(
+    () => new Set()
+  )
+  const [claimableAchievementKeys, setClaimableAchievementKeys] = useState<Set<string>>(
+    () => new Set()
+  )
+  const [dailyQuests, setDailyQuests] = useState<GamificationQuestRow[]>([])
+  const [gamificationLoading, setGamificationLoading] = useState(true)
   const viewerIsCoach = coachStudentRole === 'coach'
 
   const lastActivitiesOkAt = useRef(0)
   const lastRatingOkAt = useRef(0)
   const lastProfileOkAt = useRef(0)
+  const lastGamificationOkAt = useRef(0)
   const activitiesCountRef = useRef(0)
   const bootstrapDone = useRef(false)
   const profileTickMounted = useRef(false)
@@ -177,6 +208,39 @@ export function SessionDataProvider({
     }
   }, [])
 
+  const applyGamificationState = useCallback((state: GamificationState) => {
+    setTotalXp(state.totalXp)
+    setXpInLevel(state.xpInLevel)
+    setXpGoal(state.xpGoal)
+    setPlayerLevel(state.level)
+    setPlayerTier(state.tier)
+    setLoginStreak(state.loginStreak)
+    setClaimedAchievementKeys(new Set(state.achievements.map((a) => a.key)))
+    setClaimableAchievementKeys(
+      new Set((state.claimableAchievements ?? []).map((a) => a.key))
+    )
+    setDailyQuests(state.dailyQuests)
+    lastGamificationOkAt.current = Date.now()
+  }, [])
+
+  const fetchGamification = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent && lastGamificationOkAt.current > 0)
+    if (!silent) setGamificationLoading(true)
+    try {
+      const state = await fetchGamificationState()
+      if (state) {
+        applyGamificationState(state)
+      }
+    } finally {
+      if (!silent) setGamificationLoading(false)
+    }
+  }, [applyGamificationState])
+
+  const refreshGamification = useCallback(async () => {
+    lastGamificationOkAt.current = 0
+    await fetchGamification({ silent: false })
+  }, [fetchGamification])
+
   const fetchProfile = useCallback(async () => {
     try {
       const res = await authClient.$fetch('/profile/me', { method: 'GET' }).catch(() => null)
@@ -229,10 +293,12 @@ export function SessionDataProvider({
     lastActivitiesOkAt.current = 0
     lastRatingOkAt.current = 0
     lastProfileOkAt.current = 0
+    lastGamificationOkAt.current = 0
     void fetchActivities({ silent: false })
     void fetchRating({ silent: false })
     void fetchProfile()
-  }, [fetchActivities, fetchRating, fetchProfile])
+    void fetchGamification({ silent: false })
+  }, [fetchActivities, fetchRating, fetchProfile, fetchGamification])
 
   const onTabFocus = useCallback(() => {
     const now = Date.now()
@@ -242,6 +308,9 @@ export function SessionDataProvider({
       lastRatingOkAt.current === 0 || now - lastRatingOkAt.current >= TAB_REFETCH_COOLDOWN_MS
     const profileCooldownOk =
       lastProfileOkAt.current === 0 || now - lastProfileOkAt.current >= TAB_REFETCH_COOLDOWN_MS
+    const gamificationCooldownOk =
+      lastGamificationOkAt.current === 0 ||
+      now - lastGamificationOkAt.current >= TAB_REFETCH_COOLDOWN_MS
 
     if (needActivities) {
       void fetchActivities({ silent: activitiesCountRef.current > 0 })
@@ -249,12 +318,14 @@ export function SessionDataProvider({
     if (needRating) {
       void fetchRating({ silent: lastRatingOkAt.current > 0 })
     }
-    // Always merge disk cache on tab focus (cheap); refetch /me when cooldown allows or profile never loaded.
     void hydrateFromCache()
     if (profileCooldownOk) {
       void fetchProfile()
     }
-  }, [fetchActivities, fetchRating, fetchProfile, hydrateFromCache])
+    if (gamificationCooldownOk) {
+      void fetchGamification({ silent: lastGamificationOkAt.current > 0 })
+    }
+  }, [fetchActivities, fetchRating, fetchProfile, fetchGamification, hydrateFromCache])
 
   useEffect(() => {
     if (bootstrapDone.current) return
@@ -263,7 +334,8 @@ export function SessionDataProvider({
     void fetchActivities({ silent: false })
     void fetchRating({ silent: false })
     void fetchProfile()
-  }, [fetchActivities, fetchRating, fetchProfile, hydrateFromCache])
+    void fetchGamification({ silent: false })
+  }, [fetchActivities, fetchRating, fetchProfile, fetchGamification, hydrateFromCache])
 
   useEffect(() => {
     if (!profileTickMounted.current) {
@@ -288,6 +360,17 @@ export function SessionDataProvider({
       viewerIsCoach,
       profileRoleLoaded,
       overallPillarScore,
+      totalXp,
+      xpInLevel,
+      xpGoal,
+      playerLevel,
+      playerTier,
+      loginStreak,
+      claimedAchievementKeys,
+      claimableAchievementKeys,
+      dailyQuests,
+      gamificationLoading,
+      refreshGamification,
       onTabFocus,
       invalidate,
     }),
@@ -305,6 +388,17 @@ export function SessionDataProvider({
       viewerIsCoach,
       profileRoleLoaded,
       overallPillarScore,
+      totalXp,
+      xpInLevel,
+      xpGoal,
+      playerLevel,
+      playerTier,
+      loginStreak,
+      claimedAchievementKeys,
+      claimableAchievementKeys,
+      dailyQuests,
+      gamificationLoading,
+      refreshGamification,
       onTabFocus,
       invalidate,
     ]

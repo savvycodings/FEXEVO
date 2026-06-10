@@ -1,33 +1,16 @@
 import React, { useContext, useMemo, useState } from 'react'
 import { View, Text, StyleSheet, Image, TouchableOpacity, useWindowDimensions } from 'react-native'
 import { ThemeContext } from '../context'
+import { getAchievementDisplayImage, withAchievementState } from '../lib/achievementsCatalog'
+import { useSessionData } from '../context/SessionDataContext'
 import { useTranslation } from 'react-i18next'
 
-const BADGE_FIRST_MATCH = require('../../assets/achivemnets/firstmatch.png')
-const BADGE_3_DAYS_STREAK = require('../../assets/achivemnets/3daysstreak.png')
-const BADGE_ROOKIE_LEAGUE = require('../../assets/achivemnets/rockieleuge.png')
-const BADGE_LOCKED = require('../../assets/achivemnets/locked.png')
-
-const BADGE_COUNT = 4
+const PREVIEW_COUNT = 4
 const BADGE_ROW_GAP = 0
-/** Native asset canvases — unlocked PNGs include more outer glow, so they need a larger display box. */
 const UNLOCKED_NATIVE_W = 86
 const UNLOCKED_NATIVE_H = 96
 const LOCKED_NATIVE_W = 65
 const LOCKED_NATIVE_H = 75
-
-type BadgeItem = {
-  key: string
-  image: number
-  labelKey?: string
-}
-
-const BADGES: BadgeItem[] = [
-  { key: 'first-match', image: BADGE_FIRST_MATCH, labelKey: 'progress.badgeFirstMatch' },
-  { key: '3-days-streak', image: BADGE_3_DAYS_STREAK, labelKey: 'progress.badge3DaysStreak' },
-  { key: 'rockie-league', image: BADGE_ROOKIE_LEAGUE, labelKey: 'progress.badgeRockieLeague' },
-  { key: 'locked', image: BADGE_LOCKED },
-]
 
 type Props = {
   onViewAllPress?: () => void
@@ -40,9 +23,20 @@ export function AchievementsBadgesSection({ onViewAllPress, onRankingPress }: Pr
   const { width: winW } = useWindowDimensions()
   const [rowWidth, setRowWidth] = useState(0)
 
+  const { claimedAchievementKeys, claimableAchievementKeys } = useSessionData()
+
+  const previewBadges = useMemo(
+    () =>
+      withAchievementState(claimedAchievementKeys, claimableAchievementKeys).slice(
+        0,
+        PREVIEW_COUNT
+      ),
+    [claimedAchievementKeys, claimableAchievementKeys]
+  )
+
   const badgeSizes = useMemo(() => {
     const contentW = rowWidth > 0 ? rowWidth : Math.max(1, winW - 40)
-    const colSlot = Math.max(1, (contentW - BADGE_ROW_GAP * (BADGE_COUNT - 1)) / BADGE_COUNT)
+    const colSlot = Math.max(1, (contentW - BADGE_ROW_GAP * (PREVIEW_COUNT - 1)) / PREVIEW_COUNT)
     const unlockedW = Math.floor(colSlot * 1.05)
     const unlockedH = Math.round((unlockedW * UNLOCKED_NATIVE_H) / UNLOCKED_NATIVE_W)
     const lockedW = Math.floor(colSlot * 0.9)
@@ -80,26 +74,19 @@ export function AchievementsBadgesSection({ onViewAllPress, onRankingPress }: Pr
           if (w > 0 && Math.abs(w - rowWidth) > 1) setRowWidth(w)
         }}
       >
-        {BADGES.map((badge) => (
-          <View key={badge.key} style={styles.badgeCol}>
-            <View style={[styles.badgeIconSlot, { height: badgeSizes.iconRowH }]}>
-              <Image
-                source={badge.image}
-                style={
-                  badge.labelKey
-                    ? {
-                        width: badgeSizes.unlockedW,
-                        height: badgeSizes.unlockedH,
-                      }
-                    : {
-                        width: badgeSizes.lockedW,
-                        height: badgeSizes.lockedH,
-                      }
-                }
-                resizeMode="contain"
-              />
-            </View>
-            {badge.labelKey ? (
+        {previewBadges.map((badge) => {
+          const isUnlocked = badge.kind === 'unlocked'
+          const imgW = isUnlocked ? badgeSizes.unlockedW : badgeSizes.lockedW
+          const imgH = isUnlocked ? badgeSizes.unlockedH : badgeSizes.lockedH
+          return (
+            <View key={badge.key} style={styles.badgeCol}>
+              <View style={[styles.badgeIconSlot, { height: badgeSizes.iconRowH }]}>
+                <Image
+                  source={getAchievementDisplayImage(badge)}
+                  style={{ width: imgW, height: imgH }}
+                  resizeMode="contain"
+                />
+              </View>
               <Text
                 allowFontScaling={false}
                 numberOfLines={2}
@@ -107,11 +94,9 @@ export function AchievementsBadgesSection({ onViewAllPress, onRankingPress }: Pr
               >
                 {t(badge.labelKey)}
               </Text>
-            ) : (
-              <View style={styles.badgeLabelSpacer} />
-            )}
-          </View>
-        ))}
+            </View>
+          )
+        })}
       </View>
 
       <TouchableOpacity
@@ -178,10 +163,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     lineHeight: 14,
     textAlign: 'center',
-  },
-  badgeLabelSpacer: {
-    height: 14,
-    marginTop: 2,
   },
   rankingBtn: {
     width: '100%',

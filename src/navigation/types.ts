@@ -8,6 +8,7 @@ export type ProgressTabStackParamList = {
   ProgressMain: undefined;
   DailyQuest: undefined;
   AllAchievements: undefined;
+  AchievementDetail: { achievementKey: string };
 };
 
 export type YouTabStackParamList = {

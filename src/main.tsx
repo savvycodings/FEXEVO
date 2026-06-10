@@ -25,6 +25,7 @@ import {
   ClubDetailScreen,
   CoachDetailScreen,
 } from './screens'
+import { AchievementDetailScreen } from './screens/AchievementDetailScreen'
 import { Header } from './components'
 import { MainTabBarBackground } from './components/MainTabBarBackground'
 import {
@@ -96,6 +97,11 @@ function ProgressTabStack() {
       <ProgressStack.Screen name="ProgressMain" component={ProgressScreen} />
       <ProgressStack.Screen name="DailyQuest" component={DailyQuestScreen} />
       <ProgressStack.Screen name="AllAchievements" component={AllAchievementsScreen} />
+      <ProgressStack.Screen
+        name="AchievementDetail"
+        component={AchievementDetailScreen}
+        options={{ presentation: 'modal' }}
+      />
     </ProgressStack.Navigator>
   )
 }
