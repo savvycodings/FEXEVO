@@ -29,6 +29,42 @@ type Props = {
   skipPasswordGate?: boolean;
 };
 
+function meshSummaryFromDetail(detail: Record<string, unknown> | null | undefined): string | null {
+  const samples = detail?.samples;
+  if (!Array.isArray(samples) || samples.length === 0) return null;
+  const withMesh = samples.filter(
+    (s) => s && typeof s === "object" && (s as Record<string, unknown>).mesh_used === true
+  );
+  if (withMesh.length === 0) return null;
+  const first = withMesh[0] as Record<string, unknown>;
+  const src = typeof first.embedding_source === "string" ? first.embedding_source : "mesh";
+  const conf =
+    typeof first.mesh_confidence === "number"
+      ? Math.round(first.mesh_confidence * 100)
+      : null;
+  return conf != null ? `Mesh · ${src} · ${conf}%` : `Mesh · ${src}`;
+}
+
+function meshDetailLines(detail: Record<string, unknown> | null | undefined): string[] {
+  const samples = detail?.samples;
+  if (!Array.isArray(samples)) return [];
+  const lines: string[] = [];
+  for (const s of samples.slice(0, 5)) {
+    if (!s || typeof s !== "object") continue;
+    const row = s as Record<string, unknown>;
+    if (!row.mesh_used && !row.mesh_enriched) continue;
+    const id = typeof row.id === "string" ? row.id.slice(0, 8) : "?";
+    const src = row.embedding_source ?? "—";
+    const conf =
+      typeof row.mesh_confidence === "number"
+        ? `${Math.round(row.mesh_confidence * 100)}%`
+        : "—";
+    const frames = row.mesh_frame_count ?? "—";
+    lines.push(`${id}… · ${String(src)} · conf ${conf} · ${frames} frame(s)`);
+  }
+  return lines;
+}
+
 export function AdminAccuracy({ onClose, skipPasswordGate }: Props) {
   const { theme } = useContext(ThemeContext);
   const insets = useSafeAreaInsets();
@@ -192,6 +228,11 @@ export function AdminAccuracy({ onClose, skipPasswordGate }: Props) {
                   <Text style={styles.historySummary} numberOfLines={1}>
                     {run.summary}
                   </Text>
+                  {meshSummaryFromDetail(run.detail ?? null) ? (
+                    <Text style={styles.historyMesh} numberOfLines={1}>
+                      {meshSummaryFromDetail(run.detail ?? null)}
+                    </Text>
+                  ) : null}
                   <Text style={styles.historyDate}>
                     {new Date(run.createdAt).toLocaleString()}
                   </Text>
@@ -214,6 +255,16 @@ export function AdminAccuracy({ onClose, skipPasswordGate }: Props) {
                 <Text style={styles.modalBody}>
                   {detailRun.scorePercent}% — {detailRun.summary}
                 </Text>
+                {meshDetailLines(detailRun.detail ?? null).length > 0 ? (
+                  <View style={styles.modalMeshBlock}>
+                    <Text style={styles.modalMeshTitle}>Mesh / pose enrichment</Text>
+                    {meshDetailLines(detailRun.detail ?? null).map((line) => (
+                      <Text key={line} style={styles.modalMeshLine}>
+                        {line}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
                 {detailRun.detail ? (
                   <Text style={styles.modalJson}>
                     {JSON.stringify(detailRun.detail, null, 2)}
@@ -304,6 +355,12 @@ function getStyles(theme: {
       fontSize: 12,
       marginTop: 2,
     },
+    historyMesh: {
+      color: "#67e8f9",
+      fontFamily: theme.regularFont,
+      fontSize: 11,
+      marginTop: 2,
+    },
     historyDate: {
       color: "rgba(255,255,255,0.4)",
       fontFamily: theme.regularFont,
@@ -334,6 +391,26 @@ function getStyles(theme: {
       fontFamily: theme.regularFont,
       fontSize: 14,
       marginBottom: 12,
+    },
+    modalMeshBlock: {
+      marginBottom: 12,
+      padding: 10,
+      borderRadius: 8,
+      backgroundColor: "rgba(0, 187, 255, 0.08)",
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: "rgba(0, 187, 255, 0.2)",
+    },
+    modalMeshTitle: {
+      color: "#67e8f9",
+      fontFamily: theme.semiBoldFont,
+      fontSize: 12,
+      marginBottom: 6,
+    },
+    modalMeshLine: {
+      color: "rgba(255,255,255,0.75)",
+      fontFamily: theme.regularFont,
+      fontSize: 11,
+      marginBottom: 2,
     },
     modalJson: {
       color: "rgba(255,255,255,0.6)",
