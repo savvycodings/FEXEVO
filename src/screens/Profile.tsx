@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, Image, TouchableOpacity, Share } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { ThemeContext } from "../context";
 import { useSessionData } from "../context/SessionDataContext";
@@ -18,6 +18,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { trainCategoryLabel } from "../i18n/taxonomyLabels";
 
 const AI_INSIGHT_LOGO = require("../../assets/youpage/aiinsight.png");
+const YOU_SHARE_ICON = require("../../assets/youpage/shareicon.svg");
 
 function ProfileAiInsightBanner({
   styles,
@@ -90,7 +91,7 @@ function ProfileAiInsightBanner({
 export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => void }) {
   const { theme } = useContext(ThemeContext);
   const styles = getAiInsightStyles(theme);
-  const { ratingCategories, ratingLoading } = useSessionData();
+  const { ratingCategories, ratingLoading, profileName, overallPillarScore } = useSessionData();
   const [dismissLoaded, setDismissLoaded] = useState(false);
   const [dismissedUntilMs, setDismissedUntilMs] = useState(0);
 
@@ -120,13 +121,33 @@ export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => 
     setDismissedUntilMs(until);
   }, []);
 
+  const onShareProfile = useCallback(async () => {
+    try {
+      const name = profileName?.trim() || "Player";
+      const score = overallPillarScore != null ? String(overallPillarScore) : "—";
+      await Share.share({
+        message: `${name} · Score ${score} on Xevo`,
+      });
+    } catch {
+      /* dismissed */
+    }
+  }, [profileName, overallPillarScore]);
+
   return (
     <ActivitiesCalendarFlow
       monthNavStyle="pill"
       showHeroRow={false}
       aboveActivitiesTitle={
         <>
-          <ProfileHeroScoreBlock premiumLabelNudgeUp={4} />
+          <ProfileHeroScoreBlock
+            premiumLabelNudgeUp={4}
+            marginTop={22}
+            youPageLayout
+            onSharePress={() => void onShareProfile()}
+            shareIconModule={YOU_SHARE_ICON}
+            shareIconSize={28}
+            shareAccessibilityLabel="Share profile"
+          />
           <ProfileRatingDashboard />
           {showAiInsight && insight ? (
             <ProfileAiInsightBanner styles={styles} insight={insight} onDismiss={onDismissInsight} />

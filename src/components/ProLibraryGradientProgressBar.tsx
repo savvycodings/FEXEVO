@@ -12,6 +12,8 @@ export type ProLibraryGradientProgressBarProps = {
   fillColor: string
   trackColor?: string
   height?: number
+  /** When true, renders a flat bar with no gradient frame border. */
+  flat?: boolean
   /** Gradient “border” thickness (padding between frame and track). */
   strokeWidth?: number
   outerBorderRadius?: number
@@ -25,6 +27,7 @@ export function ProLibraryGradientProgressBar({
   fillColor,
   trackColor = PRO_LIBRARY_PROGRESS_DEFAULT_TRACK,
   height = 10,
+  flat = false,
   strokeWidth = proLibraryChrome.frameStrokeWidth,
   outerBorderRadius = 8,
   innerBorderRadius = 6,
@@ -33,6 +36,30 @@ export function ProLibraryGradientProgressBar({
 }: ProLibraryGradientProgressBarProps) {
   const g = proLibraryChrome.gradientFrame
   const pct = Math.max(0, Math.min(100, progress))
+  const track = (
+    <View
+      style={{
+        borderRadius: flat ? outerBorderRadius : innerBorderRadius,
+        backgroundColor: trackColor,
+        overflow: 'hidden',
+        height,
+      }}
+    >
+      <View
+        style={{
+          height: '100%',
+          width: `${pct}%`,
+          backgroundColor: fillColor,
+          borderRadius: fillBorderRadius,
+        }}
+      />
+    </View>
+  )
+
+  if (flat) {
+    return <View style={[{ flex: 1, minWidth: 0 }, style]}>{track}</View>
+  }
+
   return (
     <LinearGradient
       colors={[...g.colors]}
@@ -49,23 +76,7 @@ export function ProLibraryGradientProgressBar({
         style,
       ]}
     >
-      <View
-        style={{
-          borderRadius: innerBorderRadius,
-          backgroundColor: trackColor,
-          overflow: 'hidden',
-          height,
-        }}
-      >
-        <View
-          style={{
-            height: '100%',
-            width: `${pct}%`,
-            backgroundColor: fillColor,
-            borderRadius: fillBorderRadius,
-          }}
-        />
-      </View>
+      {track}
     </LinearGradient>
   )
 }

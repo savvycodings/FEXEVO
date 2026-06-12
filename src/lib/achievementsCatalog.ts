@@ -255,3 +255,48 @@ export function countUnlockedAchievements(unlockedKeys?: ReadonlySet<string> | s
   if (unlockedKeys) return countUnlockedFromKeys(unlockedKeys)
   return ACHIEVEMENTS.filter((a) => a.kind === 'unlocked').length
 }
+
+export const ACHIEVEMENT_PREVIEW_LOCKED_KEY_PREFIX = 'preview-locked-'
+
+export type ClaimedAchievementRecord = {
+  key: string
+  unlockedAt?: string
+  claimedAt?: string
+}
+
+/** Progress tab preview — most recently claimed badges, padded with generic locked slots. */
+export function buildAchievementPreviewBadges(
+  claimed: ReadonlyArray<ClaimedAchievementRecord>,
+  claimedKeys: ReadonlySet<string> | string[],
+  claimableKeys: ReadonlySet<string> | string[] = [],
+  previewCount = 4
+): AchievementDef[] {
+  const keyed = withAchievementState(claimedKeys, claimableKeys)
+  const byKey = new Map(keyed.map((a) => [a.key, a]))
+
+  const recentClaimed = [...claimed]
+    .sort((a, b) => {
+      const ta = Date.parse(a.claimedAt || a.unlockedAt || '') || 0
+      const tb = Date.parse(b.claimedAt || b.unlockedAt || '') || 0
+      return tb - ta
+    })
+    .slice(0, previewCount)
+    .map((row) => byKey.get(row.key))
+    .filter((a): a is AchievementDef => a != null && a.kind === 'unlocked')
+
+  const result: AchievementDef[] = [...recentClaimed]
+  while (result.length < previewCount) {
+    result.push({
+      key: `${ACHIEVEMENT_PREVIEW_LOCKED_KEY_PREFIX}${result.length}`,
+      kind: 'locked',
+      unlockedImage: LOCKED_BADGE_DETAIL,
+      labelKey: 'progress.badgeLockedSlot',
+      descriptionKey: 'progress.badgeLockedSlot',
+    })
+  }
+  return result
+}
+
+export function isAchievementPreviewPlaceholder(key: string): boolean {
+  return key.startsWith(ACHIEVEMENT_PREVIEW_LOCKED_KEY_PREFIX)
+}

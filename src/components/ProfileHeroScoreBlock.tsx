@@ -9,7 +9,7 @@ import {
 } from 'react-native'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
-import { ShieldProportionalFrame } from './ShieldProportionalFrame'
+import { ShieldProportionalFrame, fitShieldInBox } from './ShieldProportionalFrame'
 import { LocalSvgAsset } from './LocalSvgAsset'
 import { useTranslation } from 'react-i18next'
 
@@ -33,6 +33,7 @@ type Props = {
   /** When set, shows this player instead of the signed-in profile (e.g. leaderboard #1). */
   playerOverride?: ProfileHeroPlayerOverride
   marginBottom?: number
+  marginTop?: number
   /** When false, only the shield column is shown (ranking #1 hero). */
   showScoreCard?: boolean
   onSharePress?: () => void
@@ -41,7 +42,12 @@ type Props = {
   shareIconSize?: number
   /** Load shield pillar scores for another user (leaderboard player profile). */
   ratingUserId?: string
+  /** You tab — shield flush left, score beside it, share icon inline top-right. */
+  youPageLayout?: boolean
 }
+
+const YOU_SHARE_SLOT_MIN = 36
+const YOU_SCORE_NUDGE_RIGHT = 14
 
 /**
  * Shield + score hero row (You / Profile tab). Shared with My Coach so layout stays identical.
@@ -51,12 +57,14 @@ export function ProfileHeroScoreBlock({
   premiumLabelNudgeUp = 0,
   playerOverride,
   marginBottom = 20,
+  marginTop = 0,
   showScoreCard = true,
   onSharePress,
   shareAccessibilityLabel = 'Share',
   shareIconModule,
   shareIconSize = 32,
   ratingUserId,
+  youPageLayout = false,
 }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -80,19 +88,103 @@ export function ProfileHeroScoreBlock({
 
   const heroH = useMemo(() => Math.min(220, Math.max(160, winW * 0.42)), [winW])
   const shieldMaxW = useMemo(() => {
-    const current = Math.min(colW, winW * 0.44)
     const refHeroRowInnerW = SMALL_SHIELD_CAP_REF_WIN_W - DEFAULT_HORIZONTAL_PAD * 2
     const refApproxColW = (refHeroRowInnerW - HERO_GAP) / 2
     const reference = Math.min(refApproxColW, SMALL_SHIELD_CAP_REF_WIN_W * 0.44)
+    if (youPageLayout) {
+      return Math.min(contentW * 0.46, winW * 0.44, reference)
+    }
+    const current = Math.min(colW, winW * 0.44)
     return Math.min(current, reference)
-  }, [colW, winW])
+  }, [colW, winW, youPageLayout, contentW])
 
   /** Square score card — width matches column, capped so it aligns with shield height. */
-  const scoreSize = Math.min(colW, heroH)
+  const shieldFit = useMemo(
+    () => fitShieldInBox(shieldMaxW, heroH),
+    [shieldMaxW, heroH]
+  )
+
+  const shareSlotW = youPageLayout
+    ? Math.max(YOU_SHARE_SLOT_MIN, shareIconSize + 8)
+    : YOU_SHARE_SLOT_MIN
+
+  const scoreSize = youPageLayout
+    ? Math.min(heroH, Math.max(120, contentW - shieldFit.width - shareSlotW))
+    : Math.min(colW, heroH)
+
+  const showShare = onSharePress != null && shareIconModule != null
+
+  const scoreCard = showScoreCard ? (
+    <View style={[styles.scoreCard, { width: scoreSize, height: scoreSize }]}>
+      <Image source={SCORE_BG} style={styles.scoreImg} resizeMode="contain" />
+      <View style={styles.scoreOverlay}>
+        <View style={styles.scoreTopCluster}>
+          <Text
+            allowFontScaling={false}
+            numberOfLines={1}
+            style={[styles.scoreUserName, { fontFamily: theme.semiBoldFont }]}
+          >
+            {displayName}
+          </Text>
+          <Text
+            allowFontScaling={false}
+            style={[
+              styles.scorePremiumLabel,
+              premiumLabelNudgeUp > 0 && { marginTop: -premiumLabelNudgeUp },
+              { fontFamily: theme.mediumFont },
+            ]}
+          >
+            {t('common.premium')}
+          </Text>
+        </View>
+        <View style={styles.scoreCenterCluster}>
+          <Text
+            allowFontScaling={false}
+            style={[styles.scoreNumber, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
+          >
+            {displayScore}
+          </Text>
+          <Text allowFontScaling={false} style={[styles.scoreLabel, { fontFamily: theme.regularFont }]}>
+            {t('common.score')}
+          </Text>
+        </View>
+        <View style={styles.scoreStatsRow}>
+          <View style={styles.scoreStatCol}>
+            <Text
+              allowFontScaling={false}
+              style={[styles.scoreStatNumber, { fontFamily: theme.semiBoldFont }]}
+            >
+              0
+            </Text>
+            <Text
+              allowFontScaling={false}
+              style={[styles.scoreStatLabel, { fontFamily: theme.regularFont }]}
+            >
+              {t('common.following')}
+            </Text>
+          </View>
+          <View style={styles.scoreStatCol}>
+            <Text
+              allowFontScaling={false}
+              style={[styles.scoreStatNumber, { fontFamily: theme.semiBoldFont }]}
+            >
+              0
+            </Text>
+            <Text
+              allowFontScaling={false}
+              style={[styles.scoreStatLabel, { fontFamily: theme.regularFont }]}
+            >
+              {t('common.followers')}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  ) : null
 
   return (
     <View
-      style={[styles.block, { marginBottom }]}
+      style={[styles.block, { marginBottom, marginTop }]}
       onLayout={(e) => {
         const w = e.nativeEvent.layout.width
         if (w > 0 && Math.abs(w - rowWidth) > 1) setRowWidth(w)
@@ -101,15 +193,29 @@ export function ProfileHeroScoreBlock({
       <View
         style={[
           styles.heroRow,
-          { width: contentW },
+          youPageLayout ? styles.heroRowYou : { width: contentW },
           !showScoreCard && styles.heroRowShieldOnly,
         ]}
       >
-        <View style={[styles.shieldCol, { width: colW }]}>
-          <View style={[styles.shieldSlot, { height: heroH, width: colW }]}>
+        <View
+          style={[
+            styles.shieldCol,
+            youPageLayout ? styles.shieldColYou : { width: colW },
+            youPageLayout && { width: shieldFit.width },
+          ]}
+        >
+          <View
+            style={[
+              styles.shieldSlot,
+              { height: heroH },
+              youPageLayout ? styles.shieldSlotYou : null,
+              youPageLayout ? { width: shieldFit.width } : { width: colW },
+            ]}
+          >
             <ShieldProportionalFrame
-              maxWidth={shieldMaxW}
+              maxWidth={shieldFit.width}
               maxHeight={heroH}
+              style={youPageLayout ? styles.shieldFrameYou : undefined}
               variant="small"
               coachName={displayName}
               coachImageUri={displayImageUri}
@@ -123,77 +229,26 @@ export function ProfileHeroScoreBlock({
             />
           </View>
         </View>
-        {showScoreCard ? (
-          <View style={[styles.scoreCol, { width: colW }]}>
-            <View style={[styles.scoreCard, { width: scoreSize, height: scoreSize }]}>
-              <Image source={SCORE_BG} style={styles.scoreImg} resizeMode="contain" />
-              <View style={styles.scoreOverlay}>
-                <View style={styles.scoreTopCluster}>
-                  <Text
-                    allowFontScaling={false}
-                    numberOfLines={1}
-                    style={[styles.scoreUserName, { fontFamily: theme.semiBoldFont }]}
-                  >
-                    {displayName}
-                  </Text>
-                  <Text
-                    allowFontScaling={false}
-                    style={[
-                      styles.scorePremiumLabel,
-                      premiumLabelNudgeUp > 0 && { marginTop: -premiumLabelNudgeUp },
-                      { fontFamily: theme.mediumFont },
-                    ]}
-                  >
-                    {t('common.premium')}
-                  </Text>
-                </View>
-                <View style={styles.scoreCenterCluster}>
-                  <Text
-                    allowFontScaling={false}
-                    style={[styles.scoreNumber, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
-                  >
-                    {displayScore}
-                  </Text>
-                  <Text allowFontScaling={false} style={[styles.scoreLabel, { fontFamily: theme.regularFont }]}>
-                    {t('common.score')}
-                  </Text>
-                </View>
-                <View style={styles.scoreStatsRow}>
-                  <View style={styles.scoreStatCol}>
-                    <Text
-                      allowFontScaling={false}
-                      style={[styles.scoreStatNumber, { fontFamily: theme.semiBoldFont }]}
-                    >
-                      0
-                    </Text>
-                    <Text
-                      allowFontScaling={false}
-                      style={[styles.scoreStatLabel, { fontFamily: theme.regularFont }]}
-                    >
-                      {t('common.following')}
-                    </Text>
-                  </View>
-                  <View style={styles.scoreStatCol}>
-                    <Text
-                      allowFontScaling={false}
-                      style={[styles.scoreStatNumber, { fontFamily: theme.semiBoldFont }]}
-                    >
-                      0
-                    </Text>
-                    <Text
-                      allowFontScaling={false}
-                      style={[styles.scoreStatLabel, { fontFamily: theme.regularFont }]}
-                    >
-                      {t('common.followers')}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
+        {showScoreCard && youPageLayout ? (
+          <View style={styles.scoreCenterLane}>
+            <View style={styles.scoreNudgeRight}>{scoreCard}</View>
           </View>
+        ) : showScoreCard ? (
+          <View style={[styles.scoreCol, { width: colW }]}>{scoreCard}</View>
+        ) : null}
+        {youPageLayout && showShare ? (
+          <TouchableOpacity
+            onPress={onSharePress}
+            style={[styles.shareInlineYou, { width: shareSlotW }]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={shareAccessibilityLabel}
+          >
+            <LocalSvgAsset assetModule={shareIconModule} width={shareIconSize} height={shareIconSize} />
+          </TouchableOpacity>
         ) : null}
       </View>
-      {onSharePress ? (
+      {!youPageLayout && showShare ? (
         <TouchableOpacity
           onPress={onSharePress}
           style={styles.shareHit}
@@ -201,9 +256,7 @@ export function ProfileHeroScoreBlock({
           accessibilityRole="button"
           accessibilityLabel={shareAccessibilityLabel}
         >
-          {shareIconModule != null ? (
-            <LocalSvgAsset assetModule={shareIconModule} width={shareIconSize} height={shareIconSize} />
-          ) : null}
+          <LocalSvgAsset assetModule={shareIconModule} width={shareIconSize} height={shareIconSize} />
         </TouchableOpacity>
       ) : null}
     </View>
@@ -232,19 +285,53 @@ const styles = StyleSheet.create({
     gap: HERO_GAP,
     width: '100%',
   },
+  heroRowYou: {
+    width: '100%',
+    gap: 0,
+  },
   heroRowShieldOnly: {
     justifyContent: 'center',
   },
   shieldCol: {
     alignItems: 'center',
   },
+  shieldColYou: {
+    alignItems: 'flex-start',
+    flexShrink: 0,
+  },
   shieldSlot: {
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    overflow: 'visible',
+  },
+  shieldSlotYou: {
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    overflow: 'visible',
+  },
+  shieldFrameYou: {
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
   },
   scoreCol: {
     alignItems: 'center',
+  },
+  scoreCenterLane: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  scoreNudgeRight: {
+    transform: [{ translateX: YOU_SCORE_NUDGE_RIGHT }],
+  },
+  shareInlineYou: {
+    flexShrink: 0,
+    alignSelf: 'flex-start',
+    paddingTop: 10,
+    minHeight: 32,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
   },
   scoreCard: {
     alignItems: 'center',
