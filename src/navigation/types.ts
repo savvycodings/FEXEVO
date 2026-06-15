@@ -46,6 +46,7 @@ export type MyCoachTabStackParamList = {
 
 export type MainTabParamList = {
   AICoach: undefined;
+  Playlist: undefined;
   MyCoach: NavigatorScreenParams<MyCoachTabStackParamList>;
   Activities: { openAnalysisId?: string } | undefined;
   Progress: NavigatorScreenParams<ProgressTabStackParamList>;

@@ -18,6 +18,7 @@ import {
   NavIconMyCoach,
   NavIconMyStudents,
   NavIconProgress,
+  NavIconPlaylist,
   NavIconYou,
 } from "./NavTabIcons";
 import { useTranslation } from "react-i18next";
@@ -31,6 +32,7 @@ const TAB_ORDER: (keyof MainTabParamList)[] = [
   "AICoach",
   "MyCoach",
   "Activities",
+  "Playlist",
   "Progress",
   "You",
 ];
@@ -112,6 +114,8 @@ export function MainTabBarChrome({ activeTab }: Props) {
           screen: "MyCoach",
           params: { screen: "MyCoachMain" },
         });
+      } else if (screen === "Playlist") {
+        navigation.navigate("Main", { screen: "Playlist" });
       } else {
         navigation.navigate("Main", { screen: screen as "AICoach" | "Activities" });
       }
@@ -121,12 +125,16 @@ export function MainTabBarChrome({ activeTab }: Props) {
 
   const tabLabels: Record<keyof MainTabParamList, string> = {
     AICoach: t("tabs.aiCoach"),
+    Playlist: t("tabs.playlist"),
     MyCoach: viewerIsCoach ? t("tabs.myStudents") : t("tabs.myCoach"),
     Activities: viewerIsCoach ? t("tabs.calendar") : t("tabs.activities"),
     Progress: t("tabs.progress"),
     You: t("tabs.you"),
   };
-  const visibleTabs = TAB_ORDER.filter((tab) => !(viewerIsCoach && tab === "AICoach"));
+  const visibleTabs = TAB_ORDER.filter(
+    (tab) =>
+      !(viewerIsCoach && tab === "AICoach") && !(!viewerIsCoach && tab === "Playlist")
+  );
 
   return (
     <View style={styles.bar}>
@@ -138,6 +146,8 @@ export function MainTabBarChrome({ activeTab }: Props) {
         const icon =
           tab === "AICoach" ? (
             <NavIconAICoach color={color} size={iconSize} />
+          ) : tab === "Playlist" ? (
+            <NavIconPlaylist color={color} size={iconSize} />
           ) : tab === "MyCoach" ? (
             viewerIsCoach ? (
               <NavIconMyStudents color={color} size={iconSize} />

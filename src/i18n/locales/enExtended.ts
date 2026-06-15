@@ -243,6 +243,9 @@ export const enExtended = {
     submit: "Submit review",
     frameAt: "Frame {{time}}",
   },
+  playlist: {
+    title: "Coach Playlist",
+  },
   studentProfile: {
     uploadNewVideo: "Upload new video",
     weeklySchedule: "Weekly Schedule",

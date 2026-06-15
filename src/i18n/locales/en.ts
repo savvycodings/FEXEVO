@@ -120,6 +120,7 @@ export const en = {
     myStudents: "My Students",
     activities: "Activities",
     calendar: "Calendar",
+    playlist: "Playlist",
     progress: "Progress",
     you: "You",
   },
