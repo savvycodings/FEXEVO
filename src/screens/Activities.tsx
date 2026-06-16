@@ -93,6 +93,9 @@ function formatMonthYear(d: Date): string {
 const MONTH_PILL_CYAN = '#00BBFF'
 /** Days with sessions — solid circle behind the date (matches reference). */
 const CAL_ACTIVITY_CIRCLE = '#2B59FF'
+const CAL_WEEK_LABEL = '#86A7D2'
+const CAL_DAY_NUM = 'rgba(134, 167, 210, 0.75)'
+const CAL_DAY_MUTED = 'rgba(134, 167, 210, 0.25)'
 
 function monthYearPillLines(d: Date): { month: string; year: string } {
   return {
@@ -672,17 +675,27 @@ export function ActivitiesCalendarFlow({
               <Pressable
                 key={idx}
                 onPress={() => onPressDay(cell.date, cell.inMonth)}
-                style={[styles.dayCell, !cell.inMonth && styles.dayMuted]}
+                style={styles.dayCell}
                 android_ripple={{ color: 'rgba(0, 187, 255, 0.14)', borderless: false }}
               >
                 {has ? (
                   <View style={styles.dayNumCircle}>
-                    <Text allowFontScaling={false} style={styles.dayNumInCircle}>
+                    <Text
+                      allowFontScaling={false}
+                      style={[styles.dayNumInCircle, !cell.inMonth && styles.dayNumMuted]}
+                    >
                       {cell.date.getDate()}
                     </Text>
                   </View>
                 ) : (
-                  <Text allowFontScaling={false} style={[styles.dayNum, isSel && styles.dayNumSelected]}>
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.dayNum,
+                      isSel && styles.dayNumSelected,
+                      !cell.inMonth && styles.dayNumMuted,
+                    ]}
+                  >
                     {cell.date.getDate()}
                   </Text>
                 )}
@@ -1084,7 +1097,7 @@ function getStyles(theme: any, _winW: number) {
     weekRow: {
       flexDirection: 'row',
       width: '100%',
-      marginBottom: 6,
+      marginBottom: 12,
     },
     weekLabel: {
       width: dayColumnPct,
@@ -1095,7 +1108,7 @@ function getStyles(theme: any, _winW: number) {
       textAlign: 'center',
       fontFamily: theme.mediumFont,
       fontSize: 11,
-      color: 'rgba(255,255,255,0.45)',
+      color: CAL_WEEK_LABEL,
     },
     calendarWeekRow: {
       flexDirection: 'row',
@@ -1113,16 +1126,16 @@ function getStyles(theme: any, _winW: number) {
       justifyContent: 'center',
       overflow: 'hidden',
     },
-    dayMuted: {
-      opacity: 0.35,
-    },
     dayNum: {
       fontFamily: theme.mediumFont,
       fontSize: 13,
       lineHeight: 16,
       textAlign: 'center',
-      color: 'rgba(255,255,255,0.92)',
+      color: CAL_DAY_NUM,
       ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+    },
+    dayNumMuted: {
+      color: CAL_DAY_MUTED,
     },
     dayNumSelected: {
       color: '#00BBFF',
@@ -1142,7 +1155,7 @@ function getStyles(theme: any, _winW: number) {
       fontSize: 13,
       lineHeight: 15,
       textAlign: 'center',
-      color: '#FFFFFF',
+      color: CAL_DAY_NUM,
       ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
     },
   })

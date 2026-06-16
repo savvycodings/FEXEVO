@@ -10,6 +10,7 @@ import {
   AdminAccuracy,
   ActivitiesScreen,
   MyCoachScreen,
+  CoachPlaylistScreen,
   ProgressScreen,
   DailyQuestScreen,
   RankingScreen,
@@ -36,6 +37,7 @@ import {
   NavIconMyCoach,
   NavIconMyStudents,
   NavIconProgress,
+  NavIconPlaylist,
   NavIconYou,
 } from './components/NavTabIcons'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -179,6 +181,7 @@ function MainTabsLayoutInner({
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
   const tabLabels: Record<keyof MainTabParamList, string> = {
     AICoach: t('tabs.aiCoach'),
+    Playlist: t('tabs.playlist'),
     MyCoach: viewerIsCoach ? t('tabs.myStudents') : t('tabs.myCoach'),
     Activities: viewerIsCoach ? t('tabs.calendar') : t('tabs.activities'),
     Progress: t('tabs.progress'),
@@ -202,6 +205,8 @@ function MainTabsLayoutInner({
           screen: 'MyCoach',
           params: { screen: 'MyCoachMain' },
         })
+      } else if (screen === 'Playlist') {
+        stackNavigation.navigate('Main', { screen: 'Playlist' })
       } else {
         stackNavigation.navigate('Main', { screen: screen as 'AICoach' | 'Activities' })
       }
@@ -448,6 +453,21 @@ function MainTabsLayoutInner({
                 },
               }
             : {}),
+          ...(route.name === 'Playlist' && !viewerIsCoach
+            ? {
+                tabBarButton: () => null,
+                tabBarItemStyle: {
+                  width: 0,
+                  minWidth: 0,
+                  maxWidth: 0,
+                  height: 0,
+                  padding: 0,
+                  margin: 0,
+                  overflow: 'hidden',
+                  display: 'none' as const,
+                },
+              }
+            : {}),
           tabBarLabelStyle: {
             fontFamily: theme.mediumFont,
             fontSize: tabMetrics.labelFontSize,
@@ -462,6 +482,8 @@ function MainTabsLayoutInner({
             switch (route.name) {
               case 'AICoach':
                 return <NavIconAICoach color={c} size={s} />
+              case 'Playlist':
+                return <NavIconPlaylist color={c} size={s} />
               case 'MyCoach':
                 return viewerIsCoach ? (
                   <NavIconMyStudents color={c} size={s} />
@@ -487,6 +509,7 @@ function MainTabsLayoutInner({
         </Tab.Screen>
         <Tab.Screen name="MyCoach" options={{ title: tabLabels.MyCoach }} component={MyCoachTabStack} />
         <Tab.Screen name="Activities" options={{ title: tabLabels.Activities }} component={ActivitiesScreen} />
+        <Tab.Screen name="Playlist" component={CoachPlaylistScreen} />
         <Tab.Screen name="Progress" options={{ title: tabLabels.Progress }} component={ProgressTabStack} />
         <Tab.Screen name="You" options={{ title: tabLabels.You }}>
           {() => (

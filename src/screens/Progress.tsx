@@ -582,8 +582,9 @@ export function ProgressScreen() {
                   <ProLibraryGradientProgressBar
                     progress={pct}
                     fillColor={fillColor}
-                    trackColor={PG.track}
+                    trackColor={PG.dayCircleEmpty}
                     height={10}
+                    flat
                     style={styles.breakGradientBar}
                   />
                   <Text allowFontScaling={false} style={[styles.breakScore, { color: scoreColor }]}>

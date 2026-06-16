@@ -248,18 +248,20 @@ export function ProfileRatingDashboard({ metrics: controlledMetrics }: Props) {
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 14,
+          marginBottom: 6,
           paddingHorizontal: 2,
         },
         title: {
           fontFamily: theme.semiBoldFont,
           fontSize: 20,
           color: '#FFFFFF',
+          marginTop: 12,
         },
         legend: {
           flexDirection: 'row',
           alignItems: 'center',
           gap: 12,
+          marginTop: 12,
         },
         legendItem: {
           flexDirection: 'row',

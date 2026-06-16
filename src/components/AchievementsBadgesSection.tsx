@@ -1,12 +1,18 @@
 import React, { useContext, useMemo, useState } from 'react'
 import { View, Text, StyleSheet, Image, TouchableOpacity, useWindowDimensions } from 'react-native'
 import { ThemeContext } from '../context'
-import { getAchievementDisplayImage, withAchievementState } from '../lib/achievementsCatalog'
+import {
+  buildAchievementPreviewBadges,
+  getAchievementDisplayImage,
+  isAchievementPreviewPlaceholder,
+} from '../lib/achievementsCatalog'
 import { useSessionData } from '../context/SessionDataContext'
 import { useTranslation } from 'react-i18next'
 
 const PREVIEW_COUNT = 4
 const BADGE_ROW_GAP = 0
+/** Slightly smaller badges on the Progress achievements preview row only. */
+const BADGE_PREVIEW_SCALE = 0.82
 const UNLOCKED_NATIVE_W = 86
 const UNLOCKED_NATIVE_H = 96
 const LOCKED_NATIVE_W = 65
@@ -23,23 +29,26 @@ export function AchievementsBadgesSection({ onViewAllPress, onRankingPress }: Pr
   const { width: winW } = useWindowDimensions()
   const [rowWidth, setRowWidth] = useState(0)
 
-  const { claimedAchievementKeys, claimableAchievementKeys } = useSessionData()
+  const { claimedAchievementKeys, claimedAchievements, claimableAchievementKeys } =
+    useSessionData()
 
   const previewBadges = useMemo(
     () =>
-      withAchievementState(claimedAchievementKeys, claimableAchievementKeys).slice(
-        0,
+      buildAchievementPreviewBadges(
+        claimedAchievements,
+        claimedAchievementKeys,
+        claimableAchievementKeys,
         PREVIEW_COUNT
       ),
-    [claimedAchievementKeys, claimableAchievementKeys]
+    [claimedAchievements, claimedAchievementKeys, claimableAchievementKeys]
   )
 
   const badgeSizes = useMemo(() => {
     const contentW = rowWidth > 0 ? rowWidth : Math.max(1, winW - 40)
     const colSlot = Math.max(1, (contentW - BADGE_ROW_GAP * (PREVIEW_COUNT - 1)) / PREVIEW_COUNT)
-    const unlockedW = Math.floor(colSlot * 1.05)
+    const unlockedW = Math.floor(colSlot * 1.05 * BADGE_PREVIEW_SCALE)
     const unlockedH = Math.round((unlockedW * UNLOCKED_NATIVE_H) / UNLOCKED_NATIVE_W)
-    const lockedW = Math.floor(colSlot * 0.9)
+    const lockedW = Math.floor(colSlot * 0.9 * BADGE_PREVIEW_SCALE)
     const lockedH = Math.round((lockedW * LOCKED_NATIVE_H) / LOCKED_NATIVE_W)
     return { unlockedW, unlockedH, lockedW, lockedH, iconRowH: unlockedH }
   }, [rowWidth, winW])
@@ -87,13 +96,17 @@ export function AchievementsBadgesSection({ onViewAllPress, onRankingPress }: Pr
                   resizeMode="contain"
                 />
               </View>
-              <Text
-                allowFontScaling={false}
-                numberOfLines={2}
-                style={[styles.badgeLabel, { fontFamily: theme.regularFont }]}
-              >
-                {t(badge.labelKey)}
-              </Text>
+              {!isAchievementPreviewPlaceholder(badge.key) ? (
+                <Text
+                  allowFontScaling={false}
+                  numberOfLines={2}
+                  style={[styles.badgeLabel, { fontFamily: theme.regularFont }]}
+                >
+                  {t(badge.labelKey)}
+                </Text>
+              ) : (
+                <View style={styles.badgeLabelSpacer} />
+              )}
             </View>
           )
         })}
@@ -118,14 +131,14 @@ export function AchievementsBadgesSection({ onViewAllPress, onRankingPress }: Pr
 const styles = StyleSheet.create({
   section: {
     width: '100%',
-    marginTop: 4,
+    marginTop: 10,
     marginBottom: 20,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -163,6 +176,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     lineHeight: 14,
     textAlign: 'center',
+  },
+  badgeLabelSpacer: {
+    marginTop: 2,
+    height: 28,
   },
   rankingBtn: {
     width: '100%',

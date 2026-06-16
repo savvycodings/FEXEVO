@@ -71,6 +71,7 @@ type SessionDataContextValue = {
   playerTier: string
   loginStreak: number
   claimedAchievementKeys: Set<string>
+  claimedAchievements: { key: string; unlockedAt: string; claimedAt: string }[]
   claimableAchievementKeys: Set<string>
   dailyQuests: GamificationQuestRow[]
   weeklyQuests: GamificationQuestRow[]
@@ -123,6 +124,9 @@ export function SessionDataProvider({
   const [claimedAchievementKeys, setClaimedAchievementKeys] = useState<Set<string>>(
     () => new Set()
   )
+  const [claimedAchievements, setClaimedAchievements] = useState<
+    { key: string; unlockedAt: string; claimedAt: string }[]
+  >([])
   const [claimableAchievementKeys, setClaimableAchievementKeys] = useState<Set<string>>(
     () => new Set()
   )
@@ -223,6 +227,7 @@ export function SessionDataProvider({
     setPlayerLevel(state.level)
     setPlayerTier(state.tier)
     setLoginStreak(state.loginStreak)
+    setClaimedAchievements(state.achievements ?? [])
     setClaimedAchievementKeys(new Set(state.achievements.map((a) => a.key)))
     setClaimableAchievementKeys(
       new Set((state.claimableAchievements ?? []).map((a) => a.key))
@@ -379,6 +384,7 @@ export function SessionDataProvider({
       playerTier,
       loginStreak,
       claimedAchievementKeys,
+      claimedAchievements,
       claimableAchievementKeys,
       dailyQuests,
       weeklyQuests,
@@ -411,6 +417,7 @@ export function SessionDataProvider({
       playerTier,
       loginStreak,
       claimedAchievementKeys,
+      claimedAchievements,
       claimableAchievementKeys,
       dailyQuests,
       weeklyQuests,

@@ -244,6 +244,9 @@ export const esExtended = {
     submit: "Enviar revisión",
     frameAt: "Fotograma {{time}}",
   },
+  playlist: {
+    title: "Lista del entrenador",
+  },
   studentProfile: {
     uploadNewVideo: "Subir video nuevo",
     weeklySchedule: "Horario semanal",

@@ -267,7 +267,10 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
               {FEATURE_ROWS.map((row, i) => (
                 <View
                   key={`free-${i}`}
-                  style={[styles.featureCell, i < FEATURE_ROWS.length - 1 && styles.featureCellBorder]}
+                  style={[
+                    styles.featureCell,
+                    i < FEATURE_ROWS.length - 1 && styles.featureCellBorderFree,
+                  ]}
                 >
                   <Text
                     allowFontScaling={false}
@@ -417,7 +420,7 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
     },
     heroSubtitle: {
       color: '#0059FF',
-      fontFamily: theme.regularFont,
+      fontFamily: theme.boldFont ?? theme.semiBoldFont,
       fontSize: 17,
       lineHeight: 24,
       marginTop: 6,
@@ -584,6 +587,10 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
     featureCellBorder: {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: 'rgba(134, 167, 210, 0.2)',
+    },
+    featureCellBorderFree: {
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(0, 184, 255, 0.38)',
     },
     featureLabelFree: {
       flex: 1,

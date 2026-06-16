@@ -27,6 +27,8 @@ import type { ProgressTabStackParamList } from '../navigation/types'
 import { useTranslation } from 'react-i18next'
 
 const SPARKLES = require('../../assets/ranking/sparkles.png')
+const SPARKLES_WIDTH_SCALE = 1.15
+const SPARKLES_HEIGHT_RATIO = 0.42
 const UPLOAD_ICON = require('../../assets/ranking/upload.svg')
 const LIGHTNING_SVG = require('../../assets/achivemnets/lightning.svg')
 const GOLD_BADGE = require('../../assets/ranking/goldbadge.png')
@@ -203,31 +205,24 @@ export function RankingScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: 8, paddingHorizontal: horizontalPad }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backHit}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityRole="button"
-          accessibilityLabel={t('common.back')}
-        >
-          <Ionicons name="chevron-back" size={28} color="#86A7D2" />
-        </TouchableOpacity>
-        <Text allowFontScaling={false} style={[styles.headerTitle, { fontFamily: theme.semiBoldFont }]}>
-          {t('progress.ranking')}
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <View style={styles.stickyHead}>
+        <View style={[styles.header, { paddingTop: 8, paddingHorizontal: horizontalPad }]}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backHit}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+          >
+            <Ionicons name="chevron-back" size={28} color="#86A7D2" />
+          </TouchableOpacity>
+          <Text allowFontScaling={false} style={[styles.headerTitle, { fontFamily: theme.semiBoldFont }]}>
+            {t('progress.ranking')}
+          </Text>
+          <View style={styles.headerSpacer} />
+        </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{
-          paddingHorizontal: horizontalPad,
-          paddingBottom: 32 + insets.bottom + 74,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.segmentTrack}>
+        <View style={[styles.segmentTrack, { paddingHorizontal: horizontalPad }]}>
           {SCOPE_TABS.map((tab) => {
             const active = scope === tab.key
             return (
@@ -255,12 +250,7 @@ export function RankingScreen() {
           })}
         </View>
 
-        <View
-          style={[
-            styles.colHead,
-            { marginHorizontal: -horizontalPad, paddingHorizontal: horizontalPad },
-          ]}
-        >
+        <View style={[styles.colHead, { paddingHorizontal: horizontalPad }]}>
           <Text allowFontScaling={false} style={[styles.colHeadTxt, styles.colNo, { fontFamily: theme.mediumFont }]}>
             {t('progress.rankingColumnNo')}
           </Text>
@@ -271,7 +261,17 @@ export function RankingScreen() {
             {t('progress.rankingColumnScore')}
           </Text>
         </View>
+      </View>
 
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{
+          paddingHorizontal: horizontalPad,
+          paddingTop: 16,
+          paddingBottom: 32 + insets.bottom + 74,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
         {loading ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator color="#00B8FF" />
@@ -296,7 +296,13 @@ export function RankingScreen() {
             >
               <Image
                 source={SPARKLES}
-                style={[styles.sparkles, { width: heroRowW, height: Math.round(heroRowW * 0.42) }]}
+                style={[
+                  styles.sparkles,
+                  {
+                    width: Math.round(heroRowW * SPARKLES_WIDTH_SCALE),
+                    height: Math.round(heroRowW * SPARKLES_HEIGHT_RATIO * SPARKLES_WIDTH_SCALE),
+                  },
+                ]}
                 resizeMode="contain"
               />
               <View style={styles.heroShieldLayer}>
@@ -370,6 +376,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: PG.bg,
   },
+  stickyHead: {
+    backgroundColor: PG.bg,
+    zIndex: 2,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -439,7 +449,6 @@ const styles = StyleSheet.create({
     borderTopColor: PG.colHeadStroke,
     borderBottomColor: PG.colHeadStroke,
     paddingVertical: 10,
-    marginBottom: 16,
   },
   colHeadTxt: {
     fontSize: 11,

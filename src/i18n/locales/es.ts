@@ -120,6 +120,7 @@ export const es = {
     myStudents: "Mis estudiantes",
     activities: "Actividades",
     calendar: "Calendario",
+    playlist: "Playlist",
     progress: "Progreso",
     you: "Tú",
   },
