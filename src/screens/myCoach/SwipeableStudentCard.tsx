@@ -161,6 +161,13 @@ export function MyCoachSwipeableStudentCard({
     transform: [{ translateX: translateX.value }],
   }))
 
+  const actionsRowStyle = useAnimatedStyle(() => {
+    const swipeT = Math.min(1, Math.max(0, -translateX.value) / ACTIONS_WIDTH)
+    return {
+      backgroundColor: swipeT > 0 ? '#E94560' : '#F3F6FB',
+    }
+  })
+
   const pinkLeftBarStyle = useAnimatedStyle(() => ({
     position: 'absolute',
     left: cardWidthSV.value + translateX.value,
@@ -192,7 +199,7 @@ export function MyCoachSwipeableStudentCard({
           </Text>
         </Pressable>
       ) : null}
-      <View style={styles.actionsRow}>
+      <Animated.View style={[styles.actionsRow, actionsRowStyle]}>
         <Animated.View style={pinkLeftBarStyle} pointerEvents="none">
           <View style={styles.pinkBarEdge} />
         </Animated.View>
@@ -216,7 +223,7 @@ export function MyCoachSwipeableStudentCard({
             regularFont={fonts.regularFont}
           />
         </View>
-      </View>
+      </Animated.View>
 
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.studentCard, cardAnimStyle]}>

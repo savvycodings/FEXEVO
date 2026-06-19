@@ -18,6 +18,7 @@ import { AchievementsHeroBlock } from '../components/AchievementsHeroBlock'
 import { AchievementsDailyQuestBanner } from '../components/AchievementsDailyQuestBanner'
 import { AchievementsBadgesSection } from '../components/AchievementsBadgesSection'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
+import { StaggerChildren, usePageFocusKey } from '../components/PageEntrance'
 import type { ActivitySession } from '../lib/activitySession'
 import { useTranslation } from 'react-i18next'
 import { useNavigation } from '@react-navigation/native'
@@ -382,6 +383,7 @@ export function ProgressScreen() {
   const { activities } = useSessionData()
   const { showActionSheetWithOptions } = useActionSheet()
   const insets = useSafeAreaInsets()
+  const focusKey = usePageFocusKey()
   const { width: winW } = useWindowDimensions()
 
   const [progressView, setProgressView] = useState<ProgressView>('score')
@@ -474,6 +476,7 @@ export function ProgressScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <StaggerChildren replayKey={focusKey}>
         <Text allowFontScaling={false} style={styles.pageTitle}>
           {t('progress.title')}
         </Text>
@@ -663,6 +666,7 @@ export function ProgressScreen() {
             />
           </>
         )}
+        </StaggerChildren>
       </ScrollView>
     </View>
   )

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  Share,
   type ImageSourcePropType,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -22,8 +23,9 @@ import { getMainStackNavigation } from '../lib/mainStackNavigation'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import { vercel as defaultTheme } from '../theme'
-import { LocalSvgAsset } from '../components/LocalSvgAsset'
+import { LocalSvgAsset, prefetchSvgAssets } from '../components/LocalSvgAsset'
 import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
+import { StaggerChildren, usePageFocusKey } from '../components/PageEntrance'
 import { MyCoachCoachHero } from './myCoach/CoachHero'
 import { MyCoachSwipeableStudentCard } from './myCoach/SwipeableStudentCard'
 import type { MyCoachStudent } from './myCoach/types'
@@ -76,6 +78,18 @@ function coachStudentAvatarSource(image: string | null): ImageSourcePropType {
 }
 
 const ADD_NEW_ICON_SVG = require('../../assets/mycoach/addnew.svg')
+const YOU_SHARE_ICON = require('../../assets/youpage/shareicon.svg')
+const MY_STUDENTS_SVGS = [
+  ADD_NEW_ICON_SVG,
+  YOU_SHARE_ICON,
+  require('../../assets/mystudents/message.svg'),
+  require('../../assets/mystudents/videocall.svg'),
+  require('../../assets/mystudents/pin.svg'),
+  require('../../assets/mystudents/pinicon.svg'),
+] as const
+
+prefetchSvgAssets([...MY_STUDENTS_SVGS])
+
 /** Pill matches former addnewbutton.svg; plus uses addnew.svg (16×16). */
 const ADD_NEW_BTN_OUTER_H = 60
 const ADD_NEW_PILL_H = Math.round((38 / 72) * ADD_NEW_BTN_OUTER_H)
@@ -136,7 +150,8 @@ export function MyCoachScreen() {
   const theme = ctx?.backgroundColor != null ? ctx : defaultTheme
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<MyCoachScreenNav>()
-  const { onTabFocus, viewerIsCoach, profileRoleLoaded } = useSessionData()
+  const focusKey = usePageFocusKey()
+  const { onTabFocus, viewerIsCoach, profileRoleLoaded, profileName, overallPillarScore } = useSessionData()
 
   const [openStudentId, setOpenStudentId] = useState<string | null>(null)
   const [students, setStudents] = useState<MyCoachStudent[]>([])
@@ -304,6 +319,18 @@ export function MyCoachScreen() {
     return sortStudentsWithPins(withPinFlag, pinnedStudentIds)
   }, [students, pinnedIdSet, pinnedStudentIds])
 
+  const onShareProfile = useCallback(async () => {
+    try {
+      const name = profileName?.trim() || 'Player'
+      const score = overallPillarScore != null ? String(overallPillarScore) : '—'
+      await Share.share({
+        message: `${name} · Score ${score} on Xevo`,
+      })
+    } catch {
+      /* dismissed */
+    }
+  }, [profileName, overallPillarScore])
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -311,11 +338,21 @@ export function MyCoachScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 28 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
+        <StaggerChildren replayKey={focusKey}>
         {profileRoleLoaded && !viewerIsCoach ? (
           <MyCoachCoachHero coachName="David Blow" fonts={fonts} onUploadedVideo={onVideoPicked} />
         ) : null}
 
-        <ProfileHeroScoreBlock horizontalPadding={20} premiumLabelNudgeUp={4} />
+        <ProfileHeroScoreBlock
+          horizontalPadding={20}
+          premiumLabelNudgeUp={4}
+          marginTop={22}
+          youPageLayout
+          onSharePress={() => void onShareProfile()}
+          shareIconModule={YOU_SHARE_ICON}
+          shareIconSize={28}
+          shareAccessibilityLabel="Share profile"
+        />
 
         <View style={styles.studentsBlock}>
           <View style={styles.studentsTitleRow}>
@@ -370,6 +407,7 @@ export function MyCoachScreen() {
             />
           ))
         )}
+        </StaggerChildren>
       </ScrollView>
     </View>
   )

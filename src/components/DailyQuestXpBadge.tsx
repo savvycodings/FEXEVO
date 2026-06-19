@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text, Image, StyleSheet } from 'react-native'
+import { View, Text, Image, StyleSheet, Platform } from 'react-native'
 import {
   XP_BADGE_COMPLETE,
   XP_COMPLETE_TEXT_COLOR,
@@ -31,8 +31,13 @@ export function DailyQuestXpBadge({
   const label = formatDailyQuestXp(xp)
 
   return (
-    <View style={[styles.wrap, dims.wrap]}>
-      <Image source={source} style={[styles.img, dims.img]} resizeMode="contain" />
+    <View
+      style={[styles.wrap, dims.wrap]}
+      {...(Platform.OS === 'android'
+        ? { collapsable: false, renderToHardwareTextureAndroid: true }
+        : null)}
+    >
+      <Image source={source} style={[styles.img, dims.img]} resizeMode="contain" fadeDuration={0} />
       <Text
         allowFontScaling={false}
         style={[

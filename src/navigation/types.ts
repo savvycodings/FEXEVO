@@ -1,4 +1,5 @@
 import type { NavigatorScreenParams } from "@react-navigation/native";
+import type { TrainCategory, TrainStrokePreset } from "../lib/train-taxonomy";
 
 export type ClubId = "i95" | "reserve";
 
@@ -38,9 +39,22 @@ export type CoachStudentChatParams = {
   showNewVideoBadge?: boolean;
 };
 
+export type StudentShotSelectParams = CoachStudentChatParams & {
+  category: TrainCategory;
+};
+
+export type StudentReviewTagParams = StudentShotSelectParams & {
+  labelKey: string;
+  labelLine2Key?: string;
+  strokePreset: TrainStrokePreset;
+};
+
 export type MyCoachTabStackParamList = {
   MyCoachMain: undefined;
   StudentProfile: CoachStudentChatParams;
+  StudentShotCategory: CoachStudentChatParams;
+  StudentShotSelect: StudentShotSelectParams;
+  StudentReviewTag: StudentReviewTagParams;
   CoachStudentChat: CoachStudentChatParams;
 };
 

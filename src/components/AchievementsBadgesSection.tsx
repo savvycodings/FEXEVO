@@ -1,5 +1,5 @@
 import React, { useContext, useMemo, useState } from 'react'
-import { View, Text, StyleSheet, Image, TouchableOpacity, useWindowDimensions } from 'react-native'
+import { View, Text, StyleSheet, Image, TouchableOpacity, useWindowDimensions, Platform } from 'react-native'
 import { ThemeContext } from '../context'
 import {
   buildAchievementPreviewBadges,
@@ -89,11 +89,17 @@ export function AchievementsBadgesSection({ onViewAllPress, onRankingPress }: Pr
           const imgH = isUnlocked ? badgeSizes.unlockedH : badgeSizes.lockedH
           return (
             <View key={badge.key} style={styles.badgeCol}>
-              <View style={[styles.badgeIconSlot, { height: badgeSizes.iconRowH }]}>
+              <View
+                style={[styles.badgeIconSlot, { height: badgeSizes.iconRowH }]}
+                {...(Platform.OS === 'android'
+                  ? { collapsable: false, renderToHardwareTextureAndroid: true }
+                  : null)}
+              >
                 <Image
                   source={getAchievementDisplayImage(badge)}
                   style={{ width: imgW, height: imgH }}
                   resizeMode="contain"
+                  fadeDuration={0}
                 />
               </View>
               {!isAchievementPreviewPlaceholder(badge.key) ? (

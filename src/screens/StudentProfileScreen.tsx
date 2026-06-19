@@ -6,20 +6,19 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
-  Alert,
   useWindowDimensions,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import * as ImagePicker from 'expo-image-picker'
 import { ThemeContext } from '../context'
 import { vercel as defaultTheme } from '../theme'
 import type { MyCoachTabStackParamList } from '../navigation/types'
 import { MyCoachScoreRing } from './myCoach/ScoreRing'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { ProLibraryGradientFrame } from '../components/ProLibraryGradientFrame'
+import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
 import { useTranslation } from 'react-i18next'
 
 const BG = '#030A17'
@@ -28,7 +27,7 @@ const WRONG = '#FF005D'
 const GOOD = '#00FFC3'
 const FALLBACK_AVATAR = require('../../assets/coachs/img1.png')
 const THUMB_PLACEHOLDER = require('../../assets/coachs/img1.png')
-const CHAT_ICON = require('../../assets/mycoach/messegeicon.svg')
+const CHAT_ICON = require('../../assets/mystudents/Frame.svg')
 const NEWVIDEO_SVG = require('../../assets/chat/newvideo.svg')
 const PLAY_BUTTON_SVG = require('../../assets/mystudents/playbutton.svg')
 
@@ -72,6 +71,7 @@ const NEWVIDEO_ROW_H = 16
 const NEWVIDEO_ROW_W = Math.round((72 / 13) * NEWVIDEO_ROW_H)
 
 const UPLOAD_ROW_H = 96
+const PROFILE_AVATAR_SIZE = 72
 
 function UploadOverlapDots() {
   return (
@@ -195,6 +195,8 @@ export function StudentProfileScreen() {
     showNewVideoBadge === true ||
     !!(typeof pendingCoachReviewId === 'string' && pendingCoachReviewId.trim().length > 0)
 
+  const focusKey = usePageFocusKey()
+
   const fonts = useMemo(
     () => ({
       regularFont: theme.regularFont,
@@ -208,19 +210,28 @@ export function StudentProfileScreen() {
   const horizontalPad = 20
   const cardWidth = winW - horizontalPad * 2
 
-  const onUploadVideo = useCallback(async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert(t('commonAlerts.permissionNeeded'), t('coachFlow.permissionPhotos'))
-      return
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-      quality: 1,
+  const onUploadVideo = useCallback(() => {
+    navigation.navigate('StudentShotCategory', {
+      peerUserId,
+      peerName,
+      peerLocation,
+      actualScore,
+      lastScore,
+      peerImageUri,
+      pendingCoachReviewId,
+      showNewVideoBadge,
     })
-    if (result.canceled || !result.assets?.[0]?.uri) return
-    Alert.alert(t('coachFlow.videoSelected'), t('coachFlow.videoSelectedBody'), [{ text: t('commonAlerts.ok') }])
-  }, [t])
+  }, [
+    navigation,
+    peerUserId,
+    peerName,
+    peerLocation,
+    actualScore,
+    lastScore,
+    peerImageUri,
+    pendingCoachReviewId,
+    showNewVideoBadge,
+  ])
 
   const onOpenChat = useCallback(() => {
     navigation.navigate('CoachStudentChat', {
@@ -237,42 +248,42 @@ export function StudentProfileScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.topBar, { paddingHorizontal: horizontalPad }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.85}
-          style={styles.backRow}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          accessibilityLabel={t('coachChat.backToStudents')}
-        >
-          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
-          <Text allowFontScaling={false} style={[styles.backLabel, { fontFamily: fonts.regularFont }]}>
-            {t('coachChat.backToStudents')}
-          </Text>
-        </TouchableOpacity>
-        <ProLibraryGradientFrame
-          style={styles.uploadBtnOuter}
-          innerStyle={styles.uploadBtnInner}
-          borderRadius={14}
-          innerBorderRadius={12}
-          strokeWidth={1.5}
-          gradientVariant="default"
-          innerShadow={false}
-        >
-          <TouchableOpacity style={styles.uploadBtnTouch} activeOpacity={0.88} onPress={() => void onUploadVideo()}>
-            <Text allowFontScaling={false} style={[styles.uploadBtnTxt, { fontFamily: fonts.mediumFont }]}>
-              {t('studentProfile.uploadNewVideo')}
-            </Text>
-          </TouchableOpacity>
-        </ProLibraryGradientFrame>
-      </View>
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{ paddingBottom: 32 + insets.bottom + 74 }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.legendBar, { paddingHorizontal: horizontalPad }]}>
+        <EntranceView index={0} replayKey={focusKey} style={[styles.topBar, { paddingHorizontal: horizontalPad }]}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+            style={styles.backRow}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel={t('coachChat.backToStudents')}
+          >
+            <Ionicons name="chevron-back" size={22} color={MUTED} />
+            <Text allowFontScaling={false} style={[styles.backLabel, { fontFamily: fonts.regularFont }]}>
+              {t('coachChat.backToStudents')}
+            </Text>
+          </TouchableOpacity>
+          <ProLibraryGradientFrame
+            style={styles.uploadBtnOuter}
+            innerStyle={styles.uploadBtnInner}
+            borderRadius={16}
+            innerBorderRadius={14}
+            strokeWidth={1.5}
+            gradientVariant="default"
+            innerShadow={false}
+          >
+            <TouchableOpacity style={styles.uploadBtnTouch} activeOpacity={0.88} onPress={() => void onUploadVideo()}>
+              <Text allowFontScaling={false} style={[styles.uploadBtnTxt, { fontFamily: fonts.mediumFont }]}>
+                {t('studentProfile.uploadNewVideo')}
+              </Text>
+            </TouchableOpacity>
+          </ProLibraryGradientFrame>
+        </EntranceView>
+
+        <EntranceView index={1} replayKey={focusKey} style={[styles.legendBar, { paddingHorizontal: horizontalPad }]}>
           <Text allowFontScaling={false} style={[styles.studentLabel, { fontFamily: fonts.regularFont }]}>
             {t('coachChat.student')}
           </Text>
@@ -290,9 +301,9 @@ export function StudentProfileScreen() {
               </Text>
             </View>
           </View>
-        </View>
+        </EntranceView>
 
-        <View style={[styles.studentCard, { paddingHorizontal: horizontalPad }]}>
+        <EntranceView index={2} replayKey={focusKey} style={[styles.studentCard, { paddingHorizontal: horizontalPad }]}>
           <Image source={peerAvatarSource} style={styles.studentAvatar} resizeMode="cover" />
           <View style={styles.studentInfo}>
             <Text allowFontScaling={false} numberOfLines={1} style={[styles.studentName, { fontFamily: fonts.semiBoldFont }]}>
@@ -303,7 +314,7 @@ export function StudentProfileScreen() {
             </Text>
             <View style={styles.studentMetaRow}>
               <TouchableOpacity onPress={onOpenChat} hitSlop={8} accessibilityLabel={t('coachChat.chatTitle')}>
-                <LocalSvgAsset assetModule={CHAT_ICON} width={22} height={22} />
+                <LocalSvgAsset assetModule={CHAT_ICON} width={16} height={16} />
               </TouchableOpacity>
               {showNewVideoRow ? (
                 <View style={styles.newVideoAssetWrap}>
@@ -316,11 +327,11 @@ export function StudentProfileScreen() {
             actualScore={actualScore}
             lastScore={lastScore}
             semiBoldFont={fonts.semiBoldFont}
-            size={64}
+            size={PROFILE_AVATAR_SIZE}
           />
-        </View>
+        </EntranceView>
 
-        <View style={[styles.section, { paddingHorizontal: horizontalPad }]}>
+        <EntranceView index={3} replayKey={focusKey} style={[styles.section, { paddingHorizontal: horizontalPad }]}>
           <Text allowFontScaling={false} style={[styles.sectionTitleMuted, { fontFamily: fonts.semiBoldFont }]}>
             {t('studentProfile.weeklySchedule')}
           </Text>
@@ -345,9 +356,9 @@ export function StudentProfileScreen() {
               </View>
             ))}
           </View>
-        </View>
+        </EntranceView>
 
-        <View style={[styles.section, { paddingHorizontal: horizontalPad }]}>
+        <EntranceView index={4} replayKey={focusKey} style={[styles.section, { paddingHorizontal: horizontalPad }]}>
           <View style={styles.uploadsHead}>
             <Text allowFontScaling={false} style={[styles.sectionTitle, { fontFamily: fonts.semiBoldFont }]}>
               {t('studentProfile.uploads')}
@@ -370,7 +381,7 @@ export function StudentProfileScreen() {
           {PLACEHOLDER_UPLOADS.map((item) => (
             <UploadCard key={item.id} item={item} cardWidth={cardWidth} fonts={fonts} t={t} />
           ))}
-        </View>
+        </EntranceView>
       </ScrollView>
     </View>
   )
@@ -388,10 +399,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
     minHeight: 44,
-    paddingTop: 8,
+    paddingTop: 28,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 102, 255, 0.2)',
   },
   backRow: {
     flexDirection: 'row',
@@ -400,7 +409,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   backLabel: {
-    color: '#FFFFFF',
+    color: MUTED,
     fontSize: 14,
     lineHeight: 22,
     includeFontPadding: false,
@@ -414,20 +423,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   uploadBtnTouch: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
   },
   uploadBtnTxt: {
     color: '#00B8FF',
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: 14,
+    lineHeight: 17,
   },
   legendBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 16,
-    marginBottom: 14,
+    marginBottom: 24,
   },
   studentLabel: {
     color: MUTED,
@@ -462,9 +471,9 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
   studentAvatar: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: PROFILE_AVATAR_SIZE,
+    height: PROFILE_AVATAR_SIZE,
+    borderRadius: PROFILE_AVATAR_SIZE / 2,
     borderWidth: 2,
     borderColor: '#2AB4FF',
   },
@@ -474,19 +483,20 @@ const styles = StyleSheet.create({
   },
   studentName: {
     color: '#FFFFFF',
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 18,
+    lineHeight: 20,
   },
   studentLocation: {
     color: MUTED,
     fontSize: 13,
-    marginTop: 2,
+    lineHeight: 16,
+    marginTop: 0,
   },
   studentMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginTop: 8,
+    marginTop: 4,
   },
   newVideoAssetWrap: {
     paddingVertical: 3,

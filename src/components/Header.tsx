@@ -11,12 +11,14 @@ import { ThemeContext, AppContext } from '../../src/context'
 import { HEADER_BELOW_CONTENT_GAP, PAGE_TOP_EXTRA_PADDING } from '../../constants'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { LocalSvgAsset } from './LocalSvgAsset'
+import { LocalSvgAsset, prefetchSvgAssets } from './LocalSvgAsset'
 
 const HEADER_MARK_SVG = require('../../assets/pro.svg')
 const SETTINGS_ICON = require('../../assets/youpage/settingsicon.svg')
 const SEARCH_ICON = require('../../assets/youpage/searchicon.svg')
 const NOTI_ICON = require('../../assets/coachs/notiicon.svg')
+
+prefetchSvgAssets([HEADER_MARK_SVG, SETTINGS_ICON, SEARCH_ICON, NOTI_ICON])
 
 const HEADER_HEIGHT = 44
 const HORIZONTAL_PADDING = 16

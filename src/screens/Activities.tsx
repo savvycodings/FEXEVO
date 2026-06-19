@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
   Pressable,
   Platform,
+  Share,
 } from 'react-native'
 import { Video, ResizeMode } from 'expo-av'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -34,6 +35,7 @@ import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { useTranslation } from 'react-i18next'
 
 const AI_COACH_PLACEHOLDER = require('../../assets/actiities/aicoachplacehokder.svg')
+const YOU_SHARE_ICON = require('../../assets/youpage/shareicon.svg')
 /** Matches My Students scroll + hero horizontal inset. */
 const HERO_HORIZONTAL_PAD = 20
 
@@ -502,6 +504,8 @@ export function ActivitiesCalendarFlow({
     activities: items,
     activitiesLoading: loading,
     activitiesError: error,
+    profileName,
+    overallPillarScore,
   } = useSessionData()
 
   const [viewMonth, setViewMonth] = useState(() => {
@@ -641,6 +645,18 @@ export function ActivitiesCalendarFlow({
     }
     return n
   }, [items, detailDateKey])
+
+  const onShareProfile = useCallback(async () => {
+    try {
+      const name = profileName?.trim() || 'Player'
+      const score = overallPillarScore != null ? String(overallPillarScore) : '—'
+      await Share.share({
+        message: `${name} · Score ${score} on Xevo`,
+      })
+    } catch {
+      /* dismissed */
+    }
+  }, [profileName, overallPillarScore])
 
   const goPrevMonth = () => {
     setViewMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))
@@ -897,7 +913,20 @@ export function ActivitiesCalendarFlow({
       showsVerticalScrollIndicator={false}
     >
       {showHeroRow ? (
-        <ProfileHeroScoreBlock horizontalPadding={HERO_HORIZONTAL_PAD} premiumLabelNudgeUp={4} />
+        <ProfileHeroScoreBlock
+          horizontalPadding={HERO_HORIZONTAL_PAD}
+          premiumLabelNudgeUp={4}
+          {...(layout === 'calendar'
+            ? {
+                marginTop: 22,
+                youPageLayout: true,
+                onSharePress: () => void onShareProfile(),
+                shareIconModule: YOU_SHARE_ICON,
+                shareIconSize: 28,
+                shareAccessibilityLabel: 'Share profile',
+              }
+            : {})}
+        />
       ) : null}
 
       {aboveActivitiesTitle}

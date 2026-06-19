@@ -21,6 +21,9 @@ import {
   CoachAddPeopleScreen,
   CoachStudentChatScreen,
   StudentProfileScreen,
+  StudentShotCategoryScreen,
+  StudentShotSelectScreen,
+  StudentReviewTagScreen,
   CoachReviewEditorScreen,
   StudentCoachReviewScreen,
   AdminMembersScreen,
@@ -31,6 +34,7 @@ import {
 import { AchievementDetailScreen } from './screens/AchievementDetailScreen'
 import { Header } from './components'
 import { MainTabBarBackground } from './components/MainTabBarBackground'
+import { screenEntranceLayout } from './components/PageEntrance'
 import {
   NavIconAICoach,
   NavIconActivities,
@@ -99,14 +103,15 @@ function ProgressTabStack() {
   return (
     <ProgressStack.Navigator screenOptions={screenOptions}>
       <ProgressStack.Screen name="ProgressMain" component={ProgressScreen} />
-      <ProgressStack.Screen name="DailyQuest" component={DailyQuestScreen} />
-      <ProgressStack.Screen name="AllAchievements" component={AllAchievementsScreen} />
-      <ProgressStack.Screen name="Ranking" component={RankingScreen} />
-      <ProgressStack.Screen name="LeaderboardPlayer" component={LeaderboardPlayerScreen} />
+      <ProgressStack.Screen name="DailyQuest" component={DailyQuestScreen} layout={screenEntranceLayout} />
+      <ProgressStack.Screen name="AllAchievements" component={AllAchievementsScreen} layout={screenEntranceLayout} />
+      <ProgressStack.Screen name="Ranking" component={RankingScreen} layout={screenEntranceLayout} />
+      <ProgressStack.Screen name="LeaderboardPlayer" component={LeaderboardPlayerScreen} layout={screenEntranceLayout} />
       <ProgressStack.Screen
         name="AchievementDetail"
         component={AchievementDetailScreen}
         options={{ presentation: 'modal' }}
+        layout={screenEntranceLayout}
       />
     </ProgressStack.Navigator>
   )
@@ -127,7 +132,10 @@ function MyCoachTabStack() {
     <MyCoachStack.Navigator initialRouteName="MyCoachMain" screenOptions={screenOptions}>
       <MyCoachStack.Screen name="MyCoachMain" component={MyCoachScreen} />
       <MyCoachStack.Screen name="StudentProfile" component={StudentProfileScreen} />
-      <MyCoachStack.Screen name="CoachStudentChat" component={CoachStudentChatScreen} />
+      <MyCoachStack.Screen name="StudentShotCategory" component={StudentShotCategoryScreen} />
+      <MyCoachStack.Screen name="StudentShotSelect" component={StudentShotSelectScreen} />
+      <MyCoachStack.Screen name="StudentReviewTag" component={StudentReviewTagScreen} />
+      <MyCoachStack.Screen name="CoachStudentChat" component={CoachStudentChatScreen} layout={screenEntranceLayout} />
     </MyCoachStack.Navigator>
   )
 }
@@ -502,16 +510,16 @@ function MainTabsLayoutInner({
           },
         })}
       >
-        <Tab.Screen name="AICoach" options={{ title: tabLabels.AICoach }}>
+        <Tab.Screen name="AICoach" options={{ title: tabLabels.AICoach }} layout={screenEntranceLayout}>
           {() => (
             <Technique key={techniqueResetKey} />
           )}
         </Tab.Screen>
         <Tab.Screen name="MyCoach" options={{ title: tabLabels.MyCoach }} component={MyCoachTabStack} />
-        <Tab.Screen name="Activities" options={{ title: tabLabels.Activities }} component={ActivitiesScreen} />
-        <Tab.Screen name="Playlist" component={CoachPlaylistScreen} />
+        <Tab.Screen name="Activities" options={{ title: tabLabels.Activities }} component={ActivitiesScreen} layout={screenEntranceLayout} />
+        <Tab.Screen name="Playlist" component={CoachPlaylistScreen} layout={screenEntranceLayout} />
         <Tab.Screen name="Progress" options={{ title: tabLabels.Progress }} component={ProgressTabStack} />
-        <Tab.Screen name="You" options={{ title: tabLabels.You }}>
+        <Tab.Screen name="You" options={{ title: tabLabels.You }} layout={screenEntranceLayout}>
           {() => (
             <YouTabStack
               onProfileUpdated={onProfileUpdated}
@@ -560,10 +568,11 @@ function AuthenticatedStack() {
           /** Card push (not `fullScreenModal`) avoids per-tab modal transitions and light edges at rounded corners. */
           presentation: 'card',
         }}
+        layout={screenEntranceLayout}
       />
-      <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
-      <Stack.Screen name="CoachDetail" component={CoachDetailScreen} />
-      <Stack.Screen name="AdminHub">
+      <Stack.Screen name="ClubDetail" component={ClubDetailScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="CoachDetail" component={CoachDetailScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="AdminHub" layout={screenEntranceLayout}>
         {({ navigation }) => (
           <AdminHub
             hubUnlocked={adminHubUnlocked}
@@ -578,32 +587,32 @@ function AuthenticatedStack() {
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="AdminTrain">
+      <Stack.Screen name="AdminTrain" layout={screenEntranceLayout}>
         {({ navigation }) => <AdminTrain skipPasswordGate onClose={() => navigation.goBack()} />}
       </Stack.Screen>
-      <Stack.Screen name="AdminFalLora">
+      <Stack.Screen name="AdminFalLora" layout={screenEntranceLayout}>
         {({ navigation }) => <AdminFalLora skipPasswordGate onClose={() => navigation.goBack()} />}
       </Stack.Screen>
-      <Stack.Screen name="AdminAccuracy">
+      <Stack.Screen name="AdminAccuracy" layout={screenEntranceLayout}>
         {({ navigation }) => (
           <AdminAccuracy skipPasswordGate onClose={() => navigation.goBack()} />
         )}
       </Stack.Screen>
-      <Stack.Screen name="ProfileSettings">
+      <Stack.Screen name="ProfileSettings" layout={screenEntranceLayout}>
         {({ navigation }) => (
           <ProfileSettingsScreen onProfileUpdated={onProfileUpdated} onClose={() => navigation.goBack()} />
         )}
       </Stack.Screen>
-      <Stack.Screen name="ProSubscription">
+      <Stack.Screen name="ProSubscription" layout={screenEntranceLayout}>
         {({ navigation }) => <ProScreen onClose={() => navigation.goBack()} />}
       </Stack.Screen>
-      <Stack.Screen name="Notifications">
+      <Stack.Screen name="Notifications" layout={screenEntranceLayout}>
         {({ navigation }) => <NotificationsScreen onClose={() => navigation.goBack()} />}
       </Stack.Screen>
-      <Stack.Screen name="CoachAddPeople" component={CoachAddPeopleScreen} />
-      <Stack.Screen name="CoachReviewEditor" component={CoachReviewEditorScreen} />
-      <Stack.Screen name="StudentCoachReview" component={StudentCoachReviewScreen} />
-      <Stack.Screen name="AdminMembers" component={AdminMembersScreen} />
+      <Stack.Screen name="CoachAddPeople" component={CoachAddPeopleScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="CoachReviewEditor" component={CoachReviewEditorScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="StudentCoachReview" component={StudentCoachReviewScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="AdminMembers" component={AdminMembersScreen} layout={screenEntranceLayout} />
         </Stack.Navigator>
       </SessionDataProvider>
     </View>
