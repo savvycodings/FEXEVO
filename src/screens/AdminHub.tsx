@@ -22,6 +22,7 @@ type Props = {
   onOpenProLibraryVideo: () => void;
   onOpenLora: () => void;
   onOpenAccuracy: () => void;
+  onOpenRetrievalBench: () => void;
   /** After one successful unlock, stays true until user leaves admin (parent resets). */
   hubUnlocked: boolean;
   onHubUnlocked: () => void;
@@ -32,6 +33,7 @@ export function AdminHub({
   onOpenProLibraryVideo,
   onOpenLora,
   onOpenAccuracy,
+  onOpenRetrievalBench,
   hubUnlocked,
   onHubUnlocked,
 }: Props) {
@@ -190,6 +192,24 @@ export function AdminHub({
             <View style={styles.cardTextCol}>
               <Text style={styles.cardTitle}>Training accuracy</Text>
               <Text style={styles.cardBody}>Run retrieval checks.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.35)" />
+          </View>
+        </AdminGradientCard>
+
+        <AdminGradientCard
+          onPress={onOpenRetrievalBench}
+          style={styles.cardTouch}
+          accessibilityRole="button"
+          accessibilityLabel="Retrieval bench"
+        >
+          <View style={styles.cardInner}>
+            <View style={styles.cardIconWrap}>
+              <Ionicons name="analytics-outline" size={28} color="#00BBFF" />
+            </View>
+            <View style={styles.cardTextCol}>
+              <Text style={styles.cardTitle}>Retrieval bench</Text>
+              <Text style={styles.cardBody}>LOOCV · blend sweep · audits</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.35)" />
           </View>

@@ -77,6 +77,7 @@ export type MainStackParamList = {
   AdminTrain: undefined;
   AdminFalLora: undefined;
   AdminAccuracy: undefined;
+  AdminRetrievalBench: undefined;
   ProfileSettings: undefined;
   ProSubscription: undefined;
   Notifications: undefined;

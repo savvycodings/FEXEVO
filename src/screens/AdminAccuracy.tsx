@@ -27,6 +27,7 @@ import { formatApiError } from "../lib/formatApiError";
 type Props = {
   onClose: () => void;
   skipPasswordGate?: boolean;
+  onOpenRetrievalBench?: () => void;
 };
 
 function meshSummaryFromDetail(detail: Record<string, unknown> | null | undefined): string | null {
@@ -65,7 +66,7 @@ function meshDetailLines(detail: Record<string, unknown> | null | undefined): st
   return lines;
 }
 
-export function AdminAccuracy({ onClose, skipPasswordGate }: Props) {
+export function AdminAccuracy({ onClose, skipPasswordGate, onOpenRetrievalBench }: Props) {
   const { theme } = useContext(ThemeContext);
   const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
@@ -171,6 +172,14 @@ export function AdminAccuracy({ onClose, skipPasswordGate }: Props) {
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+        {onOpenRetrievalBench ? (
+          <TouchableOpacity style={styles.benchLink} onPress={onOpenRetrievalBench} activeOpacity={0.85}>
+            <Text style={[styles.benchLinkText, { fontFamily: theme.mediumFont }]}>
+              Retrieval bench →
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         <TouchableOpacity
           style={[styles.runAllBtn, runningAll && styles.runAllBtnDisabled]}
           onPress={() => void onRunAll()}
@@ -196,7 +205,7 @@ export function AdminAccuracy({ onClose, skipPasswordGate }: Props) {
                   title={t.title}
                   scorePercent={latest?.scorePercent ?? null}
                   passThreshold={passThreshold}
-                  summary={latest?.summary ?? t.description}
+                  summary={latest?.summary ?? "—"}
                   loading={runningId === t.id}
                   onPress={() => void onRunTest(t.id)}
                   theme={theme}
@@ -308,6 +317,8 @@ function getStyles(theme: {
       fontSize: 13,
       marginBottom: 12,
     },
+    benchLink: { marginBottom: 12 },
+    benchLinkText: { color: "#00BBFF", fontSize: 14 },
     runAllBtn: {
       backgroundColor: "#0022FF",
       borderRadius: 12,

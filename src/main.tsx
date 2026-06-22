@@ -8,6 +8,7 @@ import {
   AdminTrain,
   AdminFalLora,
   AdminAccuracy,
+  AdminRetrievalBench,
   ActivitiesScreen,
   MyCoachScreen,
   CoachPlaylistScreen,
@@ -584,6 +585,7 @@ function AuthenticatedStack() {
             onOpenProLibraryVideo={() => navigation.navigate('AdminTrain')}
             onOpenLora={() => navigation.navigate('AdminFalLora')}
             onOpenAccuracy={() => navigation.navigate('AdminAccuracy')}
+            onOpenRetrievalBench={() => navigation.navigate('AdminRetrievalBench')}
           />
         )}
       </Stack.Screen>
@@ -595,7 +597,16 @@ function AuthenticatedStack() {
       </Stack.Screen>
       <Stack.Screen name="AdminAccuracy" layout={screenEntranceLayout}>
         {({ navigation }) => (
-          <AdminAccuracy skipPasswordGate onClose={() => navigation.goBack()} />
+          <AdminAccuracy
+            skipPasswordGate
+            onClose={() => navigation.goBack()}
+            onOpenRetrievalBench={() => navigation.navigate('AdminRetrievalBench')}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="AdminRetrievalBench">
+        {({ navigation }) => (
+          <AdminRetrievalBench skipPasswordGate onClose={() => navigation.goBack()} />
         )}
       </Stack.Screen>
       <Stack.Screen name="ProfileSettings" layout={screenEntranceLayout}>
