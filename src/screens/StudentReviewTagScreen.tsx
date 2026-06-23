@@ -22,6 +22,8 @@ import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
 import { coachUploadCategoryTitleKey } from '../lib/coachStudentUploadShots'
 import { formatTrainSkillLevel, TRAIN_SKILL_LEVEL_IDS, type TrainSkillLevelId } from '../lib/trainSkillLevel'
+import { uploadCoachSentVideo } from '../lib/coachSentVideoUpload'
+import { DOMAIN } from '../../constants'
 
 const SHOT_TITLE_ICON = require('../../assets/reviewandtags/shottitle.svg')
 const UPLOAD_ICON = require('../../assets/reviewandtags/uploudicon.svg')
@@ -78,10 +80,11 @@ export function StudentReviewTagScreen() {
   const route = useRoute<R>()
   const { width: winW } = useWindowDimensions()
 
-  const { category, labelKey, labelLine2Key } = route.params
+  const { category, labelKey, labelLine2Key, peerUserId, strokePreset } = route.params
   const [skillLevel, setSkillLevel] = useState<TrainSkillLevelId | null>(null)
   const [viewId, setViewId] = useState<CoachUploadViewId | null>(null)
-  const canUpload = skillLevel != null && viewId != null
+  const [uploading, setUploading] = useState(false)
+  const canUpload = skillLevel != null && viewId != null && !uploading
   const focusKey = usePageFocusKey()
 
   const panelInnerW = winW - HORIZONTAL_PAD * 2 - 32
@@ -101,7 +104,7 @@ export function StudentReviewTagScreen() {
   const strokeLabel = shotTitleText(t, labelKey, labelLine2Key)
 
   const onUpload = useCallback(async () => {
-    if (skillLevel == null || viewId == null) return
+    if (skillLevel == null || viewId == null || uploading) return
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
       Alert.alert(t('commonAlerts.permissionNeeded'), t('coachFlow.permissionPhotos'))
@@ -111,11 +114,59 @@ export function StudentReviewTagScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
       quality: 1,
     })
-    if (result.canceled || !result.assets?.[0]?.uri) return
-    Alert.alert(t('coachFlow.videoSelected'), t('coachFlow.videoSelectedBody'), [
-      { text: t('commonAlerts.ok') },
-    ])
-  }, [skillLevel, viewId, t])
+    const asset = result.canceled ? null : result.assets?.[0]
+    if (!asset?.uri) return
+
+    setUploading(true)
+    try {
+      const fileName = asset.fileName || `coach-video-${Date.now()}.mp4`
+      const mimeType =
+        asset.mimeType || (fileName.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4')
+      await uploadCoachSentVideo({
+        uri: asset.uri,
+        fileName,
+        mimeType,
+        apiBase: DOMAIN,
+        fields: {
+          studentUserId: peerUserId,
+          category,
+          strokePreset,
+          shotLabel: strokeLabel,
+          skillLevel: formatTrainSkillLevel(skillLevel),
+          viewId,
+        },
+      })
+      Alert.alert(t('coachFlow.videoSentTitle'), t('coachFlow.videoSentBody'), [
+        {
+          text: t('commonAlerts.ok'),
+          onPress: () =>
+            navigation.navigate('StudentProfile', {
+              peerUserId,
+              peerName: route.params.peerName,
+              peerLocation: route.params.peerLocation,
+              actualScore: route.params.actualScore,
+              lastScore: route.params.lastScore,
+              peerImageUri: route.params.peerImageUri,
+            }),
+        },
+      ])
+    } catch (e: any) {
+      Alert.alert(t('coachFlow.videoSentErrorTitle'), e?.message || t('coachFlow.videoSentErrorBody'))
+    } finally {
+      setUploading(false)
+    }
+  }, [
+    skillLevel,
+    viewId,
+    uploading,
+    t,
+    peerUserId,
+    category,
+    strokePreset,
+    strokeLabel,
+    navigation,
+    route.params,
+  ])
 
   return (
     <View style={styles.screen}>
@@ -301,7 +352,7 @@ export function StudentReviewTagScreen() {
                   allowFontScaling={false}
                   style={[styles.uploadTextDisabled, { fontFamily: fonts.mediumFont }]}
                 >
-                  {t('studentProfile.uploadVideo')}
+                  {uploading ? t('coachFlow.videoSending') : t('studentProfile.uploadVideo')}
                 </Text>
               </LinearGradient>
             )}

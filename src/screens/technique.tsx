@@ -150,8 +150,13 @@ const COACH_BANNER_SLOT_PADDING_V = 6 + 2
  * left a large empty gap above the tab bar.
  */
 const TAB_SCENE_SCROLL_BOTTOM_PAD = 20
-/** Space reserved below the step-1 upload frame (analyzing row + small gap), not full home-indicator inset. */
-const STEP1_FRAME_BOTTOM_RESERVE = 4
+/**
+ * The bottom tab bar floats over the tab scene (other screens reserve `insets.bottom + 74`).
+ * Step 1's frame must reserve the same so the box ends above the nav on every device.
+ */
+const FLOATING_NAV_RESERVE = 74
+/** Step 1 upload box uses tighter side padding than other steps so it takes more width. */
+const STEP1_HORIZONTAL_PADDING = 14
 const LEVEL_OPTIONS = [
   'Beginner',
   'High Beginner',
@@ -362,6 +367,8 @@ export function Technique() {
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
   const [scrollBodyH, setScrollBodyH] = useState(0)
+  /** Actual size of the step-1 frame container, measured directly to avoid a winH-derived estimate jump. */
+  const [frameWrapSize, setFrameWrapSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const [step, setStep] = useState(1)
   const [dominantHand, setDominantHand] = useState<'left' | 'right' | null>(null)
   const [courtSide, setCourtSide] = useState<'left' | 'right' | null>(null)
@@ -486,20 +493,29 @@ export function Technique() {
   }, [scrollBodyH, winH, insets.top, insets.bottom, step, assignedCoach])
 
   /** Upload panel: cap height so step 1 fits without scrolling when coach banner is shown. */
+  const step1FrameMeasured = step === 1 && frameWrapSize.h > 0
   const step1FrameDims = useMemo(() => {
-    const maxW = winW - HORIZONTAL_PADDING * 2
-    const idealH = maxW * 1.34
     if (step !== 1) {
-      return { w: maxW, h: Math.max(320, idealH) }
+      const maxW = winW - HORIZONTAL_PADDING * 2
+      return { w: maxW, h: Math.max(320, maxW * 1.34) }
+    }
+    // Step 1 uses a tighter side padding so the upload box can take more width.
+    const maxW = winW - STEP1_HORIZONTAL_PADDING * 2
+    const idealH = maxW * 1.34
+    // Once the frame container is measured, size the box to it exactly (device-independent,
+    // no winH-derived estimate → no visible resize a beat after mount). Width stays maxW
+    // (the container applies STEP1_HORIZONTAL_PADDING) so only the height comes from measurement.
+    if (frameWrapSize.h > 0) {
+      return { w: maxW, h: Math.max(300, frameWrapSize.h) }
     }
     const paddingTop = 12
-    const paddingBottom = STEP1_FRAME_BOTTOM_RESERVE
+    const paddingBottom = insets.bottom + FLOATING_NAV_RESERVE
     const belowFrame = 10
     const availH = effectiveScrollBodyH - paddingTop - paddingBottom - belowFrame
     const targetH = Math.max(idealH, availH - 8)
     const h = Math.max(300, Math.min(targetH, availH))
     return { w: maxW, h }
-  }, [step, winW, effectiveScrollBodyH])
+  }, [step, winW, effectiveScrollBodyH, insets.bottom, frameWrapSize.w, frameWrapSize.h])
 
   const isScrubbingRef = useRef(false)
   const [trimCarouselScrubbing, setTrimCarouselScrubbing] = useState(false)
@@ -2010,7 +2026,12 @@ export function Technique() {
           style={styles.stepContent}
           contentContainerStyle={[
             styles.stepContentInner,
-            { paddingBottom: TAB_SCENE_SCROLL_BOTTOM_PAD },
+            step === 1
+              ? {
+                  paddingBottom: insets.bottom + FLOATING_NAV_RESERVE,
+                  paddingHorizontal: STEP1_HORIZONTAL_PADDING,
+                }
+              : { paddingBottom: TAB_SCENE_SCROLL_BOTTOM_PAD },
             step === 1 && uploading && scrollBodyH > 0 ? { minHeight: scrollBodyH } : null,
           ]}
           showsVerticalScrollIndicator={false}
@@ -2207,7 +2228,29 @@ export function Technique() {
                 </View>
               </View>
             ) : (
-              <View style={styles.frameWrap}>
+              <View
+                style={styles.frameWrap}
+                onLayout={(e) => {
+                  const { width, height } = e.nativeEvent.layout
+                  setFrameWrapSize((prev) =>
+                    Math.abs(prev.w - width) > 1 || Math.abs(prev.h - height) > 1
+                      ? { w: width, h: height }
+                      : prev
+                  )
+                }}
+              >
+                {!step1FrameMeasured ? (
+                  // Pre-measure: plain background-colored box at the fallback size (no glow/border),
+                  // so there's no "estimate then snap" flicker — the framed box only paints at its
+                  // final measured size.
+                  <View
+                    style={{
+                      width: step1FrameDims.w,
+                      height: step1FrameDims.h,
+                      backgroundColor: theme.backgroundColor,
+                    }}
+                  />
+                ) : (
                 <View
                   style={[
                     styles.frameOuter,
@@ -2300,6 +2343,7 @@ export function Technique() {
                     </View>
                   </View>
                 </View>
+                )}
               </View>
             )}
           </View>
@@ -3609,7 +3653,7 @@ function getStyles(theme: any) {
       bottom: 2,
       borderRadius: FRAME_RADIUS - 1,
       overflow: 'hidden',
-      paddingBottom: 12,
+      paddingBottom: 28,
       paddingHorizontal: 24,
     },
     uploadSection: {
@@ -3715,6 +3759,7 @@ function getStyles(theme: any) {
     },
     recordSection: {
       alignItems: 'center',
+      marginBottom: 6,
     },
     recordLabel: {
       fontFamily: theme.regularFont,

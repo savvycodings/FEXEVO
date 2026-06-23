@@ -427,6 +427,10 @@ export const enExtended = {
     noSessionsDay: "No AI Coach sessions on this day.",
     comments: "{{count}} comment",
     comments_plural: "{{count}} comments",
+    videosFromStudents: "Videos from students",
+    subShotFallback: "Technique",
+    subPending: "Pending",
+    subReviewed: "Reviewed",
   },
   techniqueExtra: {
     recordNewVideo: "Or start recording a new video",

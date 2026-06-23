@@ -26,7 +26,6 @@ import { vercel as defaultTheme } from '../theme'
 import { LocalSvgAsset, prefetchSvgAssets } from '../components/LocalSvgAsset'
 import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
 import { StaggerChildren, usePageFocusKey } from '../components/PageEntrance'
-import { MyCoachCoachHero } from './myCoach/CoachHero'
 import { MyCoachSwipeableStudentCard } from './myCoach/SwipeableStudentCard'
 import type { MyCoachStudent } from './myCoach/types'
 import {
@@ -151,7 +150,7 @@ export function MyCoachScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<MyCoachScreenNav>()
   const focusKey = usePageFocusKey()
-  const { onTabFocus, viewerIsCoach, profileRoleLoaded, profileName, overallPillarScore } = useSessionData()
+  const { onTabFocus, viewerIsCoach, profileName, overallPillarScore } = useSessionData()
 
   const [openStudentId, setOpenStudentId] = useState<string | null>(null)
   const [students, setStudents] = useState<MyCoachStudent[]>([])
@@ -235,13 +234,6 @@ export function MyCoachScreen() {
       semiBoldFont: theme.semiBoldFont,
     }),
     [theme.regularFont, theme.mediumFont, theme.semiBoldFont]
-  )
-
-  const onVideoPicked = useCallback(
-    (_uri: string) => {
-      navigation.navigate('AICoach')
-    },
-    [navigation]
   )
 
   const onAddNewStudent = useCallback(() => {
@@ -339,10 +331,6 @@ export function MyCoachScreen() {
         showsVerticalScrollIndicator={false}
       >
         <StaggerChildren replayKey={focusKey}>
-        {profileRoleLoaded && !viewerIsCoach ? (
-          <MyCoachCoachHero coachName="David Blow" fonts={fonts} onUploadedVideo={onVideoPicked} />
-        ) : null}
-
         <ProfileHeroScoreBlock
           horizontalPadding={20}
           premiumLabelNudgeUp={4}

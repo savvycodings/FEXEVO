@@ -87,6 +87,8 @@ export type MainStackParamList = {
   CoachReviewEditor: { reviewId: string };
   /** Student: view coach-reviewed video + marks (read-only). */
   StudentCoachReview: { reviewId: string; notificationId?: string };
+  /** Student: play a video a coach sent directly. */
+  StudentSentVideo: { sentVideoId: string; notificationId?: string };
   /** Admin hub: browse members by coach/student role (same card style as hub). */
   AdminMembers: { filter: "all" | "coach" | "student" };
 };

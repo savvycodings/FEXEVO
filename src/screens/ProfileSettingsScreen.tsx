@@ -1601,18 +1601,33 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         ) : null}
 
         <View style={styles.quickInfoRow}>
-          <View style={styles.quickInfoItem}>
+          <TouchableOpacity
+            style={styles.quickInfoItem}
+            activeOpacity={0.7}
+            onPress={() => {
+              commitPersonalFieldFocus("birthdate");
+              setActiveSection("personal");
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={shieldQuickBirthLabel ?? t("profileSettingsUi.dateNotSet")}
+          >
             <LocalSvgAsset assetModule={BIRTHDAY_ICON_SVG} width={16} height={16} />
             <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
               {shieldQuickBirthLabel ?? t("profileSettingsUi.dateNotSet")}
             </Text>
-          </View>
-          <View style={styles.quickInfoItem}>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quickInfoItem}
+            activeOpacity={0.7}
+            onPress={() => setActiveSection("location")}
+            accessibilityRole="button"
+            accessibilityLabel={shieldQuickLocationLabel ?? t("profileSettingsUi.locationNotSet")}
+          >
             <LocalSvgAsset assetModule={LOCATION_PIN_ICON_SVG} width={16} height={16} />
             <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
               {shieldQuickLocationLabel ?? t("profileSettingsUi.locationNotSet")}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <AdminGradientCard innerStyle={{ overflow: "hidden" }}>

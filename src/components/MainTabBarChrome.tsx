@@ -126,14 +126,16 @@ export function MainTabBarChrome({ activeTab }: Props) {
   const tabLabels: Record<keyof MainTabParamList, string> = {
     AICoach: t("tabs.aiCoach"),
     Playlist: t("tabs.playlist"),
-    MyCoach: viewerIsCoach ? t("tabs.myStudents") : t("tabs.myCoach"),
+    MyCoach: t("tabs.myStudents"),
     Activities: viewerIsCoach ? t("tabs.calendar") : t("tabs.activities"),
     Progress: t("tabs.progress"),
     You: t("tabs.you"),
   };
   const visibleTabs = TAB_ORDER.filter(
     (tab) =>
-      !(viewerIsCoach && tab === "AICoach") && !(!viewerIsCoach && tab === "Playlist")
+      !(viewerIsCoach && tab === "AICoach") &&
+      !(!viewerIsCoach && tab === "Playlist") &&
+      !(!viewerIsCoach && tab === "MyCoach")
   );
 
   return (

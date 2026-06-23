@@ -69,7 +69,7 @@ function getExpoOriginHeader(): string {
   return Linking.createURL('', { scheme })
 }
 
-async function getTechniqueUploadAuthHeaders(): Promise<Record<string, string>> {
+export async function getTechniqueUploadAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'x-skip-oauth-proxy': 'true',
   }

@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native'
+import { useRoute, useNavigation, useFocusEffect, type RouteProp } from '@react-navigation/native'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import type { MainTabParamList } from '../navigation/types'
 import {
@@ -28,6 +28,8 @@ import { ACTIVITIES_FAVORITES_STORAGE_KEY } from '../constants/activitiesFavorit
 import { techniqueQualityTone } from '../lib/technique-quality'
 import type { ActivitySession } from '../lib/activitySession'
 import { displayTrainShotTitle } from '../lib/trainShotDisplay'
+import { getMainStackNavigation } from '../lib/mainStackNavigation'
+import { fetchCoachSubmissions, type CoachSubmission } from '../lib/coachSubmissionsApi'
 import { ActivitiesVideoAnalysis } from './ActivitiesVideoAnalysis'
 import { ProLibraryGradientProgressBar } from '../components'
 import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
@@ -95,6 +97,8 @@ function formatMonthYear(d: Date): string {
 const MONTH_PILL_CYAN = '#00BBFF'
 /** Days with sessions — solid circle behind the date (matches reference). */
 const CAL_ACTIVITY_CIRCLE = '#2B59FF'
+/** Days a student sent the coach a video — distinct accent dot under the date. */
+const CAL_SUBMISSION_DOT = '#1FD1A0'
 const CAL_WEEK_LABEL = '#86A7D2'
 const CAL_DAY_NUM = 'rgba(134, 167, 210, 0.75)'
 const CAL_DAY_MUTED = 'rgba(134, 167, 210, 0.25)'
@@ -229,6 +233,8 @@ function ActivitiesDayDetail({
   onShiftDay,
   onSessionPress,
   backToCalendarLabel,
+  coachSubmissions = [],
+  onOpenReview,
 }: {
   dateKey: string
   sessions: ActivitySession[]
@@ -238,6 +244,8 @@ function ActivitiesDayDetail({
   onShiftDay: (delta: number) => void
   onSessionPress?: (s: ActivitySession) => void
   backToCalendarLabel?: string
+  coachSubmissions?: CoachSubmission[]
+  onOpenReview?: (reviewId: string) => void
 }) {
   const { t } = useTranslation()
   const { width: winW } = useWindowDimensions()
@@ -340,10 +348,68 @@ function ActivitiesDayDetail({
         contentContainerStyle={[styles.dayScrollInner, { paddingBottom: 40 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
+        {coachSubmissions.length > 0 ? (
+          <View style={styles.studentSubsBlock}>
+            <Text allowFontScaling={false} style={styles.studentSubsTitle}>
+              {t('activitiesExtra.videosFromStudents')}
+            </Text>
+            {coachSubmissions.map((sub) => {
+              const reviewed = String(sub.status).toLowerCase() === 'completed'
+              return (
+                <Pressable
+                  key={sub.reviewId}
+                  style={styles.subCard}
+                  onPress={() => onOpenReview?.(sub.reviewId)}
+                  android_ripple={{ color: 'rgba(255,255,255,0.08)' }}
+                >
+                  {sub.studentImage ? (
+                    <Image source={{ uri: sub.studentImage }} style={styles.subAvatar} />
+                  ) : (
+                    <View style={[styles.subAvatar, styles.subAvatarFallback]}>
+                      <Ionicons name="person" size={18} color={C.sky} />
+                    </View>
+                  )}
+                  <View style={styles.subInfoCol}>
+                    <Text allowFontScaling={false} style={styles.subName} numberOfLines={1}>
+                      {sub.studentName}
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.subShot} numberOfLines={1}>
+                      {sub.shotLabel ?? t('activitiesExtra.subShotFallback')}
+                    </Text>
+                  </View>
+                  {typeof sub.score === 'number' ? (
+                    <View style={styles.subScoreChip}>
+                      <Text allowFontScaling={false} style={styles.subScoreText}>
+                        {sub.score}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View
+                    style={[styles.subBadge, reviewed ? styles.subBadgeDone : styles.subBadgePending]}
+                  >
+                    <Text
+                      allowFontScaling={false}
+                      style={[
+                        styles.subBadgeText,
+                        reviewed ? styles.subBadgeTextDone : styles.subBadgeTextPending,
+                      ]}
+                    >
+                      {reviewed
+                        ? t('activitiesExtra.subReviewed')
+                        : t('activitiesExtra.subPending')}
+                    </Text>
+                  </View>
+                </Pressable>
+              )
+            })}
+          </View>
+        ) : null}
         {visibleSessions.length === 0 ? (
-          <Text allowFontScaling={false} style={styles.emptyDay}>
-            {t('activitiesExtra.noSessionsDay')}
-          </Text>
+          coachSubmissions.length === 0 ? (
+            <Text allowFontScaling={false} style={styles.emptyDay}>
+              {t('activitiesExtra.noSessionsDay')}
+            </Text>
+          ) : null
         ) : (
           visibleSessions.map((s) => {
             const shot = displayTrainShotTitle({
@@ -472,6 +538,8 @@ export type ActivitiesCalendarFlowProps = {
   openAnalysisId?: string
   /** Called when user leaves shot detail opened via deep link (clears latched id). */
   onOpenAnalysisConsumed?: () => void
+  /** Coach Calendar tab: also mark days students sent videos and list them in day detail. */
+  coachInbox?: boolean
 }
 
 /**
@@ -487,11 +555,13 @@ export function ActivitiesCalendarFlow({
   showHeroRow = true,
   openAnalysisId,
   onOpenAnalysisConsumed,
+  coachInbox = false,
 }: ActivitiesCalendarFlowProps) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { width: winW } = useWindowDimensions()
   const insets = useSafeAreaInsets()
+  const navigation = useNavigation()
   const resolvedSectionTitle = sectionTitle ?? t('activities.title')
   const resolvedDayBackLabel = dayDetailBackLabel ?? t('activities.backToProfile')
   const styles = useMemo(() => getStyles(theme, winW), [theme, winW])
@@ -517,6 +587,7 @@ export function ActivitiesCalendarFlow({
   const [analysisSession, setAnalysisSession] = useState<ActivitySession | null>(null)
   const [shotsTab, setShotsTab] = useState<'all' | 'favorites'>('all')
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
+  const [coachSubmissions, setCoachSubmissions] = useState<CoachSubmission[]>([])
 
   /** Load favorites on mount and when returning from shot detail (star toggled there). */
   useEffect(() => {
@@ -545,6 +616,53 @@ export function ActivitiesCalendarFlow({
     }
     return set
   }, [items])
+
+  /** Coach Calendar: load videos students sent the coach; refresh on focus (status may change after review). */
+  useFocusEffect(
+    useCallback(() => {
+      if (!coachInbox) return
+      let cancelled = false
+      ;(async () => {
+        const rows = await fetchCoachSubmissions().catch(() => [])
+        if (!cancelled) setCoachSubmissions(rows)
+      })()
+      return () => {
+        cancelled = true
+      }
+    }, [coachInbox])
+  )
+
+  const datesWithSubmissions = useMemo(() => {
+    const set = new Set<string>()
+    if (!coachInbox) return set
+    for (const s of coachSubmissions) {
+      set.add(localDateKey(new Date(s.createdAt)))
+    }
+    return set
+  }, [coachInbox, coachSubmissions])
+
+  const submissionsByDate = useMemo(() => {
+    const m = new Map<string, CoachSubmission[]>()
+    if (!coachInbox) return m
+    for (const s of coachSubmissions) {
+      const k = localDateKey(new Date(s.createdAt))
+      const arr = m.get(k) ?? []
+      arr.push(s)
+      m.set(k, arr)
+    }
+    for (const [, arr] of m) {
+      arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    }
+    return m
+  }, [coachInbox, coachSubmissions])
+
+  const openCoachReview = useCallback(
+    (reviewId: string) => {
+      const stack = getMainStackNavigation(navigation as never)
+      stack?.navigate('CoachReviewEditor', { reviewId })
+    },
+    [navigation]
+  )
 
   const itemsByDate = useMemo(() => {
     const m = new Map<string, ActivitySession[]>()
@@ -672,7 +790,7 @@ export function ActivitiesCalendarFlow({
     }
     const key = localDateKey(date)
     setSelectedKey(key)
-    if (datesWithActivity.has(key)) {
+    if (datesWithActivity.has(key) || datesWithSubmissions.has(key)) {
       setDetailDateKey(key)
     }
   }
@@ -686,6 +804,7 @@ export function ActivitiesCalendarFlow({
             const idx = row * 7 + col
             const dk = localDateKey(cell.date)
             const has = datesWithActivity.has(dk)
+            const hasSubmission = datesWithSubmissions.has(dk)
             const isSel = selectedKey === dk
             return (
               <Pressable
@@ -715,6 +834,11 @@ export function ActivitiesCalendarFlow({
                     {cell.date.getDate()}
                   </Text>
                 )}
+                {hasSubmission && cell.inMonth ? (
+                  <View style={styles.daySubmissionDotWrap} pointerEvents="none">
+                    <View style={styles.daySubmissionDot} />
+                  </View>
+                ) : null}
               </Pressable>
             )
           })}
@@ -891,6 +1015,8 @@ export function ActivitiesCalendarFlow({
         theme={theme}
         monthVideoCount={monthVideoCountForDetail}
         backToCalendarLabel={resolvedDayBackLabel}
+        coachSubmissions={coachInbox ? submissionsByDate.get(detailDateKey) ?? [] : []}
+        onOpenReview={openCoachReview}
         onShiftDay={(delta) => {
           const next = shiftDateKey(detailDateKey, delta)
           setDetailDateKey(next)
@@ -1037,6 +1163,7 @@ export function ActivitiesScreen() {
       monthNavStyle="pill"
       openAnalysisId={openAnalysisId}
       onOpenAnalysisConsumed={() => setLatchedOpenAnalysisId(undefined)}
+      coachInbox={viewerIsCoach}
     />
   )
 }
@@ -1187,6 +1314,21 @@ function getStyles(theme: any, _winW: number) {
       color: CAL_DAY_NUM,
       ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
     },
+    daySubmissionDotWrap: {
+      position: 'absolute',
+      bottom: 3,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+    },
+    daySubmissionDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: CAL_SUBMISSION_DOT,
+      borderWidth: 1,
+      borderColor: theme.backgroundColor,
+    },
   })
 }
 
@@ -1209,13 +1351,13 @@ function getShotsStyles(theme: any, winW: number) {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#041641',
-      borderRadius: 999,
+      borderRadius: 28,
       padding: 4,
-      marginBottom: 20,
+      marginBottom: 18,
     },
     segmentPill: {
       flex: 1,
-      paddingVertical: 14,
+      paddingVertical: 10,
       borderRadius: 999,
       alignItems: 'center',
       justifyContent: 'center',
@@ -1225,12 +1367,11 @@ function getShotsStyles(theme: any, winW: number) {
     },
     segmentLabel: {
       fontFamily: theme.mediumFont,
-      fontSize: 16,
+      fontSize: 12,
       color: '#336AB3',
     },
     segmentLabelActive: {
       color: '#FFFFFF',
-      fontFamily: theme.semiBoldFont,
     },
     errorInline: {
       fontFamily: theme.regularFont,
@@ -1498,6 +1639,88 @@ function getDetailStyles(theme: any, winW: number) {
       color: 'rgba(255,255,255,0.55)',
       textAlign: 'center',
       marginTop: 28,
+    },
+    studentSubsBlock: {
+      marginBottom: 18,
+    },
+    studentSubsTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 15,
+      color: theme.textColor,
+      marginBottom: 10,
+    },
+    subCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 12,
+      backgroundColor: SHOTS_CARD_BG,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      marginBottom: 10,
+    },
+    subAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: SHOTS_TRACK_BG,
+    },
+    subAvatarFallback: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    subInfoCol: {
+      flex: 1,
+      marginLeft: 12,
+      marginRight: 8,
+    },
+    subName: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 14,
+      color: '#FFFFFF',
+    },
+    subShot: {
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      color: SHOTS_TEXT_DIM,
+      marginTop: 2,
+    },
+    subScoreChip: {
+      minWidth: 34,
+      paddingHorizontal: 8,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: SHOTS_TRACK_BG,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+    },
+    subScoreText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 13,
+      color: SHOTS_BAR_CYAN,
+    },
+    subBadge: {
+      paddingHorizontal: 10,
+      height: 26,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    subBadgePending: {
+      backgroundColor: 'rgba(245, 166, 35, 0.16)',
+    },
+    subBadgeDone: {
+      backgroundColor: 'rgba(31, 209, 160, 0.16)',
+    },
+    subBadgeText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 11,
+    },
+    subBadgeTextPending: {
+      color: SHOTS_BAR_AMBER,
+    },
+    subBadgeTextDone: {
+      color: CAL_SUBMISSION_DOT,
     },
     sessionCardRow: {
       flexDirection: 'row',

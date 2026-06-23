@@ -123,11 +123,13 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
             const icon =
               n.kind === 'coach_review_ready' && n.refType === 'coach_video_review'
                 ? TICK_ICON
-                : n.kind === 'correction_images_ready'
+                : n.kind === 'coach_video_sent' && n.refType === 'coach_sent_video'
                   ? TICK_ICON
-                  : n.kind.includes('message')
-                    ? MSG_ICON
-                    : FOLLOWER_ICON
+                  : n.kind === 'correction_images_ready'
+                    ? TICK_ICON
+                    : n.kind.includes('message')
+                      ? MSG_ICON
+                      : FOLLOWER_ICON
             return (
               <View key={n.id}>
                 <TouchableOpacity
@@ -148,6 +150,18 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                       ) {
                         navigation.navigate('StudentCoachReview', {
                           reviewId: n.refId,
+                          notificationId: n.id,
+                        })
+                        onClose()
+                        return
+                      }
+                      if (
+                        n.kind === 'coach_video_sent' &&
+                        n.refType === 'coach_sent_video' &&
+                        n.refId
+                      ) {
+                        navigation.navigate('StudentSentVideo', {
+                          sentVideoId: n.refId,
                           notificationId: n.id,
                         })
                         onClose()

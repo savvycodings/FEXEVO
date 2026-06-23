@@ -169,48 +169,50 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
             <Text allowFontScaling={false} style={styles.heroSubtitle}>
               Improve your game.{'\n'}Unlock your potential.
             </Text>
-            <View style={styles.toggleRow}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setBilling('monthly')}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
-              >
-                <Text
-                  allowFontScaling={false}
-                  style={[styles.toggleLabel, billing === 'monthly' && styles.toggleLabelActive]}
-                >
-                  Monthly
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setBilling(billing === 'monthly' ? 'annual' : 'monthly')}
-                accessibilityLabel="Toggle billing cycle"
-              >
-                <LocalSvgAsset
-                  assetModule={billing === 'annual' ? SWITCH_ON : SWITCH_OFF}
-                  width={46}
-                  height={24}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setBilling('annual')}
-                hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
-              >
-                <Text
-                  allowFontScaling={false}
-                  style={[styles.toggleLabel, billing === 'annual' && styles.toggleLabelActive]}
-                >
-                  Anual
-                </Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
 
         {/* Plan comparison */}
         <View style={styles.comparison}>
+          {/* Billing toggle, sitting just above the Free/Pro headers */}
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setBilling('monthly')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[styles.toggleLabel, billing === 'monthly' && styles.toggleLabelActive]}
+              >
+                Monthly
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setBilling(billing === 'monthly' ? 'annual' : 'monthly')}
+              accessibilityLabel="Toggle billing cycle"
+            >
+              <LocalSvgAsset
+                assetModule={billing === 'annual' ? SWITCH_ON : SWITCH_OFF}
+                width={46}
+                height={24}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setBilling('annual')}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[styles.toggleLabel, billing === 'annual' && styles.toggleLabelActive]}
+              >
+                Anual
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Headers (above the cards) */}
           <View style={styles.planHeaderRow}>
             <View style={styles.planHeaderColFree}>
@@ -231,10 +233,10 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
 
             <View style={styles.planHeaderColPro}>
               <View style={styles.proTitleRow}>
-                <Image source={CROWN} style={styles.crown} resizeMode="contain" />
                 <Text allowFontScaling={false} style={styles.proTitle}>
                   Pro
                 </Text>
+                <Image source={CROWN} style={styles.crown} resizeMode="contain" />
                 <LinearGradient
                   colors={['#00BBFF', '#0022FF']}
                   start={{ x: 0, y: 0.5 }}
@@ -429,7 +431,8 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      marginTop: 14,
+      marginTop: 4,
+      marginBottom: 14,
     },
     toggleLabel: {
       color: '#86A7D2',
@@ -464,7 +467,6 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
     },
     planHeaderColFree: {
       width: freeCardWidth,
-      paddingTop: 34,
     },
     planHeaderColPro: {
       width: proCardWidth,

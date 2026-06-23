@@ -27,6 +27,7 @@ import {
   StudentReviewTagScreen,
   CoachReviewEditorScreen,
   StudentCoachReviewScreen,
+  StudentSentVideoScreen,
   AdminMembersScreen,
   InviteFriendScreen,
   ClubDetailScreen,
@@ -191,7 +192,7 @@ function MainTabsLayoutInner({
   const tabLabels: Record<keyof MainTabParamList, string> = {
     AICoach: t('tabs.aiCoach'),
     Playlist: t('tabs.playlist'),
-    MyCoach: viewerIsCoach ? t('tabs.myStudents') : t('tabs.myCoach'),
+    MyCoach: t('tabs.myStudents'),
     Activities: viewerIsCoach ? t('tabs.calendar') : t('tabs.activities'),
     Progress: t('tabs.progress'),
     You: t('tabs.you'),
@@ -324,6 +325,8 @@ function MainTabsLayoutInner({
   useEffect(() => {
     if (viewerIsCoach && activeTabName === 'AICoach') {
       goToTab('MyCoach')
+    } else if (!viewerIsCoach && activeTabName === 'MyCoach') {
+      goToTab('AICoach')
     }
   }, [activeTabName, viewerIsCoach, goToTab])
 
@@ -463,6 +466,21 @@ function MainTabsLayoutInner({
               }
             : {}),
           ...(route.name === 'Playlist' && !viewerIsCoach
+            ? {
+                tabBarButton: () => null,
+                tabBarItemStyle: {
+                  width: 0,
+                  minWidth: 0,
+                  maxWidth: 0,
+                  height: 0,
+                  padding: 0,
+                  margin: 0,
+                  overflow: 'hidden',
+                  display: 'none' as const,
+                },
+              }
+            : {}),
+          ...(route.name === 'MyCoach' && !viewerIsCoach
             ? {
                 tabBarButton: () => null,
                 tabBarItemStyle: {
@@ -623,6 +641,7 @@ function AuthenticatedStack() {
       <Stack.Screen name="CoachAddPeople" component={CoachAddPeopleScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="CoachReviewEditor" component={CoachReviewEditorScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="StudentCoachReview" component={StudentCoachReviewScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="StudentSentVideo" component={StudentSentVideoScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="AdminMembers" component={AdminMembersScreen} layout={screenEntranceLayout} />
         </Stack.Navigator>
       </SessionDataProvider>

@@ -428,6 +428,10 @@ export const esExtended = {
     noSessionsDay: "No hay sesiones de AI Coach este día.",
     comments: "{{count}} comentario",
     comments_plural: "{{count}} comentarios",
+    videosFromStudents: "Videos de estudiantes",
+    subShotFallback: "Técnica",
+    subPending: "Pendiente",
+    subReviewed: "Revisado",
   },
   techniqueExtra: {
     recordNewVideo: "O graba un video nuevo",
