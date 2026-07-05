@@ -14,6 +14,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { ThemeContext } from "../context";
+import { registerVerifiedSignup } from "../lib/signupVerification";
 import { authClient } from "../lib/auth-client";
 import { Header, LanguageToggle } from "../components";
 import { SignUpDraft } from "./SignUp";
@@ -176,23 +177,28 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
     const hasSessionBefore = await ensureSessionReady();
 
     if (!hasSessionBefore && signUpDraft) {
-      const { error } = await authClient.signUp.email({
+      if (!signUpDraft.verificationToken) {
+        setSaving(false);
+        setSubmittingOverlay(false);
+        Alert.alert(t("verifyEmail.verifyFailedTitle"), t("verifyEmail.notVerifiedMsg"));
+        return;
+      }
+
+      const registerResult = await registerVerifiedSignup({
         name: displayName.trim() || signUpDraft.name,
         email: signUpDraft.email.trim(),
         password: signUpDraft.password,
+        verificationToken: signUpDraft.verificationToken,
       });
-      if (error) {
-        const code = String((error as any)?.code || "").toUpperCase();
-        const msg = String(error.message || "");
-        const looksLikeExistingUser =
-          code.includes("USER_ALREADY_EXISTS") ||
-          code.includes("ALREADY_EXISTS") ||
-          msg.toLowerCase().includes("already exists");
+
+      if (!registerResult.ok) {
+        const msg = registerResult.message.toLowerCase();
+        const looksLikeExistingUser = msg.includes("already exists") || msg.includes("already registered");
 
         if (!looksLikeExistingUser) {
           setSaving(false);
           setSubmittingOverlay(false);
-          Alert.alert(t("auth.signUpFailed"), error.message || t("profileSetup.setupFailedMsg"));
+          Alert.alert(t("auth.signUpFailed"), registerResult.message || t("profileSetup.setupFailedMsg"));
           return;
         }
 

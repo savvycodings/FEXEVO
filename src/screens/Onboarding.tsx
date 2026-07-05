@@ -8,6 +8,7 @@ import { SignIn } from "./SignIn";
 import { SignUp, SignUpDraft } from "./SignUp";
 import { ProfileSetup } from "./ProfileSetup";
 import { AccountCreated } from "./AccountCreated";
+import { VerifyEmail } from "./VerifyEmail";
 import { WelcomeIntro } from "./WelcomeIntro";
 import { useTranslation } from "react-i18next";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -55,7 +56,7 @@ function SignUpScreen({
         onBack={() => navigation.navigate("SignIn")}
         onContinue={(draft) => {
           onContinue(draft);
-          navigation.replace("AccountCreated");
+          navigation.replace("VerifyEmail");
         }}
       />
       <TouchableOpacity
@@ -75,6 +76,7 @@ export type OnboardingInitialRoute =
   | "WelcomeIntro"
   | "SignIn"
   | "SignUp"
+  | "VerifyEmail"
   | "AccountCreated"
   | "ProfileSetup";
 
@@ -173,6 +175,22 @@ export function Onboarding(props?: {
             }}
           />
         )}
+      </Stack.Screen>
+      <Stack.Screen name="VerifyEmail" options={{ title: "Verify email" }}>
+        {({ navigation }) =>
+          signUpDraft ? (
+            <VerifyEmail
+              draft={signUpDraft}
+              onBack={() => navigation.replace("SignUp")}
+              onVerified={(draft) => {
+                setSignUpDraft(draft);
+                navigation.replace("AccountCreated");
+              }}
+            />
+          ) : (
+            <View style={{ flex: 1, backgroundColor: theme.backgroundColor }} />
+          )
+        }
       </Stack.Screen>
       <Stack.Screen
         name="AccountCreated"
