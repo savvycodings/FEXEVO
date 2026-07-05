@@ -1,57 +1,23 @@
 import { authClient } from "./auth-client";
+import { publicApiFetch } from "./apiFetch";
 
-type ApiErrorBody = {
-  error?: string;
-  message?: string;
-  retryAfterSec?: number;
-  verificationToken?: string;
-};
-
-function unwrapFetchResult(res: unknown): {
-  ok: boolean;
-  body: ApiErrorBody & Record<string, unknown>;
-  status?: number;
-} {
-  if (res == null) {
-    return { ok: false, body: { message: "Network error. Check your connection and try again." } };
-  }
-
-  const payload = res as { data?: unknown; error?: ApiErrorBody & { status?: number }; status?: number };
-  if (payload.error) {
-    return {
-      ok: false,
-      body: payload.error,
-      status: payload.error.status ?? payload.status,
-    };
-  }
-
-  const body = (payload.data ?? payload) as ApiErrorBody & Record<string, unknown>;
-  if (body.error && !body.verificationToken) {
-    return { ok: false, body, status: payload.status };
-  }
-
-  return { ok: true, body, status: payload.status };
-}
+type SendCodeResponse = { ok?: boolean; retryAfterSec?: number };
+type VerifyCodeResponse = { ok?: boolean; verificationToken?: string };
 
 export async function sendSignupVerificationCode(input: {
   email: string;
   name?: string;
 }): Promise<{ ok: true } | { ok: false; message: string; retryAfterSec?: number }> {
-  const res = await authClient
-    .$fetch("/signup/send-code", {
-      method: "POST",
-      body: { email: input.email.trim(), name: input.name?.trim() || undefined },
-    })
-    .catch((err: { error?: ApiErrorBody; message?: string }) => {
-      return { error: err?.error ?? { message: err?.message || "Could not send verification code." } };
-    });
+  const res = await publicApiFetch<SendCodeResponse>("/signup/send-code", {
+    method: "POST",
+    body: { email: input.email.trim(), name: input.name?.trim() || undefined },
+  });
 
-  const parsed = unwrapFetchResult(res);
-  if (!parsed.ok) {
+  if (!res.ok) {
     return {
       ok: false,
-      message: parsed.body.message || "Could not send verification code.",
-      retryAfterSec: parsed.body.retryAfterSec,
+      message: res.message,
+      retryAfterSec: res.error.retryAfterSec,
     };
   }
 
@@ -62,24 +28,19 @@ export async function verifySignupVerificationCode(input: {
   email: string;
   code: string;
 }): Promise<{ ok: true; verificationToken: string } | { ok: false; message: string }> {
-  const res = await authClient
-    .$fetch("/signup/verify-code", {
-      method: "POST",
-      body: { email: input.email.trim(), code: input.code.trim() },
-    })
-    .catch((err: { error?: ApiErrorBody; message?: string }) => {
-      return { error: err?.error ?? { message: err?.message || "Could not verify code." } };
-    });
+  const res = await publicApiFetch<VerifyCodeResponse>("/signup/verify-code", {
+    method: "POST",
+    body: { email: input.email.trim(), code: input.code.trim() },
+  });
 
-  const parsed = unwrapFetchResult(res);
-  if (!parsed.ok || typeof parsed.body.verificationToken !== "string") {
+  if (!res.ok || typeof res.data?.verificationToken !== "string") {
     return {
       ok: false,
-      message: parsed.body.message || "That code is incorrect. Try again.",
+      message: res.ok ? "Could not verify your code. Try again." : res.message,
     };
   }
 
-  return { ok: true, verificationToken: parsed.body.verificationToken };
+  return { ok: true, verificationToken: res.data.verificationToken };
 }
 
 export async function registerVerifiedSignup(input: {
@@ -88,23 +49,18 @@ export async function registerVerifiedSignup(input: {
   password: string;
   verificationToken: string;
 }): Promise<{ ok: true } | { ok: false; message: string }> {
-  const res = await authClient
-    .$fetch("/signup/register", {
-      method: "POST",
-      body: {
-        name: input.name.trim(),
-        email: input.email.trim(),
-        password: input.password,
-        verificationToken: input.verificationToken,
-      },
-    })
-    .catch((err: { error?: ApiErrorBody; message?: string }) => {
-      return { error: err?.error ?? { message: err?.message || "Could not create account." } };
-    });
+  const res = await publicApiFetch<Record<string, unknown>>("/signup/register", {
+    method: "POST",
+    body: {
+      name: input.name.trim(),
+      email: input.email.trim(),
+      password: input.password,
+      verificationToken: input.verificationToken,
+    },
+  });
 
-  const parsed = unwrapFetchResult(res);
-  if (!parsed.ok) {
-    return { ok: false, message: parsed.body.message || "Could not create your account." };
+  if (!res.ok) {
+    return { ok: false, message: res.message };
   }
 
   const signInRes = await authClient.signIn.email({
