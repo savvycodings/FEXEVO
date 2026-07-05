@@ -12,6 +12,7 @@ import {
 import { ActivitiesCalendarFlow } from "./Activities";
 import { ProfileRatingDashboard } from "../components/ProfileRatingDashboard";
 import { ProfileHeroScoreBlock } from "../components/ProfileHeroScoreBlock";
+import { ProLibraryGradientFrame } from "../components/ProLibraryGradientFrame";
 import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Trans, useTranslation } from "react-i18next";
@@ -19,19 +20,21 @@ import { trainCategoryLabel } from "../i18n/taxonomyLabels";
 
 const AI_INSIGHT_LOGO = require("../../assets/youpage/aiinsight.png");
 const YOU_SHARE_ICON = require("../../assets/youpage/shareicon.svg");
+const AI_INSIGHT_PATTERN = require("../../assets/dailyquests/Pattern.png");
+const AI_INSIGHT_PATTERN_TILE_SCALE = 3.5;
+const AI_INSIGHT_CARD_BG = "#050A18";
 
 function ProfileAiInsightBanner({
-  styles,
   insight,
   onDismiss,
 }: {
-  styles: ReturnType<typeof getAiInsightStyles>;
   insight: WeeklyInsight;
   onDismiss: () => void;
 }) {
+  const { theme } = useContext(ThemeContext);
   const { t } = useTranslation();
   const pillar = trainCategoryLabel(insight.pillarId);
-  const highlightWrap = <Text style={styles.aiInsightHighlight} />;
+  const highlightWrap = <Text style={aiInsightStyles.aiInsightHighlight} />;
   const insightKey = !insight.hasPriorWeek
     ? "you.insightGained"
     : insight.improved
@@ -39,58 +42,67 @@ function ProfileAiInsightBanner({
       : "you.insightShifted";
 
   return (
-    <LinearGradient
-      colors={["#006EFF", "rgba(0, 110, 255, 0)", "#006EFF", "rgba(0, 110, 255, 0)"]}
-      locations={[0, 0.33, 0.66, 1]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.aiInsightGradient}
+    <ProLibraryGradientFrame
+      style={aiInsightStyles.aiInsightCardOuter}
+      innerStyle={aiInsightStyles.aiInsightCardInnerShell}
+      borderRadius={20}
+      innerBorderRadius={18}
+      strokeWidth={2}
+      gradientVariant="default"
+      innerShadow={false}
     >
-      <View style={styles.aiInsightInner}>
-        <View style={styles.aiInsightHeaderRow}>
-          <View style={styles.aiInsightTitleRow}>
-            <View style={styles.aiInsightIconWrap}>
-              <Image source={AI_INSIGHT_LOGO} style={styles.aiInsightLogo} resizeMode="contain" />
+      <View style={aiInsightStyles.aiInsightCardFill}>
+        <Image
+          source={AI_INSIGHT_PATTERN}
+          style={aiInsightStyles.aiInsightPatternFill}
+          resizeMode="repeat"
+          pointerEvents="none"
+          accessibilityIgnoresInvertColors
+        />
+        <LinearGradient
+          colors={["rgba(4, 22, 65, 0.55)", "rgba(0, 75, 255, 0.3)"]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={aiInsightStyles.aiInsightHeadBg}
+        >
+          <View style={aiInsightStyles.aiInsightHead}>
+            <View style={aiInsightStyles.aiInsightHeadLeft}>
+              <Image source={AI_INSIGHT_LOGO} style={aiInsightStyles.aiInsightLogo} resizeMode="contain" />
+              <Text allowFontScaling={false} style={[aiInsightStyles.aiInsightTitle, { fontFamily: theme.semiBoldFont }]}>
+                {t("you.aiInsightTitle")}
+              </Text>
             </View>
-            <Text allowFontScaling={false} style={styles.aiInsightTitle}>
-              {t("you.aiInsightTitle")}
-            </Text>
+            <TouchableOpacity
+              onPress={onDismiss}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={t("common.dismiss")}
+            >
+              <Ionicons name="close" size={18} color="#004BFF" />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            onPress={onDismiss}
-            hitSlop={12}
-            style={styles.aiInsightCloseHit}
-            accessibilityLabel={t("common.dismiss")}
-          >
-            <Ionicons name="close" size={22} color="#006FFF" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.aiInsightDivider} />
-        <Text allowFontScaling={false} style={styles.aiInsightBody}>
-          <Trans
-            i18nKey={insightKey}
-            values={{ pillar, highlight: insight.highlight }}
-            components={{ highlight: highlightWrap }}
-          />
-        </Text>
-        {insight.subtitlePillarId ? (
-          <>
-            <View style={styles.aiInsightDivider} />
-            <Text allowFontScaling={false} style={styles.aiInsightSub}>
+        </LinearGradient>
+        <View style={aiInsightStyles.aiInsightBodyWrap}>
+          <Text allowFontScaling={false} style={[aiInsightStyles.aiInsightBody, { fontFamily: theme.semiBoldFont }]}>
+            <Trans
+              i18nKey={insightKey}
+              values={{ pillar, highlight: insight.highlight }}
+              components={{ highlight: highlightWrap }}
+            />
+          </Text>
+          {insight.subtitlePillarId ? (
+            <Text allowFontScaling={false} style={[aiInsightStyles.aiInsightSub, { fontFamily: theme.regularFont }]}>
               {t("you.insightLowestPillar", {
                 pillar: trainCategoryLabel(insight.subtitlePillarId),
               })}
             </Text>
-          </>
-        ) : null}
+          ) : null}
+        </View>
       </View>
-    </LinearGradient>
+    </ProLibraryGradientFrame>
   );
 }
 
 export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => void }) {
-  const { theme } = useContext(ThemeContext);
-  const styles = getAiInsightStyles(theme);
   const { ratingCategories, ratingLoading, profileName, overallPillarScore } = useSessionData();
   const [dismissLoaded, setDismissLoaded] = useState(false);
   const [dismissedUntilMs, setDismissedUntilMs] = useState(0);
@@ -150,7 +162,7 @@ export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => 
           />
           <ProfileRatingDashboard />
           {showAiInsight && insight ? (
-            <ProfileAiInsightBanner styles={styles} insight={insight} onDismiss={onDismissInsight} />
+            <ProfileAiInsightBanner insight={insight} onDismiss={onDismissInsight} />
           ) : null}
         </>
       }
@@ -158,79 +170,78 @@ export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => 
   );
 }
 
-function getAiInsightStyles(theme: any) {
-  return StyleSheet.create({
-    aiInsightGradient: {
-      borderRadius: 18,
-      padding: 1.5,
-      overflow: "hidden",
+const aiInsightStyles = StyleSheet.create({
+    aiInsightCardOuter: {
+      marginTop: 16,
       marginBottom: 12,
       width: "100%",
     },
-    aiInsightInner: {
-      borderRadius: 16,
-      backgroundColor: "#001435",
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      shadowColor: "#00BBFF",
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.12,
-      shadowRadius: 6,
-      elevation: 2,
+    aiInsightCardInnerShell: {
+      padding: 0,
+      backgroundColor: AI_INSIGHT_CARD_BG,
+      overflow: "hidden",
     },
-    aiInsightHeaderRow: {
+    aiInsightCardFill: {
+      overflow: "hidden",
+      backgroundColor: AI_INSIGHT_CARD_BG,
+      width: "100%",
+      position: "relative",
+    },
+    aiInsightPatternFill: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      opacity: 0.7,
+      transform: [{ scale: AI_INSIGHT_PATTERN_TILE_SCALE }],
+      transformOrigin: "top left",
+    },
+    aiInsightHeadBg: {
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+    },
+    aiInsightHead: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: 8,
     },
-    aiInsightTitleRow: {
+    aiInsightHeadLeft: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 12,
-      flex: 1,
-      minWidth: 0,
-    },
-    aiInsightIconWrap: {
-      width: 36,
-      height: 36,
-      alignItems: "center",
-      justifyContent: "center",
+      gap: 8,
     },
     aiInsightLogo: {
-      width: 32,
-      height: 32,
+      width: 20,
+      height: 20,
     },
     aiInsightTitle: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 13,
+      fontSize: 12,
+      color: "#004BFF",
       letterSpacing: 0.8,
-      color: "#006FFF",
+      lineHeight: 15,
     },
-    aiInsightCloseHit: {
-      padding: 4,
-    },
-    aiInsightDivider: {
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: "rgba(0, 111, 255, 0.28)",
-      marginVertical: 7,
+    aiInsightBodyWrap: {
+      backgroundColor: "rgba(4, 22, 65, 0.45)",
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 16,
+      width: "100%",
     },
     aiInsightBody: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 15,
-      lineHeight: 19,
+      fontSize: 13,
       color: "#FFFFFF",
+      lineHeight: 20,
     },
     aiInsightHighlight: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 15,
+      fontSize: 13,
       color: "#00BBFF",
+      lineHeight: 20,
     },
     aiInsightSub: {
-      fontFamily: theme.regularFont,
-      fontSize: 12,
-      lineHeight: 15,
-      color: "rgba(0, 111, 255, 0.88)",
+      fontSize: 13,
+      lineHeight: 20,
+      color: "rgba(134, 167, 210, 0.9)",
+      marginTop: 8,
     },
-  });
-}
+});

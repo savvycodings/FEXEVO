@@ -21,5 +21,5 @@ export function getDailyQuestXpBadgeImage(xp: number): ImageSourcePropType {
 }
 
 export function formatDailyQuestXp(xp: number): string {
-  return String(Math.max(0, Math.floor(xp)))
+  return `+${Math.max(0, Math.floor(xp))}`
 }

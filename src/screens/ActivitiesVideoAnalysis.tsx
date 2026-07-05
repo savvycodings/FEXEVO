@@ -1133,8 +1133,6 @@ export function ActivitiesVideoAnalysis({
                   <CorrectionFrameSelector
                     frames={displayCorrectionFrameInsights}
                     activeIndex={activeCorrection}
-                    onSelect={setActiveCorrection}
-                    proReferenceShot={proReferenceShot}
                   />
                 ) : null}
                 {correctionPairs[activeCorrection] ? (

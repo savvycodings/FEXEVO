@@ -12,6 +12,7 @@ import { HEADER_BELOW_CONTENT_GAP, PAGE_TOP_EXTRA_PADDING } from '../../constant
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LocalSvgAsset, prefetchSvgAssets } from './LocalSvgAsset'
+import { profileImageSource } from '../lib/defaultProfilePicture'
 
 const HEADER_MARK_SVG = require('../../assets/pro.svg')
 const SETTINGS_ICON = require('../../assets/youpage/settingsicon.svg')
@@ -111,11 +112,11 @@ export function Header({
             accessibilityLabel="Open profile"
           >
             <View style={styles.avatarWrap}>
-              {profileImageUri ? (
-                <Image source={{ uri: profileImageUri }} style={styles.avatarImage} resizeMode="cover" />
-              ) : (
-                <Ionicons name="person" size={16} color="#FFFFFF" />
-              )}
+              <Image
+                source={profileImageSource(profileImageUri)}
+                style={styles.avatarImage}
+                resizeMode="cover"
+              />
             </View>
             <View style={styles.profileTextWrap}>
               <Text numberOfLines={1} allowFontScaling={false} style={styles.profileNameText}>

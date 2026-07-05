@@ -18,6 +18,7 @@ import { DOMAIN } from '../../constants'
 import { ADMIN_HUB_GATE_PASSWORD } from '../config/adminHubGate'
 import type { MainStackParamList } from '../navigation/types'
 import { AdminGradientCard } from '../components/AdminGradientCard'
+import { profileImageSource } from '../lib/defaultProfilePicture'
 
 type Nav = NativeStackNavigationProp<MainStackParamList>
 type R = RouteProp<MainStackParamList, 'AdminMembers'>
@@ -182,13 +183,7 @@ export function AdminMembersScreen() {
       return (
         <AdminGradientCard style={styles.cardOuter}>
           <View style={styles.cardInner}>
-            {uri ? (
-              <Image source={{ uri }} style={styles.avatar} resizeMode="cover" />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPh]}>
-                <Ionicons name="person" size={22} color="rgba(255,255,255,0.45)" />
-              </View>
-            )}
+            <Image source={profileImageSource(uri)} style={styles.avatar} resizeMode="cover" />
             <View style={styles.textCol}>
               <Text allowFontScaling={false} style={[styles.name, { fontFamily: theme.semiBoldFont }]}>
                 {item.name || 'Unnamed user'}

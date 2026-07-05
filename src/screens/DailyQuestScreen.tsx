@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   useWindowDimensions,
+  Image,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
@@ -32,6 +33,8 @@ import type { ProgressTabStackParamList } from '../navigation/types'
 import { useTranslation } from 'react-i18next'
 
 const TODAYS_TIP_ICON = require('../../assets/achivemnets/todaystipicon.svg')
+const TIP_PATTERN = require('../../assets/dailyquests/Pattern.png')
+const TIP_PATTERN_TILE_SCALE = 3.5
 
 type QuestTab = 'daily' | 'weekly' | 'season'
 
@@ -52,7 +55,7 @@ const PG = {
   segmentActive: '#0059FF',
   track: '#07256D',
   fill: '#00B8FF',
-  claimed: '#3DDC84',
+  claimed: '#05DF78',
   muted: '#86A7D2',
 }
 
@@ -75,10 +78,10 @@ function QuestCard({
   const isComplete = quest.claimed || quest.current >= quest.goal
   const canClaim = !quest.claimed && quest.current >= quest.goal
   const goal = Math.max(1, quest.goal)
-  const pct = quest.claimed
+  const pct = isComplete
     ? 100
     : Math.max(0, Math.min(100, Math.round((quest.current / goal) * 100)))
-  const fillColor = quest.claimed ? PG.claimed : PG.fill
+  const fillColor = isComplete ? PG.claimed : PG.fill
 
   return (
     <TouchableOpacity
@@ -114,7 +117,7 @@ function QuestCard({
           >
             {t(quest.titleKey)}
           </Text>
-          {quest.claimed ? (
+          {isComplete ? (
             <Text
               allowFontScaling={false}
               style={[styles.claimedTxt, { fontFamily: theme.semiBoldFont }]}
@@ -316,30 +319,41 @@ export function DailyQuestScreen() {
             gradientVariant="default"
             innerShadow={false}
           >
-            <LinearGradient
-              colors={['#0A2F6E', '#041641']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.tipCardFill}
-            >
-              <View style={styles.tipHead}>
-                <View style={styles.tipHeadLeft}>
-                  <LocalSvgAsset assetModule={TODAYS_TIP_ICON} width={20} height={20} />
-                  <Text allowFontScaling={false} style={[styles.tipLabel, { fontFamily: theme.semiBoldFont }]}>
-                    {t('progress.todaysTip')}
-                  </Text>
+            <View style={styles.tipCardFill}>
+              <Image
+                source={TIP_PATTERN}
+                style={styles.tipPatternFill}
+                resizeMode="repeat"
+                pointerEvents="none"
+                accessibilityIgnoresInvertColors
+              />
+              <LinearGradient
+                colors={['rgba(4, 22, 65, 0.55)', 'rgba(0, 75, 255, 0.3)']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.tipHeadBg}
+              >
+                <View style={styles.tipHead}>
+                  <View style={styles.tipHeadLeft}>
+                    <LocalSvgAsset assetModule={TODAYS_TIP_ICON} width={20} height={20} />
+                    <Text allowFontScaling={false} style={[styles.tipLabel, { fontFamily: theme.semiBoldFont }]}>
+                      {t('progress.todaysTip')}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setTipVisible(false)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close" size={18} color="#004BFF" />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  onPress={() => setTipVisible(false)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="close" size={18} color="#004BFF" />
-                </TouchableOpacity>
+              </LinearGradient>
+              <View style={styles.tipBodyWrap}>
+                <Text allowFontScaling={false} style={[styles.tipBody, { fontFamily: theme.regularFont }]}>
+                  {t('progress.todaysTipBody')}
+                </Text>
               </View>
-              <Text allowFontScaling={false} style={[styles.tipBody, { fontFamily: theme.regularFont }]}>
-                {t('progress.todaysTipBody')}
-              </Text>
-            </LinearGradient>
+            </View>
           </ProLibraryGradientFrame>
         ) : null}
       </ScrollView>
@@ -493,19 +507,33 @@ const styles = StyleSheet.create({
   },
   tipCardInnerShell: {
     padding: 0,
-    backgroundColor: 'transparent',
+    backgroundColor: PG.bg,
     overflow: 'hidden',
   },
   tipCardFill: {
-    paddingVertical: 16,
+    overflow: 'hidden',
+    backgroundColor: PG.bg,
+    width: '100%',
+    position: 'relative',
+  },
+  tipPatternFill: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    opacity: 0.7,
+    transform: [{ scale: TIP_PATTERN_TILE_SCALE }],
+    transformOrigin: 'top left',
+  },
+  tipHeadBg: {
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 18,
   },
   tipHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
   },
   tipHeadLeft: {
     flexDirection: 'row',
@@ -517,6 +545,13 @@ const styles = StyleSheet.create({
     color: '#004BFF',
     letterSpacing: 0.8,
     lineHeight: 15,
+  },
+  tipBodyWrap: {
+    backgroundColor: 'rgba(4, 22, 65, 0.45)',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    width: '100%',
   },
   tipBody: {
     fontSize: 13,

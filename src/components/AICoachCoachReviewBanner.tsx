@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -10,17 +11,19 @@ import { LocalSvgAsset } from './LocalSvgAsset'
 import { titleMedium } from '../theme/typography'
 import { useTranslation } from 'react-i18next'
 
-const COACH_PHOTO = require('../../assets/mycoach/mycoachpfp.png')
+import { DEFAULT_PROFILE_PICTURE, profileImageSource } from '../lib/defaultProfilePicture'
+
 const SHIELD_BADGE_SVG = require('../../assets/mycoach/shieldmycoach.svg')
 const AI_SWITCH_ON_SVG = require('../../assets/aiswitch/on.svg')
 const AI_SWITCH_OFF_SVG = require('../../assets/aiswitch/off.svg')
 
-const BADGE_W = 18
+const BADGE_W = 20
 const BADGE_H = Math.round((BADGE_W * 22) / 17)
+const AVATAR_SIZE = 58
 const FRAME_STROKE = 1.25
 const FRAME_OUTER_R = 16
 const FRAME_INNER_R = FRAME_OUTER_R - FRAME_STROKE
-const CARD_MIN_HEIGHT = 86
+const CARD_MIN_HEIGHT = 92
 
 const frameCommon = {
   strokeWidth: FRAME_STROKE,
@@ -97,17 +100,23 @@ export function AICoachCoachReviewBanner({
 }: Props) {
   const { t } = useTranslation()
   const coachImageUri = assignedCoach.imageUri
+  const [avatarSource, setAvatarSource] = useState(() => profileImageSource(coachImageUri))
+
+  useEffect(() => {
+    setAvatarSource(profileImageSource(coachImageUri))
+  }, [coachImageUri])
 
   return (
     <ProLibraryGradientFrame style={[styles.bannerFrame, { minHeight: CARD_MIN_HEIGHT }]} {...frameCommon}>
       <View style={styles.cardInner}>
         <View style={styles.leftContent}>
           <View style={styles.avatarWrap}>
-            {coachImageUri ? (
-              <Image source={{ uri: coachImageUri }} style={styles.avatar} resizeMode="cover" />
-            ) : (
-              <Image source={COACH_PHOTO} style={styles.avatar} resizeMode="cover" />
-            )}
+            <Image
+              source={avatarSource}
+              style={styles.avatar}
+              resizeMode="cover"
+              onError={() => setAvatarSource(DEFAULT_PROFILE_PICTURE)}
+            />
             <View style={styles.shieldBadge} pointerEvents="none">
               <LocalSvgAsset assetModule={SHIELD_BADGE_SVG} width={BADGE_W} height={BADGE_H} />
             </View>
@@ -129,15 +138,21 @@ export function AICoachCoachReviewBanner({
           </View>
         </View>
 
-        <View style={styles.switchRow}>
-          <Text
-            allowFontScaling={false}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-            style={[styles.switchLabel, { fontFamily: fonts.regularFont }]}
-          >
-            {t('coachBanner.sendVideoToCoach')}
-          </Text>
+        <View style={styles.switchCol}>
+          <View style={styles.switchLabelCol}>
+            <Text
+              allowFontScaling={false}
+              style={[styles.switchLabel, { fontFamily: fonts.regularFont }]}
+            >
+              {t('coachBanner.sendVideoLine1')}
+            </Text>
+            <Text
+              allowFontScaling={false}
+              style={[styles.switchLabel, { fontFamily: fonts.regularFont }]}
+            >
+              {t('coachBanner.sendVideoLine2')}
+            </Text>
+          </View>
           <View style={styles.toggleClip}>
             <SendToCoachToggle
               value={sendVideoToCoach}
@@ -180,19 +195,22 @@ const styles = StyleSheet.create({
    * Horizontal label + toggle. Must shrink on narrow widths (`flexShrink: 1` + `minWidth: 0`),
    * otherwise the row overflows the gradient frame.
    */
-  switchRow: {
+  switchCol: {
     position: 'relative',
     zIndex: 2,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
+    justifyContent: 'center',
+    gap: 6,
     paddingLeft: 8,
     paddingRight: 0,
     flexGrow: 0,
     flexShrink: 1,
     minWidth: 0,
     maxWidth: '56%',
+  },
+  switchLabelCol: {
+    alignItems: 'center',
   },
   toggleClip: {
     position: 'relative',
@@ -205,34 +223,30 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   switchLabel: {
-    flexShrink: 1,
-    minWidth: 0,
     color: 'rgba(232,240,255,0.55)',
     fontSize: 10,
     lineHeight: 13,
-    textAlign: 'right',
+    textAlign: 'center',
   },
   avatarWrap: {
     position: 'relative',
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: 'rgba(0, 187, 255, 0.6)',
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
   },
   shieldBadge: {
     position: 'absolute',
-    right: -5,
-    bottom: -3,
+    right: -4,
+    bottom: -2,
   },
   coachTextCol: {
     flex: 1,
     minWidth: 0,
   },
   coachSubtitle: {
-    color: 'rgba(255,255,255,0.65)',
+    color: '#006FFF',
     fontSize: 11,
     lineHeight: 14,
   },

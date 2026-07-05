@@ -233,6 +233,8 @@ export const esExtended = {
   },
   coachBanner: {
     sendVideoToCoach: "Enviar video al entrenador",
+    sendVideoLine1: "Enviar video",
+    sendVideoLine2: "al entrenador",
   },
   coachReview: {
     title: "Revisión del entrenador",

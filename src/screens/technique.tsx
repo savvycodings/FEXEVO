@@ -56,6 +56,7 @@ import {
   AICoachCoachReviewBanner,
   type AICoachAssignedCoach,
 } from '../components/AICoachCoachReviewBanner'
+import { hasProfileImage, profileImageToAbsoluteUri } from '../lib/defaultProfilePicture'
 import { VideoFrameCarousel, normalizeThumbnailImageUri } from '../components/VideoFrameCarousel'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientFrame } from '../components/ProLibraryGradientFrame'
@@ -335,12 +336,6 @@ function filterValidCorrectionPairs(rows: CorrectionPairRow[]): CorrectionPairRo
     if (typeof c.correctedImage === 'string' && c.correctedImage === c.originalImage) return false
     return true
   })
-}
-
-function profileImageToAbsoluteUri(image: string | null | undefined): string | null {
-  if (!image || typeof image !== 'string') return null
-  const base = DOMAIN.replace(/\/+$/, '')
-  return image.startsWith('http') ? image : `${base}${image}`
 }
 
 function SideBySideModeIcon({ color, strokeOpacity = 1 }: CorrectionModeIconProps) {
@@ -660,6 +655,23 @@ export function Technique() {
     })
   }, [correctionImages, correctionFrameInsights, enAnalysis?.diagnosis])
 
+  const poseGaugeFrames = useMemo((): CorrectionFrameInsight[] => {
+    if (displayCorrectionFrameInsights.length > 0) {
+      return displayCorrectionFrameInsights
+    }
+    if (correctionFrameInsights.length > 0) {
+      return correctionFrameInsights
+    }
+    const diagnosis =
+      typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : null
+    return parseCorrectionFrameInsights(null, 1, diagnosis)
+  }, [displayCorrectionFrameInsights, correctionFrameInsights, enAnalysis?.diagnosis])
+
+  const poseGaugeActiveIndex = Math.min(
+    activeCorrection,
+    Math.max(0, poseGaugeFrames.length - 1)
+  )
+
   const currentTrimClip = useMemo(() => {
     if (videoDurationSeconds == null || videoDurationSeconds <= 0) return null
     const totalMs = Math.round(videoDurationSeconds * 1000)
@@ -780,9 +792,10 @@ export function Technique() {
       }
       const c = list[0]
       const name = typeof c.name === 'string' && c.name.trim() ? c.name.trim() : 'Coach'
+      const absoluteImage = profileImageToAbsoluteUri(c.image)
       setAssignedCoach({
         name,
-        imageUri: profileImageToAbsoluteUri(c.image),
+        imageUri: hasProfileImage(absoluteImage) ? absoluteImage : null,
       })
       setSendVideoToCoach(true)
     } catch {
@@ -2523,6 +2536,15 @@ export function Technique() {
                       )}
 
                       {metrics && aiAnalysis?.en && (
+                        <View style={styles.poseGaugeSectionWrap}>
+                          <CorrectionFrameSelector
+                            frames={poseGaugeFrames}
+                            activeIndex={poseGaugeActiveIndex}
+                          />
+                        </View>
+                      )}
+
+                      {metrics && aiAnalysis?.en && (
                         <View style={styles.retrievalSectionWrap}>
                           <View style={styles.retrievalSectionInner}>
                             <CoachStrengthFocusInsightCards content={coachInsightCards} />
@@ -2926,17 +2948,6 @@ export function Technique() {
 
                             {correctionImages.length > 0 && (
                               <View style={styles.correctionCarousel}>
-                                {displayCorrectionFrameInsights.length > 0 ? (
-                                  <CorrectionFrameSelector
-                                    frames={displayCorrectionFrameInsights}
-                                    activeIndex={activeCorrection}
-                                    onSelect={(idx) => {
-                                      setActiveCorrection(idx)
-                                      setCompareSplit(0.5)
-                                    }}
-                                    proReferenceShot={proReferenceShot}
-                                  />
-                                ) : null}
                                 <View style={styles.correctionTabHeader}>
                                   <Text style={styles.correctionTabLabel}>{t('technique.current')}</Text>
                                   <Text style={[styles.correctionTabLabel, styles.correctionTabLabelRight]}>
@@ -4222,11 +4233,17 @@ function getStyles(theme: any) {
     retrievalSectionWrap: {
       width: '100%',
       alignSelf: 'stretch',
-      marginTop: 12,
+      marginTop: 0,
       backgroundColor: 'transparent',
       borderWidth: 0,
       borderRadius: 0,
       overflow: 'visible',
+    },
+    poseGaugeSectionWrap: {
+      width: '100%',
+      alignSelf: 'stretch',
+      marginTop: 12,
+      paddingHorizontal: 4,
     },
     retrievalSectionInner: {
       width: '100%',
@@ -4757,7 +4774,7 @@ function getStyles(theme: any) {
     },
     correctionSectionTitleRow: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 10,
       width: '100%',

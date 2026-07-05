@@ -232,6 +232,8 @@ export const enExtended = {
   },
   coachBanner: {
     sendVideoToCoach: "Send video to Coach",
+    sendVideoLine1: "Send video",
+    sendVideoLine2: "to coach",
   },
   coachReview: {
     title: "Coach review",

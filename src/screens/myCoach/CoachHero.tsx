@@ -4,7 +4,8 @@ import { ProLibraryGradientFrame } from '../../components/ProLibraryGradientFram
 import { LocalSvgAsset } from '../../components/LocalSvgAsset'
 import { useTranslation } from 'react-i18next'
 
-const COACH_PHOTO = require('../../../assets/mycoach/mycoachpfp.png')
+import { profileImageSource } from '../../lib/defaultProfilePicture'
+
 const SHIELD_BADGE_SVG = require('../../../assets/mycoach/shieldmycoach.svg')
 const UPLOAD_ICON_SVG = require('../../../assets/mycoach/uploadicon.svg')
 const BADGE_W = 18
@@ -66,11 +67,11 @@ export function MyCoachCoachHero({
       <ProLibraryGradientFrame style={styles.coachFrame} {...frameCommon}>
         <View style={styles.coachCardInner}>
           <View style={styles.avatarWrap}>
-            {coachImageUri ? (
-              <Image source={{ uri: coachImageUri }} style={styles.avatar} resizeMode="cover" />
-            ) : (
-              <Image source={COACH_PHOTO} style={styles.avatar} resizeMode="cover" />
-            )}
+            <Image
+              source={profileImageSource(coachImageUri)}
+              style={styles.avatar}
+              resizeMode="cover"
+            />
             <View style={styles.shieldBadge} pointerEvents="none">
               <LocalSvgAsset assetModule={SHIELD_BADGE_SVG} width={BADGE_W} height={BADGE_H} />
             </View>

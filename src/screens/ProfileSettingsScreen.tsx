@@ -36,6 +36,7 @@ import * as ImagePicker from "expo-image-picker";
 import { getCachedProfile, setCachedProfile } from "../lib/profile-cache";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
+import { profileImageSource } from "../lib/defaultProfilePicture";
 
 const MENU_SVG = {
   personal: require("../../assets/youpage/personalicon.svg"),
@@ -781,13 +782,11 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               activeOpacity={0.88}
               accessibilityLabel={t("profileSettingsUi.changeProfilePhoto")}
             >
-              {profileImageUri ? (
-                <Image source={{ uri: profileImageUri }} style={styles.personalHeroAvatar} />
-              ) : (
-                <View style={[styles.personalHeroAvatar, styles.personalHeroAvatarPlaceholder]}>
-                  <Ionicons name="person" size={28} color="rgba(200,220,255,0.75)" />
-                </View>
-              )}
+              <Image
+                source={profileImageSource(profileImageUri)}
+                style={styles.personalHeroAvatar}
+                resizeMode="cover"
+              />
             </TouchableOpacity>
             <Text allowFontScaling={false} style={styles.personalHeroName} numberOfLines={2}>
               {displayFullName}
@@ -1077,13 +1076,11 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               activeOpacity={0.88}
               accessibilityLabel={t("profileSettingsUi.changeProfilePhoto")}
             >
-              {profileImageUri ? (
-                <Image source={{ uri: profileImageUri }} style={styles.personalHeroAvatar} />
-              ) : (
-                <View style={[styles.personalHeroAvatar, styles.personalHeroAvatarPlaceholder]}>
-                  <Ionicons name="person" size={28} color="rgba(200,220,255,0.75)" />
-                </View>
-              )}
+              <Image
+                source={profileImageSource(profileImageUri)}
+                style={styles.personalHeroAvatar}
+                resizeMode="cover"
+              />
             </TouchableOpacity>
             <Text allowFontScaling={false} style={styles.personalHeroName} numberOfLines={2}>
               {displayFullName}

@@ -27,12 +27,12 @@ import { useTranslation } from 'react-i18next'
 import { DOMAIN } from '../../constants'
 import Svg, { Path } from 'react-native-svg'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
+import { profileImageSource } from '../lib/defaultProfilePicture'
 
 const BG = '#030A17'
 const MUTED = '#86A7D2'
 const SEND_ICON_COLOR = '#336AB4'
 const CHAT_PANEL_BG = '#041641'
-const FALLBACK_PEER_AVATAR = require('../../assets/coachs/img1.png')
 const CHAT_MSG_ICON_SVG = require('../../assets/chat/msgicon1.svg')
 const NEWVIDEO_SVG = require('../../assets/chat/newvideo.svg')
 /** Native SVG 72×13 — scale by height for the student row. */
@@ -128,8 +128,8 @@ export function CoachStudentChatScreen() {
     [theme.regularFont, theme.mediumFont, theme.semiBoldFont]
   )
 
-  const peerAvatarSource = peerImageUri ? { uri: peerImageUri } : FALLBACK_PEER_AVATAR
-  const myAvatarSource = myImageUri ? { uri: myImageUri } : FALLBACK_PEER_AVATAR
+  const peerAvatarSource = profileImageSource(peerImageUri)
+  const myAvatarSource = profileImageSource(myImageUri)
 
   const resolveSession = useCallback(async () => {
     const sessionResult = await authClient.getSession().catch(() => null)

@@ -1,18 +1,11 @@
 import React, { useContext, useMemo } from 'react'
 import { View, Text, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native'
-import Svg, { Circle, G } from 'react-native-svg'
 import { ThemeContext } from '../context'
+import { DualRingGauge, RING_LAST_WEEK, RING_THIS_WEEK } from './DualRingGauge'
 import { useSessionData } from '../context/SessionDataContext'
 import { TRAIN_CATEGORIES, type TrainCategory } from '../lib/train-taxonomy'
 import { pillarTwoLineLabels } from '../i18n/taxonomyLabels'
 import { useTranslation } from 'react-i18next'
-
-/** Outer ring = this week (matches MyCoachScoreRing actual / light). */
-const RING_THIS_WEEK = '#40C0FF'
-/** Inner ring = last week (matches MyCoachScoreRing last / dark). */
-const RING_LAST_WEEK = '#2B7CFF'
-const RING_TRACK_OUTER = 'rgba(64, 192, 255, 0.28)'
-const RING_TRACK_INNER = 'rgba(43, 124, 255, 0.22)'
 
 /** You → Rating: pillar code at full strength; two-line subheading uses this at 50% via wrapper. */
 const RATING_METRIC_LABEL = '#86A7D2'
@@ -71,132 +64,8 @@ export const PROFILE_RATING_DEMO: RatingMetricRow[] = mapApiToMetrics([
   { id: 'overhead', thisWeek: 68, lastWeek: 73 },
 ])
 
-function clamp100(v: number): number {
-  if (!Number.isFinite(v)) return 0
-  return Math.max(0, Math.min(100, v))
-}
-
-function formatScore(v: number): string {
-  const c = clamp100(v)
-  return Number.isInteger(c) ? String(c) : c.toFixed(1)
-}
-
 /** Upper cap when there is plenty of width; actual size is computed from screen so five columns fit. */
 const GAUGE_SIZE_MAX = 84
-
-function DualRingGauge({
-  thisWeek,
-  lastWeek,
-  theme,
-  size,
-}: {
-  thisWeek: number
-  lastWeek: number
-  theme: { semiBoldFont: string; mediumFont: string }
-  size: number
-}) {
-  const cx = size / 2
-  const cy = size / 2
-  const rOuter = size * 0.34
-  const rInner = size * 0.282
-  const strokeOuter = Math.max(2.6, size * 0.048)
-  const strokeInner = Math.max(2.2, size * 0.038)
-  const scoreMainSize = size >= 72 ? 12 : size >= 62 ? 11 : 10
-  const scoreLastSize = size >= 72 ? 10 : 9
-
-  const cOuter = 2 * Math.PI * rOuter
-  const cInner = 2 * Math.PI * rInner
-  const pOut = clamp100(thisWeek) / 100
-  const pIn = clamp100(lastWeek) / 100
-
-  const dashOuter = `${pOut * cOuter} ${cOuter}`
-  const dashInner = `${pIn * cInner} ${cInner}`
-
-  return (
-    <View style={[localStyles.gaugeWrap, { width: size, height: size }]}>
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={StyleSheet.absoluteFill}>
-        <G transform={`rotate(-90 ${cx} ${cy})`}>
-          <Circle
-            cx={cx}
-            cy={cy}
-            r={rOuter}
-            stroke={RING_TRACK_OUTER}
-            strokeWidth={strokeOuter}
-            fill="none"
-          />
-          <Circle
-            cx={cx}
-            cy={cy}
-            r={rInner}
-            stroke={RING_TRACK_INNER}
-            strokeWidth={strokeInner}
-            fill="none"
-          />
-          <Circle
-            cx={cx}
-            cy={cy}
-            r={rInner}
-            stroke={RING_LAST_WEEK}
-            strokeWidth={strokeInner}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray={dashInner}
-          />
-          <Circle
-            cx={cx}
-            cy={cy}
-            r={rOuter}
-            stroke={RING_THIS_WEEK}
-            strokeWidth={strokeOuter}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray={dashOuter}
-          />
-        </G>
-      </Svg>
-      <View style={localStyles.gaugeLabels} pointerEvents="none">
-        <Text
-          allowFontScaling={false}
-          style={[
-            localStyles.scoreThis,
-            { fontFamily: theme.semiBoldFont, fontSize: scoreMainSize, lineHeight: scoreMainSize + 2 },
-          ]}
-        >
-          {formatScore(thisWeek)}
-        </Text>
-        <Text
-          allowFontScaling={false}
-          style={[
-            localStyles.scoreLast,
-            { fontFamily: theme.mediumFont, fontSize: scoreLastSize, lineHeight: scoreLastSize + 2 },
-          ]}
-        >
-          {formatScore(lastWeek)}
-        </Text>
-      </View>
-    </View>
-  )
-}
-
-const localStyles = StyleSheet.create({
-  gaugeWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gaugeLabels: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 2,
-  },
-  scoreThis: {
-    color: '#2D86FF',
-  },
-  scoreLast: {
-    color: '#5260A4',
-    marginTop: 0,
-  },
-})
 
 type Props = {
   /** When set, skips API and shows these rows (tests / story). */

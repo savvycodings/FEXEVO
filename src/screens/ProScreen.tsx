@@ -22,6 +22,7 @@ import { MainTabBarChrome } from '../components/MainTabBarChrome'
 import type { MainStackParamList } from '../navigation/types'
 import { getCachedProfile } from '../lib/profile-cache'
 import { DOMAIN } from '../../constants'
+import { profileImageSource } from '../lib/defaultProfilePicture'
 
 const PRO_BADGE_SVG = require('../../assets/pro.svg')
 const SWITCH_ON = require('../../assets/proscreen/switchon.svg')
@@ -122,11 +123,11 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
           accessibilityLabel="Open profile"
         >
           <View style={styles.avatarWrap}>
-            {profileImageUri ? (
-              <Image source={{ uri: profileImageUri }} style={styles.avatarImage} resizeMode="cover" />
-            ) : (
-              <Ionicons name="person" size={16} color="#FFFFFF" />
-            )}
+            <Image
+              source={profileImageSource(profileImageUri)}
+              style={styles.avatarImage}
+              resizeMode="cover"
+            />
           </View>
           <Text numberOfLines={1} allowFontScaling={false} style={styles.headerName}>
             {profileName}
@@ -169,50 +170,48 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
             <Text allowFontScaling={false} style={styles.heroSubtitle}>
               Improve your game.{'\n'}Unlock your potential.
             </Text>
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setBilling('monthly')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+              >
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.toggleLabel, billing === 'monthly' && styles.toggleLabelActive]}
+                >
+                  Monthly
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setBilling(billing === 'monthly' ? 'annual' : 'monthly')}
+                accessibilityLabel="Toggle billing cycle"
+              >
+                <LocalSvgAsset
+                  assetModule={billing === 'annual' ? SWITCH_ON : SWITCH_OFF}
+                  width={46}
+                  height={24}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setBilling('annual')}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+              >
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.toggleLabel, billing === 'annual' && styles.toggleLabelActive]}
+                >
+                  Anual
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
         {/* Plan comparison */}
         <View style={styles.comparison}>
-          {/* Billing toggle, sitting just above the Free/Pro headers */}
-          <View style={styles.toggleRow}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setBilling('monthly')}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[styles.toggleLabel, billing === 'monthly' && styles.toggleLabelActive]}
-              >
-                Monthly
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setBilling(billing === 'monthly' ? 'annual' : 'monthly')}
-              accessibilityLabel="Toggle billing cycle"
-            >
-              <LocalSvgAsset
-                assetModule={billing === 'annual' ? SWITCH_ON : SWITCH_OFF}
-                width={46}
-                height={24}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setBilling('annual')}
-              hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[styles.toggleLabel, billing === 'annual' && styles.toggleLabelActive]}
-              >
-                Anual
-              </Text>
-            </TouchableOpacity>
-          </View>
-
           {/* Headers (above the cards) */}
           <View style={styles.planHeaderRow}>
             <View style={styles.planHeaderColFree}>
@@ -233,20 +232,15 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
 
             <View style={styles.planHeaderColPro}>
               <View style={styles.proTitleRow}>
+                <Image source={CROWN} style={styles.crown} resizeMode="contain" />
                 <Text allowFontScaling={false} style={styles.proTitle}>
                   Pro
                 </Text>
-                <Image source={CROWN} style={styles.crown} resizeMode="contain" />
-                <LinearGradient
-                  colors={['#00BBFF', '#0022FF']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.popularBadge}
-                >
+                <View style={styles.popularBadge}>
                   <Text allowFontScaling={false} style={styles.popularBadgeText}>
                     MOST POPULAR
                   </Text>
-                </LinearGradient>
+                </View>
               </View>
               <Text allowFontScaling={false} style={styles.proSubtitle}>
                 Everything you need to Excel
@@ -295,7 +289,7 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
               borderRadius={14}
               innerBorderRadius={12}
               strokeWidth={2}
-              gradientVariant="accent"
+              gradientVariant="default"
               innerStyle={styles.proCardInner}
             >
               {FEATURE_ROWS.map((row, i) => (
@@ -410,7 +404,8 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       top: 0,
       bottom: 0,
       maxWidth: winW * 0.62,
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
+      paddingTop: 36,
       zIndex: 3,
     },
     heroTitle: {
@@ -431,8 +426,7 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      marginTop: 4,
-      marginBottom: 14,
+      marginTop: 12,
     },
     toggleLabel: {
       color: '#86A7D2',
@@ -461,12 +455,13 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
     },
     planHeaderRow: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      alignItems: 'flex-end',
       gap: cardGap,
       marginBottom: 12,
     },
     planHeaderColFree: {
       width: freeCardWidth,
+      marginBottom: 8,
     },
     planHeaderColPro: {
       width: proCardWidth,
@@ -510,8 +505,8 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       marginTop: 6,
     },
     crown: {
-      width: 28,
-      height: 22,
+      width: 34,
+      height: 27,
     },
     proTitle: {
       color: '#0059FF',
@@ -521,13 +516,18 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
     },
     popularBadge: {
       borderRadius: 999,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      minHeight: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#0059FF',
     },
     popularBadgeText: {
       color: '#FFFFFF',
       fontFamily: theme.semiBoldFont,
       fontSize: 9,
+      lineHeight: 11,
       letterSpacing: 0.4,
     },
     proSubtitle: {
@@ -550,7 +550,7 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       lineHeight: 30,
     },
     proPriceSub: {
-      color: '#86A7D2',
+      color: 'rgba(255, 255, 255, 0.5)',
       fontFamily: theme.regularFont,
       fontSize: 10,
       lineHeight: 13,
@@ -574,7 +574,7 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       width: proCardWidth,
     },
     proCardInner: {
-      backgroundColor: 'rgba(7, 30, 78, 0.95)',
+      backgroundColor: '#002070',
       paddingHorizontal: 12,
       paddingVertical: 2,
     },
@@ -587,12 +587,12 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       minHeight: 40,
     },
     featureCellBorder: {
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: 'rgba(134, 167, 210, 0.2)',
+      borderBottomWidth: 1,
+      borderBottomColor: '#86A7D233',
     },
     featureCellBorderFree: {
       borderBottomWidth: 1,
-      borderBottomColor: 'rgba(0, 184, 255, 0.38)',
+      borderBottomColor: '#86A7D233',
     },
     featureLabelFree: {
       flex: 1,

@@ -20,12 +20,12 @@ import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { ProLibraryGradientFrame } from '../components/ProLibraryGradientFrame'
 import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
 import { useTranslation } from 'react-i18next'
+import { profileImageSource } from '../lib/defaultProfilePicture'
 
 const BG = '#030A17'
 const MUTED = '#86A7D2'
 const WRONG = '#FF005D'
 const GOOD = '#00FFC3'
-const FALLBACK_AVATAR = require('../../assets/coachs/img1.png')
 const THUMB_PLACEHOLDER = require('../../assets/coachs/img1.png')
 const CHAT_ICON = require('../../assets/mystudents/Frame.svg')
 const NEWVIDEO_SVG = require('../../assets/chat/newvideo.svg')
@@ -206,7 +206,7 @@ export function StudentProfileScreen() {
     [theme.regularFont, theme.mediumFont, theme.semiBoldFont]
   )
 
-  const peerAvatarSource = peerImageUri ? { uri: peerImageUri } : FALLBACK_AVATAR
+  const peerAvatarSource = profileImageSource(peerImageUri)
   const horizontalPad = 20
   const cardWidth = winW - horizontalPad * 2
 

@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { CompositeNavigationProp } from '@react-navigation/native'
 import { authClient } from '../lib/auth-client'
-import { DOMAIN } from '../../constants'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { MainStackParamList, MainTabParamList, MyCoachTabStackParamList } from '../navigation/types'
@@ -37,7 +36,10 @@ import {
 } from '../lib/coachPinnedStudents'
 import { useTranslation } from 'react-i18next'
 
-const FALLBACK_STUDENT_AVATAR = require('../../assets/coachs/img1.png')
+import {
+  profileImageSourceFromRaw,
+  profileImageToAbsoluteUri,
+} from '../lib/defaultProfilePicture'
 
 type MyCoachScreenNav = CompositeNavigationProp<
   NativeStackNavigationProp<MyCoachTabStackParamList, 'MyCoachMain'>,
@@ -57,23 +59,9 @@ type ApiCoachStudent = {
   lastWeekScore?: number | null
 }
 
-function profileImageToAbsoluteUri(raw: string | null | undefined): string | null {
-  if (!raw || typeof raw !== 'string') return null
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  if (trimmed.startsWith('http')) return trimmed
-  const rel = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
-  return `${DOMAIN.replace(/\/+$/, '')}${rel}`
-}
 
 function coachStudentAvatarSource(image: string | null): ImageSourcePropType {
-  if (!image || typeof image !== 'string') return FALLBACK_STUDENT_AVATAR
-  const base = DOMAIN.replace(/\/+$/, '')
-  const trimmed = image.trim()
-  if (!trimmed) return FALLBACK_STUDENT_AVATAR
-  const rel = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
-  const uri = trimmed.startsWith('http') ? trimmed : `${base}${rel}`
-  return { uri }
+  return profileImageSourceFromRaw(image)
 }
 
 const ADD_NEW_ICON_SVG = require('../../assets/mycoach/addnew.svg')

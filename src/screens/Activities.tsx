@@ -35,6 +35,7 @@ import { ProLibraryGradientProgressBar } from '../components'
 import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { useTranslation } from 'react-i18next'
+import { profileImageSource } from '../lib/defaultProfilePicture'
 
 const AI_COACH_PLACEHOLDER = require('../../assets/actiities/aicoachplacehokder.svg')
 const YOU_SHARE_ICON = require('../../assets/youpage/shareicon.svg')
@@ -362,13 +363,11 @@ function ActivitiesDayDetail({
                   onPress={() => onOpenReview?.(sub.reviewId)}
                   android_ripple={{ color: 'rgba(255,255,255,0.08)' }}
                 >
-                  {sub.studentImage ? (
-                    <Image source={{ uri: sub.studentImage }} style={styles.subAvatar} />
-                  ) : (
-                    <View style={[styles.subAvatar, styles.subAvatarFallback]}>
-                      <Ionicons name="person" size={18} color={C.sky} />
-                    </View>
-                  )}
+                  <Image
+                    source={profileImageSource(sub.studentImage)}
+                    style={styles.subAvatar}
+                    resizeMode="cover"
+                  />
                   <View style={styles.subInfoCol}>
                     <Text allowFontScaling={false} style={styles.subName} numberOfLines={1}>
                       {sub.studentName}

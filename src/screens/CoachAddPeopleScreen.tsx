@@ -22,6 +22,7 @@ import { getCachedProfile } from '../lib/profile-cache'
 import { DOMAIN, mainHeaderKeyboardOffset } from '../../constants'
 import { authClient } from '../lib/auth-client'
 import type { MainStackParamList } from '../navigation/types'
+import { profileImageSource } from '../lib/defaultProfilePicture'
 
 type Nav = NativeStackNavigationProp<MainStackParamList>
 
@@ -173,13 +174,11 @@ export function CoachAddPeopleScreen() {
           disabled={!!addingUserId}
           accessibilityLabel={t('coachAdd.addPerson', { name: item.name })}
         >
-          {uri ? (
-            <Image source={{ uri }} style={styles.rowAvatar} resizeMode="cover" />
-          ) : (
-            <View style={[styles.rowAvatar, styles.rowAvatarPlaceholder]}>
-              <Ionicons name="person" size={22} color="rgba(255,255,255,0.5)" />
-            </View>
-          )}
+          <Image
+            source={profileImageSource(uri)}
+            style={styles.rowAvatar}
+            resizeMode="cover"
+          />
           <View style={styles.rowText}>
             <Text allowFontScaling={false} numberOfLines={1} style={[styles.rowName, { fontFamily: theme.semiBoldFont }]}>
               {item.name}

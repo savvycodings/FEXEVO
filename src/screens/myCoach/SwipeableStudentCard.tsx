@@ -22,7 +22,12 @@ const SWIPE_MSG_SVG = require('../../../assets/mystudents/message.svg')
 const SWIPE_VIDEO_SVG = require('../../../assets/mystudents/videocall.svg')
 const SWIPE_PIN_SVG = require('../../../assets/mystudents/pin.svg')
 const STUDENT_PIN_ICON = require('../../../assets/mystudents/pinicon.svg')
+const NEWVIDEO_SVG = require('../../../assets/mystudents/newvideo.svg')
 const SWIPE_ACTION_ICON_SIZE = 36
+const NEWVIDEO_ROW_ICON = 14
+/** Single badge row under location — fixed height so all cards match. */
+const BADGE_ROW_SLOT_HEIGHT = 18
+const BADGE_ROW_SLOT_MARGIN_TOP = 6
 
 const SPRING_CFG = { damping: 22, stiffness: 220, mass: 0.8 } as const
 const ACTION_BTN_WIDTH = 78
@@ -31,6 +36,7 @@ const ACTIONS_WIDTH = ACTION_BTN_WIDTH * ACTION_COUNT
 const BAR_EDGE_WIDTH = 5
 const BAR_EDGE_HEIGHT = 36
 const BAR_EDGE_CENTER_OFFSET = BAR_EDGE_HEIGHT / 2
+const STUDENT_AVATAR_SIZE = 68
 
 type ThemeFonts = {
   semiBoldFont: string
@@ -184,21 +190,10 @@ export function MyCoachSwipeableStudentCard({
   }
 
   const pendingReviewId = student.pendingCoachReviewId ?? null
+  const showBadgeRow = isPinned || student.notiRow !== 'none'
 
   return (
     <View style={styles.swipeOuter} onLayout={handleLayout}>
-      {pendingReviewId && onOpenCoachReview ? (
-        <Pressable
-          style={styles.reviewPill}
-          onPress={() => onOpenCoachReview(pendingReviewId)}
-          accessibilityLabel="Open coach video review"
-        >
-          <Ionicons name="videocam" size={14} color="#FFFFFF" />
-          <Text allowFontScaling={false} style={[styles.reviewPillText, { fontFamily: fonts.semiBoldFont }]}>
-            New video
-          </Text>
-        </Pressable>
-      ) : null}
       <Animated.View style={[styles.actionsRow, actionsRowStyle]}>
         <Animated.View style={pinkLeftBarStyle} pointerEvents="none">
           <View style={styles.pinkBarEdge} />
@@ -239,28 +234,46 @@ export function MyCoachSwipeableStudentCard({
             <Text allowFontScaling={false} style={[styles.studentLocation, { fontFamily: fonts.regularFont }]}>
               {student.location}
             </Text>
-            {isPinned ? (
-              <View style={styles.studentPinRow}>
-                <LocalSvgAsset assetModule={STUDENT_PIN_ICON} width={12} height={12} />
-              </View>
-            ) : null}
-            {student.notiRow !== 'none' && (
-              <View style={styles.studentNotiRow}>
-                {student.notiRow === 'pin-msg-noti' && (
-                  <>
+            <View style={styles.studentBadgeSlot}>
+              {showBadgeRow ? (
+                <View style={styles.studentBadgeRow}>
+                  {isPinned ? (
+                    <LocalSvgAsset assetModule={STUDENT_PIN_ICON} width={12} height={12} />
+                  ) : student.notiRow === 'pin-msg-noti' ? (
                     <Ionicons name="pin" size={14} color="#64748B" />
+                  ) : null}
+                  {student.notiRow === 'pin-msg-noti' ? (
                     <Ionicons name="chatbubble-outline" size={14} color="#64748B" />
-                    <Ionicons name="notifications-outline" size={14} color="#64748B" />
-                  </>
-                )}
-                {student.notiRow === 'noti-only' && (
-                  <Ionicons name="notifications-outline" size={14} color="#64748B" />
-                )}
-                <Text allowFontScaling={false} style={[styles.studentVideo, { fontFamily: fonts.regularFont }]}>
-                  New video
-                </Text>
-              </View>
-            )}
+                  ) : null}
+                  {student.notiRow !== 'none' ? (
+                    <Pressable
+                      style={styles.studentNewVideoGroup}
+                      onPress={
+                        pendingReviewId && onOpenCoachReview
+                          ? () => onOpenCoachReview(pendingReviewId)
+                          : undefined
+                      }
+                      disabled={!pendingReviewId || !onOpenCoachReview}
+                      accessibilityRole={pendingReviewId && onOpenCoachReview ? 'button' : undefined}
+                      accessibilityLabel="Open coach video review"
+                    >
+                      <LocalSvgAsset
+                        assetModule={NEWVIDEO_SVG}
+                        width={NEWVIDEO_ROW_ICON}
+                        height={NEWVIDEO_ROW_ICON}
+                      />
+                      <Text
+                        allowFontScaling={false}
+                        numberOfLines={1}
+                        style={[styles.studentVideo, { fontFamily: fonts.regularFont }]}
+                      >
+                        New video
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
             {viewerIsCoach && onMakeCoach && student.coachStudentRole !== 'coach' ? (
               <TouchableOpacity
                 activeOpacity={0.88}
@@ -299,27 +312,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
-  },
-  reviewPill: {
-    position: 'absolute',
-    right: 10,
-    top: 8,
-    zIndex: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: '#1D4ED8',
-    borderWidth: 1,
-    borderColor: 'rgba(147, 197, 253, 0.8)',
-  },
-  reviewPillText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    letterSpacing: 0.2,
   },
   actionsRow: {
     ...StyleSheet.absoluteFillObject,
@@ -405,11 +397,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    minHeight: STUDENT_AVATAR_SIZE + 24,
   },
   studentAvatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: STUDENT_AVATAR_SIZE,
+    height: STUDENT_AVATAR_SIZE,
+    borderRadius: STUDENT_AVATAR_SIZE / 2,
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#2AB4FF',
@@ -426,19 +419,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 1,
   },
-  studentPinRow: {
-    marginTop: 4,
+  studentBadgeSlot: {
+    height: BADGE_ROW_SLOT_HEIGHT,
+    marginTop: BADGE_ROW_SLOT_MARGIN_TOP,
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  studentNotiRow: {
+  studentBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: 6,
-    marginTop: 6,
+    minWidth: 0,
+  },
+  studentNewVideoGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: 6,
+    minWidth: 0,
   },
   studentVideo: {
     color: '#9AA2AF',
     fontSize: 13,
-    marginLeft: 2,
+    flexShrink: 1,
   },
 })
