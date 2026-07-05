@@ -23,14 +23,17 @@ function withNgrokHeaders(headers: Record<string, string>, url: string): Record<
 }
 
 function networkMessage(status: number, rawText: string): string {
+  if (rawText.includes("ERR_NGROK_8012") || rawText.includes("failed to establish a connection to the upstream")) {
+    return "The API tunnel is offline. If you use ngrok locally, start it — otherwise point EXPO_PUBLIC_BACKEND_URL at your Railway URL (https://bexevo-production.up.railway.app/).";
+  }
   if (status === 404) {
-    return "Signup API not found. Restart the server and make sure app .env EXPO_PUBLIC_BACKEND_URL matches your active ngrok tunnel.";
+    return "Signup API not found. Deploy the latest server code to Railway and restart the app after changing EXPO_PUBLIC_BACKEND_URL.";
   }
   if (status === 0) {
-    return "Could not reach the server. Check your connection and that EXPO_PUBLIC_BACKEND_URL matches your ngrok tunnel.";
+    return "Could not reach the server. Check your internet connection and EXPO_PUBLIC_BACKEND_URL.";
   }
   if (rawText.trim().startsWith("<!DOCTYPE") || rawText.trim().startsWith("<html")) {
-    return "Received an HTML page instead of JSON (often an ngrok warning). Update EXPO_PUBLIC_BACKEND_URL to your active ngrok URL.";
+    return "Received an HTML page instead of JSON. Check that EXPO_PUBLIC_BACKEND_URL points at your Railway backend.";
   }
   if (status >= 500) {
     return "Server error while sending the code. Check server logs for [SignupVerification].";
