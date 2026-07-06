@@ -15,6 +15,8 @@ export type StudentUploadRow = {
   score: number | null
   lastScore: number | null
   commentCount: number
+  goodCommentCount: number
+  badCommentCount: number
   rating: string | null
   coachReviewStatus: string | null
   createdAt: string
@@ -52,6 +54,8 @@ export async function fetchStudentUploadsForCoach(
     score: typeof row.score === 'number' ? row.score : null,
     lastScore: typeof row.lastScore === 'number' ? row.lastScore : null,
     commentCount: typeof row.commentCount === 'number' ? row.commentCount : 0,
+    goodCommentCount: typeof row.goodCommentCount === 'number' ? row.goodCommentCount : 0,
+    badCommentCount: typeof row.badCommentCount === 'number' ? row.badCommentCount : 0,
     rating: typeof row.rating === 'string' ? row.rating : null,
     coachReviewStatus: row.coachReviewStatus ?? null,
     createdAt: row.createdAt ?? new Date(0).toISOString(),

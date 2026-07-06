@@ -28,7 +28,6 @@ import { fetchPendingCoachReviewIdForStudent } from '../lib/coachStudentPendingR
 import { fetchStudentUploadsForCoach, type StudentUploadRow } from '../lib/coachStudentUploadsApi'
 import { getMainStackNavigation } from '../lib/mainStackNavigation'
 import { displayTrainShotTitle } from '../lib/trainShotDisplay'
-import { techniqueQualityTone } from '../lib/technique-quality'
 import { DOMAIN } from '../../constants'
 
 const BG = '#030A17'
@@ -38,6 +37,9 @@ const GOOD = '#00FFC3'
 const CHAT_ICON = require('../../assets/mystudents/Frame.svg')
 const NEWVIDEO_SVG = require('../../assets/chat/newvideo.svg')
 const PLAY_BUTTON_SVG = require('../../assets/mystudents/playbutton.svg')
+const GOOD_COMMENT_ICON = require('../../assets/videoanalysis/good.svg')
+const BAD_COMMENT_ICON = require('../../assets/videoanalysis/bad.svg')
+const MIXED_COMMENT_ICON = require('../../assets/videoanalysis/badandgood.svg')
 
 type Nav = NativeStackNavigationProp<MyCoachTabStackParamList, 'StudentProfile'>
 type R = RouteProp<MyCoachTabStackParamList, 'StudentProfile'>
@@ -58,13 +60,18 @@ type UploadItem = {
   score: number | null
   lastScore?: number
   comments?: number
-  status: 'mixed' | 'good' | 'coach'
+  commentTone?: 'good' | 'bad' | 'both'
+  status: 'good' | 'bad' | 'both' | 'coach'
 }
 
-function videoUri(path: string): string {
-  const base = DOMAIN.replace(/\/+$/, '')
-  const p = path.startsWith('/') ? path : `/${path}`
-  return `${base}${p}`
+function deriveCommentTone(
+  goodCount: number,
+  badCount: number
+): UploadItem['commentTone'] {
+  if (goodCount <= 0 && badCount <= 0) return undefined
+  if (goodCount > 0 && badCount > 0) return 'both'
+  if (badCount > 0) return 'bad'
+  return 'good'
 }
 
 function mapUploadRow(row: {
@@ -77,15 +84,20 @@ function mapUploadRow(row: {
   score: number | null
   lastScore: number | null
   commentCount: number
-  rating: string | null
+  goodCommentCount: number
+  badCommentCount: number
 }): UploadItem {
   const comments = row.commentCount > 0 ? row.commentCount : undefined
+  const commentTone = deriveCommentTone(row.goodCommentCount, row.badCommentCount)
   let status: UploadItem['status'] = 'good'
   if (row.kind === 'coach_sent' || row.subtitle === 'coach') {
     status = 'coach'
-  } else if (comments) {
-    const tone = techniqueQualityTone({ rating: row.rating, score: row.score })
-    status = tone === 'bad' ? 'mixed' : 'good'
+  } else if (commentTone === 'both') {
+    status = 'both'
+  } else if (commentTone === 'bad') {
+    status = 'bad'
+  } else if (commentTone === 'good') {
+    status = 'good'
   }
   return {
     id: row.id,
@@ -96,8 +108,15 @@ function mapUploadRow(row: {
     score: row.score,
     lastScore: row.lastScore ?? undefined,
     comments,
+    commentTone,
     status,
   }
+}
+
+function videoUri(path: string): string {
+  const base = DOMAIN.replace(/\/+$/, '')
+  const p = path.startsWith('/') ? path : `/${path}`
+  return `${base}${p}`
 }
 
 const WEEKDAY_BASE: Pick<ScheduleDay, 'key' | 'label'>[] = [
@@ -159,13 +178,14 @@ const NEWVIDEO_ROW_W = Math.round((72 / 13) * NEWVIDEO_ROW_H)
 const UPLOAD_ROW_H = 96
 const PROFILE_AVATAR_SIZE = 72
 
-function UploadOverlapDots() {
-  return (
-    <View style={styles.uploadOverlapDots}>
-      <View style={[styles.uploadOverlapDot, styles.uploadOverlapDotWrong]} />
-      <View style={[styles.uploadOverlapDot, styles.uploadOverlapDotGood]} />
-    </View>
-  )
+function UploadCommentIcon({ tone }: { tone: NonNullable<UploadItem['commentTone']> }) {
+  if (tone === 'both') {
+    return <LocalSvgAsset assetModule={MIXED_COMMENT_ICON} width={12} height={8} />
+  }
+  if (tone === 'bad') {
+    return <LocalSvgAsset assetModule={BAD_COMMENT_ICON} width={8} height={8} />
+  }
+  return <LocalSvgAsset assetModule={GOOD_COMMENT_ICON} width={8} height={8} />
 }
 
 function UploadScoreBar({ score, lastScore = 0 }: { score: number; lastScore?: number }) {
@@ -243,13 +263,9 @@ function UploadCard({
               </Text>
             ) : null}
           </View>
-          {item.comments != null && item.comments > 0 ? (
+          {item.comments != null && item.comments > 0 && item.commentTone ? (
             <View style={styles.uploadCommentsPill}>
-              {item.status === 'mixed' ? (
-                <UploadOverlapDots />
-              ) : (
-                <View style={[styles.uploadStatusDot, { backgroundColor: GOOD }]} />
-              )}
+              <UploadCommentIcon tone={item.commentTone} />
               <Text allowFontScaling={false} style={[styles.uploadComments, { fontFamily: fonts.mediumFont }]}>
                 {t('studentProfile.comments', { count: item.comments })}
               </Text>
@@ -806,33 +822,6 @@ const styles = StyleSheet.create({
     gap: 5,
     flexShrink: 0,
     marginTop: 1,
-  },
-  uploadOverlapDots: {
-    width: 18,
-    height: 11,
-    position: 'relative',
-  },
-  uploadOverlapDot: {
-    position: 'absolute',
-    top: 0,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  uploadOverlapDotWrong: {
-    left: 0,
-    backgroundColor: '#FF005D',
-    zIndex: 1,
-  },
-  uploadOverlapDotGood: {
-    left: 8,
-    backgroundColor: '#00FFC3',
-    zIndex: 2,
-  },
-  uploadStatusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
   },
   uploadComments: {
     color: '#64748B',

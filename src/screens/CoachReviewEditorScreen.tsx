@@ -10,6 +10,7 @@ import {
   Image,
   PanResponder,
   Platform,
+  Keyboard,
   useWindowDimensions,
 } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
@@ -62,7 +63,7 @@ const BRUSH_MIN = 3
 const BRUSH_MAX = 16
 
 type Stroke = { d: string; color: string; width: number }
-type EditorAnnotation = ReviewAnnotation & { tone?: 'wrong' | 'good' }
+type EditorAnnotation = ReviewAnnotation & { tone?: 'wrong' | 'good'; clientId?: string }
 
 type ReviewPayload = {
   id: string
@@ -479,45 +480,53 @@ export function CoachReviewEditorScreen() {
     })
   }
 
-  async function buildAnnotation(tone: 'good' | 'wrong', commentText: string): Promise<EditorAnnotation | null> {
-    const trimmed = commentText.trim()
-    const hasDrawing = strokes.length > 0
-    if (!trimmed && !hasDrawing) return null
-
-    let imageUri = ''
-    if (hasDrawing && boxRef.current) {
-      try {
-        const base64 = await captureRef(boxRef, { format: 'png', quality: 0.92, result: 'base64' })
-        imageUri = base64 ? `data:image/png;base64,${base64}` : ''
-      } catch {
-        imageUri = ''
-      }
-    }
-
-    const portable = imageUri ? await toPortableImageUri(imageUri) : ''
-    return {
-      imageUri: portable || imageUri,
-      comment: trimmed,
-      timeMs: positionMs,
-      tone,
-    }
-  }
-
-  async function sendComment(tone: 'good' | 'wrong') {
+  function sendComment(tone: 'good' | 'wrong') {
+    Keyboard.dismiss()
     const draft = tone === 'good' ? goodCommentDraft : badCommentDraft
-    if (!draft.trim()) return
-    if (!frozen) {
-      await freezeFrame(positionMs)
-    }
-    const ann = await buildAnnotation(tone, draft)
-    if (!ann) return
-    setAnnotations((prev) => [...prev, ann])
-    strokesRef.current = []
-    setStrokes([])
-    setRedoStack([])
-    setCurrentPath('')
+    const trimmed = draft.trim()
+    if (!trimmed) return
+
+    const clientId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const captureTimeMs = positionMs
+    const hasDrawing = strokes.length > 0
+
     if (tone === 'good') setGoodCommentDraft('')
     else setBadCommentDraft('')
+
+    setAnnotations((prev) => [
+      ...prev,
+      { clientId, comment: trimmed, timeMs: captureTimeMs, tone, imageUri: '' },
+    ])
+
+    if (!hasDrawing) {
+      strokesRef.current = []
+      setStrokes([])
+      setRedoStack([])
+      setCurrentPath('')
+      return
+    }
+
+    void (async () => {
+      let imageUri = ''
+      if (boxRef.current) {
+        try {
+          const base64 = await captureRef(boxRef, { format: 'png', quality: 0.92, result: 'base64' })
+          imageUri = base64 ? `data:image/png;base64,${base64}` : ''
+        } catch {
+          imageUri = ''
+        }
+      }
+
+      strokesRef.current = []
+      setStrokes([])
+      setRedoStack([])
+      setCurrentPath('')
+
+      if (!imageUri) return
+      setAnnotations((prev) =>
+        prev.map((ann) => (ann.clientId === clientId ? { ...ann, imageUri, clientId: undefined } : ann))
+      )
+    })()
   }
 
   async function submit() {
@@ -778,7 +787,7 @@ export function CoachReviewEditorScreen() {
                   style={[styles.commentInput, { fontFamily: theme.regularFont }]}
                 />
                 <TouchableOpacity
-                  onPress={() => void sendComment('good')}
+                  onPress={() => sendComment('good')}
                   activeOpacity={0.85}
                   hitSlop={6}
                   style={styles.commentSendBtn}
@@ -800,7 +809,7 @@ export function CoachReviewEditorScreen() {
                   style={[styles.commentInput, { fontFamily: theme.regularFont }]}
                 />
                 <TouchableOpacity
-                  onPress={() => void sendComment('wrong')}
+                  onPress={() => sendComment('wrong')}
                   activeOpacity={0.85}
                   hitSlop={6}
                   style={styles.commentSendBtn}
@@ -816,7 +825,7 @@ export function CoachReviewEditorScreen() {
             <View style={styles.annotationsSection}>
               <View style={styles.annotationsDivider} />
               {annotations.map((ann, idx) => (
-                <View key={`${ann.timeMs}-${idx}`} style={styles.annotationItem}>
+                <View key={ann.clientId ?? `${ann.timeMs}-${idx}`} style={styles.annotationItem}>
                   <View style={styles.annotationHeaderRow}>
                     <Text allowFontScaling={false} style={[styles.annotationLabel, { fontFamily: theme.regularFont }]}>
                       {t('coachReview.annotationComment')}

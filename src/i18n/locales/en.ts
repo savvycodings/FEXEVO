@@ -239,6 +239,7 @@ export const en = {
     aiCoachSummary: "AI Coach summary",
     recommendations: "Recommendations",
     coachReview: "Coach review",
+    coachComments: "Coach comments",
     aiCoachFeedback: "AI Coach feedback",
     session: "Session",
     stroke: "Stroke",

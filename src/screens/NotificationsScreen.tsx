@@ -25,7 +25,7 @@ const TICK_ICON = require('../../assets/coachs/tickicon.svg')
 const MSG_ICON = require('../../assets/coachs/msgicon.svg')
 const FOLLOWER_ICON = require('../../assets/coachs/followericon.svg')
 
-const ICON_SIZE = 40
+const ICON_SIZE = 52
 
 type ApiNotification = {
   id: string
@@ -41,7 +41,12 @@ type ApiNotification = {
 function formatNotiTime(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  const month = d.toLocaleString('en-US', { month: 'short' }).toLowerCase()
+  const day = d.getDate()
+  const time = d
+    .toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    .toLowerCase()
+  return `${month} ${day} - ${time}`
 }
 
 type Nav = NativeStackNavigationProp<MainStackParamList>
@@ -266,7 +271,7 @@ function getStyles(theme: any) {
     rowTime: {
       fontFamily: theme.regularFont,
       fontSize: 13,
-      color: '#5B9DFF',
+      color: '#86A7D2',
       marginTop: 6,
       ...Platform.select({
         android: { includeFontPadding: false },

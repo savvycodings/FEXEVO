@@ -239,6 +239,7 @@ export const es = {
     aiCoachSummary: "Resumen AI Coach",
     recommendations: "Recomendaciones",
     coachReview: "Revisión del entrenador",
+    coachComments: "Comentarios del entrenador",
     aiCoachFeedback: "Feedback AI Coach",
     session: "Sesión",
     stroke: "Golpe",

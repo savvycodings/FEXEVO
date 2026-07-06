@@ -48,6 +48,8 @@ import { proLibraryChrome } from '../theme/proLibraryChrome'
 const API_ROOT = DOMAIN.replace(/\/+$/, '')
 
 const ACTIVITIES_STAR_SVG = require('../../assets/actiities/star.svg')
+const GOOD_INDICATOR_ICON = require('../../assets/videoanalysis/goodindicator.svg')
+const BAD_INDICATOR_ICON = require('../../assets/videoanalysis/badindicaor.svg')
 const ACTIVITIES_STAR_FILLED_SVG = require('../../assets/actiities/star-filled.svg')
 /** Back chevron + favorites star outline (matches `star.svg` stroke). */
 const NAV_ICON_TINT = '#86A7D2'
@@ -83,6 +85,14 @@ type CoachAnnotation = {
   imageUri: string
   comment: string
   timeMs: number
+  tone?: 'good' | 'wrong'
+}
+
+function formatAnnotationTime(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000))
+  const min = Math.floor(totalSec / 60)
+  const sec = totalSec % 60
+  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}:00`
 }
 
 function isSafeImageUri(value: unknown): value is string {
@@ -184,8 +194,10 @@ function parseCoachAnnotations(input: unknown): CoachAnnotation[] {
       const comment = typeof r.comment === 'string' ? r.comment : ''
       const timeMsRaw = r.timeMs
       const timeMs = typeof timeMsRaw === 'number' && Number.isFinite(timeMsRaw) ? timeMsRaw : 0
+      const toneRaw = r.tone
+      const tone = toneRaw === 'good' || toneRaw === 'wrong' ? toneRaw : undefined
       if (!imageUri && !comment.trim()) return null
-      return { imageUri, comment, timeMs }
+      return { imageUri, comment, timeMs, tone }
     })
     .filter((r): r is CoachAnnotation => !!r)
 }
@@ -442,38 +454,90 @@ function getStyles(theme: any) {
       flexShrink: 1,
     },
     coachAnnWrap: {
-      marginTop: 12,
-      gap: 10,
+      gap: 16,
     },
-    coachAnnCard: {
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: 'rgba(0, 184, 255, 0.25)',
-      backgroundColor: 'rgba(0, 20, 53, 0.95)',
+    coachCommentsTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 15,
+      color: '#FFFFFF',
+      marginTop: 16,
+      marginBottom: 0,
+    },
+    coachCommentsTitleStandalone: {
+      marginTop: 0,
+      paddingHorizontal: 14,
+      paddingTop: 14,
+    },
+    coachReviewPanelAttached: {
+      backgroundColor: VA.card,
+      marginHorizontal: -16,
+      marginBottom: -16,
+      marginTop: 12,
+      paddingHorizontal: 14,
+      paddingTop: 14,
+      paddingBottom: 16,
+      borderBottomLeftRadius: 16,
+      borderBottomRightRadius: 16,
       overflow: 'hidden',
+    },
+    extraCardCoachOnly: {
+      paddingHorizontal: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+      backgroundColor: VA.card,
+      overflow: 'hidden',
+    },
+    coachReviewPanelStandalone: {
+      paddingHorizontal: 14,
+      paddingTop: 14,
+      paddingBottom: 16,
+    },
+    coachReviewFeedback: {
+      fontFamily: theme.regularFont,
+      fontSize: 14,
+      color: 'rgba(232, 240, 255, 0.88)',
+      lineHeight: 20,
+    },
+    coachAnnotationsDivider: {
+      height: 1,
+      backgroundColor: 'rgba(255, 255, 255, 0.12)',
+      marginVertical: 14,
+    },
+    coachAnnItem: {
+      gap: 8,
+    },
+    coachAnnHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    coachAnnLabel: {
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      color: 'rgba(94, 123, 166, 0.9)',
+    },
+    coachAnnMetaRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    coachAnnTimestamp: {
+      fontFamily: theme.mediumFont,
+      fontSize: 12,
+      color: 'rgba(232, 240, 255, 0.75)',
+    },
+    coachAnnComment: {
+      fontFamily: theme.regularFont,
+      fontSize: 14,
+      color: 'rgba(232, 240, 255, 0.88)',
+      lineHeight: 20,
     },
     coachAnnImage: {
       width: '100%',
       aspectRatio: 16 / 9,
+      borderRadius: 10,
       backgroundColor: '#000',
-    },
-    coachAnnMeta: {
-      paddingHorizontal: 10,
-      paddingTop: 8,
-      paddingBottom: 4,
-    },
-    coachAnnTime: {
-      fontFamily: theme.mediumFont,
-      fontSize: 12,
-      color: VA.accent,
-    },
-    coachAnnComment: {
-      fontFamily: theme.regularFont,
-      fontSize: 13,
-      color: 'rgba(255,255,255,0.9)',
-      lineHeight: 18,
-      paddingHorizontal: 10,
-      paddingBottom: 10,
+      marginTop: 4,
     },
   })
 }
@@ -815,6 +879,8 @@ export function ActivitiesVideoAnalysis({
     () => parseCoachAnnotations(session.coachMarksJson),
     [session.coachMarksJson]
   )
+  const showCoachReview = coachFeedback.length > 0 || coachAnnotations.length > 0
+  const showAiCoachCard = accordionData != null || hasNotesExtra || showWrittenEmpty
   const shotScoreWhole =
     typeof effectiveSession.score === 'number'
       ? Math.max(0, Math.min(100, Math.round(effectiveSession.score)))
@@ -838,6 +904,66 @@ export function ActivitiesVideoAnalysis({
       parts.length > 0 ? parts.join('\n') : t('analysis.confidenceDefault')
     )
   }, [aiSnapshot, t])
+
+  const coachReviewInner = (
+    <>
+      {coachFeedback.length > 0 ? (
+        <Text allowFontScaling={false} style={styles.coachReviewFeedback}>
+          {coachFeedback}
+        </Text>
+      ) : null}
+      {coachAnnotations.length > 0 ? (
+        <View style={styles.coachAnnWrap}>
+          {coachFeedback.length > 0 ? <View style={styles.coachAnnotationsDivider} /> : null}
+          {coachAnnotations.map((ann, idx) => (
+            <View key={`${ann.timeMs}-${idx}`} style={styles.coachAnnItem}>
+              <View style={styles.coachAnnHeaderRow}>
+                <Text allowFontScaling={false} style={styles.coachAnnLabel}>
+                  {t('coachReview.annotationComment')}
+                </Text>
+                <View style={styles.coachAnnMetaRight}>
+                  <LocalSvgAsset
+                    assetModule={ann.tone === 'good' ? GOOD_INDICATOR_ICON : BAD_INDICATOR_ICON}
+                    width={12}
+                    height={12}
+                  />
+                  <Text allowFontScaling={false} style={styles.coachAnnTimestamp}>
+                    {formatAnnotationTime(ann.timeMs)}
+                  </Text>
+                </View>
+              </View>
+              {ann.comment ? (
+                <Text allowFontScaling={false} style={styles.coachAnnComment}>
+                  {ann.comment}
+                </Text>
+              ) : null}
+              {ann.imageUri ? (
+                <Image source={{ uri: ann.imageUri }} style={styles.coachAnnImage} resizeMode="cover" />
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </>
+  )
+
+  const coachReviewSection = showCoachReview ? (
+    <>
+      <Text allowFontScaling={false} style={styles.coachCommentsTitle}>
+        {t('analysis.coachComments')}
+      </Text>
+      <View style={styles.coachReviewPanelAttached}>{coachReviewInner}</View>
+    </>
+  ) : null
+
+  const coachReviewStandalone = showCoachReview && !showAiCoachCard && !showCorrectionsSection ? (
+    <View style={[styles.extraCard, styles.extraCardCoachOnly]}>
+      <Text allowFontScaling={false} style={[styles.coachCommentsTitle, styles.coachCommentsTitleStandalone]}>
+        {t('analysis.coachComments')}
+      </Text>
+      <View style={styles.coachReviewPanelStandalone}>{coachReviewInner}</View>
+    </View>
+  ) : null
 
   return (
     <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
@@ -1052,6 +1178,7 @@ export function ActivitiesVideoAnalysis({
                 {t('analysis.noWrittenSummary')}
               </Text>
             ) : null}
+            {!showCorrectionsSection ? coachReviewSection : null}
           </View>
         )}
 
@@ -1141,52 +1268,11 @@ export function ActivitiesVideoAnalysis({
                 ) : null}
               </>
             ) : null}
+            {coachReviewSection}
           </View>
         ) : null}
 
-        {(coachFeedback.length > 0 || coachAnnotations.length > 0) && (
-          <View style={styles.extraCard}>
-            <View style={styles.commentHead}>
-              <Text allowFontScaling={false} style={styles.commentHeadLeft}>
-                {t('analysis.coachReview')}
-              </Text>
-              <View style={styles.commentHeadRight}>
-                <Ionicons name="checkmark-circle" size={16} color={VA.good} />
-                <Text allowFontScaling={false} style={styles.timeText}>
-                  {session.coachReviewedAt
-                    ? formatTimeTag(new Date(session.coachReviewedAt))
-                    : 'Submitted'}
-                </Text>
-              </View>
-            </View>
-            {coachFeedback.length > 0 ? (
-              <Text allowFontScaling={false} style={styles.commentBody}>
-                {coachFeedback}
-              </Text>
-            ) : null}
-            {coachAnnotations.length > 0 ? (
-              <View style={styles.coachAnnWrap}>
-                {coachAnnotations.map((ann, idx) => (
-                  <View key={`${ann.timeMs}-${idx}`} style={styles.coachAnnCard}>
-                    {ann.imageUri ? (
-                      <Image source={{ uri: ann.imageUri }} style={styles.coachAnnImage} resizeMode="cover" />
-                    ) : null}
-                    <View style={styles.coachAnnMeta}>
-                      <Text allowFontScaling={false} style={styles.coachAnnTime}>
-                        Frame {Math.max(0, Math.floor(ann.timeMs / 1000))}s
-                      </Text>
-                    </View>
-                    {ann.comment ? (
-                      <Text allowFontScaling={false} style={styles.coachAnnComment}>
-                        {ann.comment}
-                      </Text>
-                    ) : null}
-                  </View>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        )}
+        {coachReviewStandalone}
       </ScrollView>
     </View>
   )
