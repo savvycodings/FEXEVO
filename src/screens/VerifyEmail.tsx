@@ -24,12 +24,140 @@ import {
 
 const APP_LOGO = require("../../assets/logo.png");
 const RESEND_COOLDOWN_SEC = 60;
+const CODE_BOX_BG = "#041641";
+const CODE_BOX_BORDER = "rgba(0, 184, 255, 0.25)";
+const CODE_LENGTH = 6;
+const SECTION_GAP = 32;
 
 type VerifyEmailProps = {
   draft: SignUpDraft;
   onVerified: (draft: SignUpDraft) => void;
   onBack: () => void;
 };
+
+function InvitationCodeBoxes({
+  code,
+  onChangeCode,
+  editable,
+  theme,
+}: {
+  code: string;
+  onChangeCode: (next: string) => void;
+  editable: boolean;
+  theme: { semiBoldFont: string };
+}) {
+  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const styles = codeBoxStyles;
+
+  const digits = useMemo(() => {
+    const chars = code.split("");
+    while (chars.length < CODE_LENGTH) chars.push("");
+    return chars.slice(0, CODE_LENGTH);
+  }, [code]);
+
+  const focusIndex = useCallback((index: number) => {
+    inputRefs.current[index]?.focus();
+  }, []);
+
+  const applyDigits = useCallback(
+    (raw: string, startIndex: number) => {
+      const only = raw.replace(/\D/g, "").slice(0, CODE_LENGTH);
+      if (!only) {
+        const next = digits.map((d, i) => (i === startIndex ? "" : d)).join("");
+        onChangeCode(next.replace(/\s/g, ""));
+        return;
+      }
+      if (only.length > 1) {
+        onChangeCode(only);
+        const last = Math.min(CODE_LENGTH - 1, only.length - 1);
+        focusIndex(last);
+        return;
+      }
+      const nextDigits = [...digits];
+      nextDigits[startIndex] = only;
+      onChangeCode(nextDigits.join("").trimEnd());
+      if (startIndex < CODE_LENGTH - 1) focusIndex(startIndex + 1);
+    },
+    [digits, focusIndex, onChangeCode]
+  );
+
+  const handleKeyPress = useCallback(
+    (index: number, key: string) => {
+      if (key !== "Backspace" || digits[index]) return;
+      if (index <= 0) return;
+      const nextDigits = [...digits];
+      nextDigits[index - 1] = "";
+      onChangeCode(nextDigits.join("").trimEnd());
+      focusIndex(index - 1);
+    },
+    [digits, focusIndex, onChangeCode]
+  );
+
+  const renderBox = (index: number) => (
+    <TextInput
+      key={index}
+      ref={(el) => {
+        inputRefs.current[index] = el;
+      }}
+      style={[styles.codeBox, { fontFamily: theme.semiBoldFont }]}
+      value={digits[index]}
+      onChangeText={(value) => applyDigits(value, index)}
+      onKeyPress={({ nativeEvent }) => handleKeyPress(index, nativeEvent.key)}
+      keyboardType="number-pad"
+      maxLength={index === 0 ? CODE_LENGTH : 1}
+      selectTextOnFocus
+      editable={editable}
+      autoComplete={index === 0 ? "one-time-code" : "off"}
+      textContentType={index === 0 ? "oneTimeCode" : "none"}
+      allowFontScaling={false}
+    />
+  );
+
+  return (
+    <View style={styles.codeRow}>
+      <View style={styles.codeGroup}>{[0, 1, 2].map(renderBox)}</View>
+      <View style={styles.codeSep} />
+      <View style={styles.codeGroup}>{[3, 4, 5].map(renderBox)}</View>
+    </View>
+  );
+}
+
+const codeBoxStyles = StyleSheet.create({
+  codeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 14,
+  },
+  codeGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  codeSep: {
+    width: 16,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "rgba(255,255,255,0.45)",
+    marginHorizontal: 4,
+  },
+  codeBox: {
+    flex: 1,
+    maxWidth: 52,
+    minHeight: 68,
+    borderWidth: 2,
+    borderColor: CODE_BOX_BORDER,
+    borderRadius: 12,
+    backgroundColor: CODE_BOX_BG,
+    textAlign: "center",
+    fontSize: 24,
+    color: "#FFFFFF",
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+});
 
 export function VerifyEmail({ draft, onVerified, onBack }: VerifyEmailProps) {
   const { t } = useTranslation();
@@ -100,6 +228,8 @@ export function VerifyEmail({ draft, onVerified, onBack }: VerifyEmailProps) {
     });
   };
 
+  const inputsDisabled = verifying || sending;
+
   return (
     <KeyboardAwareScrollView
       style={styles.container}
@@ -118,74 +248,79 @@ export function VerifyEmail({ draft, onVerified, onBack }: VerifyEmailProps) {
       </Svg>
 
       <View style={styles.content}>
-        <View style={styles.logoWrap}>
-          <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
-        </View>
-
-        <View style={styles.header}>
-          <Text allowFontScaling={false} style={styles.heroTitle}>
-            {t("verifyEmail.title")}
-          </Text>
-          <Text allowFontScaling={false} style={styles.subtitle}>
-            {t("verifyEmail.subtitle", { email: draft.email })}
-          </Text>
-        </View>
-
-        {sending ? (
-          <View style={styles.sendingRow}>
-            <ActivityIndicator color="#00BBFF" />
-            <Text allowFontScaling={false} style={styles.sendingText}>
-              {t("verifyEmail.sending")}
-            </Text>
+        <View style={styles.body}>
+          <View style={styles.logoWrap}>
+            <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
           </View>
-        ) : null}
 
-        <TextInput
-          style={styles.codeInput}
-          placeholder={t("verifyEmail.codePlaceholder")}
-          placeholderTextColor={theme.placeholderTextColor}
-          value={code}
-          onChangeText={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
-          keyboardType="number-pad"
-          autoComplete="one-time-code"
-          textContentType="oneTimeCode"
-          maxLength={6}
-          editable={!verifying && !sending}
-        />
-
-        <TouchableOpacity
-          style={styles.resendTouch}
-          onPress={() => void requestCode(true)}
-          disabled={sending || verifying || resendSec > 0}
-          activeOpacity={0.85}
-        >
-          <Text allowFontScaling={false} style={[styles.resendText, (sending || resendSec > 0) && styles.resendDisabled]}>
-            {resendSec > 0
-              ? t("verifyEmail.resendIn", { seconds: resendSec })
-              : t("verifyEmail.resend")}
+          <View style={styles.codeSection}>
+          <Text allowFontScaling={false} style={styles.codeLabel}>
+            {t("verifyEmail.invitationCodeLabel")}
           </Text>
-        </TouchableOpacity>
+          <Text allowFontScaling={false} style={styles.codeHint}>
+            {t("verifyEmail.invitationCodeHint")}
+          </Text>
 
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.85}>
-            <Ionicons name="chevron-back" size={22} color="#00BBFF" />
-          </TouchableOpacity>
+          {sending ? (
+            <View style={styles.sendingRow}>
+              <ActivityIndicator color="#00BBFF" />
+              <Text allowFontScaling={false} style={styles.sendingText}>
+                {t("verifyEmail.sending")}
+              </Text>
+            </View>
+          ) : (
+            <InvitationCodeBoxes
+              code={code}
+              onChangeCode={setCode}
+              editable={!inputsDisabled}
+              theme={theme}
+            />
+          )}
+
           <TouchableOpacity
-            style={[styles.buttonOuter, { flex: 1 }, (verifying || sending) && styles.buttonDisabled]}
-            onPress={() => void handleVerify()}
-            disabled={verifying || sending}
+            style={styles.resendTouch}
+            onPress={() => void requestCode(true)}
+            disabled={inputsDisabled || resendSec > 0}
             activeOpacity={0.85}
           >
-            <LinearGradient colors={["#0022FF", "#00BBFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.button}>
-              {verifying ? (
-                <ActivityIndicator color={theme.tintTextColor} />
-              ) : (
-                <Text allowFontScaling={false} style={styles.buttonText}>
-                  {t("verifyEmail.verify")}
-                </Text>
-              )}
-            </LinearGradient>
+            <Text
+              allowFontScaling={false}
+              style={[styles.resendText, (sending || resendSec > 0) && styles.resendDisabled]}
+            >
+              {resendSec > 0
+                ? t("verifyEmail.resendIn", { seconds: resendSec })
+                : t("verifyEmail.resend")}
+            </Text>
           </TouchableOpacity>
+          </View>
+
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.85}>
+              <Ionicons name="chevron-back" size={22} color="#00BBFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.buttonOuter, { flex: 1 }, inputsDisabled && styles.buttonDisabled]}
+              onPress={() => void handleVerify()}
+              disabled={inputsDisabled}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={["#0022FF", "#00BBFF"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.button}
+              >
+                {verifying ? (
+                  <ActivityIndicator color={theme.tintTextColor} />
+                ) : (
+                  <Text allowFontScaling={false} style={styles.buttonText}>
+                    {t("verifyEmail.next")}
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
         </View>
 
         <LanguageToggle />
@@ -202,12 +337,17 @@ function getStyles(theme: any) {
     },
     kasvContent: {
       flexGrow: 1,
-      justifyContent: "center",
     },
     content: {
       flex: 1,
-      justifyContent: "center",
       paddingHorizontal: 24,
+      paddingBottom: 28,
+      minHeight: "100%",
+    },
+    body: {
+      flex: 1,
+      justifyContent: "center",
+      paddingTop: 24,
     },
     heroGlow: {
       position: "absolute",
@@ -218,35 +358,34 @@ function getStyles(theme: any) {
     },
     logoWrap: {
       alignItems: "center",
-      marginBottom: 32,
+      marginBottom: SECTION_GAP,
     },
     logoImage: {
       width: 172,
       height: 92,
     },
-    header: {
-      alignItems: "center",
-      marginBottom: 22,
+    codeSection: {
+      marginBottom: 0,
     },
-    heroTitle: {
-      fontSize: 34,
-      fontFamily: theme.semiBoldFont,
-      textAlign: "center",
-      marginBottom: 8,
+    codeLabel: {
+      fontSize: 15,
+      fontFamily: theme.mediumFont,
       color: "#FFFFFF",
+      marginBottom: 4,
     },
-    subtitle: {
-      fontSize: 13,
+    codeHint: {
+      fontSize: 12,
       fontFamily: theme.regularFont,
-      color: "rgba(255,255,255,0.62)",
-      textAlign: "center",
-      lineHeight: 18,
+      color: "rgba(255,255,255,0.55)",
+      lineHeight: 16,
+      marginBottom: 16,
     },
     sendingRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 10,
+      minHeight: 68,
       marginBottom: 14,
     },
     sendingText: {
@@ -254,23 +393,8 @@ function getStyles(theme: any) {
       fontFamily: theme.regularFont,
       fontSize: 13,
     },
-    codeInput: {
-      borderWidth: 1,
-      borderColor: "rgba(21, 102, 196, 0.45)",
-      borderRadius: 16,
-      paddingHorizontal: 16,
-      paddingVertical: 16,
-      fontSize: 28,
-      letterSpacing: 8,
-      textAlign: "center",
-      fontFamily: theme.semiBoldFont,
-      color: theme.textColor,
-      backgroundColor: "#0B1F57",
-      marginBottom: 12,
-    },
     resendTouch: {
       alignItems: "center",
-      marginBottom: 18,
     },
     resendText: {
       color: "#00BBFF",
@@ -281,7 +405,7 @@ function getStyles(theme: any) {
       color: "rgba(134,167,210,0.7)",
     },
     actionRow: {
-      marginTop: 8,
+      marginTop: SECTION_GAP,
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
@@ -289,12 +413,10 @@ function getStyles(theme: any) {
     backButton: {
       width: 54,
       height: 54,
-      borderRadius: 16,
+      borderRadius: 12,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "rgba(6, 26, 86, 0.9)",
-      borderWidth: 1,
-      borderColor: "rgba(0, 120, 255, 0.45)",
+      backgroundColor: CODE_BOX_BG,
     },
     buttonOuter: {
       borderRadius: 16,

@@ -231,6 +231,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
     if (rankingOrg) form.append("rankingOrg", rankingOrg);
     if (rankingValue.trim()) form.append("rankingValue", rankingValue.trim());
     if (displayName.trim()) form.append("name", displayName.trim());
+    if (signUpDraft?.country?.trim()) form.append("areaLocation", signUpDraft.country.trim());
     if (isEditMode && username.trim()) form.append("username", username.trim());
     if (isEditMode && gender) form.append("gender", gender);
     if (avatarUri) {

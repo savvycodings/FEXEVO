@@ -248,6 +248,7 @@ export const esExtended = {
   },
   playlist: {
     title: "Lista del entrenador",
+    score: "Puntuación",
   },
   studentProfile: {
     uploadNewVideo: "Subir video nuevo",

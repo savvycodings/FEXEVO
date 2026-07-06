@@ -1,45 +1,49 @@
-import React, { useCallback, useContext, useMemo } from 'react'
+import React, { useCallback, useContext, useMemo, useState } from 'react'
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   TouchableOpacity,
+  Pressable,
   useWindowDimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native'
 import Svg, { Path } from 'react-native-svg'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import { Video, ResizeMode } from 'expo-av'
 import * as ImagePicker from 'expo-image-picker'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { ProLibraryGradientFrame } from '../components/ProLibraryGradientFrame'
 import { useTranslation } from 'react-i18next'
+import { DOMAIN } from '../../constants'
+import { fetchCoachSubmissions, type CoachSubmission } from '../lib/coachSubmissionsApi'
+import { displayTrainShotTitle } from '../lib/trainShotDisplay'
+import { getMainStackNavigation } from '../lib/mainStackNavigation'
 
 const PLAY_ICON = require('../../assets/playlist/playicon.svg')
 const BIN_ICON = require('../../assets/playlist/binicon.svg')
 const BANNER_ICON = require('../../assets/playlist/bannericon.svg')
 const SEND_ICON = require('../../assets/playlist/sendicon.svg')
 
-const THUMB_1 = require('../../assets/coachs/img1.png')
-const THUMB_2 = require('../../assets/coachs/img2.png')
-const THUMB_3 = require('../../assets/coachs/img3.png')
+const API_ROOT = DOMAIN.replace(/\/+$/, '')
 
-type PlaylistItem = {
-  id: string
-  title: string
-  subtitle: string
-  difficulty: number
-  thumbnail: number
+function videoUri(path: string): string {
+  if (path.startsWith('http')) return path
+  return `${API_ROOT}${path}`
 }
 
-const DEMO_ITEMS: PlaylistItem[] = [
-  { id: '1', title: 'Vibora', subtitle: 'Voley', difficulty: 65, thumbnail: THUMB_1 },
-  { id: '2', title: 'Bandeja', subtitle: 'Defense', difficulty: 48, thumbnail: THUMB_2 },
-  { id: '3', title: 'Smash', subtitle: 'Attack', difficulty: 72, thumbnail: THUMB_3 },
-]
+type PlaylistCardItem = {
+  reviewId: string
+  title: string
+  subtitle: string
+  score: number
+  videoPath: string
+}
 
 const ARROW_W = 5
 const ARROW_H = 6
@@ -92,25 +96,54 @@ function DifficultyBar({ value, scoreFont }: { value: number; scoreFont: string 
   )
 }
 
+function submissionToCardItem(submission: CoachSubmission): PlaylistCardItem {
+  return {
+    reviewId: submission.reviewId,
+    title: displayTrainShotTitle({ strokeLabel: submission.shotLabel }),
+    subtitle: submission.studentName,
+    score:
+      typeof submission.score === 'number'
+        ? Math.max(0, Math.min(100, Math.round(submission.score)))
+        : 0,
+    videoPath: `/technique/video/${submission.techniqueVideoId}`,
+  }
+}
+
 function PlaylistCard({
   item,
   cardWidth,
   fonts,
+  scoreLabel,
+  onPressThumbnail,
 }: {
-  item: PlaylistItem
+  item: PlaylistCardItem
   cardWidth: number
   fonts: { semiBoldFont: string; mediumFont: string; regularFont: string }
+  scoreLabel: string
+  onPressThumbnail: () => void
 }) {
   const thumbH = Math.round(cardWidth * 1.04)
 
   return (
     <View style={[styles.playlistCard, { width: cardWidth }]}>
-      <View style={[styles.thumbWrap, { height: thumbH }]}>
-        <Image source={item.thumbnail} style={styles.thumbImg} resizeMode="cover" />
+      <Pressable
+        onPress={onPressThumbnail}
+        style={[styles.thumbWrap, { height: thumbH }]}
+        accessibilityRole="button"
+        accessibilityLabel={item.title}
+      >
+        <Video
+          source={{ uri: videoUri(item.videoPath) }}
+          style={styles.thumbImg}
+          resizeMode={ResizeMode.COVER}
+          useNativeControls={false}
+          isLooping={false}
+          shouldPlay={false}
+        />
         <View style={styles.playOverlay} pointerEvents="none">
           <LocalSvgAsset assetModule={PLAY_ICON} width={44} height={54} />
         </View>
-      </View>
+      </Pressable>
 
       <View style={styles.infoPanel}>
         <View style={styles.infoTopRow}>
@@ -144,12 +177,12 @@ function PlaylistCard({
         </View>
 
         <View style={styles.difficultySection}>
-          <DifficultyBar value={item.difficulty} scoreFont={fonts.semiBoldFont} />
+          <DifficultyBar value={item.score} scoreFont={fonts.semiBoldFont} />
           <Text
             allowFontScaling={false}
             style={[styles.difficultyLabel, { fontFamily: fonts.regularFont }]}
           >
-            Difficulty
+            {scoreLabel}
           </Text>
         </View>
       </View>
@@ -161,7 +194,11 @@ export function CoachPlaylistScreen() {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
+  const navigation = useNavigation()
   const { width: winW } = useWindowDimensions()
+
+  const [submissions, setSubmissions] = useState<CoachSubmission[]>([])
+  const [loading, setLoading] = useState(true)
 
   const horizontalPad = Math.max(20, insets.left, insets.right)
   const cardW = winW - horizontalPad * 2
@@ -173,6 +210,35 @@ export function CoachPlaylistScreen() {
       regularFont: theme.regularFont,
     }),
     [theme.semiBoldFont, theme.mediumFont, theme.regularFont]
+  )
+
+  const cardItems = useMemo(
+    () => submissions.map((s) => submissionToCardItem(s)),
+    [submissions]
+  )
+
+  const loadSubmissions = useCallback(async () => {
+    setLoading(true)
+    try {
+      const rows = await fetchCoachSubmissions()
+      setSubmissions(rows)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadSubmissions()
+    }, [loadSubmissions])
+  )
+
+  const openCoachReview = useCallback(
+    (reviewId: string) => {
+      const stack = getMainStackNavigation(navigation as never)
+      stack?.navigate('CoachReviewEditor', { reviewId })
+    },
+    [navigation]
   )
 
   const onUpload = useCallback(async () => {
@@ -228,9 +294,22 @@ export function CoachPlaylistScreen() {
           </TouchableOpacity>
         </View>
 
-        {DEMO_ITEMS.map((item) => (
-          <PlaylistCard key={item.id} item={item} cardWidth={cardW} fonts={fonts} />
-        ))}
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="small" color="#00B8FF" />
+          </View>
+        ) : (
+          cardItems.map((item) => (
+            <PlaylistCard
+              key={item.reviewId}
+              item={item}
+              cardWidth={cardW}
+              fonts={fonts}
+              scoreLabel={t('playlist.score')}
+              onPressThumbnail={() => openCoachReview(item.reviewId)}
+            />
+          ))
+        )}
       </ScrollView>
     </View>
   )
@@ -243,6 +322,10 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+  },
+  loadingWrap: {
+    paddingVertical: 32,
+    alignItems: 'center',
   },
   headerRow: {
     flexDirection: 'row',

@@ -247,6 +247,7 @@ export const enExtended = {
   },
   playlist: {
     title: "Coach Playlist",
+    score: "Score",
   },
   studentProfile: {
     uploadNewVideo: "Upload new video",

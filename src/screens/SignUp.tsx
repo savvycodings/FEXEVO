@@ -25,6 +25,8 @@ import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "reac
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "../components/LanguageToggle";
+import { CountryPickerModal } from "../components/CountryPickerModal";
+import { findCountry, type Country } from "../lib/countries";
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -32,6 +34,7 @@ export type SignUpDraft = {
   name: string;
   email: string;
   password: string;
+  country: string;
   verificationToken?: string;
 };
 
@@ -49,7 +52,15 @@ export function SignUp(props?: SignUpProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({});
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
+  const [countryPickerOpen, setCountryPickerOpen] = useState(false);
+  const [errors, setErrors] = useState<{
+    name?: string;
+    email?: string;
+    password?: string;
+    confirmPassword?: string;
+    country?: string;
+  }>({});
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
   const styles = getStyles(theme);
@@ -61,10 +72,17 @@ export function SignUp(props?: SignUpProps) {
     setEmail(props.initialDraft.email || "");
     setPassword(props.initialDraft.password || "");
     setConfirmPassword(props.initialDraft.password || "");
+    setSelectedCountry(findCountry(props.initialDraft.country || ""));
   }, [props?.initialDraft]);
 
   const handleContinue = async () => {
-    const nextErrors: { name?: string; email?: string; password?: string; confirmPassword?: string } = {};
+    const nextErrors: {
+      name?: string;
+      email?: string;
+      password?: string;
+      confirmPassword?: string;
+      country?: string;
+    } = {};
     if (!name.trim()) nextErrors.name = t("auth.nameRequired");
     if (!email.trim()) nextErrors.email = t("auth.emailRequired");
     if (!password) {
@@ -76,6 +94,9 @@ export function SignUp(props?: SignUpProps) {
       nextErrors.confirmPassword = t("auth.confirmRequired");
     } else if (confirmPassword !== password) {
       nextErrors.confirmPassword = t("auth.passwordsMismatch");
+    }
+    if (!selectedCountry) {
+      nextErrors.country = t("auth.countryRequired");
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -94,6 +115,7 @@ export function SignUp(props?: SignUpProps) {
       name: name.trim(),
       email: email.trim(),
       password,
+      country: selectedCountry?.name ?? "",
     });
     setLoading(false);
   };
@@ -213,6 +235,40 @@ export function SignUp(props?: SignUpProps) {
           editable={!loading && !socialLoading}
         />
         {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
+
+        <TouchableOpacity
+          style={[styles.countryTrigger, errors.country && styles.inputError]}
+          onPress={() => setCountryPickerOpen(true)}
+          activeOpacity={0.85}
+          disabled={loading || !!socialLoading}
+          accessibilityRole="button"
+          accessibilityLabel={t("auth.selectYourCountry")}
+        >
+          {selectedCountry ? (
+            <>
+              <Image source={selectedCountry.flag} style={styles.countryTriggerFlag} />
+              <Text allowFontScaling={false} style={styles.countryTriggerText} numberOfLines={1}>
+                {selectedCountry.name}
+              </Text>
+            </>
+          ) : (
+            <Text allowFontScaling={false} style={styles.countryTriggerPlaceholder} numberOfLines={1}>
+              {t("auth.selectYourCountry")}
+            </Text>
+          )}
+          <Ionicons name="chevron-down" size={18} color="rgba(200, 220, 255, 0.85)" />
+        </TouchableOpacity>
+        {errors.country ? <Text style={styles.errorText}>{errors.country}</Text> : null}
+
+        <CountryPickerModal
+          visible={countryPickerOpen}
+          selected={selectedCountry}
+          onSelect={(country) => {
+            setSelectedCountry(country);
+            if (errors.country) setErrors((prev) => ({ ...prev, country: undefined }));
+          }}
+          onClose={() => setCountryPickerOpen(false)}
+        />
 
         {enabledSocialProviders.length > 0 ? (
           <>
@@ -347,6 +403,37 @@ function getStyles(theme: any) {
       borderColor: "#FF5A6A",
       backgroundColor: "rgba(70, 12, 20, 0.35)",
       marginBottom: 6,
+    },
+    countryTrigger: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      borderWidth: 1,
+      borderColor: "rgba(21, 102, 196, 0.45)",
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      minHeight: 48,
+      backgroundColor: "#0B1F57",
+      marginBottom: 10,
+    },
+    countryTriggerFlag: {
+      width: 26,
+      height: 18,
+      borderRadius: 3,
+      backgroundColor: "rgba(255,255,255,0.06)",
+    },
+    countryTriggerText: {
+      flex: 1,
+      fontSize: 15,
+      fontFamily: theme.regularFont,
+      color: theme.textColor,
+    },
+    countryTriggerPlaceholder: {
+      flex: 1,
+      fontSize: 15,
+      fontFamily: theme.regularFont,
+      color: theme.placeholderTextColor,
     },
     errorText: {
       color: "#FF6B7A",
