@@ -67,7 +67,7 @@ function parseCoachAnnotations(input: unknown): CoachAnnotation[] {
       const comment = typeof r.comment === 'string' ? r.comment : ''
       const timeMsRaw = r.timeMs
       const timeMs = typeof timeMsRaw === 'number' && Number.isFinite(timeMsRaw) ? timeMsRaw : 0
-      if (!imageUri) return null
+      if (!imageUri && !comment.trim()) return null
       return { imageUri, comment, timeMs }
     })
     .filter((r): r is CoachAnnotation => !!r)
