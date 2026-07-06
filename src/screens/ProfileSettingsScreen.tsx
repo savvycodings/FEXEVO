@@ -27,6 +27,7 @@ import { AdminGradientCard } from "../components";
 import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { ShieldHeroRow } from "../components/ShieldHeroRow";
+import { signOutAndClearProfileCache } from "../lib/signOut";
 import { authClient } from "../lib/auth-client";
 import { useTranslation } from "react-i18next";
 import { genderTranslationKey } from "../i18n/profileOptionValues";
@@ -102,7 +103,7 @@ function formatIsoBirthDateToDMY(iso: string | null | undefined): string | null 
   return `${d}/${mo}/${y}`;
 }
 type ProfileData = {
-  user?: { name?: string; email?: string; image?: string | null };
+  user?: { id?: string; name?: string; email?: string; image?: string | null };
   profile?: {
     username?: string | null;
     phone?: string | null;
@@ -115,6 +116,7 @@ type ProfileData = {
     rankingOrg?: string | null;
     rankingValue?: string | null;
     hasRanking?: boolean | null;
+    coachStudentRole?: string | null;
   } | null;
 };
 
@@ -376,6 +378,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     if (body) {
       applyProfileBody(body);
       void setCachedProfile({
+        userId: body.user?.id ?? null,
         user: {
           name: body.user?.name || null,
           email: body.user?.email || null,
@@ -390,6 +393,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           level: body.profile?.level || null,
           rankingOrg: body.profile?.rankingOrg || null,
           rankingValue: body.profile?.rankingValue || null,
+          coachStudentRole: body.profile?.coachStudentRole ?? null,
         },
       });
     }
@@ -1669,7 +1673,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => void authClient.signOut().catch(() => null)}
+            onPress={() => void signOutAndClearProfileCache().catch(() => null)}
             style={styles.settingsFooterGradientOuter}
           >
             <LinearGradient

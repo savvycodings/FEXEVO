@@ -200,6 +200,12 @@ export const es = {
     correctionStatStability: "Estabilidad",
     correctionStatPower: "Potencia",
     proReferenceLine: "Referencia pro: {{shot}}",
+    physicalMetricsTitle: "Perfil de movimiento",
+    physicalMetricStability: "Estabilidad",
+    physicalMetricPower: "Potencia",
+    physicalMetricAgility: "Agilidad",
+    physicalMetricReactions: "Reacciones",
+    physicalMetricAcceleration: "Aceleración",
   },
   activities: {
     title: "Actividades",

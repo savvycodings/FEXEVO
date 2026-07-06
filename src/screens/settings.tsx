@@ -17,7 +17,7 @@ import {
 import { IIconProps } from '../../types'
 import { MODELS, IMAGE_MODELS } from '../../constants'
 import * as themes from '../theme'
-import { authClient } from '../lib/auth-client'
+import { signOutAndClearProfileCache } from '../lib/signOut'
 
 const { width } = Dimensions.get('window')
 const models = Object.values(MODELS)
@@ -186,7 +186,7 @@ export function Settings() {
       </View>
       <TouchableHighlight
         underlayColor="transparent"
-        onPress={() => authClient.signOut()}
+        onPress={() => void signOutAndClearProfileCache()}
       >
         <View style={[styles.chatChoiceButton, { backgroundColor: theme.borderColor }]}>
           <Text style={styles.chatTypeText}>Sign out</Text>

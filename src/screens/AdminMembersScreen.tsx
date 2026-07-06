@@ -101,6 +101,7 @@ export function AdminMembersScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [grantingId, setGrantingId] = useState<string | null>(null)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -173,13 +174,56 @@ export function AdminMembersScreen() {
     [load]
   )
 
+  const onRemoveCoach = useCallback(
+    (item: DirectoryUser) => {
+      void (async () => {
+        try {
+          setRevokingId(item.id)
+          const res = await authClient
+            .$fetch<{ ok?: boolean; coachStudentRole?: DirectoryUser['coachStudentRole']; error?: string }>(
+              '/profile/admin-revoke-coach',
+              {
+                method: 'POST',
+                headers: {
+                  Accept: 'application/json',
+                  'Content-Type': 'application/json',
+                  'X-Xevo-Admin-Hub-Password': ADMIN_HUB_GATE_PASSWORD,
+                },
+                body: JSON.stringify({ targetUserId: item.id }) as unknown as Record<string, string>,
+              }
+            )
+            .catch((e) => ({ error: e?.message || 'Request failed' } as { error: string }))
+          const body = ((res as { data?: unknown })?.data ?? res) as {
+            ok?: boolean
+            coachStudentRole?: DirectoryUser['coachStudentRole']
+            error?: unknown
+          }
+          if (!body?.ok) {
+            setError(toErrorText(body?.error, 'Could not remove coach'))
+            return
+          }
+          const nextRole = body.coachStudentRole === 'student' ? 'student' : 'none'
+          setUsers((prev) =>
+            prev.map((u) => (u.id === item.id ? { ...u, coachStudentRole: nextRole } : u))
+          )
+          void load()
+        } catch (e: unknown) {
+          setError(toErrorText(e, 'Could not remove coach'))
+        } finally {
+          setRevokingId(null)
+        }
+      })()
+    },
+    [load]
+  )
+
   const renderRow = useCallback(
     ({ item }: { item: DirectoryUser }) => {
       if (!item?.id) return null
       const uri = avatarUri(item.image)
       const roleLabel = item.coachStudentRole === 'coach' ? 'Coach' : item.coachStudentRole === 'student' ? 'Student' : 'No role'
       const isCoach = item.coachStudentRole === 'coach'
-      const busy = grantingId === item.id
+      const busy = grantingId === item.id || revokingId === item.id
       return (
         <AdminGradientCard style={styles.cardOuter}>
           <View style={styles.cardInner}>
@@ -197,16 +241,33 @@ export function AdminMembersScreen() {
                 {roleLabel}
               </Text>
             </View>
-            {!isCoach ? (
+            {isCoach ? (
+              <TouchableOpacity
+                style={[styles.removeCoachBtn, busy && styles.setCoachBtnDisabled]}
+                onPress={() => onRemoveCoach(item)}
+                disabled={busy || grantingId !== null || revokingId !== null}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove coach role from ${item.name ?? 'user'}`}
+              >
+                {revokingId === item.id ? (
+                  <ActivityIndicator size="small" color="#F87171" />
+                ) : (
+                  <Text allowFontScaling={false} style={[styles.removeCoachBtnTxt, { fontFamily: theme.mediumFont }]}>
+                    Remove coach
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : (
               <TouchableOpacity
                 style={[styles.setCoachBtn, busy && styles.setCoachBtnDisabled]}
                 onPress={() => onSetAsCoach(item)}
-                disabled={busy || grantingId !== null}
+                disabled={busy || grantingId !== null || revokingId !== null}
                 activeOpacity={0.85}
                 accessibilityRole="button"
                 accessibilityLabel={`Set ${item.name ?? 'user'} as coach`}
               >
-                {busy ? (
+                {grantingId === item.id ? (
                   <ActivityIndicator size="small" color="#00BBFF" />
                 ) : (
                   <Text allowFontScaling={false} style={[styles.setCoachBtnTxt, { fontFamily: theme.mediumFont }]}>
@@ -214,12 +275,21 @@ export function AdminMembersScreen() {
                   </Text>
                 )}
               </TouchableOpacity>
-            ) : null}
+            )}
           </View>
         </AdminGradientCard>
       )
     },
-    [grantingId, onSetAsCoach, styles, theme.mediumFont, theme.regularFont, theme.semiBoldFont]
+    [
+      grantingId,
+      revokingId,
+      onSetAsCoach,
+      onRemoveCoach,
+      styles,
+      theme.mediumFont,
+      theme.regularFont,
+      theme.semiBoldFont,
+    ]
   )
 
   return (
@@ -323,5 +393,17 @@ function getStyles(theme: { backgroundColor?: string; textColor?: string }) {
     },
     setCoachBtnDisabled: { opacity: 0.55 },
     setCoachBtnTxt: { color: '#7DD3FC', fontSize: 12 },
+    removeCoachBtn: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: 'rgba(248, 113, 113, 0.55)',
+      backgroundColor: 'rgba(248, 113, 113, 0.12)',
+      minWidth: 104,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    removeCoachBtnTxt: { color: '#FCA5A5', fontSize: 12 },
   })
 }

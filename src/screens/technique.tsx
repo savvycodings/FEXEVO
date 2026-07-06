@@ -65,12 +65,8 @@ import { proLibraryChrome } from '../theme/proLibraryChrome'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
 import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
-import { CorrectionFrameSelector } from '../components/CorrectionFrameSelector'
-import {
-  parseCorrectionFrameInsights,
-  insightForCorrectionIndex,
-  type CorrectionFrameInsight,
-} from '../types/correction'
+import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
+import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
 import { CoachStrengthFocusInsightCards } from '../components/CoachStrengthFocusInsightCards'
 import { buildCoachInsightCardsContent } from '../lib/coachInsightCards'
 import { normalizePoseData, resolveTotalFrames, type PoseFrameRow } from '../lib/techniquePose'
@@ -359,6 +355,7 @@ export function Technique() {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { invalidate: invalidateSessionData } = useSessionData()
+  const { data: session } = authClient.useSession()
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
   const [scrollBodyH, setScrollBodyH] = useState(0)
@@ -374,6 +371,9 @@ export function Technique() {
   const [uploading, setUploading] = useState(false)
   const [sendVideoToCoach, setSendVideoToCoach] = useState(false)
   const [assignedCoach, setAssignedCoach] = useState<AICoachAssignedCoach | null>(null)
+  const [coachBannerLoaded, setCoachBannerLoaded] = useState(false)
+  const coachFetchGeneration = useRef(0)
+  const sessionUserIdRef = useRef<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null)
   const [localVideoUri, setLocalVideoUri] = useState<string | null>(null)
@@ -419,9 +419,6 @@ export function Technique() {
   /** Server-extracted video frames paired with bundled testimgegen PNGs (no AI gen) */
   const [testPoseCorrectionImages, setTestPoseCorrectionImages] = useState<CorrectionPairRow[]>([])
   const [activeCorrection, setActiveCorrection] = useState(0)
-  const [correctionFrameInsights, setCorrectionFrameInsights] = useState<
-    CorrectionFrameInsight[]
-  >([])
 
   const visibleGeminiCorrectionImages = useMemo(
     () => filterValidCorrectionPairs(geminiCorrectionImages),
@@ -621,56 +618,15 @@ export function Technique() {
     ? enAnalysis.recommendations
     : []
 
-  const applyCorrectionContext = useCallback(
-    (ctx: unknown, imageCount: number) => {
-      const diagnosis =
-        typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : null
-      setCorrectionFrameInsights(parseCorrectionFrameInsights(ctx, imageCount, diagnosis))
-    },
-    [enAnalysis?.diagnosis]
+  const physicalMetrics = useMemo(
+    () => parsePhysicalMetricsFromAnalysis(aiAnalysis as Record<string, unknown> | null),
+    [aiAnalysis]
   )
 
   const proReferenceShot = useMemo(() => {
     const label = retrieval?.shot_hypothesis?.stroke_label
     return typeof label === 'string' && label.trim() ? label.trim() : null
   }, [retrieval?.shot_hypothesis?.stroke_label])
-
-  const displayCorrectionFrameInsights = useMemo((): CorrectionFrameInsight[] => {
-    const diagnosis =
-      typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : null
-    if (correctionImages.length === 0) return []
-    if (correctionFrameInsights.length === 0) {
-      return parseCorrectionFrameInsights(null, correctionImages.length, diagnosis)
-    }
-    const fallback = parseCorrectionFrameInsights(
-      null,
-      correctionImages.length,
-      diagnosis
-    )
-    return correctionImages.map((_, idx) => {
-      return (
-        insightForCorrectionIndex(correctionFrameInsights, correctionImages, idx) ??
-        fallback[idx]
-      )
-    })
-  }, [correctionImages, correctionFrameInsights, enAnalysis?.diagnosis])
-
-  const poseGaugeFrames = useMemo((): CorrectionFrameInsight[] => {
-    if (displayCorrectionFrameInsights.length > 0) {
-      return displayCorrectionFrameInsights
-    }
-    if (correctionFrameInsights.length > 0) {
-      return correctionFrameInsights
-    }
-    const diagnosis =
-      typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : null
-    return parseCorrectionFrameInsights(null, 1, diagnosis)
-  }, [displayCorrectionFrameInsights, correctionFrameInsights, enAnalysis?.diagnosis])
-
-  const poseGaugeActiveIndex = Math.min(
-    activeCorrection,
-    Math.max(0, poseGaugeFrames.length - 1)
-  )
 
   const currentTrimClip = useMemo(() => {
     if (videoDurationSeconds == null || videoDurationSeconds <= 0) return null
@@ -758,6 +714,7 @@ export function Technique() {
   }, [])
 
   const loadStudentCoaches = useCallback(async () => {
+    const generation = ++coachFetchGeneration.current
     try {
       const res = await authClient
         .$fetch('/profile/student-coaches', {
@@ -766,14 +723,18 @@ export function Technique() {
         })
         .catch((err) => ({ error: err?.message || 'Failed' }))
 
+      if (generation !== coachFetchGeneration.current) return
+
       const raw = (res as { data?: unknown })?.data ?? res
-      /** Failed request — do not clear `assignedCoach` or the banner vanishes on flaky network. */
       if (
         raw &&
         typeof raw === 'object' &&
         'error' in raw &&
         !Array.isArray((raw as { coaches?: unknown }).coaches)
       ) {
+        setAssignedCoach(null)
+        setSendVideoToCoach(false)
+        setCoachBannerLoaded(true)
         return
       }
 
@@ -783,11 +744,15 @@ export function Technique() {
       }
       const list = body?.coaches
       if (!Array.isArray(list)) {
+        setAssignedCoach(null)
+        setSendVideoToCoach(false)
+        setCoachBannerLoaded(true)
         return
       }
       if (list.length === 0) {
         setAssignedCoach(null)
         setSendVideoToCoach(false)
+        setCoachBannerLoaded(true)
         return
       }
       const c = list[0]
@@ -798,10 +763,27 @@ export function Technique() {
         imageUri: hasProfileImage(absoluteImage) ? absoluteImage : null,
       })
       setSendVideoToCoach(true)
+      setCoachBannerLoaded(true)
     } catch {
-      // Keep existing coach; avoid wiping UI on transient errors.
+      if (generation !== coachFetchGeneration.current) return
+      setAssignedCoach(null)
+      setSendVideoToCoach(false)
+      setCoachBannerLoaded(true)
     }
   }, [])
+
+  useEffect(() => {
+    const userId = session?.user?.id ?? null
+    if (userId === sessionUserIdRef.current) return
+    sessionUserIdRef.current = userId
+    coachFetchGeneration.current += 1
+    setAssignedCoach(null)
+    setSendVideoToCoach(false)
+    setCoachBannerLoaded(false)
+    if (userId) {
+      void loadStudentCoaches()
+    }
+  }, [session?.user?.id, loadStudentCoaches])
 
   // Keep assigned coach banner in sync after roster changes made elsewhere (e.g. coach/admin links).
   useFocusEffect(
@@ -865,12 +847,6 @@ export function Technique() {
         if (cancelled || !body) return
         if (Array.isArray(body.correction_images) && body.correction_images.length > 0) {
           setGeminiCorrectionImages(body.correction_images)
-          if (!cancelled) {
-            applyCorrectionContext(
-              body.correction_context,
-              body.correction_images.length
-            )
-          }
         }
         if (
           SHOW_LEGACY_CORRECTIONS &&
@@ -898,24 +874,6 @@ export function Technique() {
     analysisJson?.status,
     analysisJson?.metrics?.has_correction_images,
     geminiCorrectionImages.length,
-    applyCorrectionContext,
-  ])
-
-  useEffect(() => {
-    const m = analysisJson?.metrics as Record<string, unknown> | undefined
-    if (!m || correctionImages.length === 0) return
-    const ctx =
-      correctionImageSource === 'fal'
-        ? m.correction_context_fal
-        : correctionImageSource === 'comfy'
-          ? m.correction_context_comfy
-          : m.correction_context
-    applyCorrectionContext(ctx, correctionImages.length)
-  }, [
-    analysisJson?.metrics,
-    correctionImageSource,
-    correctionImages.length,
-    applyCorrectionContext,
   ])
 
   useEffect(() => {
@@ -1481,7 +1439,6 @@ export function Technique() {
         setActiveCorrection(0)
         setCompareSplit(0.5)
         setCorrectionViewMode('drag')
-        applyCorrectionContext(body.correction_context, body.corrections.length)
         if (opts?.forceRegenerate) {
           setRegenerateModalVisible(false)
           setRegenerateFeedbackMessage('')
@@ -1569,7 +1526,6 @@ export function Technique() {
         setActiveCorrection(0)
         setCompareSplit(0.5)
         setCorrectionViewMode('drag')
-        applyCorrectionContext(body.correction_context, body.corrections.length)
       } else {
         const apiError = body?.error
         if (typeof apiError === 'string') {
@@ -1638,7 +1594,6 @@ export function Technique() {
         setActiveCorrection(0)
         setCompareSplit(0.5)
         setCorrectionViewMode('drag')
-        applyCorrectionContext(body.correction_context, body.corrections.length)
       } else {
         const apiError = body?.error
         if (typeof apiError === 'string') {
@@ -1775,7 +1730,7 @@ export function Technique() {
           />
         </View>
       ) : null}
-      {step === 1 && assignedCoach ? (
+      {step === 1 && coachBannerLoaded && assignedCoach ? (
         <View style={styles.coachBannerSlot}>
           <AICoachCoachReviewBanner
             assignedCoach={assignedCoach}
@@ -2518,6 +2473,15 @@ export function Technique() {
                     <Text style={styles.placeholderHint}>{analysisError}</Text>
                   ) : (
                     <>
+                      {metrics && aiAnalysis?.en && physicalMetrics ? (
+                        <View style={styles.poseGaugeSectionWrap}>
+                          <PhysicalMetricsSection
+                            metrics={physicalMetrics}
+                            contentWidth={step3VideoWidth}
+                          />
+                        </View>
+                      ) : null}
+
                       {uploadedVideoUrl && step3PoseFrames.length > 0 && (
                         <View style={styles.step3FullWidthBlock}>
                           <TechniqueAnalysisVideoPanel
@@ -2531,15 +2495,6 @@ export function Technique() {
                               score: score ?? null,
                             }}
                             isLooping
-                          />
-                        </View>
-                      )}
-
-                      {metrics && aiAnalysis?.en && (
-                        <View style={styles.poseGaugeSectionWrap}>
-                          <CorrectionFrameSelector
-                            frames={poseGaugeFrames}
-                            activeIndex={poseGaugeActiveIndex}
                           />
                         </View>
                       )}
@@ -4170,7 +4125,7 @@ function getStyles(theme: any) {
       color: '#fff',
       textAlign: 'center',
     },
-    step3: { flexShrink: 1, gap: 24, minHeight: 0 },
+    step3: { flexShrink: 1, gap: 24, minHeight: 0, marginTop: -22 },
     /** Match accordion row width: no extra horizontal inset beyond `stepContentInner` */
     step3FullWidthBlock: {
       width: '100%',
@@ -4182,7 +4137,8 @@ function getStyles(theme: any) {
       flex: 1,
       alignItems: 'stretch',
       justifyContent: 'flex-start',
-      paddingVertical: 16,
+      paddingTop: 0,
+      paddingBottom: 16,
       paddingHorizontal: 0,
       borderRadius: 0,
       borderWidth: 0,
@@ -4242,8 +4198,9 @@ function getStyles(theme: any) {
     poseGaugeSectionWrap: {
       width: '100%',
       alignSelf: 'stretch',
-      marginTop: 12,
-      paddingHorizontal: 4,
+      marginTop: -10,
+      marginBottom: 6,
+      alignItems: 'center',
     },
     retrievalSectionInner: {
       width: '100%',
@@ -4413,7 +4370,7 @@ function getStyles(theme: any) {
     /** Same gradient ring treatment as Summary / Category rows (`retrievalMetaRowGradient`). */
     scoreBreakdownGradientWrap: {
       marginTop: -8,
-      marginBottom: 8,
+      marginBottom: 0,
       borderRadius: 20,
       padding: 1.5,
       overflow: 'hidden',

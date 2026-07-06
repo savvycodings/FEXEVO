@@ -9,7 +9,7 @@ import React, {
   type ReactNode,
 } from 'react'
 import { authClient } from '../lib/auth-client'
-import { getCachedProfile } from '../lib/profile-cache'
+import { getCachedProfile, setCachedProfile } from '../lib/profile-cache'
 import { TAB_REFETCH_COOLDOWN_MS } from '../lib/tab-refetch-cooldown'
 import {
   fetchGamificationState,
@@ -47,6 +47,10 @@ function deriveOverallPillarScore(rows: RatingCategoryRow[]): number | null {
 }
 
 type CoachStudentRole = 'none' | 'coach' | 'student'
+
+function normalizeCoachStudentRole(raw: unknown): CoachStudentRole {
+  return raw === 'coach' || raw === 'student' ? raw : 'none'
+}
 
 type SessionDataContextValue = {
   activities: ActivitySession[]
@@ -136,7 +140,7 @@ export function SessionDataProvider({
   const [weeklyPeriodKey, setWeeklyPeriodKey] = useState('')
   const [seasonPeriodKey, setSeasonPeriodKey] = useState('')
   const [gamificationLoading, setGamificationLoading] = useState(true)
-  const viewerIsCoach = coachStudentRole === 'coach'
+  const viewerIsCoach = profileRoleLoaded && coachStudentRole === 'coach'
 
   const lastActivitiesOkAt = useRef(0)
   const lastRatingOkAt = useRef(0)
@@ -145,6 +149,7 @@ export function SessionDataProvider({
   const activitiesCountRef = useRef(0)
   const bootstrapDone = useRef(false)
   const profileTickMounted = useRef(false)
+  const profileFetchGeneration = useRef(0)
 
   useEffect(() => {
     activitiesCountRef.current = activities.length
@@ -259,6 +264,7 @@ export function SessionDataProvider({
   }, [fetchGamification])
 
   const fetchProfile = useCallback(async () => {
+    const generation = ++profileFetchGeneration.current
     try {
       const res = await authClient.$fetch('/profile/me', { method: 'GET' }).catch(() => null)
       if (res == null) {
@@ -266,30 +272,63 @@ export function SessionDataProvider({
         return
       }
       const body = ((res as { data?: unknown })?.data ?? res) as {
-        user?: { name?: string; image?: string | null }
-        profile?: { areaLocation?: string | null; coachStudentRole?: string | null } | null
+        user?: { id?: string; name?: string; image?: string | null; email?: string | null }
+        profile?: {
+          areaLocation?: string | null
+          coachStudentRole?: string | null
+          username?: string | null
+          gender?: string | null
+          level?: string | null
+          rankingOrg?: string | null
+          rankingValue?: string | null
+        } | null
       }
       if (!body?.user) {
         return
       }
+      if (generation !== profileFetchGeneration.current) return
+      const userId = typeof body.user.id === 'string' ? body.user.id : null
       const rawName = body.user.name
       const n = typeof rawName === 'string' ? rawName.trim() : ''
       if (n) setProfileName(n)
       setProfileImageUri(profileImageToAbsoluteUri(body.user.image))
       const area = body.profile?.areaLocation
       setProfileAreaLocation(typeof area === 'string' && area.trim() ? area.trim() : null)
-      if (body.profile != null) {
-        const cr = body.profile.coachStudentRole
-        setCoachStudentRole(cr === 'coach' || cr === 'student' ? cr : 'none')
-      }
+      const role =
+        body.profile != null
+          ? normalizeCoachStudentRole(body.profile.coachStudentRole)
+          : 'none'
+      setCoachStudentRole(role)
       setProfileRoleLoaded(true)
       lastProfileOkAt.current = Date.now()
+
+      const cached = await getCachedProfile().catch(() => null)
+      if (generation !== profileFetchGeneration.current) return
+      void setCachedProfile({
+        userId,
+        user: {
+          name: body.user.name ?? cached?.user?.name ?? null,
+          email: body.user.email ?? cached?.user?.email ?? null,
+          image: body.user.image ?? cached?.user?.image ?? null,
+        },
+        profile: {
+          username: body.profile?.username ?? cached?.profile?.username ?? null,
+          phone: cached?.profile?.phone ?? null,
+          areaLocation: body.profile?.areaLocation ?? cached?.profile?.areaLocation ?? null,
+          birthDate: cached?.profile?.birthDate ?? null,
+          gender: body.profile?.gender ?? cached?.profile?.gender ?? null,
+          level: body.profile?.level ?? cached?.profile?.level ?? null,
+          rankingOrg: body.profile?.rankingOrg ?? cached?.profile?.rankingOrg ?? null,
+          rankingValue: body.profile?.rankingValue ?? cached?.profile?.rankingValue ?? null,
+          coachStudentRole: role,
+        },
+      })
     } catch {
       /* keep previous */
     }
   }, [])
 
-  const hydrateFromCache = useCallback(async () => {
+  const hydrateDisplayFromCache = useCallback(async () => {
     const cached = await getCachedProfile().catch(() => null)
     const rawCachedName = cached?.user?.name
     const n = typeof rawCachedName === 'string' ? rawCachedName.trim() : ''
@@ -298,11 +337,6 @@ export function SessionDataProvider({
     const area = cached?.profile?.areaLocation
     if (typeof area === 'string' && area.trim()) {
       setProfileAreaLocation(area.trim())
-    }
-    const cr = cached?.profile?.coachStudentRole
-    if (cr === 'coach' || cr === 'student' || cr === 'none') {
-      setCoachStudentRole(cr)
-      setProfileRoleLoaded(true)
     }
   }, [])
 
@@ -335,24 +369,30 @@ export function SessionDataProvider({
     if (needRating) {
       void fetchRating({ silent: lastRatingOkAt.current > 0 })
     }
-    void hydrateFromCache()
+    void hydrateDisplayFromCache()
     if (profileCooldownOk) {
       void fetchProfile()
     }
     if (gamificationCooldownOk) {
       void fetchGamification({ silent: lastGamificationOkAt.current > 0 })
     }
-  }, [fetchActivities, fetchRating, fetchProfile, fetchGamification, hydrateFromCache])
+  }, [fetchActivities, fetchRating, fetchProfile, fetchGamification, hydrateDisplayFromCache])
 
   useEffect(() => {
     if (bootstrapDone.current) return
     bootstrapDone.current = true
-    void hydrateFromCache()
+    void hydrateDisplayFromCache()
     void fetchActivities({ silent: false })
     void fetchRating({ silent: false })
     void fetchProfile()
     void fetchGamification({ silent: false })
-  }, [fetchActivities, fetchRating, fetchProfile, fetchGamification, hydrateFromCache])
+  }, [
+    fetchActivities,
+    fetchRating,
+    fetchProfile,
+    fetchGamification,
+    hydrateDisplayFromCache,
+  ])
 
   useEffect(() => {
     if (!profileTickMounted.current) {

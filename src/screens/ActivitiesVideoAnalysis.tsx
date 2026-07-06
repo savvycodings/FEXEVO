@@ -30,12 +30,8 @@ import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVide
 import { CoachAnalysisAccordions } from '../components/CoachAnalysisAccordions'
 import { CoachStrengthFocusInsightCards } from '../components/CoachStrengthFocusInsightCards'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
-import { CorrectionFrameSelector } from '../components/CorrectionFrameSelector'
-import {
-  parseCorrectionFrameInsights,
-  insightForCorrectionIndex,
-  type CorrectionFrameInsight,
-} from '../types/correction'
+import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
+import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
 import {
   buildCoachInsightCardsContent,
   formatActivityShotTitle,
@@ -330,6 +326,11 @@ function getStyles(theme: any) {
       marginHorizontal: pad,
       marginBottom: 14,
     },
+    physicalMetricsWrap: {
+      marginHorizontal: pad,
+      marginBottom: 14,
+      alignItems: 'center',
+    },
     breakdownScoreDenom: {
       fontFamily: theme.regularFont,
       fontSize: 11,
@@ -503,6 +504,7 @@ export function ActivitiesVideoAnalysis({
     confidenceScore: number | null
     confidenceBand: string | null
     uncertaintyPlusMinus: number | null
+    physicalMetrics: ReturnType<typeof parsePhysicalMetricsFromAnalysis>
   } | null>(null)
   const [fullFeedbackText, setFullFeedbackText] = useState<string | null>(null)
   const [aiSections, setAiSections] = useState<{
@@ -524,9 +526,6 @@ export function ActivitiesVideoAnalysis({
   const [correctionCoaching, setCorrectionCoaching] = useState<CorrectionCoachingSummary | null>(
     null
   )
-  const [correctionFrameInsights, setCorrectionFrameInsights] = useState<
-    CorrectionFrameInsight[]
-  >([])
   const [activeCorrection, setActiveCorrection] = useState(0)
   const [correctionsLoading, setCorrectionsLoading] = useState(false)
   const [hasCorrectionImagesFlag, setHasCorrectionImagesFlag] = useState(false)
@@ -582,7 +581,6 @@ export function ActivitiesVideoAnalysis({
     setCorrectionGemini([])
     setCorrectionFal([])
     setCorrectionCoaching(null)
-    setCorrectionFrameInsights([])
     setActiveCorrection(0)
     setCorrectionsLoading(false)
     setHasCorrectionImagesFlag(false)
@@ -674,6 +672,7 @@ export function ActivitiesVideoAnalysis({
           confidenceScore: confidence.score,
           confidenceBand: confidence.band,
           uncertaintyPlusMinus: confidence.uncertaintyPlusMinus,
+          physicalMetrics: parsePhysicalMetricsFromAnalysis(ai),
         })
         setPoseFrames(rows)
         setTotalVidFrames(tf)
@@ -696,20 +695,6 @@ export function ActivitiesVideoAnalysis({
           setCorrectionFal(falParsed)
           const ctxParsed = parseCorrectionContext(corrBody?.correction_context)
           setCorrectionCoaching(ctxParsed.coaching)
-          const pairCount = geminiParsed.length > 0 ? geminiParsed.length : falParsed.length
-          const fallbackDiagnosis =
-            typeof en?.diagnosis === 'string'
-              ? en.diagnosis
-              : typeof ai?.diagnosis === 'string'
-                ? ai.diagnosis
-                : ctxParsed.coaching?.diagnosis ?? null
-          setCorrectionFrameInsights(
-            parseCorrectionFrameInsights(
-              corrBody?.correction_context,
-              pairCount,
-              fallbackDiagnosis
-            )
-          )
           setActiveCorrection(0)
         }
       } catch {
@@ -811,21 +796,6 @@ export function ActivitiesVideoAnalysis({
   }, [aiSections, effectiveSession.rating, effectiveSession.score])
   const correctionPairs =
     correctionGemini.length > 0 ? correctionGemini : correctionFal
-
-  const displayCorrectionFrameInsights = useMemo((): CorrectionFrameInsight[] => {
-    const diagnosis = correctionCoaching?.diagnosis?.trim() || aiSections?.diagnosis?.trim() || null
-    if (correctionPairs.length === 0) return []
-    if (correctionFrameInsights.length === 0) {
-      return parseCorrectionFrameInsights(null, correctionPairs.length, diagnosis)
-    }
-    const fallback = parseCorrectionFrameInsights(null, correctionPairs.length, diagnosis)
-    return correctionPairs.map((_, idx) => {
-      return (
-        insightForCorrectionIndex(correctionFrameInsights, correctionPairs, idx) ??
-        fallback[idx]
-      )
-    })
-  }, [correctionPairs, correctionFrameInsights, correctionCoaching?.diagnosis, aiSections?.diagnosis])
 
   const proReferenceShot = aiSections?.strokeLabel?.trim() || null
 
@@ -1022,6 +992,17 @@ export function ActivitiesVideoAnalysis({
           })}
         </ProLibraryGradientFrame>
 
+        {aiSnapshot?.physicalMetrics ? (
+          <View style={styles.physicalMetricsWrap}>
+            <PhysicalMetricsSection
+              metrics={aiSnapshot.physicalMetrics}
+              contentWidth={videoW}
+              accentColor={VA.accent}
+              trackColor={VA.track}
+            />
+          </View>
+        ) : null}
+
         {coachInsightCards ? (
           <View style={styles.insightCardsWrap}>
             <CoachStrengthFocusInsightCards content={coachInsightCards} />
@@ -1129,12 +1110,6 @@ export function ActivitiesVideoAnalysis({
             ) : null}
             {!correctionsLoading && correctionPairs.length > 0 ? (
               <>
-                {displayCorrectionFrameInsights.length > 0 ? (
-                  <CorrectionFrameSelector
-                    frames={displayCorrectionFrameInsights}
-                    activeIndex={activeCorrection}
-                  />
-                ) : null}
                 {correctionPairs[activeCorrection] ? (
                   <View style={styles.correctionPairBlock}>
                     <View style={styles.correctionPairRow}>

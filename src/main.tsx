@@ -180,7 +180,7 @@ function MainTabsLayoutInner({
   onProfileUpdated: () => void
 }) {
   const { t } = useTranslation()
-  const { onTabFocus, viewerIsCoach, invalidate } = useSessionData()
+  const { onTabFocus, viewerIsCoach } = useSessionData()
   const stackNavigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const { theme: ctxTheme } = useContext(ThemeContext)
   const theme = ctxTheme?.backgroundColor != null ? ctxTheme : defaultTheme
@@ -278,6 +278,7 @@ function MainTabsLayoutInner({
     }
 
     void setCachedProfile({
+      userId: body.user?.id ?? null,
       user: {
         name: body.user?.name || null,
         email: body.user?.email || null,
@@ -292,8 +293,7 @@ function MainTabsLayoutInner({
         coachStudentRole: body?.profile?.coachStudentRole ?? null,
       },
     })
-    invalidate()
-  }, [invalidate])
+  }, [])
 
   useEffect(() => {
     void refreshProfile()

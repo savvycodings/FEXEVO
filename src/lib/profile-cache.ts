@@ -3,6 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const PROFILE_CACHE_KEY = "xevo.profile.cache.v1";
 
 export type CachedProfile = {
+  /** Session user id when cache was written — prevents cross-account role bleed. */
+  userId?: string | null;
   user?: {
     name?: string | null;
     email?: string | null;
