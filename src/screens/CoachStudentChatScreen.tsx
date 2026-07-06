@@ -28,6 +28,7 @@ import { DOMAIN } from '../../constants'
 import Svg, { Path } from 'react-native-svg'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { profileImageSource } from '../lib/defaultProfilePicture'
+import { fetchPendingCoachReviewIdForStudent } from '../lib/coachStudentPendingReview'
 
 const BG = '#030A17'
 const MUTED = '#86A7D2'
@@ -102,13 +103,29 @@ export function CoachStudentChatScreen() {
     actualScore,
     lastScore,
     peerImageUri,
-    pendingCoachReviewId,
-    showNewVideoBadge,
+    pendingCoachReviewId: initialPendingCoachReviewId,
+    showNewVideoBadge: _showNewVideoBadge,
   } = route.params
 
-  const showNewVideoRow =
-    showNewVideoBadge === true ||
-    !!(typeof pendingCoachReviewId === 'string' && pendingCoachReviewId.trim().length > 0)
+  const [pendingCoachReviewId, setPendingCoachReviewId] = useState<string | null>(
+    typeof initialPendingCoachReviewId === 'string' && initialPendingCoachReviewId.trim().length > 0
+      ? initialPendingCoachReviewId.trim()
+      : null
+  )
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      void fetchPendingCoachReviewIdForStudent(peerUserId).then((id) => {
+        if (!cancelled) setPendingCoachReviewId(id)
+      })
+      return () => {
+        cancelled = true
+      }
+    }, [peerUserId])
+  )
+
+  const showNewVideoRow = !!pendingCoachReviewId
 
   const listRef = useRef<FlatList<ChatRow>>(null)
   const [myUserId, setMyUserId] = useState<string | null>(null)

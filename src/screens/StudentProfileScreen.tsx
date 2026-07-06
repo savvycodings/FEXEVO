@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo } from 'react'
+import React, { useCallback, useContext, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -6,10 +6,13 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
+  Pressable,
+  ActivityIndicator,
   useWindowDimensions,
 } from 'react-native'
+import { Video, ResizeMode } from 'expo-av'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { ThemeContext } from '../context'
@@ -21,12 +24,17 @@ import { ProLibraryGradientFrame } from '../components/ProLibraryGradientFrame'
 import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
 import { useTranslation } from 'react-i18next'
 import { profileImageSource } from '../lib/defaultProfilePicture'
+import { fetchPendingCoachReviewIdForStudent } from '../lib/coachStudentPendingReview'
+import { fetchStudentUploadsForCoach, type StudentUploadRow } from '../lib/coachStudentUploadsApi'
+import { getMainStackNavigation } from '../lib/mainStackNavigation'
+import { displayTrainShotTitle } from '../lib/trainShotDisplay'
+import { techniqueQualityTone } from '../lib/technique-quality'
+import { DOMAIN } from '../../constants'
 
 const BG = '#030A17'
 const MUTED = '#86A7D2'
 const WRONG = '#FF005D'
 const GOOD = '#00FFC3'
-const THUMB_PLACEHOLDER = require('../../assets/coachs/img1.png')
 const CHAT_ICON = require('../../assets/mystudents/Frame.svg')
 const NEWVIDEO_SVG = require('../../assets/chat/newvideo.svg')
 const PLAY_BUTTON_SVG = require('../../assets/mystudents/playbutton.svg')
@@ -43,29 +51,107 @@ type ScheduleDay = {
 
 type UploadItem = {
   id: string
+  reviewId: string | null
+  videoPath: string
   title: string
   subtitle?: string | 'coach'
-  score: number
+  score: number | null
   lastScore?: number
   comments?: number
   status: 'mixed' | 'good' | 'coach'
 }
 
-const SCHEDULE: ScheduleDay[] = [
+function videoUri(path: string): string {
+  const base = DOMAIN.replace(/\/+$/, '')
+  const p = path.startsWith('/') ? path : `/${path}`
+  return `${base}${p}`
+}
+
+function mapUploadRow(row: {
+  id: string
+  kind: string
+  reviewId: string | null
+  videoPath: string
+  title: string
+  subtitle: string | null
+  score: number | null
+  lastScore: number | null
+  commentCount: number
+  rating: string | null
+}): UploadItem {
+  const comments = row.commentCount > 0 ? row.commentCount : undefined
+  let status: UploadItem['status'] = 'good'
+  if (row.kind === 'coach_sent' || row.subtitle === 'coach') {
+    status = 'coach'
+  } else if (comments) {
+    const tone = techniqueQualityTone({ rating: row.rating, score: row.score })
+    status = tone === 'bad' ? 'mixed' : 'good'
+  }
+  return {
+    id: row.id,
+    reviewId: row.reviewId,
+    videoPath: row.videoPath,
+    title: displayTrainShotTitle({ strokeLabel: row.title, strokeName: row.title }),
+    subtitle: row.subtitle === 'coach' ? 'coach' : row.subtitle ?? undefined,
+    score: row.score,
+    lastScore: row.lastScore ?? undefined,
+    comments,
+    status,
+  }
+}
+
+const WEEKDAY_BASE: Pick<ScheduleDay, 'key' | 'label'>[] = [
   { key: 'm', label: 'M' },
-  { key: 'tu', label: 'T', time: '18:30', active: true },
+  { key: 'tu', label: 'T' },
   { key: 'w', label: 'W' },
-  { key: 'th', label: 'T', time: '17:30', active: true },
+  { key: 'th', label: 'T' },
   { key: 'f', label: 'F' },
-  { key: 'sa', label: 'S', time: '14:30', active: true },
+  { key: 'sa', label: 'S' },
   { key: 'su', label: 'S' },
 ]
 
-const PLACEHOLDER_UPLOADS: UploadItem[] = [
-  { id: '1', title: 'Vibora', score: 92, lastScore: 78, comments: 16, status: 'mixed' },
-  { id: '2', title: 'Overhead', subtitle: 'Voley', score: 36, lastScore: 42, comments: 2, status: 'good' },
-  { id: '3', title: 'Save & Return', subtitle: 'coach', score: 86, lastScore: 80, status: 'coach' },
-]
+function mondayLocal(d: Date): Date {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const day = x.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  x.setDate(x.getDate() + diff)
+  x.setHours(0, 0, 0, 0)
+  return x
+}
+
+function formatScheduleTime(d: Date): string {
+  const h = d.getHours()
+  const m = d.getMinutes()
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+/** Mon=0 … Sun=6 — highlight days with student uploads in the current calendar week. */
+function buildWeeklyScheduleFromUploads(rows: StudentUploadRow[]): ScheduleDay[] {
+  const mon = mondayLocal(new Date())
+  const next = new Date(mon)
+  next.setDate(mon.getDate() + 7)
+
+  const latestByDay = new Map<number, Date>()
+  for (const row of rows) {
+    if (row.kind !== 'student_upload') continue
+    const d = new Date(row.createdAt)
+    if (Number.isNaN(d.getTime())) continue
+    const t = d.getTime()
+    if (t < mon.getTime() || t >= next.getTime()) continue
+    const idx = (d.getDay() + 6) % 7
+    const existing = latestByDay.get(idx)
+    if (!existing || d > existing) latestByDay.set(idx, d)
+  }
+
+  return WEEKDAY_BASE.map((day, idx) => {
+    const uploadAt = latestByDay.get(idx)
+    return {
+      ...day,
+      active: !!uploadAt,
+      time: uploadAt ? formatScheduleTime(uploadAt) : undefined,
+    }
+  })
+}
 
 const NEWVIDEO_ROW_H = 16
 const NEWVIDEO_ROW_W = Math.round((72 / 13) * NEWVIDEO_ROW_H)
@@ -103,18 +189,33 @@ function UploadCard({
   cardWidth,
   fonts,
   t,
+  onPress,
 }: {
   item: UploadItem
   cardWidth: number
   fonts: { semiBoldFont: string; mediumFont: string; regularFont: string }
   t: (key: string, opts?: Record<string, unknown>) => string
+  onPress?: () => void
 }) {
   const thumbW = Math.max(76, Math.round(cardWidth * 0.25))
+  const hasScore = typeof item.score === 'number'
 
   return (
-    <View style={[styles.uploadCard, { width: cardWidth }]}>
+    <Pressable
+      style={[styles.uploadCard, { width: cardWidth }]}
+      onPress={onPress}
+      disabled={!onPress}
+      android_ripple={{ color: 'rgba(255,255,255,0.08)' }}
+    >
       <View style={[styles.uploadThumbCol, { width: thumbW, minHeight: UPLOAD_ROW_H }]}>
-        <Image source={THUMB_PLACEHOLDER} style={styles.uploadThumb} resizeMode="cover" />
+        <Video
+          source={{ uri: videoUri(item.videoPath) }}
+          style={styles.uploadThumb}
+          resizeMode={ResizeMode.COVER}
+          useNativeControls={false}
+          isLooping={false}
+          shouldPlay={false}
+        />
         <View style={styles.uploadPlayOverlay} pointerEvents="none">
           <LocalSvgAsset assetModule={PLAY_BUTTON_SVG} width={24} height={28} />
         </View>
@@ -157,17 +258,25 @@ function UploadCard({
         </View>
         <View style={styles.uploadScoreSection}>
           <View style={styles.uploadScoreBarRow}>
-            <UploadScoreBar score={item.score} lastScore={item.lastScore} />
+            {hasScore ? (
+              <UploadScoreBar score={item.score!} lastScore={item.lastScore} />
+            ) : (
+              <View style={[styles.uploadScoreTrack, { justifyContent: 'center' }]}>
+                <Text allowFontScaling={false} style={[styles.uploadScorePending, { fontFamily: fonts.semiBoldFont }]}>
+                  —
+                </Text>
+              </View>
+            )}
             <Text allowFontScaling={false} style={[styles.uploadScoreNum, { fontFamily: fonts.semiBoldFont }]}>
-              {item.score}
+              {hasScore ? String(Math.round(item.score!)) : '—'}
             </Text>
           </View>
           <Text allowFontScaling={false} style={[styles.uploadScoreLabel, { fontFamily: fonts.regularFont }]}>
-            Score
+            {t('playlist.score')}
           </Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   )
 }
 
@@ -187,13 +296,45 @@ export function StudentProfileScreen() {
     actualScore,
     lastScore,
     peerImageUri,
-    pendingCoachReviewId,
-    showNewVideoBadge,
+    pendingCoachReviewId: initialPendingCoachReviewId,
+    showNewVideoBadge: _showNewVideoBadge,
   } = route.params
 
-  const showNewVideoRow =
-    showNewVideoBadge === true ||
-    !!(typeof pendingCoachReviewId === 'string' && pendingCoachReviewId.trim().length > 0)
+  const [pendingCoachReviewId, setPendingCoachReviewId] = useState<string | null>(
+    typeof initialPendingCoachReviewId === 'string' && initialPendingCoachReviewId.trim().length > 0
+      ? initialPendingCoachReviewId.trim()
+      : null
+  )
+  const [uploadRows, setUploadRows] = useState<StudentUploadRow[]>([])
+  const [uploadsLoading, setUploadsLoading] = useState(true)
+
+  const uploads = useMemo(() => uploadRows.map(mapUploadRow), [uploadRows])
+  const weeklySchedule = useMemo(() => buildWeeklyScheduleFromUploads(uploadRows), [uploadRows])
+
+  const loadUploads = useCallback(async () => {
+    setUploadsLoading(true)
+    try {
+      const rows = await fetchStudentUploadsForCoach(peerUserId)
+      setUploadRows(rows)
+    } finally {
+      setUploadsLoading(false)
+    }
+  }, [peerUserId])
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      void fetchPendingCoachReviewIdForStudent(peerUserId).then((id) => {
+        if (!cancelled) setPendingCoachReviewId(id)
+      })
+      void loadUploads()
+      return () => {
+        cancelled = true
+      }
+    }, [peerUserId, loadUploads])
+  )
+
+  const showNewVideoRow = !!pendingCoachReviewId
 
   const focusKey = usePageFocusKey()
 
@@ -219,7 +360,7 @@ export function StudentProfileScreen() {
       lastScore,
       peerImageUri,
       pendingCoachReviewId,
-      showNewVideoBadge,
+      showNewVideoBadge: !!pendingCoachReviewId,
     })
   }, [
     navigation,
@@ -230,7 +371,6 @@ export function StudentProfileScreen() {
     lastScore,
     peerImageUri,
     pendingCoachReviewId,
-    showNewVideoBadge,
   ])
 
   const onOpenChat = useCallback(() => {
@@ -242,9 +382,21 @@ export function StudentProfileScreen() {
       lastScore,
       peerImageUri,
       pendingCoachReviewId,
-      showNewVideoBadge,
+      showNewVideoBadge: !!pendingCoachReviewId,
     })
-  }, [navigation, peerUserId, peerName, peerLocation, actualScore, lastScore, peerImageUri, pendingCoachReviewId, showNewVideoBadge])
+  }, [navigation, peerUserId, peerName, peerLocation, actualScore, lastScore, peerImageUri, pendingCoachReviewId])
+
+  const onOpenUpload = useCallback(
+    (item: UploadItem) => {
+      if (!item.reviewId) return
+      const stack = getMainStackNavigation(navigation)
+      if (stack) {
+        stack.navigate('CoachReviewEditor', { reviewId: item.reviewId })
+        return
+      }
+    },
+    [navigation]
+  )
 
   return (
     <View style={styles.screen}>
@@ -336,7 +488,7 @@ export function StudentProfileScreen() {
             {t('studentProfile.weeklySchedule')}
           </Text>
           <View style={styles.scheduleRow}>
-            {SCHEDULE.map((day) => (
+            {weeklySchedule.map((day) => (
               <View key={day.key} style={styles.scheduleCol}>
                 <View style={[styles.scheduleDayBubble, day.active && styles.scheduleDayBubbleOn]}>
                   <Text
@@ -378,9 +530,24 @@ export function StudentProfileScreen() {
               </View>
             </View>
           </View>
-          {PLACEHOLDER_UPLOADS.map((item) => (
-            <UploadCard key={item.id} item={item} cardWidth={cardWidth} fonts={fonts} t={t} />
-          ))}
+          {uploadsLoading ? (
+            <ActivityIndicator color="#00BBFF" style={{ marginVertical: 20 }} />
+          ) : uploads.length === 0 ? (
+            <Text allowFontScaling={false} style={[styles.emptyUploads, { fontFamily: fonts.regularFont }]}>
+              {t('studentProfile.noUploadsYet')}
+            </Text>
+          ) : (
+            uploads.map((item) => (
+              <UploadCard
+                key={item.id}
+                item={item}
+                cardWidth={cardWidth}
+                fonts={fonts}
+                t={t}
+                onPress={item.reviewId ? () => onOpenUpload(item) : undefined}
+              />
+            ))
+          )}
         </EntranceView>
       </ScrollView>
     </View>
@@ -564,6 +731,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  emptyUploads: {
+    color: 'rgba(232,240,255,0.55)',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
   uploadCard: {
     flexDirection: 'row',
     borderRadius: 14,
@@ -722,5 +896,10 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     minWidth: 28,
     textAlign: 'right',
+  },
+  uploadScorePending: {
+    color: '#94a3b8',
+    fontSize: 13,
+    textAlign: 'center',
   },
 })

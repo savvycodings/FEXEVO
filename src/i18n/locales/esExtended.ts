@@ -366,6 +366,7 @@ export const esExtended = {
     wrong: "Mal",
     good: "Bien",
     uploadByCoach: "Subido por el entrenador",
+    noUploadsYet: "Aún no hay subidas",
     comments: "{{count}} comentarios",
   },
   coachChat: {
@@ -425,6 +426,11 @@ export const esExtended = {
     dateNotSet: "Fecha no indicada",
     locationNotSet: "Ubicación no indicada",
     passwordChangeFailed: "Error al cambiar la contraseña.",
+    signOut: "Cerrar sesión",
+    logoutTitle: "¿Cerrar sesión?",
+    logoutMessage: "¿Seguro que quieres cerrar sesión?",
+    logoutCancel: "Cancelar",
+    logoutConfirm: "Cerrar sesión",
   },
   activitiesExtra: {
     videoRecordings: "Grabaciones en video",

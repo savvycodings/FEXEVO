@@ -37,6 +37,7 @@ import * as ImagePicker from "expo-image-picker";
 import { getCachedProfile, setCachedProfile } from "../lib/profile-cache";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
+import { LogoutConfirmModal } from "../components/LogoutConfirmModal";
 import { profileImageSource } from "../lib/defaultProfilePicture";
 
 const MENU_SVG = {
@@ -237,6 +238,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     return null;
   }, [data.profile?.birthDate, birthDayInput, birthMonthInput, birthYearInput]);
   const [activeSection, setActiveSection] = useState<"personal" | "account" | "location" | "game" | null>(null);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [personalFocusedField, setPersonalFocusedField] = useState<
     "name" | "lastname" | "username" | "birthdate" | null
   >(null);
@@ -1673,7 +1675,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => void signOutAndClearProfileCache().catch(() => null)}
+            onPress={() => setLogoutModalVisible(true)}
             style={styles.settingsFooterGradientOuter}
           >
             <LinearGradient
@@ -1683,12 +1685,20 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               style={styles.settingsFooterGradientInner}
             >
               <Text allowFontScaling={false} style={styles.settingsFooterGradientText}>
-                Sign out
+                {t("profileSettingsUi.signOut")}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
       </KeyboardAwareScrollView>
+      <LogoutConfirmModal
+        visible={logoutModalVisible}
+        onCancel={() => setLogoutModalVisible(false)}
+        onConfirm={() => {
+          setLogoutModalVisible(false);
+          void signOutAndClearProfileCache().catch(() => null);
+        }}
+      />
       <MainTabBarChrome activeTab="You" />
     </View>
   );

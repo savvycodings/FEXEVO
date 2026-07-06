@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -26,6 +25,9 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { CountryPickerModal } from "../components/CountryPickerModal";
+import { AuthFormField } from "../components/AuthFormField";
+import { AuthPasswordField } from "../components/AuthPasswordField";
+import { AUTH_INPUT_FOCUS_BORDER, AUTH_INPUT_FOCUS_BORDER_WIDTH, AUTH_INPUT_ERROR_BORDER_WIDTH, createAuthFormStyles } from "../components/authFormStyles";
 import { findCountry, type Country } from "../lib/countries";
 
 const APP_LOGO = require("../../assets/logo.png");
@@ -64,6 +66,7 @@ export function SignUp(props?: SignUpProps) {
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
   const styles = getStyles(theme);
+  const fieldStyles = createAuthFormStyles(theme);
   const enabledSocialProviders = getEnabledSocialProviders();
 
   useEffect(() => {
@@ -179,10 +182,10 @@ export function SignUp(props?: SignUpProps) {
           </Text>
         </View>
 
-        <TextInput
-          style={[styles.input, errors.name && styles.inputError]}
+        <AuthFormField
+          theme={theme}
+          hasError={!!errors.name}
           placeholder={t("auth.name")}
-          placeholderTextColor={theme.placeholderTextColor}
           value={name}
           onChangeText={(v) => {
             setName(v);
@@ -191,11 +194,11 @@ export function SignUp(props?: SignUpProps) {
           autoComplete="name"
           editable={!loading && !socialLoading}
         />
-        {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
-        <TextInput
-          style={[styles.input, errors.email && styles.inputError]}
+        {errors.name ? <Text style={fieldStyles.errorText}>{errors.name}</Text> : null}
+        <AuthFormField
+          theme={theme}
+          hasError={!!errors.email}
           placeholder={t("auth.email")}
-          placeholderTextColor={theme.placeholderTextColor}
           value={email}
           onChangeText={(v) => {
             setEmail(v);
@@ -206,38 +209,40 @@ export function SignUp(props?: SignUpProps) {
           autoComplete="email"
           editable={!loading && !socialLoading}
         />
-        {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
-        <TextInput
-          style={[styles.input, errors.password && styles.inputError]}
+        {errors.email ? <Text style={fieldStyles.errorText}>{errors.email}</Text> : null}
+        <AuthPasswordField
+          theme={theme}
+          hasError={!!errors.password}
           placeholder={t("auth.passwordMinPlaceholder")}
-          placeholderTextColor={theme.placeholderTextColor}
           value={password}
           onChangeText={(v) => {
             setPassword(v);
             if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
           }}
-          secureTextEntry
           autoComplete="password-new"
           editable={!loading && !socialLoading}
         />
-        {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
-        <TextInput
-          style={[styles.input, errors.confirmPassword && styles.inputError]}
+        {errors.password ? <Text style={fieldStyles.errorText}>{errors.password}</Text> : null}
+        <AuthPasswordField
+          theme={theme}
+          hasError={!!errors.confirmPassword}
           placeholder={t("auth.repeatPassword")}
-          placeholderTextColor={theme.placeholderTextColor}
           value={confirmPassword}
           onChangeText={(v) => {
             setConfirmPassword(v);
             if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
           }}
-          secureTextEntry
           autoComplete="password-new"
           editable={!loading && !socialLoading}
         />
-        {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
+        {errors.confirmPassword ? <Text style={fieldStyles.errorText}>{errors.confirmPassword}</Text> : null}
 
         <TouchableOpacity
-          style={[styles.countryTrigger, errors.country && styles.inputError]}
+          style={[
+            styles.countryTrigger,
+            countryPickerOpen && styles.countryTriggerFocused,
+            errors.country && styles.countryTriggerError,
+          ]}
           onPress={() => setCountryPickerOpen(true)}
           activeOpacity={0.85}
           disabled={loading || !!socialLoading}
@@ -258,7 +263,7 @@ export function SignUp(props?: SignUpProps) {
           )}
           <Ionicons name="chevron-down" size={18} color="rgba(200, 220, 255, 0.85)" />
         </TouchableOpacity>
-        {errors.country ? <Text style={styles.errorText}>{errors.country}</Text> : null}
+        {errors.country ? <Text style={fieldStyles.errorText}>{errors.country}</Text> : null}
 
         <CountryPickerModal
           visible={countryPickerOpen}
@@ -387,35 +392,27 @@ function getStyles(theme: any) {
       textAlign: "center",
       marginTop: 0,
     },
-    input: {
-      borderWidth: 1,
-      borderColor: "rgba(21, 102, 196, 0.45)",
-      borderRadius: 16,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      fontSize: 15,
-      fontFamily: theme.regularFont,
-      color: theme.textColor,
-      backgroundColor: "#0B1F57",
-      marginBottom: 10,
-    },
-    inputError: {
-      borderColor: "#FF5A6A",
-      backgroundColor: "rgba(70, 12, 20, 0.35)",
-      marginBottom: 6,
-    },
     countryTrigger: {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      borderWidth: 1,
-      borderColor: "rgba(21, 102, 196, 0.45)",
+      borderWidth: 0,
       borderRadius: 16,
       paddingHorizontal: 16,
       paddingVertical: 12,
       minHeight: 48,
       backgroundColor: "#0B1F57",
       marginBottom: 10,
+    },
+    countryTriggerFocused: {
+      borderWidth: AUTH_INPUT_FOCUS_BORDER_WIDTH,
+      borderColor: AUTH_INPUT_FOCUS_BORDER,
+    },
+    countryTriggerError: {
+      borderWidth: AUTH_INPUT_ERROR_BORDER_WIDTH,
+      borderColor: "#FF5A6A",
+      backgroundColor: "rgba(70, 12, 20, 0.35)",
+      marginBottom: 6,
     },
     countryTriggerFlag: {
       width: 26,
@@ -434,14 +431,6 @@ function getStyles(theme: any) {
       fontSize: 15,
       fontFamily: theme.regularFont,
       color: theme.placeholderTextColor,
-    },
-    errorText: {
-      color: "#FF6B7A",
-      fontSize: 12,
-      fontFamily: theme.mediumFont,
-      marginBottom: 10,
-      marginTop: -2,
-      paddingHorizontal: 4,
     },
     buttonOuter: {
       borderRadius: 16,
@@ -474,8 +463,6 @@ function getStyles(theme: any) {
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: "rgba(6, 26, 86, 0.9)",
-      borderWidth: 1,
-      borderColor: "rgba(0, 120, 255, 0.45)",
     },
     socialDividerRow: {
       flexDirection: "row",
@@ -503,8 +490,6 @@ function getStyles(theme: any) {
       flex: 1,
       height: 50,
       borderRadius: 16,
-      borderWidth: 1,
-      borderColor: "rgba(21, 102, 196, 0.45)",
       backgroundColor: "#0B1F57",
       alignItems: "center",
       justifyContent: "center",

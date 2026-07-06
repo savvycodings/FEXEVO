@@ -176,32 +176,51 @@ function derivedLastScore(s: ActivitySession): number | null {
   return Math.max(0, Math.min(100, s.score + jitter))
 }
 
-function SessionScoreBar({ score, last }: { score: number; last: number | null }) {
+function SessionScoreBar({ score }: { score: number; last: number | null }) {
   const pct = Math.max(0, Math.min(100, score))
-  const lastPct = last != null ? Math.max(0, Math.min(100, last)) : null
   return (
-    <View style={detailScoreBarStyles.track}>
-      <View style={[detailScoreBarStyles.fill, { width: `${pct}%` }]} />
-      {lastPct != null ? (
-        <View style={[detailScoreBarStyles.marker, { left: `${lastPct}%` }]}>
+    <View style={detailScoreBarStyles.wrap}>
+      <View style={detailScoreBarStyles.markerRow} pointerEvents="none">
+        <View style={[detailScoreBarStyles.marker, { left: `${pct}%` }]}>
           <Text allowFontScaling={false} style={detailScoreBarStyles.markerGlyph}>
             ▼
           </Text>
         </View>
-      ) : null}
+      </View>
+      <View style={detailScoreBarStyles.track}>
+        <View style={[detailScoreBarStyles.fill, { width: `${pct}%` }]} />
+      </View>
     </View>
   )
 }
 
 const detailScoreBarStyles = StyleSheet.create({
-  track: {
+  wrap: {
     flex: 1,
+    marginRight: 8,
+  },
+  markerRow: {
+    height: 9,
+    position: 'relative',
+    marginBottom: 1,
+  },
+  marker: {
+    position: 'absolute',
+    bottom: 0,
+    marginLeft: -5,
+    width: 10,
+    alignItems: 'center',
+  },
+  markerGlyph: {
+    fontSize: 8,
+    color: C.sky,
+    lineHeight: 8,
+  },
+  track: {
     height: 7,
     borderRadius: 4,
     backgroundColor: C.track,
-    overflow: 'visible',
-    marginRight: 8,
-    justifyContent: 'center',
+    overflow: 'hidden',
   },
   fill: {
     position: 'absolute',
@@ -210,18 +229,6 @@ const detailScoreBarStyles = StyleSheet.create({
     bottom: 0,
     borderRadius: 4,
     backgroundColor: C.sky,
-  },
-  marker: {
-    position: 'absolute',
-    top: -3,
-    marginLeft: -5,
-    width: 10,
-    alignItems: 'center',
-  },
-  markerGlyph: {
-    fontSize: 8,
-    color: C.slateBar,
-    lineHeight: 10,
   },
 })
 
@@ -458,48 +465,26 @@ function ActivitiesDayDetail({
                     </View>
                   </View>
                   <View style={styles.scoreSection}>
-                    <View style={styles.scoreBarRow}>
-                      {score != null ? (
-                        <SessionScoreBar score={score} last={last} />
-                      ) : (
-                        <View style={[detailScoreBarStyles.track, { justifyContent: 'center' }]}>
-                          <Text allowFontScaling={false} style={styles.scorePending}>
-                            —
-                          </Text>
-                        </View>
-                      )}
-                      <Text allowFontScaling={false} style={styles.scoreBig}>
-                        {score != null ? String(displayScoreWhole(score)) : '—'}
-                      </Text>
-                    </View>
-                    <Text allowFontScaling={false} style={styles.scoreLabel}>
-                      Score
-                    </Text>
-                    <View style={styles.categoryBreakdownWrap}>
-                      {[
-                        { label: 'Technique', value: s.techniqueScore },
-                        { label: 'Outcome', value: s.outcomeScore },
-                        { label: 'Tactics', value: s.tacticsScore },
-                        { label: 'Confidence', value: s.confidenceScore },
-                      ].map((row) => {
-                        const v =
-                          typeof row.value === 'number'
-                            ? Math.max(0, Math.min(100, Math.round(row.value)))
-                            : null
-                        return (
-                          <View key={row.label} style={styles.categoryBreakdownRow}>
-                            <Text allowFontScaling={false} style={styles.categoryBreakdownLabel}>
-                              {row.label}
-                            </Text>
-                            <View style={styles.categoryBreakdownTrack}>
-                              <View style={[styles.categoryBreakdownFill, { width: `${v ?? 0}%` }]} />
+                    <View style={styles.scoreBarCol}>
+                      <View style={styles.scoreBarRow}>
+                        <View style={styles.scoreBarTrackWrap}>
+                          {score != null ? (
+                            <SessionScoreBar score={score} last={last} />
+                          ) : (
+                            <View style={[detailScoreBarStyles.track, { justifyContent: 'center' }]}>
+                              <Text allowFontScaling={false} style={styles.scorePending}>
+                                —
+                              </Text>
                             </View>
-                            <Text allowFontScaling={false} style={styles.categoryBreakdownValue}>
-                              {v != null ? v : '—'}
-                            </Text>
-                          </View>
-                        )
-                      })}
+                          )}
+                        </View>
+                        <Text allowFontScaling={false} style={styles.scoreBig}>
+                          {score != null ? String(displayScoreWhole(score)) : '—'}
+                        </Text>
+                      </View>
+                      <Text allowFontScaling={false} style={styles.scoreLabel}>
+                        {t('playlist.score')}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -1790,12 +1775,21 @@ function getDetailStyles(theme: any, winW: number) {
       alignItems: 'center',
       gap: 8,
     },
+    scoreBarCol: {
+      flex: 1,
+      minWidth: 0,
+    },
+    scoreBarTrackWrap: {
+      flex: 1,
+      minWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
     scoreLabel: {
       fontFamily: theme.regularFont,
       fontSize: 10,
       color: '#64748B',
-      marginTop: 5,
-      alignSelf: 'flex-start',
+      marginTop: 4,
     },
     scoreBig: {
       fontFamily: theme.semiBoldFont,
@@ -1803,45 +1797,12 @@ function getDetailStyles(theme: any, winW: number) {
       color: '#0f172a',
       minWidth: 34,
       textAlign: 'right',
+      lineHeight: 20,
     },
     scorePending: {
       fontFamily: theme.semiBoldFont,
       fontSize: 13,
       color: '#94a3b8',
-    },
-    categoryBreakdownWrap: {
-      marginTop: 7,
-      gap: 4,
-    },
-    categoryBreakdownRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    categoryBreakdownLabel: {
-      width: 55,
-      fontFamily: theme.regularFont,
-      fontSize: 9,
-      color: '#64748B',
-    },
-    categoryBreakdownTrack: {
-      flex: 1,
-      height: 4,
-      borderRadius: 999,
-      backgroundColor: '#E2E8F0',
-      overflow: 'hidden',
-    },
-    categoryBreakdownFill: {
-      height: '100%',
-      backgroundColor: C.sky,
-      borderRadius: 999,
-    },
-    categoryBreakdownValue: {
-      width: 24,
-      textAlign: 'right',
-      fontFamily: theme.mediumFont,
-      fontSize: 9,
-      color: '#334155',
     },
   })
 }

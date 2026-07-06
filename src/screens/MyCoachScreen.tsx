@@ -235,6 +235,13 @@ export function MyCoachScreen() {
 
   const onOpenCoachReview = useCallback(
     (reviewId: string) => {
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.pendingCoachReviewId === reviewId
+            ? { ...s, notiRow: 'none' as const, pendingCoachReviewId: null }
+            : s
+        )
+      )
       const stack = getMainStackNavigation(navigation)
       if (stack) {
         stack.navigate('CoachReviewEditor', { reviewId })

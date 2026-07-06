@@ -365,6 +365,7 @@ export const enExtended = {
     wrong: "Wrong",
     good: "Good",
     uploadByCoach: "Upload by Coach",
+    noUploadsYet: "No uploads yet",
     comments: "{{count}} Comments",
   },
   coachChat: {
@@ -424,6 +425,11 @@ export const enExtended = {
     dateNotSet: "Date not set",
     locationNotSet: "Location not set",
     passwordChangeFailed: "Password change failed.",
+    signOut: "Sign out",
+    logoutTitle: "Log out?",
+    logoutMessage: "Are you sure you want to log out?",
+    logoutCancel: "Cancel",
+    logoutConfirm: "Logout",
   },
   activitiesExtra: {
     videoRecordings: "Video recordings",

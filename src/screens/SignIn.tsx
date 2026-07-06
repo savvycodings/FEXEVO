@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -25,6 +24,8 @@ import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "reac
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "../components/LanguageToggle";
+import { AuthFormField } from "../components/AuthFormField";
+import { AuthPasswordField } from "../components/AuthPasswordField";
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -138,26 +139,25 @@ export function SignIn() {
           <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
         </View>
 
-        <TextInput
-          style={styles.input}
+        <AuthFormField
+          theme={theme}
           placeholder={t("auth.email")}
-          placeholderTextColor={theme.placeholderTextColor}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
           editable={!loading}
+          fieldStyle={styles.inputSpacing}
         />
-        <TextInput
-          style={styles.input}
+        <AuthPasswordField
+          theme={theme}
           placeholder={t("auth.password")}
-          placeholderTextColor={theme.placeholderTextColor}
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
           autoComplete="password"
           editable={!loading && !socialLoading}
+          wrapStyle={styles.inputSpacing}
         />
 
         <TouchableOpacity
@@ -253,16 +253,7 @@ function getStyles(theme: any) {
       width: 172,
       height: 92,
     },
-    input: {
-      borderWidth: 1,
-      borderColor: "rgba(21, 102, 196, 0.45)",
-      borderRadius: 16,
-      paddingHorizontal: 16,
-      paddingVertical: 13,
-      fontSize: 15,
-      fontFamily: theme.regularFont,
-      color: theme.textColor,
-      backgroundColor: "#0B1F57",
+    inputSpacing: {
       marginBottom: 12,
     },
     buttonOuter: {
