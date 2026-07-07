@@ -17,6 +17,7 @@ import {
   type GamificationState,
 } from '../lib/gamificationApi'
 import type { ActivitySession } from '../lib/activitySession'
+import { formatApiError } from '../lib/formatApiError'
 import { DOMAIN } from '../../constants'
 
 export type RatingCategoryRow = {
@@ -163,12 +164,12 @@ export function SessionDataProvider({
     }
     try {
       const res = await authClient
-        .$fetch<{ items?: ActivitySession[]; error?: string }>('/technique/activities', { method: 'GET' })
-        .catch((err) => ({ error: err?.message || 'Failed to load' } as { error: string }))
+        .$fetch<{ items?: ActivitySession[]; error?: unknown }>('/technique/activities', { method: 'GET' })
+        .catch((err) => ({ error: formatApiError(err, 'Failed to load activities') }))
       const body: any = (res as any)?.data ?? res
       if (body?.error) {
         if (!silent) {
-          setActivitiesError(String(body.error))
+          setActivitiesError(formatApiError(body.error, 'Failed to load activities'))
           setActivities([])
         }
       } else {
@@ -176,9 +177,9 @@ export function SessionDataProvider({
         lastActivitiesOkAt.current = Date.now()
         if (silent) setActivitiesError(null)
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (!silent) {
-        setActivitiesError(e?.message || 'Failed to load activities')
+        setActivitiesError(formatApiError(e, 'Failed to load activities'))
         setActivities([])
       }
     } finally {
@@ -194,15 +195,15 @@ export function SessionDataProvider({
     }
     try {
       const res = await authClient
-        .$fetch<{ categories?: RatingCategoryRow[]; error?: string }>('/profile/rating-by-category', {
+        .$fetch<{ categories?: RatingCategoryRow[]; error?: unknown }>('/profile/rating-by-category', {
           method: 'GET',
           headers: { Accept: 'application/json' },
         })
-        .catch((err) => ({ error: err?.message || 'Failed to load' } as { error: string }))
+        .catch((err) => ({ error: formatApiError(err, 'Failed to load rating') }))
       const body: any = (res as any)?.data ?? res
       if (body?.error) {
         if (!silent) {
-          setRatingError(String(body.error))
+          setRatingError(formatApiError(body.error, 'Failed to load rating'))
           setRatingCategories([])
         }
       } else if (Array.isArray(body?.categories)) {
@@ -215,9 +216,9 @@ export function SessionDataProvider({
         setOverallPillarScore(null)
         lastRatingOkAt.current = Date.now()
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (!silent) {
-        setRatingError(e?.message || 'Failed to load')
+        setRatingError(formatApiError(e, 'Failed to load rating'))
         setRatingCategories([])
       }
     } finally {

@@ -34,7 +34,6 @@ const BG = '#030A17'
 const MUTED = '#86A7D2'
 const WRONG = '#FF005D'
 const GOOD = '#00FFC3'
-const CHAT_ICON = require('../../assets/mystudents/Frame.svg')
 const NEWVIDEO_SVG = require('../../assets/chat/newvideo.svg')
 const PLAY_BUTTON_SVG = require('../../assets/mystudents/playbutton.svg')
 const GOOD_COMMENT_ICON = require('../../assets/videoanalysis/good.svg')
@@ -180,7 +179,7 @@ const PROFILE_AVATAR_SIZE = 72
 
 function UploadCommentIcon({ tone }: { tone: NonNullable<UploadItem['commentTone']> }) {
   if (tone === 'both') {
-    return <LocalSvgAsset assetModule={MIXED_COMMENT_ICON} width={12} height={8} />
+    return <LocalSvgAsset assetModule={MIXED_COMMENT_ICON} width={14} height={8} />
   }
   if (tone === 'bad') {
     return <LocalSvgAsset assetModule={BAD_COMMENT_ICON} width={8} height={8} />
@@ -389,19 +388,6 @@ export function StudentProfileScreen() {
     pendingCoachReviewId,
   ])
 
-  const onOpenChat = useCallback(() => {
-    navigation.navigate('CoachStudentChat', {
-      peerUserId,
-      peerName,
-      peerLocation,
-      actualScore,
-      lastScore,
-      peerImageUri,
-      pendingCoachReviewId,
-      showNewVideoBadge: !!pendingCoachReviewId,
-    })
-  }, [navigation, peerUserId, peerName, peerLocation, actualScore, lastScore, peerImageUri, pendingCoachReviewId])
-
   const onOpenUpload = useCallback(
     (item: UploadItem) => {
       if (!item.reviewId) return
@@ -480,16 +466,13 @@ export function StudentProfileScreen() {
             <Text allowFontScaling={false} numberOfLines={1} style={[styles.studentLocation, { fontFamily: fonts.regularFont }]}>
               {peerLocation}
             </Text>
-            <View style={styles.studentMetaRow}>
-              <TouchableOpacity onPress={onOpenChat} hitSlop={8} accessibilityLabel={t('coachChat.chatTitle')}>
-                <LocalSvgAsset assetModule={CHAT_ICON} width={16} height={16} />
-              </TouchableOpacity>
-              {showNewVideoRow ? (
+            {showNewVideoRow ? (
+              <View style={styles.studentMetaRow}>
                 <View style={styles.newVideoAssetWrap}>
                   <LocalSvgAsset assetModule={NEWVIDEO_SVG} width={NEWVIDEO_ROW_W} height={NEWVIDEO_ROW_H} />
                 </View>
-              ) : null}
-            </View>
+              </View>
+            ) : null}
           </View>
           <MyCoachScoreRing
             actualScore={actualScore}
@@ -682,12 +665,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   newVideoAssetWrap: {
-    paddingVertical: 3,
-    paddingHorizontal: 6,
-    borderRadius: 6,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.25)',
+    alignSelf: 'flex-start',
   },
   section: {
     marginBottom: 20,
@@ -715,10 +693,11 @@ const styles = StyleSheet.create({
   scheduleDayBubble: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
+    overflow: 'hidden',
   },
   scheduleDayBubbleOn: {
     backgroundColor: '#00B8FF',
