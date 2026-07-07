@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useRoute, useNavigation, useFocusEffect, type RouteProp } from '@react-navigation/native'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import type { MainTabParamList } from '../navigation/types'
@@ -25,7 +25,6 @@ import { authClient } from '../lib/auth-client'
 import { storedAiScoreToPercent } from '../lib/techniqueScoreDisplay'
 import { DOMAIN } from '../../constants'
 import { ACTIVITIES_FAVORITES_STORAGE_KEY } from '../constants/activitiesFavorites'
-import { techniqueQualityTone } from '../lib/technique-quality'
 import type { ActivitySession } from '../lib/activitySession'
 import { displayTrainShotTitle } from '../lib/trainShotDisplay'
 import { getMainStackNavigation } from '../lib/mainStackNavigation'
@@ -39,6 +38,9 @@ import { profileImageSource } from '../lib/defaultProfilePicture'
 
 const AI_COACH_PLACEHOLDER = require('../../assets/actiities/aicoachplacehokder.svg')
 const YOU_SHARE_ICON = require('../../assets/youpage/shareicon.svg')
+const GOOD_COMMENT_ICON = require('../../assets/videoanalysis/good.svg')
+const BAD_COMMENT_ICON = require('../../assets/videoanalysis/bad.svg')
+const MIXED_COMMENT_ICON = require('../../assets/videoanalysis/badandgood.svg')
 /** Matches My Students scroll + hero horizontal inset. */
 const HERO_HORIZONTAL_PAD = 20
 
@@ -146,22 +148,51 @@ function ActivitiesNoShotsPlaceholder({
   )
 }
 
-function commentCountHint(snippet: string | null): number {
-  if (!snippet?.trim()) return 0
-  const w = snippet.trim().split(/\s+/).length
-  return Math.min(99, Math.max(1, Math.round(w / 6)))
-}
-
 /** API list score / snapshot scores are 0–100. Show whole-number score out of 100. */
 function displayScoreWhole(score0to100: number): number {
   return Math.round(Math.max(0, Math.min(100, score0to100)))
 }
 
-function isGoodRating(s: ActivitySession): boolean {
-  const tone = techniqueQualityTone(s)
-  if (tone === 'good') return true
-  if (tone === 'bad') return false
-  return true
+/**
+ * Real coach-comment stats for a shot, taken from the coach's review
+ * annotations (coachMarksJson). Each annotation carries a tone of
+ * 'good' | 'wrong'. Shots with no coach review return zero counts.
+ */
+function coachCommentStats(s: ActivitySession): { total: number; good: number; bad: number } {
+  const marks = s.coachMarksJson
+  let good = 0
+  let bad = 0
+  let total = 0
+  if (Array.isArray(marks)) {
+    for (const row of marks) {
+      const r = row as Record<string, unknown> | null
+      if (!r) continue
+      const comment = typeof r.comment === 'string' ? r.comment.trim() : ''
+      const hasImage = typeof r.imageUri === 'string' && r.imageUri.trim().length > 0
+      if (!comment && !hasImage) continue
+      total++
+      const tone = r.tone
+      if (tone === 'good') good++
+      else if (tone === 'wrong' || tone === 'bad') bad++
+    }
+  }
+  return { total, good, bad }
+}
+
+function commentToneFromStats(stats: { good: number; bad: number }): 'good' | 'bad' | 'both' {
+  if (stats.good > 0 && stats.bad > 0) return 'both'
+  if (stats.bad > 0) return 'bad'
+  return 'good'
+}
+
+function ShotCommentToneIcon({ tone }: { tone: 'good' | 'bad' | 'both' }) {
+  if (tone === 'both') {
+    return <LocalSvgAsset assetModule={MIXED_COMMENT_ICON} width={14} height={8} />
+  }
+  if (tone === 'bad') {
+    return <LocalSvgAsset assetModule={BAD_COMMENT_ICON} width={8} height={8} />
+  }
+  return <LocalSvgAsset assetModule={GOOD_COMMENT_ICON} width={8} height={8} />
 }
 
 /** Stable “last score” marker for dual-bar UI when API does not send lastScore. */
@@ -338,13 +369,13 @@ function ActivitiesDayDetail({
 
       <View style={styles.wrongGoodLegendRow}>
         <View style={styles.wrongGoodLine}>
-          <View style={[styles.wrongGoodDot, { backgroundColor: C.wrong }]} />
+          <LocalSvgAsset assetModule={BAD_COMMENT_ICON} width={8} height={8} />
           <Text allowFontScaling={false} style={styles.wrongGoodLabel}>
             {t('common.wrong')}
           </Text>
         </View>
         <View style={styles.wrongGoodLine}>
-          <View style={[styles.wrongGoodDot, { backgroundColor: C.good }]} />
+          <LocalSvgAsset assetModule={GOOD_COMMENT_ICON} width={8} height={8} />
           <Text allowFontScaling={false} style={styles.wrongGoodLabel}>
             {t('common.good')}
           </Text>
@@ -422,8 +453,10 @@ function ActivitiesDayDetail({
               strokeLabel: s.shotLabel,
               strokeName: s.shotLabel,
             })
-            const good = isGoodRating(s)
-            const comments = commentCountHint(s.feedbackSnippet)
+            const coachStats = coachCommentStats(s)
+            const comments = coachStats.total
+            const hasComments = comments > 0
+            const tone = commentToneFromStats(coachStats)
             const score = typeof s.score === 'number' ? s.score : null
             const last = derivedLastScore(s)
 
@@ -453,12 +486,7 @@ function ActivitiesDayDetail({
                       {shot}
                     </Text>
                     <View style={styles.commentsPill}>
-                      <View
-                        style={[
-                          styles.statusDot,
-                          { backgroundColor: good ? C.good : C.wrong },
-                        ]}
-                      />
+                      {hasComments ? <ShotCommentToneIcon tone={tone} /> : null}
                       <Text allowFontScaling={false} style={styles.commentsText}>
                         {comments} Comments
                       </Text>
@@ -524,6 +552,8 @@ export type ActivitiesCalendarFlowProps = {
   onOpenAnalysisConsumed?: () => void
   /** Coach Calendar tab: also mark days students sent videos and list them in day detail. */
   coachInbox?: boolean
+  /** Incremented by the parent when the Activities tab is re-pressed — closes any open shot/day detail. */
+  resetSignal?: number
 }
 
 /**
@@ -540,6 +570,7 @@ export function ActivitiesCalendarFlow({
   openAnalysisId,
   onOpenAnalysisConsumed,
   coachInbox = false,
+  resetSignal,
 }: ActivitiesCalendarFlowProps) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -572,6 +603,17 @@ export function ActivitiesCalendarFlow({
   const [shotsTab, setShotsTab] = useState<'all' | 'favorites'>('all')
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
   const [coachSubmissions, setCoachSubmissions] = useState<CoachSubmission[]>([])
+
+  /** Re-pressing the Activities tab closes an open shot/day detail (back to main page). */
+  const didInitResetSignal = useRef(false)
+  useEffect(() => {
+    if (!didInitResetSignal.current) {
+      didInitResetSignal.current = true
+      return
+    }
+    setAnalysisSession(null)
+    setDetailDateKey(null)
+  }, [resetSignal])
 
   /** Load favorites on mount and when returning from shot detail (star toggled there). */
   useEffect(() => {
@@ -779,6 +821,8 @@ export function ActivitiesCalendarFlow({
     }
   }
 
+  const todayKey = localDateKey(new Date())
+
   /** Six rows of seven equal-width cells (explicit width; avoids iOS prod flex collapse). */
   const dayGrid = (
     <>
@@ -790,6 +834,7 @@ export function ActivitiesCalendarFlow({
             const has = datesWithActivity.has(dk)
             const hasSubmission = datesWithSubmissions.has(dk)
             const isSel = selectedKey === dk
+            const isToday = cell.inMonth && dk === todayKey
             return (
               <Pressable
                 key={idx}
@@ -801,7 +846,11 @@ export function ActivitiesCalendarFlow({
                   <View style={styles.dayNumCircle}>
                     <Text
                       allowFontScaling={false}
-                      style={[styles.dayNumInCircle, !cell.inMonth && styles.dayNumMuted]}
+                      style={[
+                        styles.dayNumInCircle,
+                        !cell.inMonth && styles.dayNumMuted,
+                        isToday && styles.dayNumToday,
+                      ]}
                     >
                       {cell.date.getDate()}
                     </Text>
@@ -813,6 +862,7 @@ export function ActivitiesCalendarFlow({
                       styles.dayNum,
                       isSel && styles.dayNumSelected,
                       !cell.inMonth && styles.dayNumMuted,
+                      isToday && styles.dayNumToday,
                     ]}
                   >
                     {cell.date.getDate()}
@@ -948,8 +998,9 @@ export function ActivitiesCalendarFlow({
                       <View style={shotsStyles.progressRow}>
                         <ProLibraryGradientProgressBar
                           progress={pct}
+                          flat
                           fillColor={barColor}
-                          trackColor={SHOTS_TRACK_BG}
+                          trackColor="#07256D"
                           height={8}
                           outerBorderRadius={6}
                           innerBorderRadius={4}
@@ -1132,12 +1183,21 @@ export function ActivitiesScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList, 'Activities'>>()
   const routeOpenId = route.params?.openAnalysisId
   const [latchedOpenAnalysisId, setLatchedOpenAnalysisId] = useState<string | undefined>()
+  const [resetSignal, setResetSignal] = useState(0)
 
   useEffect(() => {
     if (!routeOpenId) return
     setLatchedOpenAnalysisId(routeOpenId)
     navigation.setParams({ openAnalysisId: undefined })
   }, [routeOpenId, navigation])
+
+  /** Pressing the Activities tab again returns to the main Activities page (closes any open shot/day). */
+  useEffect(() => {
+    const unsub = navigation.addListener('tabPress', () => {
+      setResetSignal((n) => n + 1)
+    })
+    return unsub
+  }, [navigation])
 
   const openAnalysisId = latchedOpenAnalysisId
 
@@ -1148,6 +1208,7 @@ export function ActivitiesScreen() {
       openAnalysisId={openAnalysisId}
       onOpenAnalysisConsumed={() => setLatchedOpenAnalysisId(undefined)}
       coachInbox={viewerIsCoach}
+      resetSignal={resetSignal}
     />
   )
 }
@@ -1312,6 +1373,9 @@ function getStyles(theme: any, _winW: number) {
       backgroundColor: CAL_SUBMISSION_DOT,
       borderWidth: 1,
       borderColor: theme.backgroundColor,
+    },
+    dayNumToday: {
+      textDecorationLine: 'underline',
     },
   })
 }

@@ -28,8 +28,9 @@ import { CLUB_LIST_ROWS } from "../lib/club-detail-data";
 import { COACH_CARD_ASPECT, COACH_INVITE_CARDS } from "../lib/coach-invite-data";
 import { useTranslation } from "react-i18next";
 
-const INVITE_SVG = require("../../assets/youpage/invitebutton.svg");
 type InviteSegment = "friends" | "coaches" | "clubs";
+
+const SHARE_ICON = require("../../assets/shareicon111.svg");
 
 const TAB_ACTIVE = "#0048CD";
 const SEGMENT_INACTIVE_BG = "#041641";
@@ -280,9 +281,12 @@ export function InviteFriendScreen() {
                 onPress={() => void onInvitePress()}
                 accessibilityRole="button"
                 accessibilityLabel={t("invite.inviteFriend")}
-                style={styles.inviteHit}
+                style={[styles.inviteButton, { width: btnW, height: btnH, borderRadius: btnH / 3 }]}
               >
-                <LocalSvgAsset assetModule={INVITE_SVG} width={btnW} height={btnH} />
+                <LocalSvgAsset assetModule={SHARE_ICON} width={22} height={22} />
+                <Text allowFontScaling={false} style={styles.inviteButtonText}>
+                  {t("invite.inviteFriend")}
+                </Text>
               </TouchableOpacity>
           </>
         )}
@@ -468,10 +472,18 @@ function getStyles(theme: {
       marginBottom: 20,
       paddingHorizontal: 8,
     },
-    inviteHit: {
+    inviteButton: {
+      flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       alignSelf: "center",
+      gap: 10,
+      backgroundColor: "#0048CD",
+    },
+    inviteButtonText: {
+      fontFamily: theme.semiBoldFont ?? "System",
+      fontSize: 17,
+      color: "#00B8FF",
     },
   });
 }

@@ -33,6 +33,8 @@ import { ProLibraryGradientFrame } from '../components/ProLibraryGradientFrame'
 import { proLibraryChrome } from '../theme/proLibraryChrome'
 import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
+import { Header } from '../components/Header'
+import { MainTabBarChrome } from '../components/MainTabBarChrome'
 
 const SMALLER_BRUSH_ICON = require('../../assets/videoanalysis/smallericon.svg')
 const BIGGER_BRUSH_ICON = require('../../assets/videoanalysis/biggericon.svg')
@@ -578,8 +580,17 @@ export function CoachReviewEditorScreen() {
 
   if (loading || !review) {
     return (
-      <View style={[styles.center, { backgroundColor: theme.backgroundColor }]}>
-        <ActivityIndicator size="large" color="#00BBFF" />
+      <View style={[styles.root, { backgroundColor: theme.backgroundColor }]}>
+        <Header
+          flatOverlay
+          onProPress={() => navigation.navigate('ProSubscription')}
+          onNotificationsPress={() => navigation.navigate('Notifications')}
+          onSettingsPress={() => navigation.navigate('ProfileSettings')}
+        />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#00BBFF" />
+        </View>
+        <MainTabBarChrome activeTab="MyCoach" />
       </View>
     )
   }
@@ -587,17 +598,24 @@ export function CoachReviewEditorScreen() {
   const progressPct = totalDurMs > 0 ? positionMs / totalDurMs : 0
 
   return (
-    <KeyboardAwareScrollView
-      style={[styles.root, { backgroundColor: theme.backgroundColor }]}
-      contentContainerStyle={[styles.inner, { paddingTop: 8 + insets.top, paddingBottom: 28 + insets.bottom, paddingHorizontal: HPAD }]}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      scrollEnabled={!isDrawing}
-      bottomOffset={insets.bottom + 12}
-    >
+    <View style={[styles.root, { backgroundColor: theme.backgroundColor }]}>
+      <Header
+        flatOverlay
+        onProPress={() => navigation.navigate('ProSubscription')}
+        onNotificationsPress={() => navigation.navigate('Notifications')}
+        onSettingsPress={() => navigation.navigate('ProfileSettings')}
+      />
+      <KeyboardAwareScrollView
+        style={{ flex: 1, width: '100%' }}
+        contentContainerStyle={[styles.inner, { paddingTop: 12, paddingBottom: 28 + insets.bottom, paddingHorizontal: HPAD }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        scrollEnabled={!isDrawing}
+        bottomOffset={insets.bottom + 12}
+      >
       {/* Top bar */}
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backRow} activeOpacity={0.85} hitSlop={8}>
-        <Ionicons name="chevron-back" size={22} color="#00BBFF" />
+        <Ionicons name="chevron-back" size={26} color="#86A7D2" />
         <Text allowFontScaling={false} style={[styles.backText, { fontFamily: theme.mediumFont }]}>
           {t('coachReview.backToStudent')}
         </Text>
@@ -892,7 +910,9 @@ export function CoachReviewEditorScreen() {
           </LinearGradient>
         </TouchableOpacity>
       </View>
-    </KeyboardAwareScrollView>
+      </KeyboardAwareScrollView>
+      <MainTabBarChrome activeTab="MyCoach" />
+    </View>
   )
 }
 
@@ -902,7 +922,7 @@ function getStyles(theme: { backgroundColor?: string; mutedForegroundColor?: str
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     inner: {},
     backRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 14 },
-    backText: { color: '#00BBFF', fontSize: 15 },
+    backText: { color: '#86A7D2', fontSize: 13 },
     actionRow: {
       marginTop: 14,
       flexDirection: 'row',

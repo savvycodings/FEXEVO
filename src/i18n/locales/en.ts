@@ -263,7 +263,7 @@ export const en = {
     friends: "Friends",
     coaches: "Coaches",
     clubs: "Clubs",
-    inviteFriend: "Invite a friend",
+    inviteFriend: "Invite a friend or club",
     shareMessage: "Join me on Xevo — train smarter with padel technique feedback.",
   },
   coachAccordions: {

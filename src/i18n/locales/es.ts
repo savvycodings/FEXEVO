@@ -263,7 +263,7 @@ export const es = {
     friends: "Amigos",
     coaches: "Entrenadores",
     clubs: "Clubes",
-    inviteFriend: "Invitar a un amigo",
+    inviteFriend: "Invitar a un amigo o club",
     shareMessage: "Únete a Xevo — entrena mejor con feedback de técnica de pádel.",
   },
   coachAccordions: {

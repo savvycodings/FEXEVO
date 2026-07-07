@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Image,
   Platform,
@@ -58,13 +57,14 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<Nav>()
-  const { width: winW } = useWindowDimensions()
+  const { width: winW, height: winH } = useWindowDimensions()
   const [billing, setBilling] = useState<BillingCycle>('annual')
   const [profileName, setProfileName] = useState('Player')
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
 
   const styles = useMemo(() => getStyles(theme, winW), [theme, winW])
-  const heroHeight = Math.round(Math.min(220, Math.max(180, winW * 0.5)))
+  /** Height-based so the whole page fits without scrolling on shorter devices. */
+  const heroHeight = Math.round(Math.min(200, Math.max(140, winH * 0.2)))
   const heroImageWidth = heroHeight * (329 / 179)
   /** Wider than the image so the radial vignette extends left over the image edge */
   const heroRadialWidth = heroImageWidth * 1.22
@@ -138,11 +138,7 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollInner, { paddingBottom: 16 }]}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.content}>
         {/* Hero */}
         <View style={[styles.hero, { height: heroHeight }]}>
           <Image source={HERO_IMAGE} style={[styles.heroImage, { height: heroHeight, width: heroImageWidth }]} resizeMode="cover" />
@@ -291,6 +287,7 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
               strokeWidth={2}
               gradientVariant="default"
               innerStyle={styles.proCardInner}
+              stretchInner
             >
               {FEATURE_ROWS.map((row, i) => (
                 <View
@@ -327,7 +324,7 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
             </Text>
           </LinearGradient>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
 
       <MainTabBarChrome />
     </View>
@@ -386,11 +383,8 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
     proBadgeWrap: {
       paddingVertical: 4,
     },
-    scroll: {
+    content: {
       flex: 1,
-    },
-    scrollInner: {
-      paddingTop: 0,
     },
     hero: {
       width: winW,
@@ -450,6 +444,7 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       zIndex: 2,
     },
     comparison: {
+      flex: 1,
       marginTop: 4,
       paddingHorizontal: horizontalPad,
     },
@@ -559,8 +554,9 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       transform: [{ translateY: -4 }],
     },
     cardsRow: {
+      flex: 1,
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      alignItems: 'stretch',
       gap: cardGap,
     },
     freeCard: {
@@ -569,6 +565,7 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       borderRadius: 14,
       paddingHorizontal: 12,
       paddingVertical: 2,
+      justifyContent: 'space-between',
     },
     proCardBorder: {
       width: proCardWidth,
@@ -579,12 +576,11 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       paddingVertical: 2,
     },
     featureCell: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 11,
       gap: 6,
-      minHeight: 40,
     },
     featureCellBorder: {
       borderBottomWidth: 1,
@@ -612,13 +608,14 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       lineHeight: 14,
     },
     ctaOuter: {
-      marginTop: 20,
+      marginTop: 24,
+      marginBottom: 32,
       marginHorizontal: horizontalPad,
       borderRadius: 12,
       overflow: 'hidden',
     },
     ctaInner: {
-      paddingVertical: 16,
+      paddingVertical: 15,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 12,

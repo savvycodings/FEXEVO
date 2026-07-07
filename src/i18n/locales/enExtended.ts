@@ -439,11 +439,11 @@ export const enExtended = {
     dateNotSet: "Date not set",
     locationNotSet: "Location not set",
     passwordChangeFailed: "Password change failed.",
-    signOut: "Sign out",
+    signOut: "Log out",
     logoutTitle: "Log out?",
     logoutMessage: "Are you sure you want to log out?",
     logoutCancel: "Cancel",
-    logoutConfirm: "Logout",
+    logoutConfirm: "Log out",
   },
   activitiesExtra: {
     videoRecordings: "Video recordings",

@@ -81,12 +81,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ringActual: {
-    color: '#2D86FF',
+    color: '#40C0FF',
     fontSize: 14,
     lineHeight: 15,
   },
   ringLast: {
-    color: '#5260A4',
+    color: '#2B7CFF',
     fontSize: 12,
     lineHeight: 12,
     marginTop: 1,

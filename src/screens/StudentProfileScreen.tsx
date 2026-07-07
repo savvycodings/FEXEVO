@@ -187,18 +187,11 @@ function UploadCommentIcon({ tone }: { tone: NonNullable<UploadItem['commentTone
   return <LocalSvgAsset assetModule={GOOD_COMMENT_ICON} width={8} height={8} />
 }
 
-function UploadScoreBar({ score, lastScore = 0 }: { score: number; lastScore?: number }) {
+function UploadScoreBar({ score }: { score: number; lastScore?: number }) {
   const pct = Math.max(0, Math.min(100, score))
-  const lastPct = Math.max(0, Math.min(100, lastScore))
   return (
     <View style={styles.uploadScoreTrack}>
-      {lastPct > 0 ? <View style={[styles.uploadScoreFillLast, { width: `${lastPct}%` }]} /> : null}
       <View style={[styles.uploadScoreFill, { width: `${pct}%` }]} />
-      <View style={[styles.uploadScoreMarker, { left: `${pct}%` }]}>
-        <Text allowFontScaling={false} style={styles.uploadScoreMarkerGlyph}>
-          ▼
-        </Text>
-      </View>
     </View>
   )
 }
@@ -820,16 +813,8 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: '#E2E8F0',
-    overflow: 'visible',
+    overflow: 'hidden',
     position: 'relative',
-  },
-  uploadScoreFillLast: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: '#3D58FF',
-    borderRadius: 4,
   },
   uploadScoreFill: {
     position: 'absolute',
@@ -838,18 +823,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: '#38BDF8',
     borderRadius: 4,
-  },
-  uploadScoreMarker: {
-    position: 'absolute',
-    top: -3,
-    marginLeft: -5,
-    width: 10,
-    alignItems: 'center',
-  },
-  uploadScoreMarkerGlyph: {
-    fontSize: 8,
-    color: '#38BDF8',
-    lineHeight: 10,
   },
   uploadScoreLabel: {
     marginTop: -3,

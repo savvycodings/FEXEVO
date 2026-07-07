@@ -136,10 +136,10 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   scoreThis: {
-    color: '#2D86FF',
+    color: RING_THIS_WEEK,
   },
   scoreLast: {
-    color: '#5260A4',
+    color: RING_LAST_WEEK,
     marginTop: 0,
   },
 })

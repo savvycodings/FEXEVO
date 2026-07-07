@@ -122,10 +122,13 @@ export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => 
 
   const insight = useMemo(() => computeWeeklyInsightFromRatingRows(ratingCategories), [ratingCategories]);
 
+  // Only surface the banner once there are 2 weeks of records (a prior-week
+  // baseline exists) so it can show an actual week-over-week change.
   const showAiInsight =
     dismissLoaded &&
     !ratingLoading &&
     insight != null &&
+    insight.hasPriorWeek &&
     Date.now() >= dismissedUntilMs;
 
   const onDismissInsight = useCallback(async () => {

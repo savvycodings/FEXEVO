@@ -189,7 +189,7 @@ export function Settings() {
         onPress={() => void signOutAndClearProfileCache()}
       >
         <View style={[styles.chatChoiceButton, { backgroundColor: theme.borderColor }]}>
-          <Text style={styles.chatTypeText}>Sign out</Text>
+          <Text style={styles.chatTypeText}>Log out</Text>
         </View>
       </TouchableHighlight>
     </ScrollView>
