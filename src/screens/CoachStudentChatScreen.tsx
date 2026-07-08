@@ -19,7 +19,9 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { ThemeContext } from '../context'
 import { vercel as defaultTheme } from '../theme'
-import type { MyCoachTabStackParamList } from '../navigation/types'
+import { Header } from '../components/Header'
+import { MainTabBarChrome } from '../components/MainTabBarChrome'
+import type { MainStackParamList, MyCoachTabStackParamList } from '../navigation/types'
 import { authClient } from '../lib/auth-client'
 import { MyCoachScoreRing } from './myCoach/ScoreRing'
 import { getCachedProfile } from '../lib/profile-cache'
@@ -105,7 +107,13 @@ export function CoachStudentChatScreen() {
     peerImageUri,
     pendingCoachReviewId: initialPendingCoachReviewId,
     showNewVideoBadge: _showNewVideoBadge,
+    peerRole = 'student',
   } = route.params
+
+  /** Student is viewing their coach (peer is a coach), vs. coach viewing a student. */
+  const peerIsCoach = peerRole === 'coach'
+  /** Header/nav actions target MainStack routes (student side is a MainStack screen). */
+  const mainNav = navigation as unknown as NativeStackNavigationProp<MainStackParamList>
 
   const [pendingCoachReviewId, setPendingCoachReviewId] = useState<string | null>(
     typeof initialPendingCoachReviewId === 'string' && initialPendingCoachReviewId.trim().length > 0
@@ -115,6 +123,8 @@ export function CoachStudentChatScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // "New video pending review" is coach-only context; skip when the peer is a coach.
+      if (peerIsCoach) return
       let cancelled = false
       void fetchPendingCoachReviewIdForStudent(peerUserId).then((id) => {
         if (!cancelled) setPendingCoachReviewId(id)
@@ -122,7 +132,7 @@ export function CoachStudentChatScreen() {
       return () => {
         cancelled = true
       }
-    }, [peerUserId])
+    }, [peerUserId, peerIsCoach])
   )
 
   const showNewVideoRow = !!pendingCoachReviewId
@@ -262,17 +272,24 @@ export function CoachStudentChatScreen() {
 
   return (
     <View style={styles.screen}>
+      {peerIsCoach ? (
+        <Header
+          onProPress={() => mainNav.navigate('ProSubscription')}
+          onSettingsPress={() => mainNav.navigate('ProfileSettings')}
+          onNotificationsPress={() => mainNav.navigate('Notifications')}
+        />
+      ) : null}
       <View style={styles.topBar}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           activeOpacity={0.85}
           style={styles.backRow}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          accessibilityLabel={t('coachChat.backToStudents')}
+          accessibilityLabel={peerIsCoach ? t('coachChat.backToCoach') : t('coachChat.backToStudents')}
         >
           <Ionicons name="chevron-back" size={22} color={MUTED} />
           <Text allowFontScaling={false} style={[styles.backLabel, { fontFamily: fonts.regularFont }]}>
-            {t('coachChat.backToStudents')}
+            {peerIsCoach ? t('coachChat.backToCoach') : t('coachChat.backToStudents')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -285,26 +302,28 @@ export function CoachStudentChatScreen() {
         bounces={false}
         bottomOffset={insets.bottom + 20}
       >
-        {/* ── "Student" label + legend ── */}
-        <View style={styles.legendBar}>
-          <Text allowFontScaling={false} style={[styles.studentLabel, { fontFamily: fonts.regularFont }]}>
-            {t('coachChat.student')}
-          </Text>
-          <View style={styles.legendRight}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#2AB4FF' }]} />
-              <Text allowFontScaling={false} style={[styles.legendText, { fontFamily: fonts.regularFont }]}>
-                {t('myCoach.actualScore')}
-              </Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#3D58FF' }]} />
-              <Text allowFontScaling={false} style={[styles.legendText, { fontFamily: fonts.regularFont }]}>
-                {t('myCoach.lastScore')}
-              </Text>
+        {/* ── "Student" label + legend (coach view only) ── */}
+        {peerIsCoach ? null : (
+          <View style={styles.legendBar}>
+            <Text allowFontScaling={false} style={[styles.studentLabel, { fontFamily: fonts.regularFont }]}>
+              {t('coachChat.student')}
+            </Text>
+            <View style={styles.legendRight}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#2AB4FF' }]} />
+                <Text allowFontScaling={false} style={[styles.legendText, { fontFamily: fonts.regularFont }]}>
+                  {t('myCoach.actualScore')}
+                </Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#3D58FF' }]} />
+                <Text allowFontScaling={false} style={[styles.legendText, { fontFamily: fonts.regularFont }]}>
+                  {t('myCoach.lastScore')}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
         {/* ── Student info card (mirrors SwipeableStudentCard visually) ── */}
         <View style={styles.studentCard}>
@@ -348,17 +367,19 @@ export function CoachStudentChatScreen() {
                   ellipsizeMode="tail"
                   style={[styles.chatTitle, { fontFamily: fonts.mediumFont }]}
                 >
-                  {t('coachChat.chatTitle')}
+                  {peerIsCoach ? t('coachChat.chatTitleToCoach') : t('coachChat.chatTitle')}
                 </Text>
-                <TouchableOpacity
-                  onPress={() => navigation.goBack()}
-                  activeOpacity={0.85}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  style={styles.chatCloseBtn}
-                  accessibilityLabel="Close chat"
-                >
-                  <Ionicons name="close" size={20} color="#86A7D2" />
-                </TouchableOpacity>
+                {peerIsCoach ? null : (
+                  <TouchableOpacity
+                    onPress={() => navigation.goBack()}
+                    activeOpacity={0.85}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={styles.chatCloseBtn}
+                    accessibilityLabel="Close chat"
+                  >
+                    <Ionicons name="close" size={20} color="#86A7D2" />
+                  </TouchableOpacity>
+                )}
               </View>
 
               {/* Messages */}
@@ -417,6 +438,7 @@ export function CoachStudentChatScreen() {
           </LinearGradient>
         </View>
       </KeyboardAwareScrollView>
+      {peerIsCoach ? <MainTabBarChrome /> : null}
     </View>
   )
 }
@@ -619,7 +641,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   bubbleTheirs: {
-    backgroundColor: '#030A17',
+    backgroundColor: 'rgba(3, 10, 23, 0.5)',
     borderWidth: 1,
     borderColor: 'rgba(51,65,85,0.55)',
   },

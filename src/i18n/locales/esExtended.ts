@@ -385,8 +385,11 @@ export const esExtended = {
   },
   coachChat: {
     backToStudents: "Volver a alumnos",
+    backToCoach: "Volver",
     student: "Alumno",
+    coach: "Entrenador",
     chatTitle: "Enviar mensaje a tu alumno…",
+    chatTitleToCoach: "Enviar mensaje a tu entrenador…",
     closeChat: "Cerrar chat",
     emptyChat: "Aún no hay mensajes. Saluda abajo.",
     messagePlaceholder: "Escribe tu mensaje",

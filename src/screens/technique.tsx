@@ -48,7 +48,9 @@ import Svg, {
 import { authClient } from '../lib/auth-client'
 import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { MainStackParamList } from '../navigation/types'
 import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { LOADING_OVERLAY_SCRIM } from '../constants/loadingVideoFullscreen'
@@ -356,6 +358,7 @@ export function Technique() {
   const { theme } = useContext(ThemeContext)
   const { invalidate: invalidateSessionData } = useSessionData()
   const { data: session } = authClient.useSession()
+  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
   const [scrollBodyH, setScrollBodyH] = useState(0)
@@ -759,6 +762,7 @@ export function Technique() {
       const name = typeof c.name === 'string' && c.name.trim() ? c.name.trim() : 'Coach'
       const absoluteImage = profileImageToAbsoluteUri(c.image)
       setAssignedCoach({
+        id: typeof c.id === 'string' ? c.id : '',
         name,
         imageUri: hasProfileImage(absoluteImage) ? absoluteImage : null,
       })
@@ -1742,6 +1746,13 @@ export function Technique() {
             sendVideoToCoach={sendVideoToCoach}
             onSendVideoToCoachChange={setSendVideoToCoach}
             interactionBusy={uploading}
+            onPressCoach={() =>
+              navigation.navigate('CoachDetail', {
+                coachId: assignedCoach.id,
+                coachName: assignedCoach.name,
+                coachImageUri: assignedCoach.imageUri,
+              })
+            }
           />
         </View>
       ) : null}

@@ -43,6 +43,7 @@ export type AICoachCoachReviewBannerFonts = {
 }
 
 export type AICoachAssignedCoach = {
+  id: string
   name: string
   imageUri: string | null
 }
@@ -55,6 +56,8 @@ type Props = {
   fonts: AICoachCoachReviewBannerFonts
   /** Disables interactions while main upload is in progress. */
   interactionBusy?: boolean
+  /** Opens the coach's profile when the avatar / name area is tapped. */
+  onPressCoach?: () => void
 }
 
 function SendToCoachToggle({
@@ -97,6 +100,7 @@ export function AICoachCoachReviewBanner({
   onSendVideoToCoachChange,
   fonts,
   interactionBusy = false,
+  onPressCoach,
 }: Props) {
   const { t } = useTranslation()
   const coachImageUri = assignedCoach.imageUri
@@ -109,7 +113,13 @@ export function AICoachCoachReviewBanner({
   return (
     <ProLibraryGradientFrame style={[styles.bannerFrame, { minHeight: CARD_MIN_HEIGHT }]} {...frameCommon}>
       <View style={styles.cardInner}>
-        <View style={styles.leftContent}>
+        <Pressable
+          style={styles.leftContent}
+          onPress={onPressCoach}
+          disabled={!onPressCoach}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${assignedCoach.name}'s profile`}
+        >
           <View style={styles.avatarWrap}>
             <Image
               source={avatarSource}
@@ -136,7 +146,7 @@ export function AICoachCoachReviewBanner({
               {t('myCoach.premiumCoach')}
             </Text>
           </View>
-        </View>
+        </Pressable>
 
         <View style={styles.switchCol}>
           <View style={styles.switchLabelCol}>

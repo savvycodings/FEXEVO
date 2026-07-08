@@ -61,3 +61,25 @@ export function getCoachDetail(id: string): CoachDetailModel | null {
   if (key !== "steve" && key !== "carlos" && key !== "slama") return null;
   return COACH_DETAIL[key];
 }
+
+/**
+ * Resolve a coach detail model for any id. Known sample coaches return their
+ * static profile; real (linked) coaches that aren't in the sample set fall back
+ * to a generic profile that surfaces the coach's real display name.
+ */
+export function resolveCoachDetail(
+  id: string,
+  fallbackName?: string | null
+): CoachDetailModel | null {
+  const known = getCoachDetail(id);
+  if (known) return known;
+  const name = (fallbackName ?? "").trim();
+  if (!name) return null;
+  return {
+    ...COACH_DETAIL.carlos,
+    id: (id.trim() || "carlos") as CoachId,
+    displayName: name,
+    fullLegalName: name,
+    headline: "Premium Coach",
+  };
+}

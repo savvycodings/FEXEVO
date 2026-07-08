@@ -37,6 +37,11 @@ export type CoachStudentChatParams = {
   pendingCoachReviewId?: string | null;
   /** When true, show the “New video” strip under the name (matches My Coach row noti). */
   showNewVideoBadge?: boolean;
+  /**
+   * Who the peer is relative to the viewer. `student` (default) = coach viewing a
+   * student. `coach` = student viewing their coach (opened from the coach page).
+   */
+  peerRole?: "coach" | "student";
 };
 
 export type StudentShotSelectParams = CoachStudentChatParams & {
@@ -72,7 +77,9 @@ export type MainStackParamList = {
   /** Full-screen modal (friends / coaches / clubs search) from header on You, Progress, Activities. */
   InviteSearch: undefined;
   ClubDetail: { clubId: ClubId };
-  CoachDetail: { coachId: CoachId };
+  CoachDetail: { coachId: CoachId | string; coachName?: string; coachImageUri?: string | null };
+  /** Student ↔ coach private chat (opened from the coach page's Message badge). */
+  CoachStudentChat: CoachStudentChatParams;
   AdminHub: undefined;
   AdminTrain: undefined;
   AdminFalLora: undefined;

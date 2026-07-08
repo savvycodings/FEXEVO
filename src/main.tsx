@@ -591,6 +591,7 @@ function AuthenticatedStack() {
       />
       <Stack.Screen name="ClubDetail" component={ClubDetailScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="CoachDetail" component={CoachDetailScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="CoachStudentChat" component={CoachStudentChatScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="AdminHub" layout={screenEntranceLayout}>
         {({ navigation }) => (
           <AdminHub

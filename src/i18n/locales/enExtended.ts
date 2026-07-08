@@ -384,8 +384,11 @@ export const enExtended = {
   },
   coachChat: {
     backToStudents: "Back to students",
+    backToCoach: "Back",
     student: "Student",
+    coach: "Coach",
     chatTitle: "Send message to your student…",
+    chatTitleToCoach: "Send message to your coach…",
     closeChat: "Close chat",
     emptyChat: "No messages yet. Say hello below.",
     messagePlaceholder: "Write your message",

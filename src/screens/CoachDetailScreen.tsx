@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Share,
-  useWindowDimensions,
   Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,19 +16,23 @@ import { ThemeContext } from "../context";
 import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
-import { getCoachDetail } from "../lib/coach-detail-data";
+import { ProfileHeroScoreBlock } from "../components/ProfileHeroScoreBlock";
+import { getCoachDetail, resolveCoachDetail } from "../lib/coach-detail-data";
+import {
+  fetchPlayerOverallScore,
+  fetchPublicPlayerProfile,
+} from "../lib/leaderboardPlayerApi";
+import { resolveUploadUrl } from "../lib/mediaUrl";
 import type { MainStackParamList } from "../navigation/types";
 
 const UNFOLLOW_ICON = require("../../assets/youpage/unfollowicon.svg");
 const BOOK_VIDEO_ICON = require("../../assets/youpage/bookvideocall.svg");
+const MESSAGE_ICON = require("../../assets/mystudents/message.svg");
 const PERSONAL_ICON = require("../../assets/coachs/personalicon.png");
-const SHIELD_COACH = require("../../assets/coachs/shieldcoach.png");
-const SCORE_GRAPHIC = require("../../assets/coachs/coachscore.png");
 const BD_ICON_SVG = require("../../assets/coachs/bdicon.svg");
-const MEDEL_SVG = require("../../assets/coachs/medel.svg");
 const SHARE_ICON_SVG = require("../../assets/coachs/shareicon.svg");
 
-const SHARE_ICON_SIZE = 22;
+const SHARE_ICON_SIZE = 28;
 
 const COACH_GALLERY = [
   require("../../assets/coachs/img1.png"),
@@ -39,14 +42,17 @@ const COACH_GALLERY = [
   require("../../assets/coachs/img5.png"),
 ] as const;
 
-const SHIELD_ASPECT = 211 / 170;
-const SCORE_ASPECT = 176 / 195;
 const GALLERY_SIZE = 80;
-const MEDAL_ICON_SIZE = 52;
+
+type LiveCoachProfile = {
+  name?: string;
+  headline?: string;
+  birthDisplay?: string | null;
+  areaLocation?: string | null;
+  imageUri?: string | null;
+  score?: number | null;
+};
 const ACCENT = "#00B8FF";
-const PILL_INACTIVE = "#0E1830";
-const OUTLINE_BORDER = "rgba(0, 184, 255, 0.45)";
-const META_MUTED = "rgba(160, 180, 210, 0.95)";
 
 type CoachDetailRoute = RouteProp<MainStackParamList, "CoachDetail">;
 type CoachDetailNav = NativeStackNavigationProp<MainStackParamList, "CoachDetail">;
@@ -56,11 +62,17 @@ export function CoachDetailScreen() {
   const route = useRoute<CoachDetailRoute>();
   const insets = useSafeAreaInsets();
   const { theme } = useContext(ThemeContext);
-  const { width: winW } = useWindowDimensions();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
   const coachId = route.params.coachId;
-  const coach = useMemo(() => getCoachDetail(coachId), [coachId]);
+  const coachName = route.params.coachName;
+  const coachImageUri = route.params.coachImageUri ?? null;
+  const coach = useMemo(
+    () => resolveCoachDetail(coachId, coachName),
+    [coachId, coachName]
+  );
+  /** Known sample coaches (invite flow) keep their static location; live coaches don't. */
+  const isSampleCoach = useMemo(() => getCoachDetail(coachId) != null, [coachId]);
   const horizontalPad = Math.max(16, insets.left, insets.right);
 
   const navigateMainTab = useCallback(
@@ -76,12 +88,34 @@ export function CoachDetailScreen() {
     },
     [navigation]
   );
-  const contentW = winW - horizontalPad * 2;
-  const heroGap = 12;
-  const shieldW = Math.min(168, Math.floor(contentW * 0.4));
-  const shieldH = shieldW * SHIELD_ASPECT;
-  const scoreColW = contentW - shieldW - heroGap;
-  const scoreImgH = Math.min(scoreColW * SCORE_ASPECT, 200);
+
+  // Live coach profile (name, headline, birth date, location) + overall score.
+  const [live, setLive] = useState<LiveCoachProfile | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [profile, overall] = await Promise.all([
+        fetchPublicPlayerProfile(coachId),
+        fetchPlayerOverallScore(coachId),
+      ]);
+      if (cancelled) return;
+      if (profile) {
+        setLive({
+          name: profile.user.name,
+          headline: profile.profile.headline,
+          birthDisplay: profile.profile.birthDisplay,
+          areaLocation: profile.profile.areaLocation,
+          imageUri: resolveUploadUrl(profile.user.image),
+          score: overall,
+        });
+      } else {
+        setLive({ score: overall });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [coachId]);
 
   if (!coach) {
     return (
@@ -103,21 +137,45 @@ export function CoachDetailScreen() {
 
   const detail = coach;
 
+  // Prefer live coach data; fall back to the sample profile for known sample coaches.
+  const displayName = live?.name?.trim() || detail.displayName;
+  const displayLegalName = live?.name?.trim() || detail.fullLegalName;
+  const displayHeadline = live?.headline?.trim() || (isSampleCoach ? detail.headline : "");
+  const displayBirth =
+    live?.birthDisplay?.trim() || (isSampleCoach ? detail.birthDisplay : "");
+  const displayLocation =
+    live?.areaLocation?.trim() || (isSampleCoach ? detail.locationDisplay : "");
+  const displayImage = coachImageUri ?? live?.imageUri ?? null;
+  const displayScore = live?.score ?? null;
+
   async function onShare() {
     try {
       await Share.share({
-        message: `${detail.fullLegalName}\n${detail.locationDisplay}`,
+        message: displayLocation ? `${displayLegalName}\n${displayLocation}` : displayLegalName,
       });
     } catch {
       /* dismissed */
     }
   }
 
+  const onOpenMessage = useCallback(() => {
+    navigation.navigate("CoachStudentChat", {
+      peerUserId: coachId,
+      peerName: displayName,
+      peerLocation: displayLocation,
+      actualScore: displayScore ?? 0,
+      lastScore: 0,
+      peerImageUri: displayImage,
+      peerRole: "coach",
+    });
+  }, [navigation, coachId, displayName, displayLocation, displayScore, displayImage]);
+
   return (
     <View style={styles.root}>
       <Header
         flatOverlay
-        onBackPress={() => navigation.goBack()}
+        headerLeftMode="search"
+        onSearchPress={() => navigation.navigate("InviteSearch")}
         onProPress={() => navigation.navigate("ProSubscription")}
         onSettingsPress={() => navigation.navigate("ProfileSettings")}
         onNotificationsPress={() => navigation.navigate("Notifications")}
@@ -130,38 +188,66 @@ export function CoachDetailScreen() {
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
       >
-        <View style={styles.shareRow}>
+        <View style={styles.topActionRow}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+            style={styles.backRow}
+            hitSlop={{ top: 10, bottom: 10, left: 8, right: 12 }}
+            accessibilityLabel="Back to coaches"
+          >
+            <Ionicons name="chevron-back" size={30} color="#86A7D2" />
+            <Text style={styles.backLabel}>Back to Coaches</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => void onShare()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel="Share coach"
           >
-            <LocalSvgAsset assetModule={SHARE_ICON_SVG} width={SHARE_ICON_SIZE} height={SHARE_ICON_SIZE} />
+            <LocalSvgAsset
+              assetModule={SHARE_ICON_SVG}
+              width={SHARE_ICON_SIZE}
+              height={SHARE_ICON_SIZE}
+              strokeColor="#86A7D2"
+            />
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.heroRow, { gap: heroGap }]}>
-          <Image
-            source={SHIELD_COACH}
-            style={{ width: shieldW, height: shieldH }}
-            resizeMode="contain"
-            accessibilityLabel={`${detail.displayName} shield`}
-          />
-          <View style={[styles.heroRight, { width: scoreColW }]}>
-            <Image
-              source={SCORE_GRAPHIC}
-              style={{ width: scoreColW, height: scoreImgH }}
-              resizeMode="contain"
-              accessibilityLabel="Coach score"
-            />
-          </View>
-        </View>
+        <ProfileHeroScoreBlock
+          horizontalPadding={horizontalPad}
+          premiumLabelNudgeUp={4}
+          marginTop={4}
+          marginBottom={0}
+          youPageLayout
+          ratingUserId={coachId}
+          playerOverride={{
+            name: displayName,
+            imageUri: displayImage,
+            areaLocation: displayLocation || null,
+            score: displayScore,
+          }}
+        />
 
         <View style={styles.actionRow}>
           <TouchableOpacity style={[styles.actionBtn, styles.actionBtnFilled]} activeOpacity={0.85}>
             <Image source={PERSONAL_ICON} style={styles.perfilIcon} resizeMode="contain" />
             <Text style={styles.actionBtnTextFilled}>Perfil</Text>
           </TouchableOpacity>
+          {!isSampleCoach ? (
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnOutline]}
+              activeOpacity={0.85}
+              onPress={onOpenMessage}
+            >
+              <LocalSvgAsset
+                assetModule={MESSAGE_ICON}
+                width={16}
+                height={16}
+                strokeColor="#1F6CD0"
+              />
+              <Text style={styles.actionBtnTextOutline}>Message</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} activeOpacity={0.85}>
             <LocalSvgAsset assetModule={UNFOLLOW_ICON} width={16} height={16} />
             <Text style={styles.actionBtnTextOutline}>Unfollow</Text>
@@ -192,36 +278,29 @@ export function CoachDetailScreen() {
         </ScrollView>
 
         <View style={styles.personalBlock}>
-          <Text style={styles.legalName}>{detail.fullLegalName}</Text>
-          <Text style={styles.headline}>{detail.headline}</Text>
-          <View style={styles.personalMeta}>
-            <View style={styles.metaLine}>
-              <LocalSvgAsset assetModule={BD_ICON_SVG} width={18} height={18} />
-              <Text style={styles.metaText}>{detail.birthDisplay}</Text>
-              <View style={styles.metaBetween} />
-              <Ionicons name="location-outline" size={18} color="#FFFFFF" />
-              <Text style={[styles.metaText, styles.metaTextLocation]} numberOfLines={1}>
-                {detail.locationDisplay}
-              </Text>
+          <Text style={styles.legalName}>{displayLegalName}</Text>
+          {displayHeadline ? <Text style={styles.headline}>{displayHeadline}</Text> : null}
+          {displayBirth || displayLocation ? (
+            <View style={styles.personalMeta}>
+              <View style={styles.metaLine}>
+                {displayBirth ? (
+                  <>
+                    <LocalSvgAsset assetModule={BD_ICON_SVG} width={18} height={18} />
+                    <Text style={styles.metaText}>{displayBirth}</Text>
+                  </>
+                ) : null}
+                {displayBirth && displayLocation ? <View style={styles.metaBetween} /> : null}
+                {displayLocation ? (
+                  <>
+                    <Ionicons name="location-outline" size={18} color="#FFFFFF" />
+                    <Text style={[styles.metaText, styles.metaTextLocation]} numberOfLines={1}>
+                      {displayLocation}
+                    </Text>
+                  </>
+                ) : null}
+              </View>
             </View>
-          </View>
-        </View>
-
-        <View style={styles.splitRow}>
-          <View style={styles.achievementCard}>
-            <LocalSvgAsset assetModule={MEDEL_SVG} width={MEDAL_ICON_SIZE} height={MEDAL_ICON_SIZE} />
-            <Text style={styles.achievementTitle} numberOfLines={3}>
-              {detail.achievementTitle}
-            </Text>
-            <Text style={styles.achievementSub} numberOfLines={2}>
-              {detail.achievementSubtitle}
-            </Text>
-          </View>
-          <View style={styles.perfilCol}>
-            <Text style={styles.perfilHeading}>Perfil</Text>
-            <View style={styles.perfilRule} />
-            <Text style={styles.perfilBody}>{detail.perfilBody}</Text>
-          </View>
+          ) : null}
         </View>
       </ScrollView>
       <MainTabBarChrome />
@@ -248,11 +327,23 @@ function getStyles(theme: {
       color: "#FFFFFF",
       fontFamily: theme.regularFont ?? "System",
     },
-    shareRow: {
+    topActionRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "flex-end",
-      marginBottom: 6,
+      justifyContent: "space-between",
+      marginTop: 16,
+      marginBottom: 16,
+    },
+    backRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    backLabel: {
+      color: "#86A7D2",
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 13,
+      lineHeight: 18,
     },
     scroll: {
       flex: 1,
@@ -260,24 +351,17 @@ function getStyles(theme: {
     scrollInner: {
       paddingBottom: 20,
     },
-    heroRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginTop: 4,
-    },
-    heroRight: {
-      minWidth: 0,
-    },
     actionRow: {
       flexDirection: "row",
+      alignItems: "center",
       gap: 8,
       marginTop: 20,
     },
     actionBtn: {
       flex: 1,
       minWidth: 0,
-      borderRadius: 20,
-      paddingVertical: 12,
+      height: 38,
+      borderRadius: 19,
       paddingHorizontal: 6,
       flexDirection: "row",
       alignItems: "center",
@@ -285,15 +369,15 @@ function getStyles(theme: {
       gap: 6,
     },
     actionBtnFilled: {
-      backgroundColor: PILL_INACTIVE,
+      backgroundColor: "#041641",
     },
     actionBtnOutline: {
       backgroundColor: "transparent",
-      borderWidth: 1,
-      borderColor: OUTLINE_BORDER,
+      borderWidth: 2,
+      borderColor: "#0E2969",
     },
     actionBtnTextFilled: {
-      color: "#FFFFFF",
+      color: "#00B8FF",
       fontFamily: theme.mediumFont ?? "System",
       fontSize: 12,
     },
@@ -302,9 +386,10 @@ function getStyles(theme: {
       height: 16,
     },
     actionBtnTextOutline: {
-      color: "#FFFFFF",
+      color: "#1F6CD0",
       fontFamily: theme.mediumFont ?? "System",
       fontSize: 11,
+      lineHeight: 13,
       textAlign: "center",
     },
     actionBtnTextNarrow: {
@@ -366,58 +451,6 @@ function getStyles(theme: {
     metaTextLocation: {
       flexShrink: 1,
       maxWidth: "52%",
-    },
-    splitRow: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      marginTop: 28,
-      gap: 12,
-    },
-    achievementCard: {
-      width: "36%",
-      minWidth: 118,
-      backgroundColor: PILL_INACTIVE,
-      borderRadius: 14,
-      paddingVertical: 14,
-      paddingHorizontal: 12,
-      alignItems: "center",
-    },
-    achievementTitle: {
-      marginTop: 10,
-      color: "#FFFFFF",
-      fontFamily: theme.semiBoldFont ?? theme.mediumFont ?? "System",
-      fontSize: 14,
-      lineHeight: 18,
-      textAlign: "center",
-    },
-    achievementSub: {
-      marginTop: 6,
-      color: META_MUTED,
-      fontFamily: theme.regularFont ?? "System",
-      fontSize: 12,
-      lineHeight: 16,
-      textAlign: "center",
-    },
-    perfilCol: {
-      flex: 1,
-      minWidth: 0,
-    },
-    perfilHeading: {
-      color: ACCENT,
-      fontFamily: theme.semiBoldFont ?? theme.mediumFont ?? "System",
-      fontSize: 16,
-    },
-    perfilRule: {
-      height: 1,
-      backgroundColor: "rgba(0, 184, 255, 0.35)",
-      marginTop: 8,
-      marginBottom: 10,
-    },
-    perfilBody: {
-      color: "rgba(255, 255, 255, 0.88)",
-      fontFamily: theme.regularFont ?? "System",
-      fontSize: 14,
-      lineHeight: 21,
     },
   });
 }
