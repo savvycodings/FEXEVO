@@ -833,8 +833,18 @@ export function ActivitiesCalendarFlow({
             const dk = localDateKey(cell.date)
             const has = datesWithActivity.has(dk)
             const hasSubmission = datesWithSubmissions.has(dk)
+            const hasActivityDay = coachInbox ? hasSubmission : has
             const isSel = selectedKey === dk
             const isToday = cell.inMonth && dk === todayKey
+            const todayUnderline = isToday ? (
+              <View
+                style={[
+                  styles.dayTodayUnderline,
+                  isSel && styles.dayTodayUnderlineSelected,
+                ]}
+                pointerEvents="none"
+              />
+            ) : null
             return (
               <Pressable
                 key={idx}
@@ -842,33 +852,39 @@ export function ActivitiesCalendarFlow({
                 style={styles.dayCell}
                 android_ripple={{ color: 'rgba(0, 187, 255, 0.14)', borderless: false }}
               >
-                {has ? (
-                  <View style={styles.dayNumCircle}>
+                {hasActivityDay ? (
+                  <View style={styles.dayCellStack}>
+                    <View style={styles.dayNumCircle}>
+                      <Text
+                        allowFontScaling={false}
+                        style={[
+                          styles.dayNumInCircle,
+                          !cell.inMonth && styles.dayNumMuted,
+                          isSel && styles.dayNumSelectedColor,
+                        ]}
+                      >
+                        {cell.date.getDate()}
+                      </Text>
+                    </View>
+                    {todayUnderline}
+                  </View>
+                ) : (
+                  <View style={styles.dayCellStack}>
                     <Text
                       allowFontScaling={false}
                       style={[
-                        styles.dayNumInCircle,
+                        styles.dayNum,
+                        isSel && !isToday && styles.dayNumSelected,
+                        isSel && isToday && styles.dayNumSelectedColor,
                         !cell.inMonth && styles.dayNumMuted,
-                        isToday && styles.dayNumToday,
                       ]}
                     >
                       {cell.date.getDate()}
                     </Text>
+                    {todayUnderline}
                   </View>
-                ) : (
-                  <Text
-                    allowFontScaling={false}
-                    style={[
-                      styles.dayNum,
-                      isSel && styles.dayNumSelected,
-                      !cell.inMonth && styles.dayNumMuted,
-                      isToday && styles.dayNumToday,
-                    ]}
-                  >
-                    {cell.date.getDate()}
-                  </Text>
                 )}
-                {hasSubmission && cell.inMonth ? (
+                {hasSubmission && cell.inMonth && !coachInbox ? (
                   <View style={styles.daySubmissionDotWrap} pointerEvents="none">
                     <View style={styles.daySubmissionDot} />
                   </View>
@@ -978,7 +994,7 @@ export function ActivitiesCalendarFlow({
                     onPress={() => setAnalysisSession(s)}
                     android_ripple={{ color: 'rgba(255,255,255,0.06)' }}
                   >
-                    <View style={shotsStyles.thumbBox}>
+                    <View style={shotsStyles.thumbBox} collapsable={false}>
                       <Video
                         source={{ uri: videoUri(s.videoPath) }}
                         style={shotsStyles.thumbVideo}
@@ -1327,6 +1343,10 @@ function getStyles(theme: any, _winW: number) {
       justifyContent: 'center',
       overflow: 'hidden',
     },
+    dayCellStack: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     dayNum: {
       fontFamily: theme.mediumFont,
       fontSize: 13,
@@ -1341,6 +1361,9 @@ function getStyles(theme: any, _winW: number) {
     dayNumSelected: {
       color: '#00BBFF',
       textDecorationLine: 'underline',
+    },
+    dayNumSelectedColor: {
+      color: '#00BBFF',
     },
     dayNumCircle: {
       width: 36,
@@ -1374,8 +1397,15 @@ function getStyles(theme: any, _winW: number) {
       borderWidth: 1,
       borderColor: theme.backgroundColor,
     },
-    dayNumToday: {
-      textDecorationLine: 'underline',
+    dayTodayUnderline: {
+      marginTop: 2,
+      width: 11,
+      height: 1.5,
+      borderRadius: 1,
+      backgroundColor: CAL_DAY_NUM,
+    },
+    dayTodayUnderlineSelected: {
+      backgroundColor: '#00BBFF',
     },
   })
 }
@@ -1467,15 +1497,22 @@ function getShotsStyles(theme: any, winW: number) {
       flexDirection: 'row',
       alignItems: 'stretch',
       minHeight: cardMinH,
+      overflow: 'hidden',
+      borderRadius: 17,
     },
     thumbBox: {
       width: thumbW,
       minHeight: cardMinH,
       backgroundColor: '#000',
+      borderTopLeftRadius: 17,
+      borderBottomLeftRadius: 17,
+      overflow: 'hidden',
     },
     thumbVideo: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: '#000',
+      borderTopLeftRadius: 17,
+      borderBottomLeftRadius: 17,
     },
     shotCardBody: {
       flex: 1,
@@ -1701,7 +1738,7 @@ function getDetailStyles(theme: any, winW: number) {
       flexDirection: 'row',
       alignItems: 'center',
       borderRadius: 12,
-      backgroundColor: SHOTS_CARD_BG,
+      backgroundColor: '#041641',
       paddingVertical: 10,
       paddingHorizontal: 12,
       marginBottom: 10,

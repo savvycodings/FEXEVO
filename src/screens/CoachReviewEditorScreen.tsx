@@ -173,30 +173,117 @@ type BrushSizeSliderProps = {
   value: number
   min: number
   max: number
+  /** Live updates while dragging (should avoid heavy parent re-renders). */
   onChange: (size: number) => void
+  /** Final value when the finger lifts — use to commit React state once. */
+  onChangeEnd?: (size: number) => void
   onUndo?: () => void
   onRedo?: () => void
   canUndo?: boolean
   canRedo?: boolean
 }
 
-function BrushSizeSlider({ value, min, max, onChange, onUndo, onRedo, canUndo, canRedo }: BrushSizeSliderProps) {
+function clampBrushSize(size: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(size)))
+}
+
+function BrushSizeSlider({
+  value,
+  min,
+  max,
+  onChange,
+  onChangeEnd,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
+}: BrushSizeSliderProps) {
+  const trackRef = useRef<View>(null)
   const trackWRef = useRef(0)
+  const trackLeftRef = useRef(0)
+  const dragValueRef = useRef<number | null>(null)
   const [trackW, setTrackW] = useState(0)
-  const pct = (value - min) / (max - min)
+  const [dragValue, setDragValue] = useState<number | null>(null)
 
-  function handleTouch(x: number) {
-    const w = trackWRef.current || 1
-    const next = Math.round(min + Math.max(0, Math.min(1, x / w)) * (max - min))
-    onChange(next)
-  }
+  const measureTrack = useCallback(() => {
+    trackRef.current?.measureInWindow((x, _y, w) => {
+      trackLeftRef.current = x
+      if (w > 0 && Math.abs(w - trackWRef.current) > 0.5) {
+        trackWRef.current = w
+        setTrackW(w)
+      }
+    })
+  }, [])
 
+  const valueFromPageX = useCallback(
+    (pageX: number) => {
+      const w = trackWRef.current || 1
+      const x = pageX - trackLeftRef.current
+      const ratio = Math.max(0, Math.min(1, x / w))
+      return min + ratio * (max - min)
+    },
+    [min, max]
+  )
+
+  const applyDrag = useCallback(
+    (pageX: number) => {
+      const raw = valueFromPageX(pageX)
+      dragValueRef.current = raw
+      setDragValue(raw)
+      onChange(clampBrushSize(raw, min, max))
+    },
+    [min, max, onChange, valueFromPageX]
+  )
+
+  const finishDrag = useCallback(
+    (pageX?: number) => {
+      const raw =
+        dragValueRef.current ??
+        (pageX != null ? valueFromPageX(pageX) : value)
+      const final = clampBrushSize(raw, min, max)
+      dragValueRef.current = null
+      setDragValue(null)
+      onChange(final)
+      ;(onChangeEnd ?? onChange)(final)
+    },
+    [min, max, onChange, onChangeEnd, value, valueFromPageX]
+  )
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: (e) => {
+          measureTrack()
+          applyDrag(e.nativeEvent.pageX)
+        },
+        onPanResponderMove: (e) => {
+          applyDrag(e.nativeEvent.pageX)
+        },
+        onPanResponderRelease: (e) => {
+          finishDrag(e.nativeEvent.pageX)
+        },
+        onPanResponderTerminate: (e) => {
+          finishDrag(e.nativeEvent.pageX)
+        },
+      }),
+    [applyDrag, finishDrag, measureTrack]
+  )
+
+  const displayValue = dragValue ?? value
+  const pct = (displayValue - min) / (max - min)
   const wedgePoints = trackW > 0 ? brushWedgePoints(trackW) : ''
 
   return (
     <View style={brushSliderStyles.row}>
       <TouchableOpacity
-        onPress={() => onChange(min)}
+        onPress={() => {
+          const next = min
+          onChange(next)
+          ;(onChangeEnd ?? onChange)(next)
+        }}
         onLongPress={canUndo ? onUndo : undefined}
         delayLongPress={280}
         activeOpacity={0.75}
@@ -206,22 +293,21 @@ function BrushSizeSlider({ value, min, max, onChange, onUndo, onRedo, canUndo, c
         <LocalSvgAsset assetModule={SMALLER_BRUSH_ICON} width={21} height={22} />
       </TouchableOpacity>
       <View
+        ref={trackRef}
+        collapsable={false}
         style={brushSliderStyles.track}
-        onLayout={(e) => {
-          trackWRef.current = e.nativeEvent.layout.width
-          setTrackW(e.nativeEvent.layout.width)
+        onLayout={() => {
+          measureTrack()
         }}
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => true}
-        onResponderGrant={(e) => handleTouch(e.nativeEvent.locationX)}
-        onResponderMove={(e) => handleTouch(e.nativeEvent.locationX)}
+        {...panResponder.panHandlers}
       >
         {trackW > 0 ? (
-          <Svg width={trackW} height={BRUSH_TRACK_H} style={StyleSheet.absoluteFill}>
+          <Svg width={trackW} height={BRUSH_TRACK_H} style={StyleSheet.absoluteFill} pointerEvents="none">
             <Polygon points={wedgePoints} fill="rgba(0, 119, 255, 0.2)" />
           </Svg>
         ) : null}
         <View
+          pointerEvents="none"
           style={[
             brushSliderStyles.thumb,
             { left: Math.max(0, Math.min(trackW - BRUSH_THUMB_SIZE, pct * Math.max(0, trackW - BRUSH_THUMB_SIZE))) },
@@ -229,7 +315,11 @@ function BrushSizeSlider({ value, min, max, onChange, onUndo, onRedo, canUndo, c
         />
       </View>
       <TouchableOpacity
-        onPress={() => onChange(max)}
+        onPress={() => {
+          const next = max
+          onChange(next)
+          ;(onChangeEnd ?? onChange)(next)
+        }}
         onLongPress={canRedo ? onRedo : undefined}
         delayLongPress={280}
         activeOpacity={0.75}
@@ -574,9 +664,16 @@ export function CoachReviewEditorScreen() {
   const timelineTrackWRef = useRef(0)
 
   // Brush-size slider (wedge track between smaller / bigger icons)
-  function handleBrushChange(size: number) {
-    setBrushSize(Math.max(BRUSH_MIN, Math.min(BRUSH_MAX, size)))
-  }
+  const handleBrushChange = useCallback((size: number) => {
+    const clamped = Math.max(BRUSH_MIN, Math.min(BRUSH_MAX, size))
+    brushSizeRef.current = clamped
+  }, [])
+
+  const handleBrushChangeEnd = useCallback((size: number) => {
+    const clamped = Math.max(BRUSH_MIN, Math.min(BRUSH_MAX, size))
+    brushSizeRef.current = clamped
+    setBrushSize(clamped)
+  }, [])
 
   if (loading || !review) {
     return (
@@ -767,6 +864,7 @@ export function CoachReviewEditorScreen() {
               min={BRUSH_MIN}
               max={BRUSH_MAX}
               onChange={handleBrushChange}
+              onChangeEnd={handleBrushChangeEnd}
               onUndo={undo}
               onRedo={redo}
               canUndo={strokes.length > 0}

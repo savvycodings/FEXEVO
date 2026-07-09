@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  type ImageSourcePropType,
 } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -18,6 +19,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { ThemeContext } from '../context'
+import { useSessionData } from '../context/SessionDataContext'
 import { vercel as defaultTheme } from '../theme'
 import { Header } from '../components/Header'
 import { MainTabBarChrome } from '../components/MainTabBarChrome'
@@ -26,10 +28,14 @@ import { authClient } from '../lib/auth-client'
 import { MyCoachScoreRing } from './myCoach/ScoreRing'
 import { getCachedProfile } from '../lib/profile-cache'
 import { useTranslation } from 'react-i18next'
-import { DOMAIN } from '../../constants'
 import Svg, { Path } from 'react-native-svg'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
-import { profileImageSource } from '../lib/defaultProfilePicture'
+import {
+  DEFAULT_PROFILE_PICTURE,
+  hasProfileImage,
+  profileImageSource,
+  profileImageToAbsoluteUri,
+} from '../lib/defaultProfilePicture'
 import { fetchPendingCoachReviewIdForStudent } from '../lib/coachStudentPendingReview'
 
 const BG = '#030A17'
@@ -82,18 +88,11 @@ function normalizeMessage(raw: Record<string, unknown>): ChatRow | null {
   return { id, senderUserId, body, createdAt }
 }
 
-function profileImageToAbsoluteUri(raw: string | null | undefined): string | null {
-  if (!raw || typeof raw !== 'string') return null
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  if (trimmed.startsWith('http')) return trimmed
-  const rel = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
-  return `${DOMAIN.replace(/\/+$/, '')}${rel}`
-}
-
 export function CoachStudentChatScreen() {
   const { t } = useTranslation()
   const { theme: ctx } = useContext(ThemeContext)
+  const { data: session } = authClient.useSession()
+  const { profileImageUri: sessionProfileImageUri } = useSessionData()
   const theme = ctx?.backgroundColor != null ? ctx : defaultTheme
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<ChatStackNav>()
@@ -140,6 +139,7 @@ export function CoachStudentChatScreen() {
   const listRef = useRef<FlatList<ChatRow>>(null)
   const [myUserId, setMyUserId] = useState<string | null>(null)
   const [myImageUri, setMyImageUri] = useState<string | null>(null)
+  const [myAvatarSource, setMyAvatarSource] = useState<ImageSourcePropType>(DEFAULT_PROFILE_PICTURE)
   const [rows, setRows] = useState<ChatRow[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -156,16 +156,37 @@ export function CoachStudentChatScreen() {
   )
 
   const peerAvatarSource = profileImageSource(peerImageUri)
-  const myAvatarSource = profileImageSource(myImageUri)
+
+  const sessionUserId =
+    typeof session?.user?.id === 'string' && session.user.id.length > 0 ? session.user.id : null
+  const effectiveMyUserId = sessionUserId ?? myUserId
+
+  const myAvatarUri = useMemo(() => {
+    const candidates = [
+      myImageUri,
+      sessionProfileImageUri,
+      profileImageToAbsoluteUri(session?.user?.image),
+    ]
+    return candidates.find((uri) => hasProfileImage(uri)) ?? null
+  }, [myImageUri, sessionProfileImageUri, session?.user?.image])
+
+  useEffect(() => {
+    setMyAvatarSource(profileImageSource(myAvatarUri))
+  }, [myAvatarUri])
 
   const resolveSession = useCallback(async () => {
     const sessionResult = await authClient.getSession().catch(() => null)
     const sessionData: any = (sessionResult as any)?.data ?? sessionResult
     const uid = sessionData?.user?.id
     if (typeof uid === 'string' && uid.length > 0) setMyUserId(uid)
+    const sessionImg = profileImageToAbsoluteUri(sessionData?.user?.image)
+    if (hasProfileImage(sessionImg)) {
+      setMyImageUri(sessionImg)
+      return
+    }
     const cached = await getCachedProfile().catch(() => null)
-    const img = (cached as any)?.user?.image
-    setMyImageUri(profileImageToAbsoluteUri(img))
+    const img = profileImageToAbsoluteUri((cached as any)?.user?.image)
+    setMyImageUri(hasProfileImage(img) ? img : null)
   }, [])
 
   const fetchMessages = useCallback(async () => {
@@ -242,32 +263,38 @@ export function CoachStudentChatScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: ChatRow }) => {
-      const mine = myUserId != null && item.senderUserId === myUserId
-      return (
-        <View style={[styles.bubbleRow, mine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
-          {mine ? (
-            <>
-              <View style={[styles.bubble, styles.bubbleMine]}>
-                <Text
-                  allowFontScaling={false}
-                  style={[styles.bubbleText, styles.bubbleTextMine, { fontFamily: fonts.regularFont }]}
-                >
-                  {item.body}
-                </Text>
-              </View>
-              <Image source={myAvatarSource} style={styles.bubbleAvatar} />
-            </>
-          ) : (
-            <View style={[styles.bubble, styles.bubbleTheirs]}>
-              <Text allowFontScaling={false} style={[styles.bubbleText, { fontFamily: fonts.regularFont }]}>
+      const mine = effectiveMyUserId != null && item.senderUserId === effectiveMyUserId
+      if (mine) {
+        return (
+          <View style={[styles.bubbleRow, styles.bubbleRowMine]}>
+            <View style={[styles.bubble, styles.bubbleMine]}>
+              <Text
+                allowFontScaling={false}
+                style={[styles.bubbleText, styles.bubbleTextMine, { fontFamily: fonts.regularFont }]}
+              >
                 {item.body}
               </Text>
             </View>
-          )}
+            <Image
+              source={myAvatarSource}
+              style={styles.bubbleAvatar}
+              resizeMode="cover"
+              onError={() => setMyAvatarSource(DEFAULT_PROFILE_PICTURE)}
+            />
+          </View>
+        )
+      }
+      return (
+        <View style={[styles.bubbleRow, styles.bubbleRowTheirs]}>
+          <View style={[styles.bubble, styles.bubbleTheirs]}>
+            <Text allowFontScaling={false} style={[styles.bubbleText, { fontFamily: fonts.regularFont }]}>
+              {item.body}
+            </Text>
+          </View>
         </View>
       )
     },
-    [fonts.regularFont, myUserId, myAvatarSource]
+    [fonts.regularFont, effectiveMyUserId, myAvatarSource]
   )
 
   return (
@@ -369,17 +396,6 @@ export function CoachStudentChatScreen() {
                 >
                   {peerIsCoach ? t('coachChat.chatTitleToCoach') : t('coachChat.chatTitle')}
                 </Text>
-                {peerIsCoach ? null : (
-                  <TouchableOpacity
-                    onPress={() => navigation.goBack()}
-                    activeOpacity={0.85}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    style={styles.chatCloseBtn}
-                    accessibilityLabel="Close chat"
-                  >
-                    <Ionicons name="close" size={20} color="#86A7D2" />
-                  </TouchableOpacity>
-                )}
               </View>
 
               {/* Messages */}
@@ -392,6 +408,7 @@ export function CoachStudentChatScreen() {
               ) : (
                 <FlatList
                   ref={listRef}
+                  style={styles.messageList}
                   data={rows}
                   keyExtractor={(item) => item.id}
                   renderItem={renderItem}
@@ -590,20 +607,16 @@ const styles = StyleSheet.create({
     color: 'rgba(232,240,255,0.95)',
     fontSize: 15,
   },
-  chatCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#0E1830',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   /* ── Messages ── */
+  messageList: {
+    width: '100%',
+  },
   listContent: {
     paddingHorizontal: 16,
     flexGrow: 1,
     paddingBottom: 8,
+    alignItems: 'stretch',
   },
   emptyChat: {
     color: 'rgba(148,163,184,0.8)',
@@ -621,6 +634,8 @@ const styles = StyleSheet.create({
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    alignSelf: 'stretch',
+    width: '100%',
     marginBottom: 14,
     gap: 8,
   },
@@ -657,6 +672,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
+    flexShrink: 0,
   },
 
   /* ── Composer ── */

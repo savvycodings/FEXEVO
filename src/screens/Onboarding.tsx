@@ -212,6 +212,7 @@ export function Onboarding(props?: {
           <ProfileSetup
             signUpDraft={signUpDraft}
             onBack={() => navigation.replace("SignUp")}
+            onRestart={() => navigation.replace("SignUp")}
             onComplete={props?.onProfileSetupComplete}
           />
         )}

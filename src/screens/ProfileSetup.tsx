@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 import {
   View,
   Text,
@@ -7,10 +7,10 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
-  ScrollView,
   Alert,
   Platform,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { ThemeContext } from "../context";
@@ -26,25 +26,46 @@ import {
   levelTranslationKey,
 } from "../i18n/profileOptionValues";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
+import { PAGE_TOP_EXTRA_PADDING } from "../../constants";
 
+const APP_LOGO = require("../../assets/logo.png");
 const COURT_IMAGE = require("../../assets/court.png");
 const BALL_IMAGE = require("../../assets/ball.png");
+const SELECTION_BOX_BG = "#041641";
+const COURT_NATIVE_W = 262;
+const COURT_NATIVE_H = 151;
+const BALL_NATIVE_W = 61;
+const BALL_NATIVE_H = 21;
+const COURT_ASPECT = COURT_NATIVE_W / COURT_NATIVE_H;
+const BALL_ASPECT = BALL_NATIVE_W / BALL_NATIVE_H;
+/** Ball anchor tuned to the near court surface in court.png (percent of court box). */
+const BALL_BOTTOM_PCT = `${(43 / COURT_NATIVE_H) * 100}%`;
+const BALL_SIDE_PCT = `${(62 / COURT_NATIVE_W) * 100}%`;
+const BALL_WIDTH_PCT = `${(BALL_NATIVE_W / COURT_NATIVE_W) * 100}%`;
+const COURT_MAX_W = 296;
+const RANK_LOGO_BOX_H = 80;
+const RANK_LOGO_BOX_W = 200;
 
-const RANKING_ORG_OPTIONS = [
+const RANKING_ORG_GRID_OPTIONS = [
+  "WPR",
   "Playtomic",
-  "Playbypoint",
   "RankedIn",
   "MATCHi",
   "Padel Manager",
-  "Red Padel",
+  "Playbypoint",
   "PadelScore",
   "Tie Player",
+] as const;
+
+const RANKING_ORG_OPTIONS = [
+  ...RANKING_ORG_GRID_OPTIONS,
+  "Red Padel",
   "Spain Federation",
 ];
 
 const RANKING_ORG_LOGOS: Record<string, any> = {
+  WPR: require("../../assets/worldpadlerating.svg"),
   Playtomic: require("../../assets/logos/playtomic.svg"),
   Playbypoint: require("../../assets/logos/playbypoint.svg"),
   RankedIn: require("../../assets/logos/RankedIn.svg"),
@@ -62,19 +83,27 @@ function rankingLogoModule(org: string | null): number | null {
   return mod != null ? mod : null;
 }
 
+function rankingOrgLabel(org: string): string {
+  if (org === "RankedIn") return "Rankedin";
+  return org;
+}
+
 type ProfileSetupProps = {
   onComplete?: () => void;
   signUpDraft?: SignUpDraft | null;
   mode?: "onboarding" | "edit";
   onBack?: () => void;
+  onRestart?: () => void;
 };
 
-export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onBack }: ProfileSetupProps) {
+export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onBack, onRestart }: ProfileSetupProps) {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const insets = useSafeAreaInsets();
+  const screenBg = theme.backgroundColor ?? "#030A17";
   const styles = getStyles(theme);
   const [step, setStep] = useState(1);
+  const [rankingSetupPhase, setRankingSetupPhase] = useState<"choose" | "configure">("choose");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submittingOverlay, setSubmittingOverlay] = useState(false);
@@ -86,7 +115,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
   const [courtSide, setCourtSide] = useState<"left" | "right" | null>(null);
   const [hasRanking, setHasRanking] = useState<boolean | null>(null);
   const [level, setLevel] = useState<string | null>(null);
-  const [rankingOrg, setRankingOrg] = useState<string | null>("Playtomic");
+  const [rankingOrg, setRankingOrg] = useState<string | null>("WPR");
   const [rankingValue, setRankingValue] = useState("");
 
   const canContinueStep1 = !!dominantHand && !!courtSide;
@@ -145,6 +174,12 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
       mounted = false;
     };
   }, [signUpDraft]);
+
+  useEffect(() => {
+    if (step === 2 && mode !== "edit") {
+      setRankingSetupPhase("choose");
+    }
+  }, [step, mode]);
 
   async function pickAvatar() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -274,21 +309,13 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
       : t("profileSetup.settingUpSub");
     return (
       <View style={styles.screen}>
-        <Svg pointerEvents="none" style={[styles.heroGlow, { height: 430 + insets.top }]}>
-          <Defs>
-            <SvgRadialGradient
-              id="profileSetupRadialBgLoading"
-              cx="50%"
-              cy="-30%"
-              rx="120%"
-              ry="95%"
-            >
-              <Stop offset="0%" stopColor="#071D47" stopOpacity={1} />
-              <Stop offset="100%" stopColor="#071D47" stopOpacity={0} />
-            </SvgRadialGradient>
-          </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" fill="url(#profileSetupRadialBgLoading)" />
-        </Svg>
+        <LinearGradient
+          pointerEvents="none"
+          colors={["#071D47", screenBg]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 0.4 }}
+          style={StyleSheet.absoluteFillObject}
+        />
         <View style={styles.loadingWrap}>
           <Text allowFontScaling={false} style={styles.loadingTitle}>{loadingTitle}</Text>
           <Text allowFontScaling={false} style={styles.loadingSubtitle}>{loadingSubtitle}</Text>
@@ -297,55 +324,79 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
     );
   }
 
-  const onboardingStep = step === 1 ? 2 : 3;
   const isEditMode = mode === "edit";
+  const onboardingHeaderPadH = Math.max(24, insets.left, insets.right);
+  const onboardingHeaderPadTop = PAGE_TOP_EXTRA_PADDING + 16;
 
   return (
     <View style={styles.screen}>
-      <Svg pointerEvents="none" style={[styles.heroGlow, { height: 430 + insets.top }]}>
-        <Defs>
-          <SvgRadialGradient
-            id="profileSetupRadialBg"
-            cx="50%"
-            cy="-30%"
-            rx="120%"
-            ry="95%"
-          >
-            <Stop offset="0%" stopColor="#071D47" stopOpacity={1} />
-            <Stop offset="100%" stopColor="#071D47" stopOpacity={0} />
-          </SvgRadialGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#profileSetupRadialBg)" />
-      </Svg>
-      <Header />
+      <LinearGradient
+        pointerEvents="none"
+        colors={["#071D47", screenBg]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.4 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      {isEditMode ? <Header /> : null}
       {!isEditMode ? (
-        <View style={styles.progressSection}>
-          <View style={styles.progressWrap}>
-            {[1, 2, 3].map((i) => (
-              <View
-                key={i}
-                style={[styles.progressSegment, i <= onboardingStep && styles.progressSegmentActive]}
-              />
-            ))}
+        <SafeAreaView edges={["top"]} style={styles.onboardingHeaderSafe}>
+          <View
+            style={[
+              styles.onboardingHeader,
+              {
+                paddingTop: onboardingHeaderPadTop,
+                paddingLeft: onboardingHeaderPadH,
+                paddingRight: onboardingHeaderPadH,
+              },
+            ]}
+          >
+            <View style={styles.onboardingHeaderInner}>
+              {onRestart ? (
+                <TouchableOpacity
+                  style={styles.restartTouch}
+                  onPress={onRestart}
+                  activeOpacity={0.85}
+                  accessibilityLabel={t("profileSetup.restart")}
+                >
+                  <Text allowFontScaling={false} style={styles.restartText}>
+                    {t("profileSetup.restart")}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              <View style={styles.logoWrap}>
+                <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
+              </View>
+            </View>
           </View>
-          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.stepTitle}>
-          {step === 1 ? t("profileSetup.step1Title") : t("profileSetup.step2Title")}
-          </Text>
-        </View>
-      ) : (
+        </SafeAreaView>
+      ) : null}
+      {isEditMode ? (
         <View style={styles.progressSection}>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.stepTitle}>
             {t("profileSetup.editTitle")}
           </Text>
         </View>
-      )}
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        {!isEditMode ? (
-          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.title}>
-            {t("profileSetup.completeTitle")}
-          </Text>
-        ) : null}
-
+      ) : null}
+      <KeyboardAwareScrollView
+        style={styles.container}
+        contentContainerStyle={[
+          styles.content,
+          !isEditMode && step === 1 ? styles.contentStep1 : null,
+          !isEditMode && step === 2 ? styles.contentStep2 : null,
+          {
+            paddingBottom:
+              40 +
+              insets.bottom +
+              (step === 2 && (isEditMode || rankingSetupPhase === "configure") ? 72 : 0),
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        bottomOffset={insets.bottom + 72}
+        extraKeyboardSpace={20}
+      >
+        {isEditMode ? (
         <View style={styles.avatarRow}>
           <TouchableOpacity style={styles.avatarCircle} onPress={pickAvatar} activeOpacity={0.85}>
             {avatarUri ? (
@@ -365,6 +416,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             />
           </View>
         </View>
+        ) : null}
         {isEditMode ? (
           <>
             <View>
@@ -404,8 +456,9 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         ) : null}
 
         {step === 1 && (
-          <View style={styles.card}>
-          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>
+          <>
+          <View style={styles.selectionBox}>
+          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.boxTitle}>
             {t("profileSetup.dominantHand")}
           </Text>
           <View style={styles.row}>
@@ -422,10 +475,13 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               styles={styles}
             />
           </View>
+          </View>
+
+          <View style={styles.selectionBox}>
           <Text
             allowFontScaling={false}
             maxFontSizeMultiplier={1.05}
-            style={[styles.cardTitle, { marginTop: 18 }]}
+            style={styles.boxTitle}
           >
             {t("profileSetup.courtSide")}
           </Text>
@@ -443,21 +499,9 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               styles={styles}
             />
           </View>
-          <View style={styles.courtWrap}>
-            <View style={styles.courtImageArea}>
-              <Image source={COURT_IMAGE} style={styles.courtImage} resizeMode="contain" />
-              {courtSide && (
-                <Image
-                  source={BALL_IMAGE}
-                  style={[
-                    styles.courtBall,
-                    courtSide === "left" ? styles.courtBallLeft : styles.courtBallRight,
-                  ]}
-                  resizeMode="contain"
-                />
-              )}
-            </View>
+          <CourtSideGraphic courtSide={courtSide} />
           </View>
+
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={styles.backButton}
@@ -483,129 +527,293 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               </LinearGradient>
             </TouchableOpacity>
           </View>
-          </View>
+          </>
         )}
 
-        {step === 2 && (
-          <View style={styles.card}>
-          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>{t("profileSetup.setRanking")}</Text>
-          <View style={styles.row}>
-            <ChoicePill
-              label={t("common.no")}
-              active={hasRanking === false}
-              onPress={() => {
-                setHasRanking(false);
-                setRankingOrg(null);
-                setRankingValue("");
-              }}
-              styles={styles}
-            />
-            <ChoicePill
-              label={t("common.yes")}
-              active={hasRanking === true}
-              onPress={() => {
-                setHasRanking(true);
-                setRankingOrg((prev) => prev || "Playtomic");
-              }}
-              styles={styles}
-            />
-          </View>
-
-          {hasRanking === false && (
-            <View style={{ gap: 8, marginTop: 12 }}>
-              <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.cardTitle}>{t("profileSetup.setLevel")}</Text>
-              {LEVEL_OPTION_VALUES.map((opt) => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[styles.levelOption, level === opt && styles.levelOptionActive]}
-                  onPress={() => setLevel(opt)}
-                  activeOpacity={0.85}
-                >
-                  <Text allowFontScaling={false} style={[styles.levelText, level === opt && styles.levelTextActive]}>
-                    {t(levelTranslationKey(opt))}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+        {step === 2 && !isEditMode && rankingSetupPhase === "choose" && (
+          <>
+            <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.rankingTitle}>
+              {t("profileSetup.setRanking")}
+            </Text>
+            <View style={styles.rankingSubtitleBlock}>
+              <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.rankingSubtitle}>
+                {t("profileSetup.hasRankingHint")}
+              </Text>
+              <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.rankingSubtitle}>
+                {t("profileSetup.hasRankingHintSources")}
+              </Text>
             </View>
-          )}
-
-          {hasRanking === true && (
-            <View style={{ gap: 10, marginTop: 12 }}>
-              <View style={styles.rankLogoWrap}>
-                {rankingLogoModule(rankingOrg) != null ? (
-                  <LocalSvgAsset assetModule={rankingLogoModule(rankingOrg)!} width={300} height={64} />
-                ) : (
-                  <Text allowFontScaling={false} style={styles.rankLogoFallback}>
-                    {rankingOrg || "Playtomic"}
-                  </Text>
-                )}
+            <View style={styles.selectionBox}>
+              <View style={styles.row}>
+                <ChoicePill
+                  label={t("common.no")}
+                  active={hasRanking === false}
+                  onPress={() => {
+                    setHasRanking(false);
+                    setRankingOrg(null);
+                    setRankingValue("");
+                  }}
+                  styles={styles}
+                />
+                <ChoicePill
+                  label={t("common.yes")}
+                  active={hasRanking === true}
+                  onPress={() => {
+                    setHasRanking(true);
+                    setRankingOrg((prev) => prev || "WPR");
+                  }}
+                  styles={styles}
+                />
               </View>
-              <View style={styles.chipWrap}>
-                {RANKING_ORG_OPTIONS.map((opt) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[styles.chip, rankingOrg === opt && styles.chipActive]}
-                    onPress={() => setRankingOrg(opt)}
-                    activeOpacity={0.85}
-                  >
-                    <Text
-                      allowFontScaling={false}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                      style={[styles.chipText, rankingOrg === opt && styles.chipTextActive]}
-                    >
-                      {opt}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <TextInput
-                value={rankingValue}
-                onChangeText={setRankingValue}
-                style={styles.input}
-                placeholder={t("profileSetup.ratingPlaceholder")}
-                placeholderTextColor={theme.mutedForegroundColor}
-              />
             </View>
-          )}
-
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => {
-                setStep(1);
-              }}
-              activeOpacity={0.85}
-              accessibilityLabel={t("profileSetup.goBack")}
-            >
-              <Ionicons name="chevron-back" size={22} color="#00BBFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.primaryOuter, { flex: 1 }, (!canContinueStep2 || saving) && { opacity: 0.45 }]}
-              onPress={saveProfile}
-              disabled={!canContinueStep2 || saving}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={isEditMode ? ["#00BBFF", "#0022FF"] : ["#0022FF", "#00BBFF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.primaryInner}
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => setStep(1)}
+                activeOpacity={0.85}
+                accessibilityLabel={t("profileSetup.goBack")}
               >
-                <Text allowFontScaling={false} style={styles.primaryText}>
-                  {isEditMode ? t("common.done") : t("profileSetup.finishSetup")}
+                <Ionicons name="chevron-back" size={22} color="#00BBFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryOuter, { flex: 1 }, hasRanking === null && { opacity: 0.45 }]}
+                onPress={() => setRankingSetupPhase("configure")}
+                disabled={hasRanking === null}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={["#0022FF", "#00BBFF"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.primaryInner}
+                >
+                  <Text allowFontScaling={false} style={styles.primaryText}>
+                    {t("profileSetup.setYourLevelBtn")}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+        {step === 2 && (isEditMode || rankingSetupPhase === "configure") && (
+          <>
+            {!isEditMode ? (
+              <>
+                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.rankingTitle}>
+                  {hasRanking === false ? t("profileSetup.setLevel") : t("profileSetup.setRanking")}
                 </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-          </View>
+                {hasRanking === true ? (
+                  <View style={styles.rankingSubtitleBlock}>
+                    <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.rankingSubtitle}>
+                      {t("profileSetup.hasRankingHint")}
+                    </Text>
+                    <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.rankingSubtitle}>
+                      {t("profileSetup.hasRankingHintSources")}
+                    </Text>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+            <View style={styles.selectionBox}>
+              {(isEditMode || hasRanking === true) ? (
+                <View style={styles.row}>
+                  <ChoicePill
+                    label={t("common.no")}
+                    active={hasRanking === false}
+                    onPress={() => {
+                      setHasRanking(false);
+                      setRankingOrg(null);
+                      setRankingValue("");
+                      setLevel(null);
+                    }}
+                    styles={styles}
+                  />
+                  <ChoicePill
+                    label={t("common.yes")}
+                    active={hasRanking === true}
+                    onPress={() => {
+                      setHasRanking(true);
+                      setRankingOrg((prev) => prev || "WPR");
+                      setLevel(null);
+                    }}
+                    styles={styles}
+                  />
+                </View>
+              ) : null}
+
+              {hasRanking === false && (
+                <View style={styles.levelList}>
+                  {LEVEL_OPTION_VALUES.map((opt) => (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[styles.levelOption, level === opt && styles.levelOptionActive]}
+                      onPress={() => setLevel(opt)}
+                      activeOpacity={0.85}
+                    >
+                      <Text allowFontScaling={false} style={[styles.levelText, level === opt && styles.levelTextActive]}>
+                        {t(levelTranslationKey(opt))}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {hasRanking === true && (
+                <View style={styles.rankingForm}>
+                  <View style={styles.rankLogoWrap}>
+                    {rankingLogoModule(rankingOrg) != null ? (
+                      <LocalSvgAsset
+                        assetModule={rankingLogoModule(rankingOrg)!}
+                        width={RANK_LOGO_BOX_W}
+                        height={RANK_LOGO_BOX_H}
+                      />
+                    ) : (
+                      <Text allowFontScaling={false} style={styles.rankLogoFallback}>
+                        {rankingOrg || "WPR"}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.rankOrgGrid}>
+                    {(isEditMode ? RANKING_ORG_OPTIONS : RANKING_ORG_GRID_OPTIONS).map((opt) => (
+                      <TouchableOpacity
+                        key={opt}
+                        style={[styles.rankOrgChip, rankingOrg === opt && styles.rankOrgChipActive]}
+                        onPress={() => setRankingOrg(opt)}
+                        activeOpacity={0.85}
+                      >
+                        <Text
+                          allowFontScaling={false}
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                          style={[styles.rankOrgChipText, rankingOrg === opt && styles.rankOrgChipTextActive]}
+                        >
+                          {rankingOrgLabel(opt)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.rankingInputRow}>
+                    <TextInput
+                      value={rankingValue}
+                      onChangeText={setRankingValue}
+                      style={styles.rankingInput}
+                      placeholder={t("profileSetup.ratingPlaceholder")}
+                      placeholderTextColor="rgba(134, 167, 210, 0.55)"
+                      keyboardType="decimal-pad"
+                      underlineColorAndroid="transparent"
+                    />
+                    {rankingValue.trim().length > 0 ? (
+                      <View style={styles.rankingInputCheck}>
+                        <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => {
+                  if (!isEditMode && rankingSetupPhase === "configure") {
+                    setRankingSetupPhase("choose");
+                    return;
+                  }
+                  setStep(1);
+                }}
+                activeOpacity={0.85}
+                accessibilityLabel={t("profileSetup.goBack")}
+              >
+                <Ionicons name="chevron-back" size={22} color="#00BBFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryOuter, { flex: 1 }, (!canContinueStep2 || saving) && { opacity: 0.45 }]}
+                onPress={saveProfile}
+                disabled={!canContinueStep2 || saving}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={isEditMode ? ["#00BBFF", "#0022FF"] : ["#0022FF", "#00BBFF"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.primaryInner}
+                >
+                  <Text allowFontScaling={false} style={styles.primaryText}>
+                    {isEditMode ? t("common.done") : t("profileSetup.finishSetup")}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
 
         <LanguageToggle />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
+
+function CourtSideGraphic({ courtSide }: { courtSide: "left" | "right" | null }) {
+  return (
+    <View style={courtGraphicStyles.wrap}>
+      <View style={courtGraphicStyles.stage}>
+        <View style={courtGraphicStyles.courtFrame}>
+          <Image source={COURT_IMAGE} style={courtGraphicStyles.courtImage} resizeMode="stretch" />
+          {courtSide ? (
+            <Image
+              source={BALL_IMAGE}
+              style={[
+                courtGraphicStyles.courtBall,
+                courtSide === "left" ? courtGraphicStyles.courtBallLeft : courtGraphicStyles.courtBallRight,
+              ]}
+              resizeMode="contain"
+            />
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const courtGraphicStyles = StyleSheet.create({
+  wrap: {
+    marginTop: 32,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 4,
+  },
+  stage: {
+    width: "100%",
+    maxWidth: COURT_MAX_W,
+    alignSelf: "center",
+  },
+  courtFrame: {
+    width: "100%",
+    aspectRatio: COURT_ASPECT,
+    position: "relative",
+    overflow: "hidden",
+  },
+  courtImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  courtBall: {
+    position: "absolute",
+    width: BALL_WIDTH_PCT,
+    aspectRatio: BALL_ASPECT,
+    bottom: BALL_BOTTOM_PCT,
+  },
+  courtBallLeft: {
+    left: BALL_SIDE_PCT,
+  },
+  courtBallRight: {
+    right: BALL_SIDE_PCT,
+  },
+});
 
 function ChoicePill({
   label,
@@ -667,8 +875,72 @@ function getStyles(theme: any) {
       flex: 1,
       backgroundColor: theme.backgroundColor,
     },
-    container: { flex: 1, backgroundColor: theme.backgroundColor },
-    content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 40, gap: 10 },
+    container: { flex: 1, backgroundColor: "transparent" },
+    content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40, gap: 14 },
+    contentStep1: {
+      paddingTop: 0,
+      paddingBottom: 28,
+    },
+    contentStep2: {
+      paddingTop: 0,
+      paddingBottom: 28,
+      gap: 18,
+    },
+    rankingTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 20,
+      color: "#FFFFFF",
+      textAlign: "center",
+      marginTop: 4,
+    },
+    rankingSubtitle: {
+      fontFamily: theme.regularFont,
+      fontSize: 13,
+      lineHeight: 18,
+      color: "#86A7D2",
+      textAlign: "center",
+      paddingHorizontal: 8,
+    },
+    rankingSubtitleBlock: {
+      alignItems: "center",
+      marginTop: -6,
+      marginBottom: 4,
+      gap: 2,
+    },
+    onboardingHeaderSafe: {
+      backgroundColor: "transparent",
+    },
+    onboardingHeader: {
+      marginBottom: 28,
+    },
+    onboardingHeaderInner: {
+      position: "relative",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 108,
+      paddingTop: 10,
+    },
+    restartTouch: {
+      position: "absolute",
+      right: 0,
+      top: 10,
+      zIndex: 2,
+      paddingVertical: 6,
+      paddingHorizontal: 2,
+    },
+    restartText: {
+      color: "#86A7D2",
+      fontFamily: theme.mediumFont,
+      fontSize: 14,
+    },
+    logoWrap: {
+      alignItems: "center",
+      paddingTop: 10,
+    },
+    logoImage: {
+      width: 172,
+      height: 92,
+    },
     loadingWrap: {
       flex: 1,
       backgroundColor: theme.backgroundColor,
@@ -710,13 +982,6 @@ function getStyles(theme: any) {
       color: theme.textColor,
       marginBottom: 4,
     },
-    heroGlow: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      opacity: 1,
-    },
     title: { fontFamily: theme.semiBoldFont, fontSize: 24, color: "#fff" },
     avatarRow: { flexDirection: "row", gap: 12, alignItems: "center", marginTop: 4 },
     avatarCircle: {
@@ -736,91 +1001,143 @@ function getStyles(theme: any) {
     input: {
       minHeight: 42,
       borderRadius: 12,
-      borderWidth: 1,
-      borderColor: "rgba(0, 120, 255, 0.4)",
-      backgroundColor: "rgba(2, 26, 92, 0.45)",
+      backgroundColor: SELECTION_BOX_BG,
       color: "#fff",
       paddingHorizontal: 12,
       fontFamily: theme.regularFont,
       fontSize: 13,
     },
+    selectionBox: {
+      borderRadius: 22,
+      backgroundColor: SELECTION_BOX_BG,
+      paddingHorizontal: 16,
+      paddingVertical: 18,
+      gap: 12,
+    },
+    boxTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 20,
+      color: "#fff",
+      textAlign: "center",
+    },
     card: {
       marginTop: 8,
-      borderRadius: 18,
-      borderWidth: 1,
-      borderColor: "rgba(0, 102, 255, 0.4)",
-      backgroundColor: "rgba(7, 16, 46, 0.9)",
-      padding: 14,
+      borderRadius: 22,
+      backgroundColor: SELECTION_BOX_BG,
+      padding: 16,
       gap: 10,
     },
-    cardTitle: { fontFamily: theme.semiBoldFont, fontSize: 21, color: "#fff" },
+    cardTitle: { fontFamily: theme.semiBoldFont, fontSize: 21, color: "#fff", textAlign: "center" },
     row: { flexDirection: "row", gap: 10 },
     choicePill: {
       flex: 1,
-      minHeight: 40,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: "rgba(0, 134, 255, 0.35)",
-      backgroundColor: "rgba(0, 34, 120, 0.45)",
+      minHeight: 38,
+      borderRadius: 14,
+      backgroundColor: "#07256D",
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: 10,
+      paddingVertical: 6,
     },
-    choicePillActive: { backgroundColor: "#fff", borderColor: "#fff" },
-    choiceText: { fontFamily: theme.mediumFont, fontSize: 13, color: "#73A8FF" },
+    choicePillActive: { backgroundColor: "#FFFFFF" },
+    choiceText: { fontFamily: theme.mediumFont, fontSize: 16, lineHeight: 20, color: "#00B8FF" },
     choiceTextActive: { color: "#062063" },
-    courtWrap: {
-      marginTop: 4,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: "rgba(0, 134, 255, 0.3)",
-      backgroundColor: "rgba(0, 20, 64, 0.55)",
+    levelList: {
+      gap: 8,
+    },
+    rankingForm: {
+      gap: 14,
+      marginTop: 2,
+    },
+    rankLogoWrap: {
+      height: RANK_LOGO_BOX_H,
+      width: "100%",
       alignItems: "center",
       justifyContent: "center",
-      paddingVertical: 10,
-      minHeight: 220,
+      overflow: "hidden",
     },
-    courtImageArea: { width: 280, height: 176, position: "relative", overflow: "hidden" },
-    courtImage: { width: 280, height: 176 },
-    courtBall: { position: "absolute", width: 40, height: 18, bottom: 26 },
-    courtBallLeft: { left: 62 },
-    courtBallRight: { right: 62 },
+    rankOrgGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      justifyContent: "space-between",
+    },
+    rankOrgChip: {
+      width: "48%",
+      minHeight: 32,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: "#1848BA",
+      backgroundColor: "transparent",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    rankOrgChipActive: {
+      borderColor: "#00BBFF",
+    },
+    rankOrgChipText: {
+      fontFamily: theme.mediumFont,
+      fontSize: 15,
+      lineHeight: 18,
+      color: "#1848BA",
+      textAlign: "center",
+    },
+    rankOrgChipTextActive: {
+      color: "#00BBFF",
+    },
+    rankingInputRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      minHeight: 54,
+      borderRadius: 14,
+      backgroundColor: "#07256D",
+      paddingLeft: 16,
+      paddingRight: 10,
+      gap: 10,
+      overflow: "hidden",
+    },
+    rankingInput: {
+      flex: 1,
+      color: "#00BBFF",
+      backgroundColor: "#07256D",
+      fontFamily: theme.semiBoldFont,
+      fontSize: 28,
+      paddingVertical: 10,
+    },
+    rankingInputCheck: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: "#00BBFF",
+      alignItems: "center",
+      justifyContent: "center",
+    },
     levelOption: {
       minHeight: 38,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: "rgba(0, 120, 255, 0.4)",
-      backgroundColor: "rgba(3, 23, 90, 0.55)",
+      borderRadius: 14,
+      backgroundColor: "#07256D",
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: 12,
+      paddingVertical: 6,
     },
-    levelOptionActive: { borderColor: "#00BBFF", backgroundColor: "rgba(0, 108, 255, 0.35)" },
-    levelText: { fontFamily: theme.mediumFont, color: "#79AFFF", fontSize: 13 },
-    levelTextActive: { color: "#fff" },
+    levelOptionActive: { backgroundColor: "#FFFFFF" },
+    levelText: { fontFamily: theme.mediumFont, color: "#00B8FF", fontSize: 16, lineHeight: 20 },
+    levelTextActive: { color: "#062063" },
     chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
     chip: {
       width: "48.5%",
       borderRadius: 12,
-      borderWidth: 1,
-      borderColor: "rgba(0, 120, 255, 0.45)",
-      backgroundColor: "rgba(2, 26, 92, 0.45)",
+      backgroundColor: "#0E2969",
       paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingVertical: 5,
       alignItems: "center",
     },
-    chipActive: { borderColor: "#00BBFF", backgroundColor: "rgba(0, 94, 255, 0.38)" },
-    chipText: { fontFamily: theme.mediumFont, color: "#79AFFF", fontSize: 12 },
+    chipActive: { backgroundColor: "rgba(0, 94, 255, 0.38)" },
+    chipText: { fontFamily: theme.mediumFont, color: "#1F6CD0", fontSize: 14, lineHeight: 18 },
     chipTextActive: { color: "#fff" },
-    rankLogoWrap: {
-      marginTop: 2,
-      marginBottom: 2,
-      minHeight: 78,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 10,
-      backgroundColor: "rgba(255,255,255,0.02)",
-    },
     rankLogoFallback: {
       color: "#FFFFFF",
       fontFamily: theme.semiBoldFont,
@@ -829,9 +1146,9 @@ function getStyles(theme: any) {
     },
     primaryOuter: { borderRadius: 16, overflow: "hidden" },
     primaryInner: { minHeight: 54, alignItems: "center", justifyContent: "center", borderRadius: 16 },
-    primaryText: { fontFamily: theme.semiBoldFont, fontSize: 14, color: "#fff" },
+    primaryText: { fontFamily: theme.semiBoldFont, fontSize: 17, color: "#fff" },
     actionRow: {
-      marginTop: 10,
+      marginTop: 8,
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
@@ -839,12 +1156,10 @@ function getStyles(theme: any) {
     backButton: {
       width: 54,
       height: 54,
-      borderRadius: 16,
+      borderRadius: 12,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "rgba(6, 26, 86, 0.9)",
-      borderWidth: 1,
-      borderColor: "rgba(0, 120, 255, 0.45)",
+      backgroundColor: SELECTION_BOX_BG,
     },
   });
 }

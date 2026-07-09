@@ -404,8 +404,6 @@ const styles = StyleSheet.create({
     height: STUDENT_AVATAR_SIZE,
     borderRadius: STUDENT_AVATAR_SIZE / 2,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#2AB4FF',
   },
   studentInfo: {
     flex: 1,
