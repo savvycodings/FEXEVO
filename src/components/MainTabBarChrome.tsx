@@ -69,7 +69,8 @@ export function MainTabBarChrome({ activeTab }: Props) {
           paddingBottom: tabBarBottomPad,
           paddingHorizontal: 4,
           flexDirection: "row",
-          alignItems: "flex-start",
+          /** Stretch items to full bar height so icon+label center like `main.tsx` tabBarItemStyle. */
+          alignItems: "stretch",
           justifyContent: "space-between",
         },
         item: {
@@ -77,10 +78,18 @@ export function MainTabBarChrome({ activeTab }: Props) {
           alignItems: "center",
           justifyContent: "center",
           paddingHorizontal: 2,
+          paddingTop: 0,
+          paddingBottom: 0,
           minWidth: 0,
         },
+        iconWrap: {
+          marginTop: 0,
+          marginBottom: 2,
+          alignItems: "center",
+          justifyContent: "center",
+        },
         label: {
-          marginTop: 2,
+          marginTop: 0,
           fontFamily: theme.mediumFont ?? "System",
           fontSize: tabMetrics.labelFontSize,
           lineHeight: tabMetrics.labelFontSize + (Platform.OS === "android" ? 6 : 4),
@@ -174,7 +183,7 @@ export function MainTabBarChrome({ activeTab }: Props) {
             accessibilityLabel={tabLabels[tab]}
             accessibilityState={{ selected: focused }}
           >
-            {icon}
+            <View style={styles.iconWrap}>{icon}</View>
             <Text
               allowFontScaling={false}
               numberOfLines={1}

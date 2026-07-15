@@ -66,6 +66,7 @@ import { ProLibraryGradientProgressBar } from '../components'
 import { proLibraryChrome } from '../theme/proLibraryChrome'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
 import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
+import { SentToSupportModal } from '../components/SentToSupportModal'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
 import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
@@ -109,7 +110,19 @@ const CATEGORY_ICON_OUTCOME = require('../../assets/afteranylize/outcome.svg')
 const CATEGORY_ICON_TACTICS = require('../../assets/afteranylize/tactics.svg')
 const HOWTO_HIDE_KEY = 'technique_hide_howto_prompt'
 const CHOOSE_FILE_ICON = require('../../assets/aicoach/choosefileicon.svg')
+const FAIL_ICON = require('../../assets/aicoach/failicon.png')
+const FAIL_MOTION = require('../../assets/aicoach/failmotion.png')
 const UPLOADING_STEP_ICON = require('../../assets/actiities/uploading.svg')
+/**
+ * failmotion is a square; side energy reaches the PNG L/R edges.
+ * Slightly overscale past the overlay width so soft PNG edges still hit the screen
+ * (exact 1:1 leaves a visual gap on some devices).
+ * failicon nests in the center void — kept smaller than the energy circle.
+ */
+const FAIL_MOTION_TO_OVERLAY = 1.16
+const FAIL_ICON_TO_MOTION = 0.54
+/** Visible stack height relative to motion (motion can overflow; overlay clips). */
+const FAIL_STACK_TO_MOTION = 0.78
 const CORRECTION_MODE_ICON_GREY = '#6B7F9E'
 const CORRECTION_MODE_ICON_ACTIVE = '#00BBFF'
 /** Matches Summary Category / Level / Shot gradient ring */
@@ -387,6 +400,10 @@ export function Technique() {
   const [analysisJson, setAnalysisJson] = useState<any>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  /** Full-tab failure UI (header + bottom nav stay visible). */
+  const [processFailedVisible, setProcessFailedVisible] = useState(false)
+  const [processFailedOverlayW, setProcessFailedOverlayW] = useState(0)
+  const [sentToSupportVisible, setSentToSupportVisible] = useState(false)
   const trimPreviewRef = useRef<TrimClipPreviewHandle | null>(null)
   /** Pixel dimensions from the trim preview `Video` — box height = f(width, aspect) so overlays stay aligned with decode geometry. */
   const [trimPreviewNaturalSize, setTrimPreviewNaturalSize] = useState<{ w: number; h: number } | null>(
@@ -581,6 +598,14 @@ export function Technique() {
     const height = Math.round(Math.min(Math.max(120, intrinsicH), maxH))
     return { height: Math.max(1, height) }
   }, [winW, winH, trimPreviewNaturalSize])
+
+  const failVisual = useMemo(() => {
+    const overlayW = processFailedOverlayW > 0 ? processFailedOverlayW : winW
+    const motionSize = Math.round(overlayW * FAIL_MOTION_TO_OVERLAY)
+    const iconSize = Math.round(motionSize * FAIL_ICON_TO_MOTION)
+    const stackH = Math.round(motionSize * FAIL_STACK_TO_MOTION)
+    return { overlayW, motionSize, iconSize, stackH }
+  }, [processFailedOverlayW, winW])
 
   const API_BASE = DOMAIN.replace(/\/+$/, '')
   const metrics = analysisJson?.metrics || null
@@ -1025,6 +1050,8 @@ export function Technique() {
     setAnalysisId(null)
     setAnalysisJson(null)
     setAnalysisError(null)
+    setUploadError(null)
+    setProcessFailedVisible(false)
     setGeminiCorrectionImages([])
     setFalCorrectionImages([])
     setComfyCorrectionImages([])
@@ -1041,6 +1068,14 @@ export function Technique() {
     setTrimRange({ startMs: 0, endMs: 3000 })
     trimRangeInitializedRef.current = false
     setStep(1)
+  }, [])
+
+  const openProcessFailedScreen = useCallback(() => {
+    setProcessFailedVisible(true)
+  }, [])
+
+  const handleSendToSupport = useCallback(() => {
+    setSentToSupportVisible(true)
   }, [])
 
   useEffect(() => {
@@ -1208,6 +1243,7 @@ export function Technique() {
       const message = err instanceof Error ? err.message : 'Upload failed. Please try again.'
       setUploadError(message)
       setUploadProgress(0)
+      openProcessFailedScreen()
     } finally {
       setUploading(false)
     }
@@ -1284,6 +1320,7 @@ export function Technique() {
       if (!analysisId) {
         setAnalysisError(errorMsg || t('techniqueExtra.analyzeFailed'))
         setAnalysisLoading(false)
+        openProcessFailedScreen()
         return
       }
 
@@ -1293,6 +1330,7 @@ export function Technique() {
 
       const pollStart = Date.now()
       let done = false
+      let failed = false
       while (!done && Date.now() - pollStart < 600000) {
         await new Promise(r => setTimeout(r, 3000))
         const pollRes = await authClient
@@ -1331,6 +1369,7 @@ export function Technique() {
 
         if (pollBody?.error && !pollBody?.status) {
           setAnalysisError(pollBody.error || 'Failed to fetch analysis')
+          failed = true
           break
         }
         if (pollBody.status === 'completed' || pollBody.status === 'failed') {
@@ -1350,6 +1389,7 @@ export function Technique() {
           setAnalysisJson(pollBody)
           if (pollBody.status === 'failed') {
             setAnalysisError(pollBody.feedbackText || 'Analysis failed')
+            failed = true
           }
           done = true
           break
@@ -1359,16 +1399,23 @@ export function Technique() {
       setAnalysisLoading(false)
       console.log('[Technique] Analysis flow finished', {
         done,
+        failed,
         totalWallMs: Date.now() - analyzeWallStart,
         analyzePostMs,
       })
-      if (done && (options.navigateOnDone ?? true)) {
+      if (failed || !done) {
+        if (!failed) {
+          setAnalysisError(t('techniqueExtra.analyzeFailed'))
+        }
+        openProcessFailedScreen()
+      } else if (options.navigateOnDone ?? true) {
         setStep(3)
       }
     } catch (err: any) {
       console.error('[Technique] runAnalysis error', err)
       setAnalysisError(err?.message || t('techniqueExtra.analyzeError'))
       setAnalysisLoading(false)
+      openProcessFailedScreen()
     }
   }
 
@@ -1734,6 +1781,86 @@ export function Technique() {
           />
         </View>
       ) : null}
+      {processFailedVisible ? (
+        <View
+          style={styles.processFailedOverlay}
+          pointerEvents="auto"
+          onLayout={(e) => {
+            const w = e.nativeEvent.layout.width
+            setProcessFailedOverlayW((prev) => (Math.abs(prev - w) > 1 ? w : prev))
+          }}
+        >
+          <View style={styles.processFailedCenter}>
+            <View
+              style={[
+                styles.processFailedIconStack,
+                { width: failVisual.overlayW, height: failVisual.stackH },
+              ]}
+            >
+              <Image
+                source={FAIL_MOTION}
+                style={{
+                  position: 'absolute',
+                  width: failVisual.motionSize,
+                  height: failVisual.motionSize,
+                  left: Math.round((failVisual.overlayW - failVisual.motionSize) / 2),
+                  top: Math.round((failVisual.stackH - failVisual.motionSize) / 2),
+                }}
+                resizeMode="contain"
+              />
+              <Image
+                source={FAIL_ICON}
+                style={{
+                  position: 'absolute',
+                  width: failVisual.iconSize,
+                  height: failVisual.iconSize,
+                }}
+                resizeMode="contain"
+              />
+            </View>
+            <View style={styles.processFailedCopyBlock}>
+              <Text allowFontScaling={false} style={styles.processFailedTitle}>
+                {t('technique.analysisFailedTitle')}
+              </Text>
+              <Text allowFontScaling={false} style={styles.processFailedSubtitle}>
+                {t('technique.analysisFailedSubtitle')}
+              </Text>
+              <TouchableOpacity
+                style={styles.processFailedPrimaryOuter}
+                onPress={resetToNewVideo}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#00BBFF', '#0022FF']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={styles.processFailedPrimaryInner}
+                >
+                  <Text allowFontScaling={false} style={styles.processFailedPrimaryText}>
+                    {t('technique.startOver')}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.processFailedSecondaryBtn}
+                onPress={handleSendToSupport}
+                activeOpacity={0.85}
+              >
+                <Text allowFontScaling={false} style={styles.processFailedSecondaryText}>
+                  {t('technique.sendToSupport')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      ) : null}
+      <SentToSupportModal
+        visible={sentToSupportVisible}
+        onDone={() => {
+          setSentToSupportVisible(false)
+          resetToNewVideo()
+        }}
+      />
       {step === 1 && coachBannerLoaded && assignedCoach ? (
         <View style={styles.coachBannerSlot}>
           <AICoachCoachReviewBanner
@@ -4593,6 +4720,91 @@ function getStyles(theme: any) {
         android: { elevation: 24 },
         default: {},
       }),
+    },
+    /**
+     * Same stacking as loading overlay: fills Technique root only so Header + tab bar stay.
+     */
+    processFailedOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 100000,
+      backgroundColor: theme.backgroundColor ?? '#030A17',
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 0,
+      paddingLeft: 0,
+      paddingRight: 0,
+      marginHorizontal: 0,
+      ...Platform.select({
+        android: { elevation: 24 },
+        default: {},
+      }),
+    },
+    processFailedCenter: {
+      width: '100%',
+      alignItems: 'center',
+      paddingHorizontal: 0,
+    },
+    processFailedIconStack: {
+      width: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'visible',
+      marginBottom: 8,
+    },
+    processFailedCopyBlock: {
+      width: '100%',
+      maxWidth: 400,
+      alignItems: 'center',
+      paddingHorizontal: 24,
+    },
+    processFailedTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 22,
+      color: '#FFFFFF',
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    processFailedSubtitle: {
+      fontFamily: theme.regularFont,
+      fontSize: 14,
+      lineHeight: 20,
+      color: '#86A7D2',
+      textAlign: 'center',
+      marginBottom: 36,
+      paddingHorizontal: 8,
+    },
+    processFailedPrimaryOuter: {
+      width: '100%',
+      borderRadius: 18,
+      overflow: 'hidden',
+      marginBottom: 14,
+    },
+    processFailedPrimaryInner: {
+      minHeight: 60,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 18,
+      paddingHorizontal: 24,
+    },
+    processFailedPrimaryText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 18,
+      color: '#FFFFFF',
+    },
+    processFailedSecondaryBtn: {
+      width: '100%',
+      minHeight: 60,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#041641',
+      paddingHorizontal: 24,
+    },
+    processFailedSecondaryText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 18,
+      color: '#6BA3E8',
     },
     /** Edge-to-edge in tab scene; COVER removes CONTAIN letterboxing band above the tab bar. */
     analysisLoadingVideoCover: {
