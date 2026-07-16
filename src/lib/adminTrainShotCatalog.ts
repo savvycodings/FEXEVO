@@ -35,8 +35,6 @@ export const ADMIN_TRAIN_SHOTS_BY_CATEGORY: Record<
   readonly AdminTrainShotItem[]
 > = {
   save_return: [
-    { label: "Flat Serve", presetId: "forehand_drive" },
-    { label: "Slice Serve", presetId: "backhand_drive_with_wall" },
     { label: "Forehand Return", presetId: "forehand_return_with_lob" },
     { label: "Forehand Return with lob", presetId: "forehand_return_with_lob" },
     { label: "Backhand Return", presetId: "backhand_return" },
