@@ -115,8 +115,11 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
   const [courtSide, setCourtSide] = useState<"left" | "right" | null>(null);
   const [hasRanking, setHasRanking] = useState<boolean | null>(null);
   const [level, setLevel] = useState<string | null>(null);
+  const [customLevelText, setCustomLevelText] = useState("");
   const [rankingOrg, setRankingOrg] = useState<string | null>("WPR");
   const [rankingValue, setRankingValue] = useState("");
+
+  const standardLevelOptions = LEVEL_OPTION_VALUES.filter((opt) => opt !== "Other");
 
   const canContinueStep1 = !!dominantHand && !!courtSide;
 
@@ -162,7 +165,13 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
       if (typeof body?.profile?.hasRanking === "boolean") {
         setHasRanking(body.profile.hasRanking);
       }
-      if (body?.profile?.level) setLevel(body.profile.level);
+      if (body?.profile?.level) {
+        const savedLevel = String(body.profile.level);
+        setLevel(savedLevel);
+        if (!(LEVEL_OPTION_VALUES.filter((o) => o !== "Other") as readonly string[]).includes(savedLevel)) {
+          setCustomLevelText(savedLevel);
+        }
+      }
       if (body?.profile?.username) setUsername(body.profile.username);
       if (body?.profile?.gender) setGender(body.profile.gender);
       if (body?.profile?.rankingOrg) setRankingOrg(body.profile.rankingOrg);
@@ -552,6 +561,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                     setHasRanking(false);
                     setRankingOrg(null);
                     setRankingValue("");
+                    setLevel(null);
+                    setCustomLevelText("");
                   }}
                   styles={styles}
                 />
@@ -561,6 +572,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                   onPress={() => {
                     setHasRanking(true);
                     setRankingOrg((prev) => prev || "WPR");
+                    setLevel(null);
+                    setCustomLevelText("");
                   }}
                   styles={styles}
                 />
@@ -626,6 +639,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                       setRankingOrg(null);
                       setRankingValue("");
                       setLevel(null);
+                      setCustomLevelText("");
                     }}
                     styles={styles}
                   />
@@ -636,6 +650,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                       setHasRanking(true);
                       setRankingOrg((prev) => prev || "WPR");
                       setLevel(null);
+                      setCustomLevelText("");
                     }}
                     styles={styles}
                   />
@@ -644,18 +659,48 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
 
               {hasRanking === false && (
                 <View style={styles.levelList}>
-                  {LEVEL_OPTION_VALUES.map((opt) => (
-                    <TouchableOpacity
-                      key={opt}
-                      style={[styles.levelOption, level === opt && styles.levelOptionActive]}
-                      onPress={() => setLevel(opt)}
-                      activeOpacity={0.85}
-                    >
-                      <Text allowFontScaling={false} style={[styles.levelText, level === opt && styles.levelTextActive]}>
-                        {t(levelTranslationKey(opt))}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  {standardLevelOptions.map((opt) => {
+                    const active = level === opt;
+                    return (
+                      <TouchableOpacity
+                        key={opt}
+                        style={[styles.levelOption, active && styles.levelOptionActive]}
+                        onPress={() => {
+                          setCustomLevelText("");
+                          setLevel(opt);
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <Text
+                          allowFontScaling={false}
+                          style={[styles.levelText, active && styles.levelTextActive]}
+                        >
+                          {t(levelTranslationKey(opt))}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <TextInput
+                    value={customLevelText}
+                    onChangeText={(text) => {
+                      setCustomLevelText(text);
+                      const trimmed = text.trim();
+                      setLevel(trimmed.length > 0 ? trimmed : null);
+                    }}
+                    onFocus={() => {
+                      if (
+                        level &&
+                        (standardLevelOptions as readonly string[]).includes(level)
+                      ) {
+                        setLevel(customLevelText.trim() || null);
+                      }
+                    }}
+                    style={styles.levelOtherInput}
+                    placeholder={t(levelTranslationKey("Other"))}
+                    placeholderTextColor="#1848BA"
+                    allowFontScaling={false}
+                    underlineColorAndroid="transparent"
+                  />
                 </View>
               )}
 
@@ -1115,17 +1160,43 @@ function getStyles(theme: any) {
       justifyContent: "center",
     },
     levelOption: {
-      minHeight: 38,
-      borderRadius: 14,
-      backgroundColor: "#07256D",
+      minHeight: 44,
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: "#1848BA",
+      backgroundColor: "transparent",
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingVertical: 10,
     },
-    levelOptionActive: { backgroundColor: "#FFFFFF" },
-    levelText: { fontFamily: theme.mediumFont, color: "#00B8FF", fontSize: 16, lineHeight: 20 },
-    levelTextActive: { color: "#062063" },
+    levelOptionActive: {
+      borderColor: "#00BBFF",
+      backgroundColor: "transparent",
+    },
+    levelText: {
+      fontFamily: theme.mediumFont,
+      color: "#1848BA",
+      fontSize: 16,
+      lineHeight: 20,
+    },
+    levelTextActive: {
+      color: "#00BBFF",
+    },
+    levelOtherInput: {
+      marginTop: 10,
+      minHeight: 50,
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: "#1848BA",
+      backgroundColor: "#07256D",
+      color: "#1848BA",
+      fontFamily: theme.mediumFont,
+      fontSize: 16,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      textAlignVertical: "center",
+    },
     chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
     chip: {
       width: "48.5%",
