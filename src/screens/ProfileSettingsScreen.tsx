@@ -24,6 +24,7 @@ import type { MainStackParamList } from "../navigation/types";
 import { ThemeContext } from "../context";
 import { useSessionData } from "../context/SessionDataContext";
 import { AdminGradientCard } from "../components";
+import { LanguageToggle } from "../components/LanguageToggle";
 import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { ShieldHeroRow } from "../components/ShieldHeroRow";
@@ -1656,6 +1657,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           />
         </AdminGradientCard>
 
+        <LanguageToggle style={styles.settingsLanguageToggle} />
+
         <View style={styles.settingsFooterStack}>
           <TouchableOpacity
             activeOpacity={0.85}
@@ -1857,9 +1860,14 @@ function getStyles(theme: any) {
       color: "#18C0FF",
     },
     settingsFooterStack: {
-      marginTop: 28,
+      marginTop: 12,
       width: "100%",
       gap: 12,
+    },
+    settingsLanguageToggle: {
+      marginTop: 4,
+      marginBottom: 4,
+      paddingVertical: 14,
     },
     settingsFooterGradientOuter: {
       width: "100%",
