@@ -44,6 +44,8 @@ type Props = {
   ratingUserId?: string
   /** You tab — shield flush left, score beside it, share icon inline top-right. */
   youPageLayout?: boolean
+  /** Override You-layout score X nudge (default 14). Lower = further left. */
+  scoreNudgeRight?: number
 }
 
 const YOU_SHARE_SLOT_MIN = 36
@@ -65,6 +67,7 @@ export function ProfileHeroScoreBlock({
   shareIconSize = 32,
   ratingUserId,
   youPageLayout = false,
+  scoreNudgeRight,
 }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -113,6 +116,8 @@ export function ProfileHeroScoreBlock({
     : Math.min(colW, heroH)
 
   const showShare = onSharePress != null && shareIconModule != null
+
+  const scoreNudgeX = scoreNudgeRight ?? (youPageLayout ? YOU_SCORE_NUDGE_RIGHT : 0)
 
   const scoreCard = showScoreCard ? (
     <View style={[styles.scoreCard, { width: scoreSize, height: scoreSize }]}>
@@ -231,7 +236,9 @@ export function ProfileHeroScoreBlock({
         </View>
         {showScoreCard && youPageLayout ? (
           <View style={styles.scoreCenterLane}>
-            <View style={styles.scoreNudgeRight}>{scoreCard}</View>
+            <View style={scoreNudgeX !== 0 ? { transform: [{ translateX: scoreNudgeX }] } : undefined}>
+              {scoreCard}
+            </View>
           </View>
         ) : showScoreCard ? (
           <View style={[styles.scoreCol, { width: colW }]}>{scoreCard}</View>
@@ -321,9 +328,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'flex-start',
-  },
-  scoreNudgeRight: {
-    transform: [{ translateX: YOU_SCORE_NUDGE_RIGHT }],
   },
   shareInlineYou: {
     flexShrink: 0,
