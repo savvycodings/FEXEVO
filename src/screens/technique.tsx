@@ -1823,7 +1823,9 @@ export function Technique() {
                 {t('technique.analysisFailedTitle')}
               </Text>
               <Text allowFontScaling={false} style={styles.processFailedSubtitle}>
-                {t('technique.analysisFailedSubtitle')}
+                {analysisError?.trim()
+                  ? analysisError.trim()
+                  : t('technique.analysisFailedSubtitle')}
               </Text>
               <TouchableOpacity
                 style={styles.processFailedPrimaryOuter}
