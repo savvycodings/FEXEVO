@@ -32,6 +32,8 @@ import {
   InviteFriendScreen,
   ClubDetailScreen,
   CoachDetailScreen,
+  CoachDetailView,
+  CoachProfileSectionEditScreen,
 } from './screens'
 import { AchievementDetailScreen } from './screens/AchievementDetailScreen'
 import { Header } from './components'
@@ -152,6 +154,10 @@ function YouTabStack({
   const { theme: ctxTheme } = useContext(ThemeContext)
   const theme = ctxTheme?.backgroundColor != null ? ctxTheme : defaultTheme
   const stackBg = theme.backgroundColor ?? '#030A17'
+  const { viewerIsCoach, profileName, profileImageUri } = useSessionData()
+  const { data: session } = authClient.useSession()
+  const coachUserId =
+    typeof session?.user?.id === 'string' ? session.user.id : null
   const screenOptions = useMemo(
     (): NativeStackNavigationOptions => ({
       headerShown: false,
@@ -162,8 +168,24 @@ function YouTabStack({
   return (
     <YouStack.Navigator screenOptions={screenOptions}>
       <YouStack.Screen name="YouMain">
-        {() => <Profile onProfileUpdated={onProfileUpdated} onDone={onDone} />}
+        {() =>
+          viewerIsCoach && coachUserId ? (
+            <CoachDetailView
+              coachId={coachUserId}
+              coachName={profileName}
+              coachImageUri={profileImageUri}
+              embeddedInYouTab
+            />
+          ) : (
+            <Profile onProfileUpdated={onProfileUpdated} onDone={onDone} />
+          )
+        }
       </YouStack.Screen>
+      <YouStack.Screen
+        name="CoachProfileSectionEdit"
+        component={CoachProfileSectionEditScreen}
+        layout={screenEntranceLayout}
+      />
     </YouStack.Navigator>
   )
 }

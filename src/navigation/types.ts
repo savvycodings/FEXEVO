@@ -24,6 +24,7 @@ export type ProgressTabStackParamList = {
 
 export type YouTabStackParamList = {
   YouMain: undefined;
+  CoachProfileSectionEdit: undefined;
 };
 
 /** My Coach tab: list + per-student chat (keeps bottom tab bar visible on chat). */
