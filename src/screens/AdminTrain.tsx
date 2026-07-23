@@ -43,7 +43,15 @@ import {
 
 const ADMIN_UI_PASSWORD = "xevodev";
 const ADMIN_HEADER_SECRET = "xevodev";
-type ViewProfile = "front" | "side" | "behind";
+type ViewProfile = "front" | "side" | "behind" | "diag_right" | "diag_left";
+
+const VIEW_PROFILE_OPTIONS: { value: ViewProfile; label: string }[] = [
+  { value: "front", label: "front" },
+  { value: "side", label: "side" },
+  { value: "behind", label: "behind" },
+  { value: "diag_right", label: "45° right" },
+  { value: "diag_left", label: "45° left" },
+];
 
 type TrainSkillLevel = "beginner" | "intermediate" | "advanced";
 function absoluteBackendUrl(relativeOrAbsolute: string): string {
@@ -748,7 +756,7 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
         </View>
         <Text style={styles.label}>View profile</Text>
         <View style={styles.pillGrid}>
-          {(["front", "side", "behind"] as ViewProfile[]).map((v) => {
+          {VIEW_PROFILE_OPTIONS.map(({ value: v, label }) => {
             const active = viewProfile === v;
             return (
               <TouchableOpacity
@@ -760,7 +768,7 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
                 <Text
                   style={[styles.taxonomyPillText, active && styles.taxonomyPillTextActive]}
                 >
-                  {v}
+                  {label}
                 </Text>
               </TouchableOpacity>
             );
