@@ -111,11 +111,11 @@ const CATEGORY_ICON_TACTICS = require('../../assets/afteranylize/tactics.svg')
 const HOWTO_HIDE_KEY = 'technique_hide_howto_prompt'
 const CHOOSE_FILE_ICON = require('../../assets/aicoach/choosefileicon.svg')
 const FAIL_ICON = require('../../assets/aicoach/failicon.png')
-const FAIL_MOTION = require('../../assets/aicoach/failmotion.png')
+const FAIL_MOTION_VIDEO = require('../../assets/aicoach/failmotion.mp4')
 const UPLOADING_STEP_ICON = require('../../assets/actiities/uploading.svg')
 /**
- * failmotion is a square; side energy reaches the PNG L/R edges.
- * Slightly overscale past the overlay width so soft PNG edges still hit the screen
+ * failmotion video is a square; side energy reaches the L/R edges.
+ * Slightly overscale past the overlay width so soft edges still hit the screen
  * (exact 1:1 leaves a visual gap on some devices).
  * failicon nests in the center void — kept smaller than the energy circle.
  */
@@ -1797,8 +1797,8 @@ export function Technique() {
                 { width: failVisual.overlayW, height: failVisual.stackH },
               ]}
             >
-              <Image
-                source={FAIL_MOTION}
+              <Video
+                source={FAIL_MOTION_VIDEO}
                 style={{
                   position: 'absolute',
                   width: failVisual.motionSize,
@@ -1806,7 +1806,10 @@ export function Technique() {
                   left: Math.round((failVisual.overlayW - failVisual.motionSize) / 2),
                   top: Math.round((failVisual.stackH - failVisual.motionSize) / 2),
                 }}
-                resizeMode="contain"
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay={processFailedVisible}
+                isLooping
+                isMuted
               />
               <Image
                 source={FAIL_ICON}
