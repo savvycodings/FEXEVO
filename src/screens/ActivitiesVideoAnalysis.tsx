@@ -27,11 +27,20 @@ import {
   storedAiScoreToPercent,
 } from '../lib/techniqueScoreDisplay'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
-import { CoachAnalysisAccordions } from '../components/CoachAnalysisAccordions'
+import {
+  CoachAnalysisAccordions,
+  CoachDoneWellSection,
+} from '../components/CoachAnalysisAccordions'
+import { CoachRichText } from '../components/CoachRichText'
 import { CoachStrengthFocusInsightCards } from '../components/CoachStrengthFocusInsightCards'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
+import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidenceSection'
 import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
+import {
+  parseBiomechanicsSummary,
+  type BiomechanicsSummary,
+} from '../lib/biomechanicsSummary'
 import {
   buildCoachInsightCardsContent,
   formatActivityShotTitle,
@@ -40,6 +49,7 @@ import {
 import {
   displayTrainShotTitle,
   humanShotLabelFromStoredMetrics,
+  stripTrainClipIndexSuffix,
 } from '../lib/trainShotDisplay'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { ProLibraryGradientFrame, ProLibraryGradientProgressBar } from '../components'
@@ -338,6 +348,14 @@ function getStyles(theme: any) {
       marginHorizontal: pad,
       marginBottom: 14,
     },
+    motionEvidenceWrap: {
+      marginHorizontal: pad,
+      marginTop: 4,
+      marginBottom: 18,
+      paddingTop: 16,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: 'rgba(255,255,255,0.1)',
+    },
     physicalMetricsWrap: {
       marginHorizontal: pad,
       marginBottom: 14,
@@ -569,6 +587,7 @@ export function ActivitiesVideoAnalysis({
     confidenceBand: string | null
     uncertaintyPlusMinus: number | null
     physicalMetrics: ReturnType<typeof parsePhysicalMetricsFromAnalysis>
+    biomechanicsSummary: BiomechanicsSummary | null
   } | null>(null)
   const [fullFeedbackText, setFullFeedbackText] = useState<string | null>(null)
   const [aiSections, setAiSections] = useState<{
@@ -737,6 +756,7 @@ export function ActivitiesVideoAnalysis({
           confidenceBand: confidence.band,
           uncertaintyPlusMinus: confidence.uncertaintyPlusMinus,
           physicalMetrics: parsePhysicalMetricsFromAnalysis(ai),
+          biomechanicsSummary: parseBiomechanicsSummary(metrics),
         })
         setPoseFrames(rows)
         setTotalVidFrames(tf)
@@ -851,7 +871,7 @@ export function ActivitiesVideoAnalysis({
       rating: effectiveSession.rating ?? null,
       score: effectiveSession.score ?? null,
       diagnosis: aiSections.diagnosis,
-      shotContext: aiSections.shotContext,
+      shotContext: null,
       strengths: aiSections.strengths,
       technicalErrors: aiSections.technicalErrors,
       actionableCorrections: aiSections.actionableCorrections,
@@ -861,7 +881,9 @@ export function ActivitiesVideoAnalysis({
   const correctionPairs =
     correctionGemini.length > 0 ? correctionGemini : correctionFal
 
-  const proReferenceShot = aiSections?.strokeLabel?.trim() || null
+  const proReferenceShot = aiSections?.strokeLabel
+    ? stripTrainClipIndexSuffix(aiSections.strokeLabel)
+    : null
 
   useEffect(() => {
     setActiveCorrection((prev) => {
@@ -1118,6 +1140,18 @@ export function ActivitiesVideoAnalysis({
           })}
         </ProLibraryGradientFrame>
 
+        {aiSections?.strengths && aiSections.strengths.length > 0 ? (
+          <View style={styles.insightCardsWrap}>
+            <CoachDoneWellSection strengths={aiSections.strengths} />
+          </View>
+        ) : null}
+
+        {coachInsightCards ? (
+          <View style={styles.insightCardsWrap}>
+            <CoachStrengthFocusInsightCards content={coachInsightCards} />
+          </View>
+        ) : null}
+
         {aiSnapshot?.physicalMetrics ? (
           <View style={styles.physicalMetricsWrap}>
             <PhysicalMetricsSection
@@ -1129,9 +1163,9 @@ export function ActivitiesVideoAnalysis({
           </View>
         ) : null}
 
-        {coachInsightCards ? (
-          <View style={styles.insightCardsWrap}>
-            <CoachStrengthFocusInsightCards content={coachInsightCards} />
+        {aiSnapshot?.biomechanicsSummary ? (
+          <View style={styles.motionEvidenceWrap}>
+            <MotionEvidenceSection summary={aiSnapshot.biomechanicsSummary} />
           </View>
         ) : null}
 
@@ -1150,7 +1184,10 @@ export function ActivitiesVideoAnalysis({
                   {t('analysis.session')}
                 </Text>
                 <Text allowFontScaling={false} style={styles.commentBody}>
-                  {t('analysis.stroke')}: {aiSections.strokeLabel || shotTitle}
+                  {t('analysis.stroke')}:{' '}
+                  {(aiSections.strokeLabel
+                    ? stripTrainClipIndexSuffix(aiSections.strokeLabel)
+                    : null) || shotTitle}
                   {'\n'}
                   {t('analysis.category')}: {aiSections.category || '—'}
                   {'\n'}
@@ -1160,7 +1197,11 @@ export function ActivitiesVideoAnalysis({
             ) : null}
             {accordionData ? (
               <View style={{ marginTop: 14 }}>
-                <CoachAnalysisAccordions data={accordionData} defaultExpanded />
+                <CoachAnalysisAccordions
+                  data={accordionData}
+                  defaultExpanded
+                  omitStrengths
+                />
               </View>
             ) : null}
             {hasNotesExtra ? (
@@ -1168,9 +1209,7 @@ export function ActivitiesVideoAnalysis({
                 <Text allowFontScaling={false} style={styles.aiSubTitle}>
                   {t('analysis.fullCoachNotes')}
                 </Text>
-                <Text allowFontScaling={false} style={styles.commentBody}>
-                  {notesExtra}
-                </Text>
+                <CoachRichText text={notesExtra} style={styles.commentBody} numberOfLines={24} />
               </>
             ) : null}
             {showWrittenEmpty ? (
@@ -1204,9 +1243,11 @@ export function ActivitiesVideoAnalysis({
                 <Text allowFontScaling={false} style={styles.aiSubTitle}>
                   {t('analysis.coachSummary')}
                 </Text>
-                <Text allowFontScaling={false} style={styles.commentBody}>
-                  {correctionCoaching.diagnosis.trim()}
-                </Text>
+                <CoachRichText
+                  text={correctionCoaching.diagnosis.trim()}
+                  style={styles.commentBody}
+                  numberOfLines={16}
+                />
               </>
             ) : null}
             {correctionCoaching?.recommendations &&

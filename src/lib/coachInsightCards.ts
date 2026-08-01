@@ -1,4 +1,6 @@
 import { TRAIN_CATEGORIES, trainStrokeLabel, type TrainStrokePreset } from './train-taxonomy'
+import { stripCoachRichMarkers } from './coachRichText'
+import { stripTrainClipIndexSuffix } from './trainShotDisplay'
 
 const TRAIN_CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
   TRAIN_CATEGORIES.map((c) => [c.id, c.label])
@@ -9,7 +11,8 @@ export const INSIGHT_HEADLINE_MAX_CHARS = 48
 export const INSIGHT_BODY_MAX_CHARS = 220
 export const ACTIVITY_SHOT_TITLE_MAX_CHARS = 40
 export const STRENGTH_HEADLINE_FALLBACK = 'Your shot'
-export const FOCUS_HEADLINE_FALLBACK = 'Next focus'
+/** Empty sentinel — never show a redundant "Focus / Next focus" blue line. */
+export const FOCUS_HEADLINE_FALLBACK = '—'
 export const ACTIVITY_SHOT_TITLE_FALLBACK = 'Technique'
 
 export type CoachInsightCardsInput = {
@@ -38,7 +41,7 @@ function trainCategoryLabel(raw: string | undefined): string {
 }
 
 function clipInsightTitle(text: string, maxLen: number): string {
-  const t = text.trim()
+  const t = stripCoachRichMarkers(text)
   if (!t) return ''
   if (t.length <= maxLen) return t
   return `${t.slice(0, Math.max(0, maxLen - 1)).trim()}…`
@@ -46,7 +49,7 @@ function clipInsightTitle(text: string, maxLen: number): string {
 
 function firstInsightSentence(text: string | undefined, maxLen: number): string {
   if (!text?.trim()) return ''
-  const t = text.trim()
+  const t = stripCoachRichMarkers(text)
   const m = t.match(/^[^.!?]+[.!?]?/)
   const s = (m ? m[0] : t.split('\n')[0]) ?? t
   return clipInsightTitle(s, maxLen)
@@ -62,8 +65,23 @@ function insightHeadlineWordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length
 }
 
+function firstRichChipPhrase(text: string): string {
+  if (!text?.trim()) return ''
+  const m = text.match(/\[\[([^\]]{1,48})\]\]|\*\*([^*]{1,48})\*\*/)
+  const chip = String(m?.[1] ?? m?.[2] ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+  return chip
+}
+
+function isRedundantFocusHeadline(title: string): boolean {
+  const t = title.trim().toLowerCase()
+  if (!t || t === '—' || t === '-') return true
+  return /^(next\s+)?focus$/.test(t) || /^next\s+focus\b/.test(t)
+}
+
 function stripCoachingFillerForHeadline(text: string): string {
-  let t = text.trim()
+  let t = stripCoachRichMarkers(text)
   if (!t) return ''
   const firstClause = t.split(/[.!?]\s+/)[0] ?? t
   t = firstClause.split(/[,;]/)[0]?.trim() ?? firstClause
@@ -74,6 +92,7 @@ function stripCoachingFillerForHeadline(text: string): string {
     .replace(/^aim\s+to\s+/i, '')
     .replace(/^work\s+on\s+/i, '')
     .replace(/^focus\s+on\s+/i, '')
+    .replace(/^next\s+focus[,:]?\s*/i, '')
     .replace(/^you\s+should\s+/i, '')
     .replace(/^you\s+need\s+to\s+/i, '')
     .replace(/^you\s+must\s+/i, '')
@@ -87,7 +106,7 @@ function stripCoachingFillerForHeadline(text: string): string {
 }
 
 function finalizeInsightHeadline(candidate: string, fallback: string): string {
-  const t = candidate.trim()
+  const t = stripCoachRichMarkers(candidate)
   if (!t) return fallback
   if (t.length > INSIGHT_HEADLINE_MAX_CHARS) return fallback
   const words = insightHeadlineWordCount(t)
@@ -97,7 +116,7 @@ function finalizeInsightHeadline(candidate: string, fallback: string): string {
 }
 
 export function completeInsightHeadline(raw: string, maxWords: number, fallback: string): string {
-  const t = raw.trim()
+  const t = stripCoachRichMarkers(raw)
   if (!t) return fallback
   const stripped = stripCoachingFillerForHeadline(t)
   const base = stripped.length > 0 ? stripped : t
@@ -120,9 +139,16 @@ export function completeInsightHeadline(raw: string, maxWords: number, fallback:
 }
 
 function clipInsightBody(text: string): string {
+  // Keep [[chip]] markers so insight card bodies can render ghost chips.
   const t = text.trim()
   if (!t) return '—'
-  return clipInsightTitle(t, INSIGHT_BODY_MAX_CHARS) || '—'
+  if (t.length <= INSIGHT_BODY_MAX_CHARS) return t
+  const sliced = t.slice(0, Math.max(0, INSIGHT_BODY_MAX_CHARS - 1)).trim()
+  // Avoid cutting inside an open [[... marker
+  const open = sliced.lastIndexOf('[[')
+  const close = sliced.lastIndexOf(']]')
+  const safe = open > close ? sliced.slice(0, open).trim() : sliced
+  return `${safe}…`
 }
 
 /** Short nav title for Activities / lists — never a full coaching paragraph. */
@@ -133,7 +159,8 @@ export function formatActivityShotTitle(opts: {
   shotContext?: string | null
   sessionLabel?: string | null
 }): string {
-  const humanLabel = typeof opts.strokeLabel === 'string' ? opts.strokeLabel.trim() : ''
+  const humanLabel =
+    typeof opts.strokeLabel === 'string' ? stripTrainClipIndexSuffix(opts.strokeLabel) : ''
   if (humanLabel) {
     return clipInsightTitle(humanLabel, ACTIVITY_SHOT_TITLE_MAX_CHARS) || ACTIVITY_SHOT_TITLE_FALLBACK
   }
@@ -176,7 +203,9 @@ export function buildCoachInsightCardsContent(
 
   const strengthCandidates: string[] = []
   const fromLabel =
-    typeof input.strokeLabel === 'string' ? input.strokeLabel.trim() : ''
+    typeof input.strokeLabel === 'string'
+      ? stripTrainClipIndexSuffix(input.strokeLabel)
+      : ''
   if (fromLabel) {
     strengthCandidates.push(
       completeInsightHeadline(fromLabel, INSIGHT_HEADLINE_MAX_WORDS, STRENGTH_HEADLINE_FALLBACK)
@@ -227,9 +256,26 @@ export function buildCoachInsightCardsContent(
   let focusRaw = ''
   if (actionableCorrectionsList.length > 0) focusRaw = actionableCorrectionsList[0].trim()
   if (!focusRaw && technicalErrorsList.length > 0) focusRaw = technicalErrorsList[0].trim()
-  const focusTitle = focusRaw
-    ? completeInsightHeadline(focusRaw, INSIGHT_HEADLINE_MAX_WORDS, FOCUS_HEADLINE_FALLBACK)
-    : '—'
+
+  // Prefer the marked cue ([[chip]]) as the blue line; never fall back to "Next focus"
+  // under the Focus section title (redundant). Omit the headline when we can't shorten.
+  let focusTitle = '—'
+  if (focusRaw) {
+    const fromChip = firstRichChipPhrase(focusRaw)
+    if (fromChip) {
+      focusTitle = finalizeInsightHeadline(fromChip, FOCUS_HEADLINE_FALLBACK)
+    }
+    if (focusTitle === FOCUS_HEADLINE_FALLBACK || isRedundantFocusHeadline(focusTitle)) {
+      focusTitle = completeInsightHeadline(
+        focusRaw,
+        INSIGHT_HEADLINE_MAX_WORDS,
+        FOCUS_HEADLINE_FALLBACK
+      )
+    }
+    if (isRedundantFocusHeadline(focusTitle)) {
+      focusTitle = '—'
+    }
+  }
 
   let focusBody = '—'
   if (technicalErrorsList.length > 0 && actionableCorrectionsList.length > 0) {

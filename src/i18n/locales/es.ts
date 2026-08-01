@@ -215,6 +215,12 @@ export const es = {
     physicalMetricAgility: "Agilidad",
     physicalMetricReactions: "Reacciones",
     physicalMetricAcceleration: "Aceleración",
+    motionEvidenceTitle: "Movimiento medido",
+    motionEvidenceCaption: "Desde pose y bola · velocidades relativas al tamaño del cuerpo",
+    motionEvidenceElbowImpact: "Codo en el impacto",
+    motionEvidenceTorsoRotation: "Rotación del torso",
+    motionEvidenceWristSpeed: "Velocidad de muñeca",
+    motionEvidenceContactWindow: "Ventana de contacto",
   },
   activities: {
     title: "Actividades",

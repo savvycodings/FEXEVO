@@ -523,6 +523,7 @@ export function TechniqueAnalysisVideoPanel({
                   resizeMode={ResizeMode.CONTAIN}
                   useNativeControls={false}
                   isLooping={isLooping}
+                  progressUpdateIntervalMillis={33}
                   onLoad={(s) => {
                     if (s.isLoaded) {
                       const ext = s as AVPlaybackStatusSuccess & {
@@ -598,6 +599,7 @@ export function TechniqueAnalysisVideoPanel({
                   resizeMode={ResizeMode.CONTAIN}
                   useNativeControls={false}
                   isLooping={isLooping}
+                  progressUpdateIntervalMillis={33}
                   onLoad={(s) => {
                     if (s.isLoaded) {
                       const ext = s as AVPlaybackStatusSuccess & {

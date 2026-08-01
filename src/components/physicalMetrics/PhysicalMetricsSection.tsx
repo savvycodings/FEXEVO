@@ -82,13 +82,13 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'stretch',
     paddingTop: 0,
-    paddingBottom: 8,
-    marginTop: -4,
+    paddingBottom: 4,
+    marginTop: 0,
     gap: 0,
     alignItems: 'stretch',
   },
   barsWrap: {
     width: '100%',
-    marginTop: -10,
+    marginTop: 0,
   },
 })

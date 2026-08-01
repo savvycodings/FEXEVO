@@ -69,9 +69,16 @@ import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateMod
 import { SentToSupportModal } from '../components/SentToSupportModal'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
+import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidenceSection'
 import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
+import { parseBiomechanicsSummary } from '../lib/biomechanicsSummary'
 import { CoachStrengthFocusInsightCards } from '../components/CoachStrengthFocusInsightCards'
+import {
+  CoachAnalysisAccordions,
+  CoachDoneWellSection,
+} from '../components/CoachAnalysisAccordions'
 import { buildCoachInsightCardsContent } from '../lib/coachInsightCards'
+import { stripTrainClipIndexSuffix } from '../lib/trainShotDisplay'
 import { normalizePoseData, resolveTotalFrames, type PoseFrameRow } from '../lib/techniquePose'
 import {
   storedAiBreakdownToPercent,
@@ -87,6 +94,8 @@ import { uploadTechniqueVideo } from '../lib/techniqueVideoUpload'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const HORIZONTAL_PADDING = 24
+/** Tighter content column on results — keeps video + text on one aligned edge. */
+const STEP3_HORIZONTAL_PADDING = 16
 const FRAME_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 2
 const FRAME_ASPECT = 9 / 16
 const FRAME_HEIGHT = FRAME_WIDTH / FRAME_ASPECT
@@ -399,6 +408,9 @@ export function Technique() {
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [analysisJson, setAnalysisJson] = useState<any>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+  /** Dense pose/YOLO overlay from /pose-overlay (not the 80-sample poll metrics). */
+  const [overlayPoseFrames, setOverlayPoseFrames] = useState<PoseFrameRow[]>([])
+  const [overlayTotalFrames, setOverlayTotalFrames] = useState<number | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   /** Full-tab failure UI (header + bottom nav stay visible). */
   const [processFailedVisible, setProcessFailedVisible] = useState(false)
@@ -409,10 +421,6 @@ export function Technique() {
   const [trimPreviewNaturalSize, setTrimPreviewNaturalSize] = useState<{ w: number; h: number } | null>(
     null
   )
-  const [ratingOpen, setRatingOpen] = useState(false)
-  const [strengthsOpen, setStrengthsOpen] = useState(false)
-  const [technicalErrorsOpen, setTechnicalErrorsOpen] = useState(false)
-  const [actionableOpen, setActionableOpen] = useState(false)
   const [markerProgress, setMarkerProgress] = useState(0.5)
   const [trimRange, setTrimRange] = useState<{ startMs: number; endMs: number }>({
     startMs: 0,
@@ -651,9 +659,15 @@ export function Technique() {
     [aiAnalysis]
   )
 
+  const biomechanicsSummary = useMemo(
+    () => parseBiomechanicsSummary(metrics as Record<string, unknown> | null | undefined),
+    [metrics]
+  )
+
   const proReferenceShot = useMemo(() => {
     const label = retrieval?.shot_hypothesis?.stroke_label
-    return typeof label === 'string' && label.trim() ? label.trim() : null
+    if (typeof label !== 'string' || !label.trim()) return null
+    return stripTrainClipIndexSuffix(label)
   }, [retrieval?.shot_hypothesis?.stroke_label])
 
   const currentTrimClip = useMemo(() => {
@@ -682,7 +696,7 @@ export function Technique() {
   const coachInsightCards = useMemo(
     () =>
       buildCoachInsightCardsContent({
-        strokeLabel: retrieval?.shot_hypothesis?.stroke_label ?? null,
+        strokeLabel: proReferenceShot,
         strokePreset: retrieval?.shot_hypothesis?.stroke_preset ?? null,
         shotContext: typeof enAnalysis?.shot_context === 'string' ? enAnalysis.shot_context : null,
         primaryTrainCategory:
@@ -696,7 +710,7 @@ export function Technique() {
         diagnosis: typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : null,
       }),
     [
-      retrieval?.shot_hypothesis?.stroke_label,
+      proReferenceShot,
       retrieval?.shot_hypothesis?.stroke_preset,
       enAnalysis?.shot_context,
       enAnalysis?.observations,
@@ -708,15 +722,75 @@ export function Technique() {
     ]
   )
 
-  const step3PoseFrames: PoseFrameRow[] = useMemo(
-    () => normalizePoseData(metrics?.pose_data),
-    [metrics?.pose_data]
+  // Dense overlay only — never use poll metrics.pose_data (capped at 80 ≈ every-5th-frame stutter).
+  const step3PoseFrames: PoseFrameRow[] = overlayPoseFrames
+  const step3TotalVidFrames = useMemo(() => {
+    if (overlayTotalFrames != null && overlayTotalFrames > 0) {
+      return resolveTotalFrames(
+        { total_frames: overlayTotalFrames, ...(metrics ?? {}) },
+        step3PoseFrames
+      )
+    }
+    return resolveTotalFrames(metrics as Record<string, unknown> | null | undefined, step3PoseFrames)
+  }, [overlayTotalFrames, metrics, step3PoseFrames])
+
+  useEffect(() => {
+    if (!analysisId || analysisJson?.status !== 'completed') {
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const overlayRes = await authClient.$fetch(
+          `/technique/analysis/${analysisId}/pose-overlay`,
+          { method: 'GET' }
+        )
+        if (cancelled) return
+        const overlayBody: any = (overlayRes as any)?.data ?? overlayRes
+        if (overlayBody?.error) {
+          console.warn('[Technique] pose-overlay error', overlayBody.error)
+          return
+        }
+        const rows = normalizePoseData(overlayBody?.pose_data)
+        const totalSamples =
+          typeof overlayBody?.pose_data_total_samples === 'number'
+            ? overlayBody.pose_data_total_samples
+            : null
+        const tf =
+          typeof overlayBody?.total_frames === 'number' && overlayBody.total_frames > 0
+            ? overlayBody.total_frames
+            : null
+        console.log('[Technique] pose-overlay loaded', {
+          analysisId,
+          returned: rows.length,
+          totalSamples,
+          totalFrames: tf,
+          ratio:
+            totalSamples != null && totalSamples > 0
+              ? (rows.length / totalSamples).toFixed(3)
+              : null,
+        })
+        if (rows.length > 0) {
+          setOverlayPoseFrames(rows)
+        } else {
+          console.warn('[Technique] pose-overlay returned 0 pose rows', { analysisId })
+        }
+        if (tf != null) setOverlayTotalFrames(tf)
+      } catch (err) {
+        console.warn('[Technique] pose-overlay fetch failed (no sparse poll fallback)', {
+          analysisId,
+          message: err instanceof Error ? err.message : String(err),
+        })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [analysisId, analysisJson?.status])
+  const step3VideoWidth = useMemo(
+    () => Math.max(200, winW - STEP3_HORIZONTAL_PADDING * 2),
+    [winW]
   )
-  const step3TotalVidFrames = useMemo(
-    () => resolveTotalFrames(metrics as Record<string, unknown> | null | undefined, step3PoseFrames),
-    [metrics, step3PoseFrames]
-  )
-  const step3VideoWidth = useMemo(() => Math.max(200, winW - HORIZONTAL_PADDING * 2), [winW])
   const analysisReady =
     analysisJson?.status === 'completed' || analysisJson?.status === 'failed'
   const canContinueProfileStep1 = dominantHand != null && courtSide != null
@@ -1050,6 +1124,8 @@ export function Technique() {
     setAnalysisId(null)
     setAnalysisJson(null)
     setAnalysisError(null)
+    setOverlayPoseFrames([])
+    setOverlayTotalFrames(null)
     setUploadError(null)
     setProcessFailedVisible(false)
     setGeminiCorrectionImages([])
@@ -1266,6 +1342,8 @@ export function Technique() {
       setAnalysisError(null)
       if (options.resetState ?? true) {
         setAnalysisJson(null)
+        setOverlayPoseFrames([])
+        setOverlayTotalFrames(null)
         setGeminiCorrectionImages([])
         setFalCorrectionImages([])
         setComfyCorrectionImages([])
@@ -2142,7 +2220,12 @@ export function Technique() {
                   paddingBottom: insets.bottom + FLOATING_NAV_RESERVE,
                   paddingHorizontal: STEP1_HORIZONTAL_PADDING,
                 }
-              : { paddingBottom: TAB_SCENE_SCROLL_BOTTOM_PAD },
+              : step === 3
+                ? {
+                    paddingBottom: TAB_SCENE_SCROLL_BOTTOM_PAD,
+                    paddingHorizontal: STEP3_HORIZONTAL_PADDING,
+                  }
+                : { paddingBottom: TAB_SCENE_SCROLL_BOTTOM_PAD },
             step === 1 && uploading && scrollBodyH > 0 ? { minHeight: scrollBodyH } : null,
           ]}
           showsVerticalScrollIndicator={false}
@@ -2546,6 +2629,30 @@ export function Technique() {
                 </View>
               </View>
             )}
+
+            {metrics && aiAnalysis?.en && strengthsList.length > 0 ? (
+              <View style={styles.step3EarlyFeedbackWrap}>
+                <CoachDoneWellSection strengths={strengthsList} />
+              </View>
+            ) : null}
+
+            {uploadedVideoUrl && analysisJson?.status === 'completed' ? (
+              <View style={styles.step3FullWidthBlock}>
+                <TechniqueAnalysisVideoPanel
+                  videoUri={uploadedVideoUrl}
+                  videoKey={analysisId ?? 'technique-step3'}
+                  width={step3VideoWidth}
+                  poseFrames={step3PoseFrames}
+                  totalVidFrames={step3TotalVidFrames}
+                  qualitySession={{
+                    rating: typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null,
+                    score: score ?? null,
+                  }}
+                  isLooping
+                />
+              </View>
+            ) : null}
+
             {score != null && (
               <LinearGradient
                 colors={[...STEP3_CARD_GRADIENT_COLORS]}
@@ -2609,6 +2716,12 @@ export function Technique() {
               </LinearGradient>
             )}
 
+            {metrics && aiAnalysis?.en ? (
+              <View style={styles.step3InsightBeforeChartWrap}>
+                <CoachStrengthFocusInsightCards content={coachInsightCards} />
+              </View>
+            ) : null}
+
             {analysisError || analysisJson ? (
               <View style={styles.step3}>
                 <View style={styles.placeholderCard}>
@@ -2625,30 +2738,37 @@ export function Technique() {
                         </View>
                       ) : null}
 
-                      {uploadedVideoUrl && step3PoseFrames.length > 0 && (
-                        <View style={styles.step3FullWidthBlock}>
-                          <TechniqueAnalysisVideoPanel
-                            videoUri={uploadedVideoUrl}
-                            videoKey={analysisId ?? 'technique-step3'}
-                            width={step3VideoWidth}
-                            poseFrames={step3PoseFrames}
-                            totalVidFrames={step3TotalVidFrames}
-                            qualitySession={{
-                              rating: typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null,
+                      {biomechanicsSummary ? (
+                        <View style={styles.step3MotionEvidenceWrap}>
+                          <MotionEvidenceSection summary={biomechanicsSummary} />
+                        </View>
+                      ) : null}
+
+                      {enAnalysis ? (
+                        <View style={styles.step3CoachFeedbackWrap}>
+                          <CoachAnalysisAccordions
+                            omitStrengths
+                            data={{
+                              rating:
+                                aiAnalysis?.rating != null
+                                  ? String(aiAnalysis.rating)
+                                  : null,
                               score: score ?? null,
+                              diagnosis:
+                                typeof enAnalysis.diagnosis === 'string'
+                                  ? enAnalysis.diagnosis
+                                  : null,
+                              shotContext: null,
+                              strengths: strengthsList,
+                              technicalErrors: technicalErrorsList,
+                              actionableCorrections: actionableCorrectionsList,
+                              recommendations: Array.isArray(enAnalysis.recommendations)
+                                ? enAnalysis.recommendations
+                                : [],
                             }}
-                            isLooping
                           />
                         </View>
-                      )}
-
-                      {metrics && aiAnalysis?.en && (
-                        <View style={styles.retrievalSectionWrap}>
-                          <View style={styles.retrievalSectionInner}>
-                            <CoachStrengthFocusInsightCards content={coachInsightCards} />
-                          </View>
-                        </View>
-                      )}
+                      ) : null}
 
                       {aiAnalysis?.en && (
                         <View style={styles.correctionSection}>
@@ -3192,193 +3312,6 @@ export function Technique() {
                           </View>
                         </View>
                       )}
-
-                      {aiAnalysis?.en && (
-                        <LinearGradient
-                          colors={[...STEP3_CARD_GRADIENT_COLORS]}
-                          locations={[...STEP3_CARD_GRADIENT_LOCATIONS]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={[styles.retrievalMetaRowGradient, styles.step3AccordionGradientWrap]}
-                        >
-                          <View style={styles.step3SummaryGradientFill}>
-                            <TouchableOpacity
-                              style={styles.accordionHeader}
-                              activeOpacity={0.8}
-                              onPress={() => setRatingOpen(!ratingOpen)}
-                            >
-                              <View>
-                                <Text style={styles.accordionTitle}>{t('technique.techniqueRating')}</Text>
-                                <Text style={styles.accordionSubtitle}>
-                                  {aiAnalysis.rating
-                                    ? String(aiAnalysis.rating).replace('_', ' ').toUpperCase()
-                                    : '—'}
-                                </Text>
-                              </View>
-                              <View style={styles.accordionRight}>
-                                <Text style={styles.accordionScoreText}>{score ?? '–'}</Text>
-                                <View style={styles.accordionIconChip}>
-                                  <FeatherIcon name="activity" size={14} color="#FFFFFF" />
-                                </View>
-                                <Ionicons
-                                  name={ratingOpen ? 'chevron-up' : 'chevron-down'}
-                                  size={18}
-                                  color={theme.mutedForegroundColor}
-                                />
-                              </View>
-                            </TouchableOpacity>
-                            {ratingOpen && (
-                              <View style={styles.accordionBody}>
-                                <Text style={styles.ratingText}>{aiAnalysis.en.diagnosis}</Text>
-                              </View>
-                            )}
-                          </View>
-                        </LinearGradient>
-                      )}
-
-                      {enAnalysis && Array.isArray(strengthsList) && strengthsList.length > 0 && (
-                        <LinearGradient
-                          colors={[...STEP3_CARD_GRADIENT_COLORS]}
-                          locations={[...STEP3_CARD_GRADIENT_LOCATIONS]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={[styles.retrievalMetaRowGradient, styles.step3AccordionGradientWrap]}
-                        >
-                          <View style={styles.step3SummaryGradientFill}>
-                            <TouchableOpacity
-                              style={styles.accordionHeader}
-                              activeOpacity={0.8}
-                              onPress={() => setStrengthsOpen(!strengthsOpen)}
-                            >
-                              <View>
-                                <Text style={styles.accordionTitle}>{t('technique.doneWell')}</Text>
-                                <Text style={styles.accordionSubtitle}>
-                                  {t('coachAccordions.strengthsCount', { count: strengthsList.length })}
-                                </Text>
-                              </View>
-                              <View style={styles.accordionRight}>
-                                <View style={styles.accordionIconChip}>
-                                  <FeatherIcon name="eye" size={14} color="#FFFFFF" />
-                                </View>
-                                <Ionicons
-                                  name={strengthsOpen ? 'chevron-up' : 'chevron-down'}
-                                  size={18}
-                                  color={theme.mutedForegroundColor}
-                                />
-                              </View>
-                            </TouchableOpacity>
-                            {strengthsOpen && (
-                              <View style={styles.accordionBody}>
-                                {strengthsList.map((obs: string, idx: number) => (
-                                  <View key={idx} style={styles.bulletRow}>
-                                    <Text style={styles.bulletDot}>•</Text>
-                                    <Text style={styles.bulletText}>{obs}</Text>
-                                  </View>
-                                ))}
-                              </View>
-                            )}
-                          </View>
-                        </LinearGradient>
-                      )}
-
-                      {enAnalysis &&
-                        Array.isArray(technicalErrorsList) &&
-                        technicalErrorsList.length > 0 && (
-                        <LinearGradient
-                          colors={[...STEP3_CARD_GRADIENT_COLORS]}
-                          locations={[...STEP3_CARD_GRADIENT_LOCATIONS]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={[styles.retrievalMetaRowGradient, styles.step3AccordionGradientWrap]}
-                        >
-                          <View style={styles.step3SummaryGradientFill}>
-                            <TouchableOpacity
-                              style={styles.accordionHeader}
-                              activeOpacity={0.8}
-                              onPress={() => setTechnicalErrorsOpen(!technicalErrorsOpen)}
-                            >
-                              <View>
-                                <Text style={styles.accordionTitle}>{t('technique.technicalErrors')}</Text>
-                                <Text style={styles.accordionSubtitle}>
-                                  {t('coachAccordions.issuesCount', { count: technicalErrorsList.length })}
-                                </Text>
-                              </View>
-                              <View style={styles.accordionRight}>
-                                <View style={styles.accordionIconChip}>
-                                  <FeatherIcon name="alert-triangle" size={14} color="#FFFFFF" />
-                                </View>
-                                <Ionicons
-                                  name={technicalErrorsOpen ? 'chevron-up' : 'chevron-down'}
-                                  size={18}
-                                  color={theme.mutedForegroundColor}
-                                />
-                              </View>
-                            </TouchableOpacity>
-                            {technicalErrorsOpen && (
-                              <View style={styles.accordionBody}>
-                                {technicalErrorsList.map(
-                                  (rec: string, idx: number) => (
-                                    <View key={idx} style={styles.bulletRow}>
-                                      <Text style={styles.bulletDot}>•</Text>
-                                      <Text style={styles.bulletText}>{rec}</Text>
-                                    </View>
-                                  )
-                                )}
-                              </View>
-                            )}
-                          </View>
-                        </LinearGradient>
-                        )}
-
-                      {enAnalysis &&
-                        Array.isArray(actionableCorrectionsList) &&
-                        actionableCorrectionsList.length > 0 && (
-                        <LinearGradient
-                          colors={[...STEP3_CARD_GRADIENT_COLORS]}
-                          locations={[...STEP3_CARD_GRADIENT_LOCATIONS]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={[styles.retrievalMetaRowGradient, styles.step3AccordionGradientWrap]}
-                        >
-                          <View style={styles.step3SummaryGradientFill}>
-                            <TouchableOpacity
-                              style={styles.accordionHeader}
-                              activeOpacity={0.8}
-                              onPress={() => setActionableOpen(!actionableOpen)}
-                            >
-                              <View>
-                                <Text style={styles.accordionTitle}>{t('technique.actionableCorrections')}</Text>
-                                <Text style={styles.accordionSubtitle}>
-                                  {t('coachAccordions.cuesCount', { count: actionableCorrectionsList.length })}
-                                </Text>
-                              </View>
-                              <View style={styles.accordionRight}>
-                                <View style={styles.accordionIconChip}>
-                                  <FeatherIcon name="check-circle" size={14} color="#FFFFFF" />
-                                </View>
-                                <Ionicons
-                                  name={actionableOpen ? 'chevron-up' : 'chevron-down'}
-                                  size={18}
-                                  color={theme.mutedForegroundColor}
-                                />
-                              </View>
-                            </TouchableOpacity>
-                            {actionableOpen && (
-                              <View style={styles.accordionBody}>
-                                {actionableCorrectionsList.map(
-                                  (rec: string, idx: number) => (
-                                    <View key={idx} style={styles.bulletRow}>
-                                      <Text style={styles.bulletDot}>•</Text>
-                                      <Text style={styles.bulletText}>{rec}</Text>
-                                    </View>
-                                  )
-                                )}
-                              </View>
-                            )}
-                          </View>
-                        </LinearGradient>
-                      )}
-
 
                       {!aiAnalysis && (
                         <Text style={[styles.placeholderHint, { marginTop: 8 }]}>
@@ -4268,20 +4201,46 @@ function getStyles(theme: any) {
       color: '#fff',
       textAlign: 'center',
     },
-    step3: { flexShrink: 1, gap: 24, minHeight: 0, marginTop: -22 },
-    /** Match accordion row width: no extra horizontal inset beyond `stepContentInner` */
+    step3: { flexShrink: 1, gap: 20, minHeight: 0, marginTop: 0, width: '100%' },
+    /** Same content column as video / score bars — no extra horizontal inset. */
+    step3EarlyFeedbackWrap: {
+      width: '100%',
+      alignSelf: 'stretch',
+      marginTop: 4,
+      marginBottom: 4,
+      paddingHorizontal: 0,
+    },
+    /** Pull following block up after Focus — parent `step2` gap is 20. */
+    step3InsightBeforeChartWrap: {
+      width: '100%',
+      alignSelf: 'stretch',
+      marginTop: 0,
+      marginBottom: -22,
+      paddingHorizontal: 0,
+    },
+    /** After radar — same content column as coach text sections. */
+    step3MotionEvidenceWrap: {
+      width: '100%',
+      alignSelf: 'stretch',
+      marginTop: 16,
+      marginBottom: 4,
+      paddingTop: 16,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: 'rgba(255,255,255,0.1)',
+    },
     step3FullWidthBlock: {
       width: '100%',
       alignSelf: 'stretch',
-      paddingTop: 8,
+      paddingTop: 4,
       paddingBottom: 4,
     },
     placeholderCard: {
       flex: 1,
       alignItems: 'stretch',
       justifyContent: 'flex-start',
+      width: '100%',
       paddingTop: 0,
-      paddingBottom: 16,
+      paddingBottom: 8,
       paddingHorizontal: 0,
       borderRadius: 0,
       borderWidth: 0,
@@ -4341,9 +4300,9 @@ function getStyles(theme: any) {
     poseGaugeSectionWrap: {
       width: '100%',
       alignSelf: 'stretch',
-      marginTop: -10,
-      marginBottom: 6,
-      alignItems: 'center',
+      marginTop: 0,
+      marginBottom: 4,
+      alignItems: 'stretch',
     },
     retrievalSectionInner: {
       width: '100%',
@@ -4450,6 +4409,10 @@ function getStyles(theme: any) {
       shadowRadius: 6,
       elevation: 2,
     },
+    step3CoachFeedbackWrap: {
+      width: '100%',
+      marginTop: 8,
+    },
     step3AccordionGradientWrap: {
       width: '100%',
       marginTop: 12,
@@ -4512,8 +4475,10 @@ function getStyles(theme: any) {
     },
     /** Same gradient ring treatment as Summary / Category rows (`retrievalMetaRowGradient`). */
     scoreBreakdownGradientWrap: {
-      marginTop: -8,
-      marginBottom: 0,
+      width: '100%',
+      alignSelf: 'stretch',
+      marginTop: 8,
+      marginBottom: 4,
       borderRadius: 20,
       padding: 1.5,
       overflow: 'hidden',
@@ -4521,9 +4486,9 @@ function getStyles(theme: any) {
     scoreBreakdownInner: {
       borderRadius: 18,
       backgroundColor: '#001435',
-      paddingHorizontal: 16,
-      paddingVertical: 16,
-      gap: 18,
+      paddingHorizontal: 12,
+      paddingVertical: 14,
+      gap: 14,
     },
     scoreBreakdownRow: {
       flexDirection: 'row',
