@@ -14,13 +14,16 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { ThemeContext } from "../context";
 import { BenchSubmissionCard } from "../components/admin/BenchSubmissionCard";
 import { BenchStepResultPanel } from "../components/admin/BenchStepResult";
+import { BenchMatchPreviewPanel } from "../components/admin/BenchMatchPreviewPanel";
 import {
   fetchBenchSteps,
   fetchBenchSubmissions,
+  fetchBenchMatchPreview,
   runBenchStep,
   type BenchStepDef,
   type BenchStepResult,
   type BenchSubmission,
+  type BenchMatchPreview,
 } from "../lib/adminRetrievalBenchApi";
 import { formatApiError } from "../lib/formatApiError";
 
@@ -45,6 +48,9 @@ export function AdminRetrievalBench({ onClose, skipPasswordGate }: Props) {
   const [blendMeshWeight, setBlendMeshWeight] = useState<number | null>(0.4);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [matchPreview, setMatchPreview] = useState<BenchMatchPreview | null>(null);
+  const [matchPreviewLoading, setMatchPreviewLoading] = useState(false);
+  const [matchPreviewError, setMatchPreviewError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +74,33 @@ export function AdminRetrievalBench({ onClose, skipPasswordGate }: Props) {
   useEffect(() => {
     if (skipPasswordGate) void load();
   }, [skipPasswordGate, load]);
+
+  useEffect(() => {
+    if (!selectedAnalysisId) {
+      setMatchPreview(null);
+      setMatchPreviewError(null);
+      return;
+    }
+    let cancelled = false;
+    setMatchPreviewLoading(true);
+    setMatchPreviewError(null);
+    ;(async () => {
+      try {
+        const preview = await fetchBenchMatchPreview(selectedAnalysisId);
+        if (!cancelled) setMatchPreview(preview);
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setMatchPreview(null);
+          setMatchPreviewError(formatApiError(e, "Failed to load match preview"));
+        }
+      } finally {
+        if (!cancelled) setMatchPreviewLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAnalysisId]);
 
   async function onRunStep(stepId: string) {
     setRunningStepId(stepId);
@@ -145,6 +178,12 @@ export function AdminRetrievalBench({ onClose, skipPasswordGate }: Props) {
             ))}
           </ScrollView>
         )}
+
+        <BenchMatchPreviewPanel
+          preview={matchPreview}
+          loading={matchPreviewLoading}
+          error={matchPreviewError}
+        />
 
         <Text style={[styles.sectionLabel, { fontFamily: theme.semiBoldFont, marginTop: 16 }]}>
           Steps

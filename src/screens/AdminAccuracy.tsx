@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { ThemeContext } from "../context";
 import { LiquidScoreTile } from "../components/admin/LiquidScoreTile";
+import { BenchSubmissionCard } from "../components/admin/BenchSubmissionCard";
+import { BenchMatchPreviewPanel } from "../components/admin/BenchMatchPreviewPanel";
 import {
   fetchAccuracyCatalog,
   fetchAccuracyHistory,
@@ -22,6 +24,12 @@ import {
   type AccuracyTestDef,
   type AccuracyTestRun,
 } from "../lib/adminAccuracyApi";
+import {
+  fetchBenchSubmissions,
+  fetchBenchMatchPreview,
+  type BenchSubmission,
+  type BenchMatchPreview,
+} from "../lib/adminRetrievalBenchApi";
 import { formatApiError } from "../lib/formatApiError";
 
 type Props = {
@@ -80,6 +88,11 @@ export function AdminAccuracy({ onClose, skipPasswordGate, onOpenRetrievalBench 
   const [runningAll, setRunningAll] = useState(false);
   const [detailRun, setDetailRun] = useState<AccuracyTestRun | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [submissions, setSubmissions] = useState<BenchSubmission[]>([]);
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState<string | null>(null);
+  const [matchPreview, setMatchPreview] = useState<BenchMatchPreview | null>(null);
+  const [matchPreviewLoading, setMatchPreviewLoading] = useState(false);
+  const [matchPreviewError, setMatchPreviewError] = useState<string | null>(null);
 
   const refreshHistory = useCallback(async () => {
     const h = await fetchAccuracyHistory();
@@ -91,9 +104,14 @@ export function AdminAccuracy({ onClose, skipPasswordGate, onOpenRetrievalBench 
     setLoadingCatalog(true);
     setError(null);
     try {
-      const c = await fetchAccuracyCatalog();
+      const [c, subs] = await Promise.all([
+        fetchAccuracyCatalog(),
+        fetchBenchSubmissions().catch(() => [] as BenchSubmission[]),
+      ]);
       setCatalog(c.tests);
       setPassThreshold(c.passThresholdPercent);
+      setSubmissions(subs);
+      setSelectedAnalysisId((prev) => prev ?? subs[0]?.analysisId ?? null);
       await refreshHistory();
     } catch (e: unknown) {
       setError(formatApiError(e, "Failed to load tests"));
@@ -105,6 +123,33 @@ export function AdminAccuracy({ onClose, skipPasswordGate, onOpenRetrievalBench 
   useEffect(() => {
     if (skipPasswordGate) void load();
   }, [skipPasswordGate, load]);
+
+  useEffect(() => {
+    if (!selectedAnalysisId) {
+      setMatchPreview(null);
+      setMatchPreviewError(null);
+      return;
+    }
+    let cancelled = false;
+    setMatchPreviewLoading(true);
+    setMatchPreviewError(null);
+    ;(async () => {
+      try {
+        const preview = await fetchBenchMatchPreview(selectedAnalysisId);
+        if (!cancelled) setMatchPreview(preview);
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setMatchPreview(null);
+          setMatchPreviewError(formatApiError(e, "Failed to load match preview"));
+        }
+      } finally {
+        if (!cancelled) setMatchPreviewLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAnalysisId]);
 
   async function onRunTest(testId: string) {
     setRunningId(testId);
@@ -179,6 +224,34 @@ export function AdminAccuracy({ onClose, skipPasswordGate, onOpenRetrievalBench 
             </Text>
           </TouchableOpacity>
         ) : null}
+
+        <Text style={styles.sectionTitle}>Shot match preview</Text>
+        {submissions.length === 0 && !loadingCatalog ? (
+          <Text style={[styles.muted, { marginBottom: 16 }]}>No analyses yet.</Text>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.subScroll}
+            contentContainerStyle={styles.subScrollContent}
+          >
+            {submissions.map((s) => (
+              <BenchSubmissionCard
+                key={s.analysisId}
+                item={s}
+                selected={selectedAnalysisId === s.analysisId}
+                onSelect={() => setSelectedAnalysisId(s.analysisId)}
+                theme={theme}
+              />
+            ))}
+          </ScrollView>
+        )}
+        <BenchMatchPreviewPanel
+          preview={matchPreview}
+          loading={matchPreviewLoading}
+          error={matchPreviewError}
+          showSectionTitle={false}
+        />
 
         <TouchableOpacity
           style={[styles.runAllBtn, runningAll && styles.runAllBtnDisabled]}
@@ -319,11 +392,14 @@ function getStyles(theme: {
     },
     benchLink: { marginBottom: 12 },
     benchLinkText: { color: "#00BBFF", fontSize: 14 },
+    subScroll: { marginHorizontal: -4, marginTop: 10, marginBottom: 4 },
+    subScrollContent: { paddingRight: 8 },
     runAllBtn: {
       backgroundColor: "#0022FF",
       borderRadius: 12,
       paddingVertical: 14,
       alignItems: "center",
+      marginTop: 20,
       marginBottom: 20,
     },
     runAllBtnDisabled: { opacity: 0.7 },
@@ -338,12 +414,14 @@ function getStyles(theme: {
       fontFamily: theme.semiBoldFont,
       fontSize: 16,
       marginTop: 8,
-      marginBottom: 12,
+      marginBottom: 8,
     },
     muted: {
       color: "rgba(255,255,255,0.5)",
       fontFamily: theme.regularFont,
       fontSize: 13,
+      lineHeight: 18,
+      marginBottom: 4,
     },
     historyRow: {
       flexDirection: "row",

@@ -96,3 +96,34 @@ export async function runBenchStep(
   if (data.scorePercent == null) throw new Error("Invalid bench response");
   return data;
 }
+
+export type BenchMatchPreviewClip = {
+  label: string;
+  videoUrl: string;
+  pose_data: unknown[];
+  total_frames: number;
+  video_duration_ms: number | null;
+};
+
+export type BenchMatchPreview = {
+  analysisId: string;
+  user: BenchMatchPreviewClip;
+  match: (BenchMatchPreviewClip & {
+    train_sample_id: string;
+    train_video_id: string;
+    stroke_label: string;
+    distance: number | null;
+  }) | null;
+};
+
+export async function fetchBenchMatchPreview(analysisId: string): Promise<BenchMatchPreview> {
+  const res = await authClient
+    .$fetch<BenchMatchPreview & { error?: unknown }>(
+      `/train/admin/accuracy/bench/match-preview/${encodeURIComponent(analysisId)}`,
+      { method: "GET", headers: adminHeaders() }
+    )
+    .catch((err) => ({ error: formatApiError(err, "Match preview failed") }));
+  const data = await parseJson<BenchMatchPreview>(res);
+  if (!data?.user?.videoUrl) throw new Error("Invalid match preview response");
+  return data;
+}
