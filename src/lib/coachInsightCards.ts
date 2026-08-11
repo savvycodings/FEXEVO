@@ -192,6 +192,52 @@ export function formatActivityShotTitle(opts: {
   return ACTIVITY_SHOT_TITLE_FALLBACK
 }
 
+function titleCaseHeadline(text: string): string {
+  return text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+/**
+ * Short cyan Focus headline from the correction/body copy.
+ * Prefer [[chip]] / shortened clause; otherwise first 1–3 content words.
+ */
+function focusTitleFromCopy(raw: string): string {
+  if (!raw?.trim() || raw.trim() === '—') return FOCUS_HEADLINE_FALLBACK
+
+  const fromChip = firstRichChipPhrase(raw)
+  if (fromChip) {
+    const chipTitle = finalizeInsightHeadline(fromChip, FOCUS_HEADLINE_FALLBACK)
+    if (chipTitle !== FOCUS_HEADLINE_FALLBACK && !isRedundantFocusHeadline(chipTitle)) {
+      return titleCaseHeadline(chipTitle)
+    }
+  }
+
+  const shortened = completeInsightHeadline(
+    raw,
+    INSIGHT_HEADLINE_MAX_WORDS,
+    FOCUS_HEADLINE_FALLBACK
+  )
+  if (shortened !== FOCUS_HEADLINE_FALLBACK && !isRedundantFocusHeadline(shortened)) {
+    return titleCaseHeadline(shortened)
+  }
+
+  const stripped = stripCoachingFillerForHeadline(raw)
+  const words = stripped.split(/\s+/).filter(Boolean)
+  if (words.length >= 1) {
+    const slice = words.slice(0, Math.min(INSIGHT_HEADLINE_MAX_WORDS, words.length)).join(' ')
+    const finalized = finalizeInsightHeadline(slice, FOCUS_HEADLINE_FALLBACK)
+    if (finalized !== FOCUS_HEADLINE_FALLBACK && !isRedundantFocusHeadline(finalized)) {
+      return titleCaseHeadline(finalized)
+    }
+  }
+
+  return FOCUS_HEADLINE_FALLBACK
+}
+
 export function buildCoachInsightCardsContent(
   input: CoachInsightCardsInput
 ): CoachInsightCardsContent {
@@ -253,30 +299,6 @@ export function buildCoachInsightCardsContent(
     if (typeof first === 'string' && first.trim()) strengthBody = clipInsightBody(first)
   }
 
-  let focusRaw = ''
-  if (actionableCorrectionsList.length > 0) focusRaw = actionableCorrectionsList[0].trim()
-  if (!focusRaw && technicalErrorsList.length > 0) focusRaw = technicalErrorsList[0].trim()
-
-  // Prefer the marked cue ([[chip]]) as the blue line; never fall back to "Next focus"
-  // under the Focus section title (redundant). Omit the headline when we can't shorten.
-  let focusTitle = '—'
-  if (focusRaw) {
-    const fromChip = firstRichChipPhrase(focusRaw)
-    if (fromChip) {
-      focusTitle = finalizeInsightHeadline(fromChip, FOCUS_HEADLINE_FALLBACK)
-    }
-    if (focusTitle === FOCUS_HEADLINE_FALLBACK || isRedundantFocusHeadline(focusTitle)) {
-      focusTitle = completeInsightHeadline(
-        focusRaw,
-        INSIGHT_HEADLINE_MAX_WORDS,
-        FOCUS_HEADLINE_FALLBACK
-      )
-    }
-    if (isRedundantFocusHeadline(focusTitle)) {
-      focusTitle = '—'
-    }
-  }
-
   let focusBody = '—'
   if (technicalErrorsList.length > 0 && actionableCorrectionsList.length > 0) {
     focusBody = clipInsightBody(actionableCorrectionsList[0])
@@ -288,6 +310,16 @@ export function buildCoachInsightCardsContent(
     const d = typeof input.diagnosis === 'string' ? input.diagnosis : ''
     if (d) focusBody = clipInsightBody(firstInsightSentence(d, INSIGHT_BODY_MAX_CHARS))
   }
+
+  // Prefer a short cue from the same focus copy we show (chip → shortened clause →
+  // first 1–3 words). Never use a redundant "Focus" / "Next focus" blue line.
+  const focusTitleSource =
+    focusBody !== '—'
+      ? focusBody
+      : actionableCorrectionsList[0]?.trim() ||
+        technicalErrorsList[0]?.trim() ||
+        ''
+  const focusTitle = focusTitleFromCopy(focusTitleSource)
 
   return { strengthTitle, strengthBody, focusTitle, focusBody }
 }

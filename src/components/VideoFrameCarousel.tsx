@@ -627,16 +627,6 @@ export function VideoFrameCarousel({
     selectionMs >= 1000
       ? `${(selectionMs / 1000).toFixed(1)}s`
       : `${Math.max(1, Math.round(selectionMs))}ms`
-  const maxClipSec =
-    typeof maxClipDurationMs === 'number' && maxClipDurationMs > 0
-      ? maxClipDurationMs / 1000
-      : null
-  const lengthLabel =
-    durationSec != null && durationSec > 0
-      ? maxClipSec != null
-        ? `Selected ${selectionSecLabel} (max ${maxClipSec}s) · full video ${durationSec}s`
-        : `Selected ${selectionSecLabel} · full video ${durationSec}s`
-      : `Selected ${selectionSecLabel}`
   const selectedLeftEdge = startStripX
   const selectedRightEdge = endStripX
   const leftHandleRenderLeft =
@@ -650,12 +640,6 @@ export function VideoFrameCarousel({
 
   return (
     <View style={styles.shell}>
-      <View style={styles.header}>
-        <Text allowFontScaling={false} style={styles.lengthHint}>
-          {lengthLabel}
-        </Text>
-      </View>
-
       <View
         ref={stripOuterRef}
         collapsable={false}
@@ -769,16 +753,6 @@ const styles = StyleSheet.create({
   shell: {
     width: '100%',
     paddingBottom: 10,
-  },
-  header: {
-    height: 24,
-    justifyContent: 'center',
-  },
-  lengthHint: {
-    alignSelf: 'flex-end',
-    fontSize: 11,
-    color: 'rgba(232,240,255,0.92)',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   stripOuter: {
     borderRadius: TRACK_RADIUS + 3,

@@ -113,6 +113,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [dominantHand, setDominantHand] = useState<"left" | "right" | null>(null);
   const [courtSide, setCourtSide] = useState<"left" | "right" | null>(null);
+  const [heightCmInput, setHeightCmInput] = useState("");
+  const [weightKgInput, setWeightKgInput] = useState("");
   const [hasRanking, setHasRanking] = useState<boolean | null>(null);
   const [level, setLevel] = useState<string | null>(null);
   const [customLevelText, setCustomLevelText] = useState("");
@@ -121,7 +123,13 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
 
   const standardLevelOptions = LEVEL_OPTION_VALUES.filter((opt) => opt !== "Other");
 
-  const canContinueStep1 = !!dominantHand && !!courtSide;
+  const canContinueStep1 =
+    !!dominantHand &&
+    !!courtSide &&
+    Number(heightCmInput) >= 100 &&
+    Number(heightCmInput) <= 250 &&
+    Number(weightKgInput) >= 30 &&
+    Number(weightKgInput) <= 250;
 
   function selectDominantHand(hand: "left" | "right") {
     setDominantHand(hand);
@@ -176,6 +184,12 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
       if (body?.profile?.gender) setGender(body.profile.gender);
       if (body?.profile?.rankingOrg) setRankingOrg(body.profile.rankingOrg);
       if (body?.profile?.rankingValue) setRankingValue(body.profile.rankingValue);
+      if (typeof body?.profile?.heightCm === "number" && Number.isFinite(body.profile.heightCm)) {
+        setHeightCmInput(String(body.profile.heightCm));
+      }
+      if (typeof body?.profile?.weightKg === "number" && Number.isFinite(body.profile.weightKg)) {
+        setWeightKgInput(String(body.profile.weightKg));
+      }
       setLoading(false);
     }
     void loadMe();
@@ -271,6 +285,23 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
     form.append("dominantHand", dominantHand);
     form.append("courtSide", courtSide);
     form.append("hasRanking", String(!!hasRanking));
+    const heightNum = Number(String(heightCmInput).trim());
+    const weightNum = Number(String(weightKgInput).trim());
+    if (
+      !Number.isFinite(heightNum) ||
+      heightNum < 100 ||
+      heightNum > 250 ||
+      !Number.isFinite(weightNum) ||
+      weightNum < 30 ||
+      weightNum > 250
+    ) {
+      setSaving(false);
+      setSubmittingOverlay(false);
+      Alert.alert(t("profileSetup.setupFailed"), t("profileSetup.anthroRequiredMsg"));
+      return;
+    }
+    form.append("heightCm", String(heightNum));
+    form.append("weightKg", String(weightNum));
     if (level) form.append("level", level);
     if (rankingOrg) form.append("rankingOrg", rankingOrg);
     if (rankingValue.trim()) form.append("rankingValue", rankingValue.trim());
@@ -509,6 +540,47 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             />
           </View>
           <CourtSideGraphic courtSide={courtSide} />
+          </View>
+
+          <View style={styles.selectionBox}>
+            <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.boxTitle}>
+              {t("profileSetup.heightTitle")}
+            </Text>
+            <View style={styles.anthroRow}>
+              <TextInput
+                allowFontScaling={false}
+                value={heightCmInput}
+                onChangeText={(v) => setHeightCmInput(v.replace(/[^0-9.]/g, ""))}
+                keyboardType="decimal-pad"
+                placeholder={t("profileSetup.heightPlaceholder")}
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                style={styles.anthroInput}
+              />
+              <Text allowFontScaling={false} style={styles.anthroUnit}>
+                {t("profileSetup.cm")}
+              </Text>
+            </View>
+            <Text
+              allowFontScaling={false}
+              maxFontSizeMultiplier={1.05}
+              style={[styles.boxTitle, { marginTop: 16 }]}
+            >
+              {t("profileSetup.weightTitle")}
+            </Text>
+            <View style={styles.anthroRow}>
+              <TextInput
+                allowFontScaling={false}
+                value={weightKgInput}
+                onChangeText={(v) => setWeightKgInput(v.replace(/[^0-9.]/g, ""))}
+                keyboardType="decimal-pad"
+                placeholder={t("profileSetup.weightPlaceholder")}
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                style={styles.anthroInput}
+              />
+              <Text allowFontScaling={false} style={styles.anthroUnit}>
+                {t("profileSetup.kg")}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.actionRow}>
@@ -1064,6 +1136,38 @@ function getStyles(theme: any) {
       fontSize: 20,
       color: "#fff",
       textAlign: "center",
+    },
+    anthroHint: {
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      color: "rgba(255,255,255,0.55)",
+      textAlign: "center",
+      lineHeight: 16,
+      marginTop: -4,
+    },
+    anthroRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    anthroInput: {
+      flex: 1,
+      minHeight: 44,
+      borderRadius: 14,
+      backgroundColor: "#07256D",
+      borderWidth: 1,
+      borderColor: "rgba(0, 184, 255, 0.35)",
+      color: "#FFFFFF",
+      fontFamily: theme.semiBoldFont,
+      fontSize: 18,
+      paddingHorizontal: 14,
+      textAlign: "center",
+    },
+    anthroUnit: {
+      fontFamily: theme.mediumFont,
+      fontSize: 16,
+      color: "#00B8FF",
+      minWidth: 28,
     },
     card: {
       marginTop: 8,

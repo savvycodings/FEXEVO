@@ -113,6 +113,8 @@ type ProfileData = {
     areaLocation?: string | null;
     /** ISO `YYYY-MM-DD` when set. */
     birthDate?: string | null;
+    heightCm?: number | null;
+    weightKg?: number | null;
     gender?: string | null;
     level?: string | null;
     rankingOrg?: string | null;
@@ -241,7 +243,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   const [activeSection, setActiveSection] = useState<"personal" | "account" | "location" | "game" | null>(null);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [personalFocusedField, setPersonalFocusedField] = useState<
-    "name" | "lastname" | "username" | "birthdate" | null
+    "name" | "lastname" | "username" | "birthdate" | "height" | "weight" | null
   >(null);
   const blurClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const birthBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -251,6 +253,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   const birthDayInputRef = useRef<TextInput | null>(null);
   const birthMonthInputRef = useRef<TextInput | null>(null);
   const birthYearInputRef = useRef<TextInput | null>(null);
+  const heightInputRef = useRef<TextInput | null>(null);
+  const weightInputRef = useRef<TextInput | null>(null);
 
   function cancelScheduledBlurClears() {
     if (blurClearTimerRef.current) {
@@ -263,7 +267,9 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     }
   }
 
-  function commitPersonalFieldFocus(field: "name" | "lastname" | "username" | "birthdate") {
+  function commitPersonalFieldFocus(
+    field: "name" | "lastname" | "username" | "birthdate" | "height" | "weight"
+  ) {
     cancelScheduledBlurClears();
     setPersonalFocusedField(field);
   }
@@ -292,6 +298,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   const [birthDayInput, setBirthDayInput] = useState("");
   const [birthMonthInput, setBirthMonthInput] = useState("");
   const [birthYearInput, setBirthYearInput] = useState("");
+  const [heightCmInput, setHeightCmInput] = useState("");
+  const [weightKgInput, setWeightKgInput] = useState("");
   const [genderPickerOpen, setGenderPickerOpen] = useState(false);
   const [accountEmailInput, setAccountEmailInput] = useState("");
   const [accountPhoneInput, setAccountPhoneInput] = useState("");
@@ -363,6 +371,16 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
       setBirthMonthInput("");
       setBirthYearInput("");
     }
+    if (typeof body.profile?.heightCm === "number" && Number.isFinite(body.profile.heightCm)) {
+      setHeightCmInput(String(body.profile.heightCm));
+    } else {
+      setHeightCmInput("");
+    }
+    if (typeof body.profile?.weightKg === "number" && Number.isFinite(body.profile.weightKg)) {
+      setWeightKgInput(String(body.profile.weightKg));
+    } else {
+      setWeightKgInput("");
+    }
     const rawImage = body.user?.image;
     if (typeof rawImage === "string" && rawImage.length > 0) {
       const normalized = rawImage.startsWith("http")
@@ -391,6 +409,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           username: body.profile?.username || null,
           areaLocation: body.profile?.areaLocation || null,
           birthDate: body.profile?.birthDate ?? null,
+          heightCm: body.profile?.heightCm ?? null,
+          weightKg: body.profile?.weightKg ?? null,
           phone: body.profile?.phone || null,
           gender: body.profile?.gender || null,
           level: body.profile?.level || null,
@@ -419,6 +439,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             phone: cached.profile?.phone || null,
             areaLocation: cached.profile?.areaLocation || null,
             birthDate: cached.profile?.birthDate ?? null,
+            heightCm: cached.profile?.heightCm ?? null,
+            weightKg: cached.profile?.weightKg ?? null,
             gender: cached.profile?.gender || null,
             level: cached.profile?.level || null,
             rankingOrg: cached.profile?.rankingOrg || null,
@@ -501,6 +523,30 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
       return;
     }
 
+    const heightRaw = String(heightCmInput ?? "").trim();
+    if (!heightRaw) {
+      Alert.alert(t("commonAlerts.saveFailed"), t("profileSettings.heightRequired"));
+      return;
+    }
+    const heightNum = Number(heightRaw);
+    if (!Number.isFinite(heightNum) || heightNum < 100 || heightNum > 250) {
+      Alert.alert(t("commonAlerts.saveFailed"), t("profileSettings.heightInvalid"));
+      return;
+    }
+    const heightCm = Math.round(heightNum * 10) / 10;
+
+    const weightRaw = String(weightKgInput ?? "").trim();
+    if (!weightRaw) {
+      Alert.alert(t("commonAlerts.saveFailed"), t("profileSettings.weightRequired"));
+      return;
+    }
+    const weightNum = Number(weightRaw);
+    if (!Number.isFinite(weightNum) || weightNum < 30 || weightNum > 250) {
+      Alert.alert(t("commonAlerts.saveFailed"), t("profileSettings.weightInvalid"));
+      return;
+    }
+    const weightKg = Math.round(weightNum * 10) / 10;
+
     setSaving(true);
     const res = await authClient
       .$fetch<{ ok?: boolean; error?: string }>("/profile/basic", {
@@ -510,6 +556,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           username: usernameInput.trim(),
           gender: genderInput || "",
           birthDate: birthResolved,
+          heightCm,
+          weightKg,
         } as any,
       })
       .catch((e) => ({ error: e?.message || "Failed to save profile." } as any));
@@ -950,6 +998,68 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                     />
                   </View>
                 </View>
+              </View>
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              personalFocusedField === "height" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => heightInputRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                {t("profileSettingsUi.height")}
+              </Text>
+              <View style={styles.personalAnthroRow}>
+                <TextInput
+                  ref={heightInputRef}
+                  allowFontScaling={false}
+                  value={heightCmInput}
+                  onChangeText={(v) => setHeightCmInput(v.replace(/[^0-9.]/g, ""))}
+                  onFocus={() => commitPersonalFieldFocus("height")}
+                  onBlur={() => scheduleBlurClearField()}
+                  style={[styles.personalFieldInput, styles.personalAnthroInput]}
+                  placeholder={t("profileSettingsUi.heightPlaceholder")}
+                  placeholderTextColor={phColor}
+                  keyboardType="decimal-pad"
+                />
+                <Text allowFontScaling={false} style={styles.personalAnthroUnit}>
+                  {t("profileSettingsUi.heightUnit")}
+                </Text>
+              </View>
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.personalFieldBox,
+              personalFocusedField === "weight" && styles.personalFieldBoxSelected,
+            ]}
+            onPress={() => weightInputRef.current?.focus()}
+          >
+            <View style={styles.personalFieldBody}>
+              <Text allowFontScaling={false} style={styles.personalFieldLabel}>
+                {t("profileSettingsUi.weight")}
+              </Text>
+              <View style={styles.personalAnthroRow}>
+                <TextInput
+                  ref={weightInputRef}
+                  allowFontScaling={false}
+                  value={weightKgInput}
+                  onChangeText={(v) => setWeightKgInput(v.replace(/[^0-9.]/g, ""))}
+                  onFocus={() => commitPersonalFieldFocus("weight")}
+                  onBlur={() => scheduleBlurClearField()}
+                  style={[styles.personalFieldInput, styles.personalAnthroInput]}
+                  placeholder={t("profileSettingsUi.weightPlaceholder")}
+                  placeholderTextColor={phColor}
+                  keyboardType="decimal-pad"
+                />
+                <Text allowFontScaling={false} style={styles.personalAnthroUnit}>
+                  {t("profileSettingsUi.weightUnit")}
+                </Text>
               </View>
             </View>
           </Pressable>
@@ -2158,6 +2268,28 @@ function getStyles(theme: any) {
       padding: 0,
       margin: 0,
       height: 22,
+    },
+    personalAnthroRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      height: 22,
+    },
+    personalAnthroInput: {
+      flex: 1,
+      minWidth: 0,
+    },
+    personalAnthroUnit: {
+      color: "rgba(180, 200, 230, 0.85)",
+      fontFamily: theme.mediumFont,
+      fontSize: 14,
+    },
+    personalAnthroHint: {
+      color: "rgba(0, 184, 255, 0.75)",
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      marginTop: 6,
+      lineHeight: 16,
     },
     personalUsernameRow: {
       flexDirection: "row",

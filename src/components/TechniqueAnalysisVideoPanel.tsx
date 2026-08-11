@@ -2,7 +2,8 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
 import { Video, ResizeMode, type AVPlaybackStatus, type AVPlaybackStatusSuccess } from 'expo-av'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import Svg, { Line, Rect } from 'react-native-svg'
+import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg'
+import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { ProLibraryGradientFrame } from './ProLibraryGradientFrame'
 import { proLibraryChrome } from '../theme/proLibraryChrome'
@@ -13,23 +14,36 @@ import {
   nearestPoseWithBall,
   projectBboxToOverlayRect,
   poseSegmentColor,
-  projectLandmark,
-  landmarkToContainPx,
+  projectLandmarkToOverlayPx,
   containerSizeFromNatural,
-  landmarksNeedRotateForContainer,
-  rotateLandmarksNormalized90CW,
+  resolveDisplaySizeForVideo,
   type LandmarkPoint,
   type PoseFrameRow,
 } from '../lib/techniquePose'
+import {
+  computeOverlayJointAngles,
+  emaAngle,
+  jointArcSvgPath,
+  jointLabelOffset,
+  JOINT_DOT_COLOR,
+  OVERLAY_JOINT_DOT_NAMES,
+  type ComputedJointAngle,
+} from '../lib/poseJointAngles'
 import {
   techniqueQualityTone,
   type TechniqueQuality,
   type TechniqueQualityInput,
 } from '../lib/technique-quality'
+
 const VA = {
   good: '#34C759',
   wrong: '#FF2D55',
 }
+
+const DETAILED_SKELETON = '#00B8FF'
+const LEGEND_POSE = '#34C759'
+const LEGEND_RACKET = '#FFD400'
+const LEGEND_BALL = '#00E5FF'
 
 const BALL_OVERLAY_MIN_CONF = Number(
   String(process.env.EXPO_PUBLIC_BALL_OVERLAY_MIN_CONF ?? '0.12')
@@ -50,7 +64,18 @@ const SCRUB_DOTS_FALLBACK: { p: number; good: boolean }[] = [
   { p: 0.78, good: false },
 ]
 
-function PoseSkeletonLines({
+function projectLmPx(
+  name: string,
+  landmarks: Record<string, LandmarkPoint>,
+  boxW: number,
+  boxH: number,
+  naturalW: number | null,
+  naturalH: number | null
+): { x: number; y: number } | null {
+  return projectLandmarkToOverlayPx(name, landmarks, boxW, boxH, naturalW, naturalH)
+}
+
+function PoseSkeletonOverlay({
   landmarks,
   boxW,
   boxH,
@@ -60,6 +85,8 @@ function PoseSkeletonLines({
   wrongColor,
   uniformStrokeColor,
   strokeWidth = 3,
+  showJointMetrics = false,
+  jointAngles = [],
 }: {
   landmarks: Record<string, LandmarkPoint>
   boxW: number
@@ -70,17 +97,18 @@ function PoseSkeletonLines({
   wrongColor: string
   uniformStrokeColor?: string
   strokeWidth?: number
+  showJointMetrics?: boolean
+  jointAngles?: ComputedJointAngle[]
 }) {
-  const hasNatural = naturalW != null && naturalH != null && naturalW > 0 && naturalH > 0
+  const arcR = Math.max(10, Math.min(22, boxW * 0.035))
+  const labelDist = arcR + 10
+  const dotR = Math.max(3.2, Math.min(5.5, boxW * 0.012))
+
   return (
     <>
       {MEDIAPIPE_POSE_CONNECTIONS.map(([a, b]) => {
-        const p1 = hasNatural
-          ? landmarkToContainPx(a, landmarks, naturalW!, naturalH!, boxW, boxH)
-          : projectLandmark(a, landmarks, boxW, boxH)
-        const p2 = hasNatural
-          ? landmarkToContainPx(b, landmarks, naturalW!, naturalH!, boxW, boxH)
-          : projectLandmark(b, landmarks, boxW, boxH)
+        const p1 = projectLmPx(a, landmarks, boxW, boxH, naturalW, naturalH)
+        const p2 = projectLmPx(b, landmarks, boxW, boxH, naturalW, naturalH)
         if (!p1 || !p2) return null
         const stroke = uniformStrokeColor ?? poseSegmentColor(a, b, goodColor, wrongColor)
         return (
@@ -96,6 +124,56 @@ function PoseSkeletonLines({
           />
         )
       })}
+
+      {showJointMetrics
+        ? OVERLAY_JOINT_DOT_NAMES.map((name) => {
+            const pt = projectLmPx(name, landmarks, boxW, boxH, naturalW, naturalH)
+            if (!pt) return null
+            const fill = JOINT_DOT_COLOR[name] ?? DETAILED_SKELETON
+            return (
+              <Circle
+                key={`dot-${name}`}
+                cx={pt.x}
+                cy={pt.y}
+                r={dotR}
+                fill={fill}
+                stroke="rgba(0,0,0,0.35)"
+                strokeWidth={1}
+              />
+            )
+          })
+        : null}
+
+      {showJointMetrics
+        ? jointAngles.map((j) => {
+            const arc = jointArcSvgPath(j.b, j.a, j.c, arcR)
+            const labelAt = jointLabelOffset(j.b, j.a, j.c, labelDist)
+            const degLabel = `${Math.round(j.deg)}°`
+            return (
+              <React.Fragment key={`ang-${j.id}`}>
+                {arc ? (
+                  <Path
+                    d={arc}
+                    fill="none"
+                    stroke={j.color}
+                    strokeWidth={1.6}
+                    strokeOpacity={0.9}
+                  />
+                ) : null}
+                <SvgText
+                  x={labelAt.x}
+                  y={labelAt.y + 4}
+                  fill={j.color}
+                  fontSize={Math.max(10, Math.min(13, boxW * 0.032))}
+                  fontWeight="700"
+                  textAnchor="middle"
+                >
+                  {degLabel}
+                </SvgText>
+              </React.Fragment>
+            )
+          })
+        : null}
     </>
   )
 }
@@ -134,6 +212,11 @@ export type TechniqueAnalysisVideoPanelProps = {
   showScrubDotsInStacked?: boolean
   /** Green arms / pink legs segment colors; `uniform` = single tone from session quality. */
   skeletonColorMode?: 'uniform' | 'segment'
+  /**
+   * Mock-aligned Poses UI: Your pose / Pose Corrected chrome, on-frame legend,
+   * cyan skeleton, joint dots + included-degree arcs.
+   */
+  showDetailedPoseOverlay?: boolean
 }
 
 /**
@@ -154,20 +237,28 @@ export function TechniqueAnalysisVideoPanel({
   showLegendInStacked = false,
   showScrubDotsInStacked = false,
   skeletonColorMode = 'uniform',
+  showDetailedPoseOverlay = false,
 }: TechniqueAnalysisVideoPanelProps) {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const videoRef = useRef<Video>(null)
   const naturalFromPlayerRef = useRef(false)
   const [playback, setPlayback] = useState<AVPlaybackStatusSuccess | null>(null)
   const [encodedNatural, setEncodedNatural] = useState<{ w: number; h: number } | null>(null)
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null)
+  const [videoOrientation, setVideoOrientation] = useState<'portrait' | 'landscape' | null>(
+    null
+  )
   const [activePose, setActivePose] = useState<PoseFrameRow | null>(null)
+  const angleEmaRef = useRef<Record<string, number>>({})
+  const [jointAngles, setJointAngles] = useState<ComputedJointAngle[]>([])
 
   const applyExpoVideoNaturalSize = useCallback(
     (ns: { width: number; height: number; orientation?: 'portrait' | 'landscape' } | null | undefined) => {
       if (!ns || ns.width <= 0 || ns.height <= 0) return
       naturalFromPlayerRef.current = true
       setEncodedNatural({ w: ns.width, h: ns.height })
+      setVideoOrientation(ns.orientation ?? null)
       setNaturalSize(containerSizeFromNatural(ns))
     },
     []
@@ -181,23 +272,32 @@ export function TechniqueAnalysisVideoPanel({
     techniqueQualityProp ?? sessionToTone(qualitySession ?? null)
 
   const skeletonUniformColor = useMemo(() => {
+    if (showDetailedPoseOverlay) return DETAILED_SKELETON
     if (techniqueQuality === 'good') return VA.good
     if (techniqueQuality === 'bad') return VA.wrong
     return 'rgba(255,255,255,0.42)'
-  }, [techniqueQuality])
+  }, [techniqueQuality, showDetailedPoseOverlay])
+
+  const paintSize = useMemo(
+    () =>
+      resolveDisplaySizeForVideo({
+        encoded: encodedNatural,
+        container: naturalSize,
+        orientation: videoOrientation,
+      }),
+    [encodedNatural, naturalSize, videoOrientation]
+  )
 
   const videoH = useMemo(() => {
-    const arFromNatural =
-      naturalSize && naturalSize.w > 0 && naturalSize.h > 0
-        ? naturalSize.h / naturalSize.w
-        : null
-    const arFromEncoded =
-      encodedNatural && encodedNatural.w > 0 && encodedNatural.h > 0
-        ? encodedNatural.h / encodedNatural.w
-        : null
-    const ratio = arFromNatural ?? arFromEncoded ?? 9 / 16
-    return Math.max(1, Math.ceil(width * ratio))
-  }, [width, encodedNatural, naturalSize])
+    // Full width × encoded buffer aspect (what CONTAIN paints). No orientation tall-box.
+    if (paintSize.w > 0 && paintSize.h > 0) {
+      return Math.max(1, Math.ceil(width * (paintSize.h / paintSize.w)))
+    }
+    return Math.max(1, Math.ceil(width * (9 / 16)))
+  }, [width, paintSize])
+
+  /** Landmarks / YOLO boxes live in OpenCV buffer space (= encoded). Never rotate for overlay. */
+  const shouldRotateLandmarks = false
 
   const lineStrokeW = useMemo(
     () => Math.max(2.2, Math.min(4, Math.round(width / 110))),
@@ -214,9 +314,12 @@ export function TechniqueAnalysisVideoPanel({
   useEffect(() => {
     naturalFromPlayerRef.current = false
     lastSnapFrameRef.current = null
+    angleEmaRef.current = {}
+    setJointAngles([])
     setActivePose(null)
     setEncodedNatural(null)
     setNaturalSize(null)
+    setVideoOrientation(null)
     if (poseFrames.length) {
       const first = nearestPoseByFrame(poseFrames, 0) ?? poseFrames[0]!
       lastSnapFrameRef.current = first.frame
@@ -274,13 +377,31 @@ export function TechniqueAnalysisVideoPanel({
 
   const landmarksForPoseOverlay = useMemo(() => {
     if (!activePose?.landmarks) return null
-    const lm = activePose.landmarks
-    if (!encodedNatural || !naturalSize) return lm
-    if (landmarksNeedRotateForContainer(encodedNatural, naturalSize)) {
-      return rotateLandmarksNormalized90CW(lm)
+    return activePose.landmarks
+  }, [activePose])
+
+  useEffect(() => {
+    if (!showDetailedPoseOverlay || !landmarksForPoseOverlay) {
+      setJointAngles([])
+      return
     }
-    return lm
-  }, [activePose, encodedNatural, naturalSize])
+    const getPx = (name: string) =>
+      projectLmPx(
+        name,
+        landmarksForPoseOverlay,
+        width,
+        videoH,
+        paintSize.w,
+        paintSize.h
+      )
+    const raw = computeOverlayJointAngles(getPx, landmarksForPoseOverlay)
+    const next = raw.map((j) => {
+      const smoothed = emaAngle(angleEmaRef.current[j.id], j.deg)
+      if (smoothed != null) angleEmaRef.current[j.id] = smoothed
+      return { ...j, deg: smoothed ?? j.deg }
+    })
+    setJointAngles(next)
+  }, [showDetailedPoseOverlay, landmarksForPoseOverlay, width, videoH, paintSize])
 
   const racketOverlayBox = useMemo(() => {
     const est = estimatedVideoFrame
@@ -292,13 +413,20 @@ export function TechniqueAnalysisVideoPanel({
         ? activePose
         : null)
     const rb = withRacket?.racket_bbox as [number, number, number, number] | null | undefined
-    return projectBboxToOverlayRect(rb, { videoW: width, videoH, encodedNatural, naturalSize })
+    return projectBboxToOverlayRect(rb, {
+      videoW: width,
+      videoH,
+      encodedNatural,
+      naturalSize: paintSize,
+      rotate: shouldRotateLandmarks,
+    })
   }, [
     estimatedVideoFrame,
     poseFrames,
     activePose,
     encodedNatural,
-    naturalSize,
+    paintSize,
+    shouldRotateLandmarks,
     width,
     videoH,
   ])
@@ -316,8 +444,23 @@ export function TechniqueAnalysisVideoPanel({
         : null
     const src = withBall ?? fallback
     const bb = src?.ball_bbox as [number, number, number, number] | undefined
-    return projectBboxToOverlayRect(bb, { videoW: width, videoH, encodedNatural, naturalSize })
-  }, [estimatedVideoFrame, poseFrames, activePose, encodedNatural, naturalSize, width, videoH])
+    return projectBboxToOverlayRect(bb, {
+      videoW: width,
+      videoH,
+      encodedNatural,
+      naturalSize: paintSize,
+      rotate: shouldRotateLandmarks,
+    })
+  }, [
+    estimatedVideoFrame,
+    poseFrames,
+    activePose,
+    encodedNatural,
+    paintSize,
+    shouldRotateLandmarks,
+    width,
+    videoH,
+  ])
 
   const scrubDots = useMemo(() => {
     if (!poseFrames.length || totalVidFrames <= 0) return SCRUB_DOTS_FALLBACK
@@ -352,7 +495,6 @@ export function TechniqueAnalysisVideoPanel({
       StyleSheet.create({
         videoBlockOuter: { width: '100%', alignItems: 'center' },
         videoSection: { width: '100%', alignSelf: 'stretch', backgroundColor: '#000', overflow: 'visible' },
-        /** Only when stacked layout does not use ProLibraryGradientFrame (unused path). */
         videoSectionStackedTop: {
           borderTopLeftRadius: 16,
           borderTopRightRadius: 16,
@@ -371,6 +513,94 @@ export function TechniqueAnalysisVideoPanel({
           zIndex: 4,
           elevation: 8,
         },
+        /** Pills sit above the framed video (not overlaid on the clip). */
+        chromeRow: {
+          width: '100%',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          marginBottom: 10,
+          paddingHorizontal: 0,
+        },
+        yourPosePill: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 5,
+          paddingHorizontal: 9,
+          paddingVertical: 6,
+          borderRadius: 999,
+          backgroundColor: '#041028',
+          borderWidth: 1.5,
+          borderColor: '#00B8FF',
+          flexShrink: 0,
+        },
+        yourPoseDot: {
+          width: 6,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: '#00B8FF',
+        },
+        yourPoseText: {
+          fontFamily: theme.semiBoldFont,
+          fontSize: 11,
+          color: '#FFFFFF',
+        },
+        /** Long outer pill — left label + one nested legend pill (Pose / Racket / Ball). */
+        poseCorrectedOuter: {
+          flexGrow: 0,
+          flexShrink: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          gap: 8,
+          paddingLeft: 10,
+          paddingRight: 4,
+          paddingVertical: 4,
+          borderRadius: 999,
+          backgroundColor: '#041028',
+          borderWidth: 1.5,
+          borderColor: 'rgba(0, 255, 166, 0.55)',
+        },
+        poseCorrectedLabel: {
+          fontFamily: theme.regularFont,
+          fontSize: 11,
+          color: 'rgba(200, 215, 230, 0.72)',
+          flexShrink: 0,
+        },
+        /** Single inner pill holding all three legend items. */
+        nestedLegendPill: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          paddingHorizontal: 9,
+          paddingVertical: 5,
+          borderRadius: 999,
+          backgroundColor: 'rgba(0, 255, 166, 0.12)',
+          flexShrink: 0,
+        },
+        nestedLegendItem: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+        },
+        nestedLegendText: {
+          fontFamily: theme.semiBoldFont,
+          fontSize: 10,
+          color: 'rgba(160, 185, 205, 0.9)',
+        },
+        overlayLegendDot: { width: 6, height: 6, borderRadius: 3 },
+        detailedVideoFrame: {
+          width,
+          alignSelf: 'center',
+          marginBottom: 2,
+        },
+        videoShellDetailed: {
+          width,
+          backgroundColor: '#000',
+          alignItems: 'center',
+        },
         controlsStrip: {
           flexDirection: 'row',
           alignItems: 'center',
@@ -381,6 +611,12 @@ export function TechniqueAnalysisVideoPanel({
           paddingVertical: 14,
           gap: 10,
           backgroundColor: 'rgba(5, 10, 24, 0.98)',
+        },
+        controlsStripDetailed: {
+          marginTop: 10,
+          paddingHorizontal: 4,
+          paddingVertical: 8,
+          backgroundColor: 'transparent',
         },
         controlsStripStacked: {
           marginTop: 10,
@@ -430,7 +666,6 @@ export function TechniqueAnalysisVideoPanel({
           top: -5,
           marginLeft: -7,
         },
-        /** Reference: grey pill track, blue played segment, donut thumb (white ring + blue fill). */
         trackBgStacked: {
           height: 6,
           borderRadius: 3,
@@ -477,264 +712,270 @@ export function TechniqueAnalysisVideoPanel({
           alignSelf: 'stretch',
         },
         overlayLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-        overlayLegendDot: { width: 8, height: 8, borderRadius: 4 },
         overlayLegendText: {
           fontFamily: theme.regularFont,
           fontSize: 12,
           color: 'rgba(255,255,255,0.7)',
         },
       }),
-    [theme.regularFont]
+    [theme.regularFont, theme.semiBoldFont, width]
   )
 
-  const showLegendUi = showLegend && (!stacked || showLegendInStacked)
+  const showLegendUi =
+    showLegend && !showDetailedPoseOverlay && (!stacked || showLegendInStacked)
   const showScrubDotsUi = !stacked || showScrubDotsInStacked
-  const useUniformSkeleton = skeletonColorMode === 'uniform'
+  const useUniformSkeleton = skeletonColorMode === 'uniform' || showDetailedPoseOverlay
 
-  /** Stacked: fixed-width column so controls align to video edges but sit outside the black frame. */
-  const innerColumnStyle = stacked
-    ? ({ width, alignSelf: 'center' } as const)
-    : ({ width: '100%' as const, alignSelf: 'stretch' as const })
+  const poseOverlaySvg = landmarksForPoseOverlay ? (
+    <PoseSkeletonOverlay
+      landmarks={landmarksForPoseOverlay}
+      boxW={width}
+      boxH={videoH}
+      naturalW={paintSize.w}
+      naturalH={paintSize.h}
+      goodColor={VA.good}
+      wrongColor={VA.wrong}
+      uniformStrokeColor={useUniformSkeleton ? skeletonUniformColor : undefined}
+      strokeWidth={lineStrokeW}
+      showJointMetrics={showDetailedPoseOverlay}
+      jointAngles={jointAngles}
+    />
+  ) : null
+
+  const detectionRects = (
+    <>
+      {racketOverlayBox ? (
+        <Rect
+          x={racketOverlayBox.x}
+          y={racketOverlayBox.y}
+          width={racketOverlayBox.w}
+          height={racketOverlayBox.h}
+          fill="transparent"
+          stroke={LEGEND_RACKET}
+          strokeWidth={Math.max(2, lineStrokeW * 0.9)}
+          strokeOpacity={1}
+        />
+      ) : null}
+      {ballOverlayBox ? (
+        <Rect
+          x={ballOverlayBox.x}
+          y={ballOverlayBox.y}
+          width={ballOverlayBox.w}
+          height={ballOverlayBox.h}
+          fill="transparent"
+          stroke={LEGEND_BALL}
+          strokeWidth={Math.max(2, lineStrokeW * 0.75)}
+          strokeOpacity={1}
+        />
+      ) : null}
+    </>
+  )
+
+  const chromeAboveVideo = showDetailedPoseOverlay ? (
+    <View style={styles.chromeRow} pointerEvents="box-none">
+      <View style={styles.yourPosePill}>
+        <View style={styles.yourPoseDot} />
+        <Text allowFontScaling={false} style={styles.yourPoseText}>
+          {t('technique.yourPosePill')}
+        </Text>
+      </View>
+      <View style={styles.poseCorrectedOuter} accessibilityState={{ disabled: true }}>
+        <Text allowFontScaling={false} style={styles.poseCorrectedLabel}>
+          {t('technique.poseCorrectedPill')}
+        </Text>
+        <View style={styles.nestedLegendPill}>
+          <View style={styles.nestedLegendItem}>
+            <View style={[styles.overlayLegendDot, { backgroundColor: LEGEND_POSE }]} />
+            <Text allowFontScaling={false} style={styles.nestedLegendText}>
+              {t('technique.overlayLegendPose')}
+            </Text>
+          </View>
+          <View style={styles.nestedLegendItem}>
+            <View style={[styles.overlayLegendDot, { backgroundColor: LEGEND_RACKET }]} />
+            <Text allowFontScaling={false} style={styles.nestedLegendText}>
+              {t('technique.overlayLegendRacket')}
+            </Text>
+          </View>
+          <View style={styles.nestedLegendItem}>
+            <View style={[styles.overlayLegendDot, { backgroundColor: LEGEND_BALL }]} />
+            <Text allowFontScaling={false} style={styles.nestedLegendText}>
+              {t('technique.overlayLegendBall')}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  ) : null
+
+  const videoPlayer = (
+    <View style={[styles.videoBox, { width, height: videoH }]}>
+      <Video
+        key={videoKey}
+        ref={videoRef}
+        source={{ uri: videoUri }}
+        style={{ width, height: videoH }}
+        resizeMode={
+          encodedNatural ? ResizeMode.STRETCH : ResizeMode.CONTAIN
+        }
+        useNativeControls={false}
+        isLooping={isLooping}
+        progressUpdateIntervalMillis={33}
+        onLoad={(s) => {
+          if (s.isLoaded) {
+            const ext = s as AVPlaybackStatusSuccess & {
+              naturalSize?: { width: number; height: number; orientation?: 'portrait' | 'landscape' }
+            }
+            if (ext.naturalSize && ext.naturalSize.width > 0 && ext.naturalSize.height > 0) {
+              applyExpoVideoNaturalSize(ext.naturalSize)
+            }
+          }
+        }}
+        onReadyForDisplay={(e) => {
+          applyExpoVideoNaturalSize(e.naturalSize)
+        }}
+        onPlaybackStatusUpdate={handlePlaybackStatus}
+      />
+      <Svg
+        width={width}
+        height={videoH}
+        viewBox={`0 0 ${width} ${videoH}`}
+        style={[styles.overlaySvg, { width, height: videoH }]}
+        pointerEvents="none"
+      >
+        {poseOverlaySvg}
+        {detectionRects}
+      </Svg>
+    </View>
+  )
+
+  const framedVideo =
+    showDetailedPoseOverlay || stacked ? (
+      <ProLibraryGradientFrame
+        borderRadius={proLibraryChrome.radii.frameOuter}
+        innerBorderRadius={proLibraryChrome.radii.frameInner}
+        strokeWidth={
+          showDetailedPoseOverlay
+            ? Math.max(proLibraryChrome.frameStrokeWidth, 2)
+            : STACKED_VIDEO_GRADIENT_STROKE
+        }
+        gradientVariant="accent"
+        innerShadow={false}
+        innerStyle={{ backgroundColor: '#000000', padding: 0, overflow: 'hidden' }}
+        style={
+          showDetailedPoseOverlay
+            ? styles.detailedVideoFrame
+            : ({ width: '100%' } as const)
+        }
+      >
+        <View style={showDetailedPoseOverlay ? styles.videoShellDetailed : styles.videoShell}>
+          {videoPlayer}
+        </View>
+      </ProLibraryGradientFrame>
+    ) : (
+      <View style={styles.videoShell}>{videoPlayer}</View>
+    )
+
+  const innerColumnStyle =
+    stacked || showDetailedPoseOverlay
+      ? ({ width, alignSelf: 'center' } as const)
+      : ({ width: '100%' as const, alignSelf: 'stretch' as const })
 
   return (
     <View style={styles.videoBlockOuter} pointerEvents="box-none">
       <View style={innerColumnStyle} pointerEvents="box-none">
-      <View
-        style={[styles.videoSection, stacked ? styles.videoSectionStackedFrameOuter : undefined]}
-        pointerEvents="box-none"
-      >
-        {stacked ? (
-          <ProLibraryGradientFrame
-            borderRadius={proLibraryChrome.radii.frameOuter}
-            innerBorderRadius={proLibraryChrome.radii.frameInner}
-            strokeWidth={STACKED_VIDEO_GRADIENT_STROKE}
-            gradientVariant="accent"
-            innerShadow={false}
-            innerStyle={{ backgroundColor: '#000000', padding: 0, overflow: 'visible' }}
-            style={{ width: '100%' }}
-          >
-            <View style={styles.videoShell}>
-              <View style={[styles.videoBox, { width, height: videoH }]}>
-                <Video
-                  key={videoKey}
-                  ref={videoRef}
-                  source={{ uri: videoUri }}
-                  style={{ width, height: videoH }}
-                  resizeMode={ResizeMode.CONTAIN}
-                  useNativeControls={false}
-                  isLooping={isLooping}
-                  progressUpdateIntervalMillis={33}
-                  onLoad={(s) => {
-                    if (s.isLoaded) {
-                      const ext = s as AVPlaybackStatusSuccess & {
-                        naturalSize?: { width: number; height: number; orientation?: 'portrait' | 'landscape' }
-                      }
-                      if (ext.naturalSize && ext.naturalSize.width > 0 && ext.naturalSize.height > 0) {
-                        applyExpoVideoNaturalSize(ext.naturalSize)
-                      }
-                    }
-                  }}
-                  onReadyForDisplay={(e) => {
-                    applyExpoVideoNaturalSize(e.naturalSize)
-                  }}
-                  onPlaybackStatusUpdate={handlePlaybackStatus}
-                />
-                <Svg
-                  width={width}
-                  height={videoH}
-                  viewBox={`0 0 ${width} ${videoH}`}
-                  style={[styles.overlaySvg, { width, height: videoH }]}
-                  pointerEvents="none"
-                >
-                  {landmarksForPoseOverlay ? (
-                    <PoseSkeletonLines
-                      landmarks={landmarksForPoseOverlay}
-                      boxW={width}
-                      boxH={videoH}
-                      naturalW={naturalSize?.w ?? null}
-                      naturalH={naturalSize?.h ?? null}
-                      goodColor={VA.good}
-                      wrongColor={VA.wrong}
-                      uniformStrokeColor={useUniformSkeleton ? skeletonUniformColor : undefined}
-                      strokeWidth={lineStrokeW}
-                    />
-                  ) : null}
-                  {racketOverlayBox ? (
-                    <Rect
-                      x={racketOverlayBox.x}
-                      y={racketOverlayBox.y}
-                      width={racketOverlayBox.w}
-                      height={racketOverlayBox.h}
-                      fill="transparent"
-                      stroke="#FFD400"
-                      strokeWidth={Math.max(2, lineStrokeW * 0.9)}
-                      strokeOpacity={1}
-                    />
-                  ) : null}
-                  {ballOverlayBox ? (
-                    <Rect
-                      x={ballOverlayBox.x}
-                      y={ballOverlayBox.y}
-                      width={ballOverlayBox.w}
-                      height={ballOverlayBox.h}
-                      fill="transparent"
-                      stroke="#00E5FF"
-                      strokeWidth={Math.max(2, lineStrokeW * 0.75)}
-                      strokeOpacity={1}
-                    />
-                  ) : null}
-                </Svg>
-              </View>
-            </View>
-          </ProLibraryGradientFrame>
-        ) : (
-          <>
-            <View style={styles.videoShell}>
-              <View style={[styles.videoBox, { width, height: videoH }]}>
-                <Video
-                  key={videoKey}
-                  ref={videoRef}
-                  source={{ uri: videoUri }}
-                  style={{ width, height: videoH }}
-                  resizeMode={ResizeMode.CONTAIN}
-                  useNativeControls={false}
-                  isLooping={isLooping}
-                  progressUpdateIntervalMillis={33}
-                  onLoad={(s) => {
-                    if (s.isLoaded) {
-                      const ext = s as AVPlaybackStatusSuccess & {
-                        naturalSize?: { width: number; height: number; orientation?: 'portrait' | 'landscape' }
-                      }
-                      if (ext.naturalSize && ext.naturalSize.width > 0 && ext.naturalSize.height > 0) {
-                        applyExpoVideoNaturalSize(ext.naturalSize)
-                      }
-                    }
-                  }}
-                  onReadyForDisplay={(e) => {
-                    applyExpoVideoNaturalSize(e.naturalSize)
-                  }}
-                  onPlaybackStatusUpdate={handlePlaybackStatus}
-                />
-                <Svg
-                  width={width}
-                  height={videoH}
-                  viewBox={`0 0 ${width} ${videoH}`}
-                  style={[styles.overlaySvg, { width, height: videoH }]}
-                  pointerEvents="none"
-                >
-                  {landmarksForPoseOverlay ? (
-                    <PoseSkeletonLines
-                      landmarks={landmarksForPoseOverlay}
-                      boxW={width}
-                      boxH={videoH}
-                      naturalW={naturalSize?.w ?? null}
-                      naturalH={naturalSize?.h ?? null}
-                      goodColor={VA.good}
-                      wrongColor={VA.wrong}
-                      uniformStrokeColor={useUniformSkeleton ? skeletonUniformColor : undefined}
-                      strokeWidth={lineStrokeW}
-                    />
-                  ) : null}
-                  {racketOverlayBox ? (
-                    <Rect
-                      x={racketOverlayBox.x}
-                      y={racketOverlayBox.y}
-                      width={racketOverlayBox.w}
-                      height={racketOverlayBox.h}
-                      fill="transparent"
-                      stroke="#FFD400"
-                      strokeWidth={Math.max(2, lineStrokeW * 0.9)}
-                      strokeOpacity={1}
-                    />
-                  ) : null}
-                  {ballOverlayBox ? (
-                    <Rect
-                      x={ballOverlayBox.x}
-                      y={ballOverlayBox.y}
-                      width={ballOverlayBox.w}
-                      height={ballOverlayBox.h}
-                      fill="transparent"
-                      stroke="#00E5FF"
-                      strokeWidth={Math.max(2, lineStrokeW * 0.75)}
-                      strokeOpacity={1}
-                    />
-                  ) : null}
-                </Svg>
-              </View>
-            </View>
-          </>
-        )}
-      </View>
-      <View style={[styles.controlsStrip, stacked && styles.controlsStripStacked]}>
-        <TouchableOpacity style={styles.playHit} onPress={togglePlay} hitSlop={12}>
-          <Ionicons name={isPlaying ? 'pause' : 'play'} size={stacked ? 20 : 22} color="#FFFFFF" />
-        </TouchableOpacity>
-        <View style={stacked ? styles.trackWrapStacked : styles.trackWrap}>
-          <View style={[styles.trackBg, stacked && styles.trackBgStacked]}>
+        {chromeAboveVideo}
+        <View
+          style={[
+            styles.videoSection,
+            (stacked || showDetailedPoseOverlay) && styles.videoSectionStackedFrameOuter,
+          ]}
+          pointerEvents="box-none"
+        >
+          {framedVideo}
+        </View>
+        <View
+          style={[
+            styles.controlsStrip,
+            stacked && styles.controlsStripStacked,
+            showDetailedPoseOverlay && styles.controlsStripDetailed,
+          ]}
+        >
+          <TouchableOpacity style={styles.playHit} onPress={togglePlay} hitSlop={12}>
+            <Ionicons name={isPlaying ? 'pause' : 'play'} size={stacked ? 20 : 22} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={stacked || showDetailedPoseOverlay ? styles.trackWrapStacked : styles.trackWrap}>
             <View
               style={[
-                stacked ? styles.trackFillStacked : styles.trackFill,
-                { width: `${progress * 100}%` },
-                stacked &&
-                  progress >= 0.998 && {
-                    borderTopRightRadius: 3,
-                    borderBottomRightRadius: 3,
-                  },
+                styles.trackBg,
+                (stacked || showDetailedPoseOverlay) && styles.trackBgStacked,
               ]}
-            />
-            {showScrubDotsUi &&
-              scrubDots.map((d, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.scrubDot,
-                    {
-                      left: `${d.p * 100}%`,
-                      backgroundColor: d.good ? VA.good : VA.wrong,
+            >
+              <View
+                style={[
+                  stacked || showDetailedPoseOverlay ? styles.trackFillStacked : styles.trackFill,
+                  { width: `${progress * 100}%` },
+                  (stacked || showDetailedPoseOverlay) &&
+                    progress >= 0.998 && {
+                      borderTopRightRadius: 3,
+                      borderBottomRightRadius: 3,
                     },
-                  ]}
-                />
-              ))}
-            <View
-              style={[
-                stacked ? styles.scrubThumbStacked : styles.scrubThumb,
-                { left: `${progress * 100}%` },
-              ]}
-            />
+                ]}
+              />
+              {showScrubDotsUi &&
+                scrubDots.map((d, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.scrubDot,
+                      {
+                        left: `${d.p * 100}%`,
+                        backgroundColor: d.good ? VA.good : VA.wrong,
+                      },
+                    ]}
+                  />
+                ))}
+              <View
+                style={[
+                  stacked || showDetailedPoseOverlay
+                    ? styles.scrubThumbStacked
+                    : styles.scrubThumb,
+                  { left: `${progress * 100}%` },
+                ]}
+              />
+            </View>
           </View>
         </View>
-      </View>
-      {showLegendUi ? (
-        <View style={[styles.overlayLegendRow, stacked && styles.overlayLegendRowStacked]}>
-          <View style={styles.overlayLegendItem}>
-            <View
-              style={[
-                styles.overlayLegendDot,
-                {
-                  backgroundColor: useUniformSkeleton
-                    ? skeletonUniformColor
-                    : VA.good,
-                },
-              ]}
-            />
-            <Text allowFontScaling={false} style={styles.overlayLegendText}>
-              Pose
-            </Text>
+        {showLegendUi ? (
+          <View style={[styles.overlayLegendRow, stacked && styles.overlayLegendRowStacked]}>
+            <View style={styles.overlayLegendItem}>
+              <View
+                style={[
+                  styles.overlayLegendDot,
+                  {
+                    backgroundColor: useUniformSkeleton
+                      ? skeletonUniformColor
+                      : VA.good,
+                  },
+                ]}
+              />
+              <Text allowFontScaling={false} style={styles.overlayLegendText}>
+                Pose
+              </Text>
+            </View>
+            <View style={styles.overlayLegendItem}>
+              <View style={[styles.overlayLegendDot, { backgroundColor: LEGEND_RACKET }]} />
+              <Text allowFontScaling={false} style={styles.overlayLegendText}>
+                Racket
+              </Text>
+            </View>
+            <View style={styles.overlayLegendItem}>
+              <View style={[styles.overlayLegendDot, { backgroundColor: LEGEND_BALL }]} />
+              <Text allowFontScaling={false} style={styles.overlayLegendText}>
+                Ball
+              </Text>
+            </View>
           </View>
-          <View style={styles.overlayLegendItem}>
-            <View style={[styles.overlayLegendDot, { backgroundColor: '#FFD400' }]} />
-            <Text allowFontScaling={false} style={styles.overlayLegendText}>
-              Racket
-            </Text>
-          </View>
-          <View style={styles.overlayLegendItem}>
-            <View style={[styles.overlayLegendDot, { backgroundColor: '#00E5FF' }]} />
-            <Text allowFontScaling={false} style={styles.overlayLegendText}>
-              Ball
-            </Text>
-          </View>
-        </View>
-      ) : null}
+        ) : null}
       </View>
     </View>
   )

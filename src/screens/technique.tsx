@@ -46,6 +46,7 @@ import Svg, {
   FeGaussianBlur,
 } from 'react-native-svg'
 import { authClient } from '../lib/auth-client'
+import { formatApiError } from '../lib/formatApiError'
 import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
@@ -69,8 +70,15 @@ import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateMod
 import { SentToSupportModal } from '../components/SentToSupportModal'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
+import {
+  BodyMobilitySection,
+  type BodyMobilityPayload,
+} from '../components/bodyMobility/BodyMobilitySection'
 import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidenceSection'
-import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
+import {
+  parsePhysicalMetricsFromAnalysis,
+  type PhysicalHistoryItem,
+} from '../lib/physicalMetrics'
 import { parseBiomechanicsSummary } from '../lib/biomechanicsSummary'
 import { CoachStrengthFocusInsightCards } from '../components/CoachStrengthFocusInsightCards'
 import {
@@ -78,6 +86,7 @@ import {
   CoachDoneWellSection,
 } from '../components/CoachAnalysisAccordions'
 import { buildCoachInsightCardsContent } from '../lib/coachInsightCards'
+import { pickCoachAnalysisLocale, filterLegacyCoachPlaceholderLines } from '../lib/coachLocaleAnalysis'
 import { stripTrainClipIndexSuffix } from '../lib/trainShotDisplay'
 import { normalizePoseData, resolveTotalFrames, type PoseFrameRow } from '../lib/techniquePose'
 import {
@@ -376,7 +385,7 @@ function SideBySideModeIcon({ color, strokeOpacity = 1 }: CorrectionModeIconProp
 }
 
 export function Technique() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { invalidate: invalidateSessionData } = useSessionData()
   const { data: session } = authClient.useSession()
@@ -408,6 +417,10 @@ export function Technique() {
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [analysisJson, setAnalysisJson] = useState<any>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+  /** Last-10 completed analyses with physical_metrics for Step 3 compare panel. */
+  const [physicalHistory, setPhysicalHistory] = useState<PhysicalHistoryItem[]>([])
+  /** Mid-clip You vs Ideal body mobility (Head/Shoulder/Wrist/Knee). */
+  const [bodyMobility, setBodyMobility] = useState<BodyMobilityPayload | null>(null)
   /** Dense pose/YOLO overlay from /pose-overlay (not the 80-sample poll metrics). */
   const [overlayPoseFrames, setOverlayPoseFrames] = useState<PoseFrameRow[]>([])
   const [overlayTotalFrames, setOverlayTotalFrames] = useState<number | null>(null)
@@ -639,20 +652,30 @@ export function Technique() {
   const scoreProgress = score != null ? score / 100 : 0
   /** Stable unique id for SVG gradient url(#...) */
   const scoreRingGradientId = `scoreRingGrad_${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
-  const enAnalysis = aiAnalysis?.en || null
-  const strengthsList: string[] = Array.isArray(enAnalysis?.strengths)
-    ? enAnalysis.strengths
-    : Array.isArray(enAnalysis?.observations)
-    ? enAnalysis.observations
+  const localeAnalysis = useMemo(
+    () =>
+      pickCoachAnalysisLocale(
+        aiAnalysis as Record<string, unknown> | null | undefined,
+        i18n.language
+      ),
+    [aiAnalysis, i18n.language]
+  )
+  const strengthsList: string[] = Array.isArray(localeAnalysis?.strengths)
+    ? (localeAnalysis.strengths as string[])
+    : Array.isArray(localeAnalysis?.observations)
+    ? filterLegacyCoachPlaceholderLines(localeAnalysis.observations)
     : []
-  const technicalErrorsList: string[] = Array.isArray(enAnalysis?.technical_errors)
-    ? enAnalysis.technical_errors
+  const technicalErrorsList: string[] = Array.isArray(localeAnalysis?.technical_errors)
+    ? (localeAnalysis.technical_errors as string[])
     : []
-  const actionableCorrectionsList: string[] = Array.isArray(enAnalysis?.actionable_corrections)
-    ? enAnalysis.actionable_corrections
-    : Array.isArray(enAnalysis?.recommendations)
-    ? enAnalysis.recommendations
+  const actionableCorrectionsList: string[] = Array.isArray(localeAnalysis?.actionable_corrections)
+    ? (localeAnalysis.actionable_corrections as string[])
+    : Array.isArray(localeAnalysis?.recommendations)
+    ? filterLegacyCoachPlaceholderLines(localeAnalysis.recommendations)
     : []
+  const recommendationsList: string[] = filterLegacyCoachPlaceholderLines(
+    localeAnalysis?.recommendations
+  )
 
   const physicalMetrics = useMemo(
     () => parsePhysicalMetricsFromAnalysis(aiAnalysis as Record<string, unknown> | null),
@@ -685,36 +708,38 @@ export function Technique() {
         if (t && !items.includes(t)) items.push(t)
       }
     }
-    if (typeof enAnalysis?.diagnosis === 'string' && enAnalysis.diagnosis.trim()) {
-      items.push(enAnalysis.diagnosis.trim())
+    if (typeof localeAnalysis?.diagnosis === 'string' && localeAnalysis.diagnosis.trim()) {
+      items.push(localeAnalysis.diagnosis.trim())
     }
     pushUnique(actionableCorrectionsList)
     pushUnique(technicalErrorsList)
     return items.slice(0, 10)
-  }, [enAnalysis?.diagnosis, actionableCorrectionsList, technicalErrorsList])
+  }, [localeAnalysis?.diagnosis, actionableCorrectionsList, technicalErrorsList])
 
   const coachInsightCards = useMemo(
     () =>
       buildCoachInsightCardsContent({
         strokeLabel: proReferenceShot,
         strokePreset: retrieval?.shot_hypothesis?.stroke_preset ?? null,
-        shotContext: typeof enAnalysis?.shot_context === 'string' ? enAnalysis.shot_context : null,
+        shotContext: typeof localeAnalysis?.shot_context === 'string' ? localeAnalysis.shot_context : null,
         primaryTrainCategory:
           aiAnalysis && typeof (aiAnalysis as Record<string, unknown>).primary_train_category === 'string'
             ? String((aiAnalysis as Record<string, unknown>).primary_train_category).trim()
             : null,
         strengths: strengthsList,
-        observations: Array.isArray(enAnalysis?.observations) ? enAnalysis.observations : undefined,
+        observations: Array.isArray(localeAnalysis?.observations)
+          ? (localeAnalysis.observations as string[])
+          : undefined,
         actionableCorrections: actionableCorrectionsList,
         technicalErrors: technicalErrorsList,
-        diagnosis: typeof enAnalysis?.diagnosis === 'string' ? enAnalysis.diagnosis : null,
+        diagnosis: typeof localeAnalysis?.diagnosis === 'string' ? localeAnalysis.diagnosis : null,
       }),
     [
       proReferenceShot,
       retrieval?.shot_hypothesis?.stroke_preset,
-      enAnalysis?.shot_context,
-      enAnalysis?.observations,
-      enAnalysis?.diagnosis,
+      localeAnalysis?.shot_context,
+      localeAnalysis?.observations,
+      localeAnalysis?.diagnosis,
       aiAnalysis,
       strengthsList,
       actionableCorrectionsList,
@@ -733,6 +758,80 @@ export function Technique() {
     }
     return resolveTotalFrames(metrics as Record<string, unknown> | null | undefined, step3PoseFrames)
   }, [overlayTotalFrames, metrics, step3PoseFrames])
+
+  useEffect(() => {
+    if (!analysisId || analysisJson?.status !== 'completed') {
+      setPhysicalHistory([])
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const histRes = await authClient.$fetch<{
+          items?: PhysicalHistoryItem[]
+          error?: string
+        }>('/technique/physical-history?limit=10', { method: 'GET' })
+        if (cancelled) return
+        const histBody: any = (histRes as any)?.data ?? histRes
+        const items = Array.isArray(histBody?.items) ? histBody.items : []
+        setPhysicalHistory(
+          items.filter(
+            (row: PhysicalHistoryItem) =>
+              row &&
+              typeof row.analysisId === 'string' &&
+              row.physicalMetrics &&
+              typeof row.physicalMetrics === 'object'
+          )
+        )
+      } catch (err) {
+        if (!cancelled) setPhysicalHistory([])
+        console.warn('[Technique] physical-history fetch failed', {
+          analysisId,
+          message: err instanceof Error ? err.message : String(err),
+        })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [analysisId, analysisJson?.status])
+
+  useEffect(() => {
+    if (!analysisId || analysisJson?.status !== 'completed') {
+      setBodyMobility(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await authClient.$fetch<BodyMobilityPayload & { error?: string }>(
+          `/technique/analysis/${analysisId}/body-mobility`,
+          { method: 'GET' }
+        )
+        if (cancelled) return
+        const body: any = (res as any)?.data ?? res
+        if (body?.error || !body?.side) {
+          setBodyMobility(null)
+          return
+        }
+        setBodyMobility({
+          frame: typeof body.frame === 'number' ? body.frame : 0,
+          totalFrames: typeof body.totalFrames === 'number' ? body.totalFrames : undefined,
+          side: body.side,
+          idealSource: body.idealSource ?? null,
+        })
+      } catch (err) {
+        if (!cancelled) setBodyMobility(null)
+        console.warn('[Technique] body-mobility fetch failed', {
+          analysisId,
+          message: err instanceof Error ? err.message : String(err),
+        })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [analysisId, analysisJson?.status])
 
   useEffect(() => {
     if (!analysisId || analysisJson?.status !== 'completed') {
@@ -1382,7 +1481,7 @@ export function Technique() {
               : {}),
           }),
         })
-        .catch((err) => ({ error: err?.message || 'Analyze failed' } as any))
+        .catch((err) => ({ error: formatApiError(err, 'Analyze failed') } as any))
 
       const analyzePostMs = Date.now() - analyzeWallStart
       const body = ((res as any)?.data ?? res) as { analysisId?: string; error?: string }
@@ -1393,10 +1492,13 @@ export function Technique() {
       })
 
       const analysisId = (body as any)?.analysisId as string | undefined
-      const errorMsg = (body as any)?.error as string | undefined
+      const errorMsg = formatApiError(
+        (body as any)?.error ?? (body as any)?.detail ?? body,
+        t('techniqueExtra.analyzeFailed')
+      )
 
       if (!analysisId) {
-        setAnalysisError(errorMsg || t('techniqueExtra.analyzeFailed'))
+        setAnalysisError(errorMsg)
         setAnalysisLoading(false)
         openProcessFailedScreen()
         return
@@ -1446,7 +1548,7 @@ export function Technique() {
         })
 
         if (pollBody?.error && !pollBody?.status) {
-          setAnalysisError(pollBody.error || 'Failed to fetch analysis')
+          setAnalysisError(formatApiError(pollBody.error, 'Failed to fetch analysis'))
           failed = true
           break
         }
@@ -1466,7 +1568,9 @@ export function Technique() {
           })
           setAnalysisJson(pollBody)
           if (pollBody.status === 'failed') {
-            setAnalysisError(pollBody.feedbackText || 'Analysis failed')
+            setAnalysisError(
+              formatApiError(pollBody.feedbackText ?? pollBody.error, 'Analysis failed')
+            )
             failed = true
           }
           done = true
@@ -1489,9 +1593,9 @@ export function Technique() {
       } else if (options.navigateOnDone ?? true) {
         setStep(3)
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Technique] runAnalysis error', err)
-      setAnalysisError(err?.message || t('techniqueExtra.analyzeError'))
+      setAnalysisError(formatApiError(err, t('techniqueExtra.analyzeError')))
       setAnalysisLoading(false)
       openProcessFailedScreen()
     }
@@ -1904,7 +2008,7 @@ export function Technique() {
                 {t('technique.analysisFailedTitle')}
               </Text>
               <Text allowFontScaling={false} style={styles.processFailedSubtitle}>
-                {analysisError?.trim()
+                {typeof analysisError === 'string' && analysisError.trim()
                   ? analysisError.trim()
                   : t('technique.analysisFailedSubtitle')}
               </Text>
@@ -1985,11 +2089,6 @@ export function Technique() {
           >
             <View style={styles.step2}>
                 <View style={styles.step2VideoSummaryCard}>
-                  <View style={styles.step2VideoSummaryTextCol}>
-                    <Text allowFontScaling={false} style={styles.step2VideoSummaryInstruction}>
-                      Set the impact of the ball with the white line
-                    </Text>
-                  </View>
                   <View style={styles.step2SummaryThumbOuter}>
                     <Svg width={48} height={48} style={StyleSheet.absoluteFill}>
                       <Defs>
@@ -2111,15 +2210,6 @@ export function Technique() {
                         </Text>
                       </View>
                     )
-                  ) : null}
-
-                  {currentTrimClip ? (
-                    <Text allowFontScaling={false} style={styles.trimRangeText}>
-                      Analysis uses the blue handles: {formatTimeFromMs(currentTrimClip.startMs)} –{' '}
-                      {formatTimeFromMs(currentTrimClip.endMs)} (
-                      {((currentTrimClip.endMs - currentTrimClip.startMs) / 1000).toFixed(1)}s, max{' '}
-                      {MAX_ANALYZE_CLIP_MS / 1000}s)
-                    </Text>
                   ) : null}
 
                   <View style={styles.setClipControlRow}>
@@ -2630,26 +2720,51 @@ export function Technique() {
               </View>
             )}
 
-            {metrics && aiAnalysis?.en && strengthsList.length > 0 ? (
+            {metrics && localeAnalysis && strengthsList.length > 0 ? (
               <View style={styles.step3EarlyFeedbackWrap}>
                 <CoachDoneWellSection strengths={strengthsList} />
               </View>
             ) : null}
 
-            {uploadedVideoUrl && analysisJson?.status === 'completed' ? (
-              <View style={styles.step3FullWidthBlock}>
-                <TechniqueAnalysisVideoPanel
-                  videoUri={uploadedVideoUrl}
-                  videoKey={analysisId ?? 'technique-step3'}
-                  width={step3VideoWidth}
-                  poseFrames={step3PoseFrames}
-                  totalVidFrames={step3TotalVidFrames}
-                  qualitySession={{
-                    rating: typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null,
-                    score: score ?? null,
-                  }}
-                  isLooping
+            {metrics && localeAnalysis && physicalMetrics ? (
+              <View style={styles.poseGaugeSectionWrap}>
+                <PhysicalMetricsSection
+                  metrics={physicalMetrics}
+                  history={physicalHistory}
+                  currentAnalysisId={analysisId}
+                  contentWidth={step3VideoWidth}
+                  compareMode
                 />
+              </View>
+            ) : null}
+
+            {uploadedVideoUrl && analysisJson?.status === 'completed' ? (
+              <View style={styles.step3PosesSection}>
+                <View style={styles.step3PosesDivider} />
+                <View style={styles.step3PosesHeader}>
+                  <Text allowFontScaling={false} style={styles.step3PosesTitle}>
+                    {t('technique.posesSectionTitle')}
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.step3PosesCaption}>
+                    {t('technique.posesSectionCaption')}
+                  </Text>
+                </View>
+                <View style={styles.step3FullWidthBlock}>
+                  <TechniqueAnalysisVideoPanel
+                    videoUri={uploadedVideoUrl}
+                    videoKey={analysisId ?? 'technique-step3'}
+                    width={step3VideoWidth}
+                    poseFrames={step3PoseFrames}
+                    totalVidFrames={step3TotalVidFrames}
+                    qualitySession={{
+                      rating: typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null,
+                      score: score ?? null,
+                    }}
+                    isLooping
+                    showDetailedPoseOverlay
+                  />
+                </View>
+                {bodyMobility ? <BodyMobilitySection data={bodyMobility} /> : null}
               </View>
             ) : null}
 
@@ -2716,7 +2831,7 @@ export function Technique() {
               </LinearGradient>
             )}
 
-            {metrics && aiAnalysis?.en ? (
+            {metrics && localeAnalysis ? (
               <View style={styles.step3InsightBeforeChartWrap}>
                 <CoachStrengthFocusInsightCards content={coachInsightCards} />
               </View>
@@ -2729,22 +2844,13 @@ export function Technique() {
                     <Text style={styles.placeholderHint}>{analysisError}</Text>
                   ) : (
                     <>
-                      {metrics && aiAnalysis?.en && physicalMetrics ? (
-                        <View style={styles.poseGaugeSectionWrap}>
-                          <PhysicalMetricsSection
-                            metrics={physicalMetrics}
-                            contentWidth={step3VideoWidth}
-                          />
-                        </View>
-                      ) : null}
-
                       {biomechanicsSummary ? (
                         <View style={styles.step3MotionEvidenceWrap}>
                           <MotionEvidenceSection summary={biomechanicsSummary} />
                         </View>
                       ) : null}
 
-                      {enAnalysis ? (
+                      {localeAnalysis ? (
                         <View style={styles.step3CoachFeedbackWrap}>
                           <CoachAnalysisAccordions
                             omitStrengths
@@ -2755,22 +2861,20 @@ export function Technique() {
                                   : null,
                               score: score ?? null,
                               diagnosis:
-                                typeof enAnalysis.diagnosis === 'string'
-                                  ? enAnalysis.diagnosis
+                                typeof localeAnalysis.diagnosis === 'string'
+                                  ? localeAnalysis.diagnosis
                                   : null,
                               shotContext: null,
                               strengths: strengthsList,
                               technicalErrors: technicalErrorsList,
                               actionableCorrections: actionableCorrectionsList,
-                              recommendations: Array.isArray(enAnalysis.recommendations)
-                                ? enAnalysis.recommendations
-                                : [],
+                              recommendations: recommendationsList,
                             }}
                           />
                         </View>
                       ) : null}
 
-                      {aiAnalysis?.en && (
+                      {localeAnalysis && (
                         <View style={styles.correctionSection}>
                           <View style={styles.correctionSectionTitleRow}>
                             <View style={styles.correctionTitleBlock}>
@@ -3998,28 +4102,14 @@ function getStyles(theme: any) {
     step2VideoSummaryCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 14,
-      paddingVertical: 20,
+      justifyContent: 'flex-end',
+      paddingVertical: 12,
       paddingHorizontal: 16,
       borderRadius: 18,
       borderWidth: 0,
       backgroundColor: '#041641',
       marginTop: 4,
-      // Match marginTop so the banner has the same gap above and below
-      // (gap below was 14, which read as too much padding before the video preview).
       marginBottom: 4,
-    },
-    step2VideoSummaryTextCol: {
-      flex: 1,
-      minWidth: 0,
-    },
-    step2VideoSummaryInstruction: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
-      lineHeight: 22,
-      color: '#FFFFFF',
-      letterSpacing: 0.1,
     },
     step2SummaryThumbOuter: {
       position: 'relative' as const,
@@ -4224,15 +4314,41 @@ function getStyles(theme: any) {
       alignSelf: 'stretch',
       marginTop: 16,
       marginBottom: 4,
-      paddingTop: 16,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: 'rgba(255,255,255,0.1)',
     },
     step3FullWidthBlock: {
       width: '100%',
       alignSelf: 'stretch',
       paddingTop: 4,
       paddingBottom: 4,
+    },
+    step3PosesSection: {
+      width: '100%',
+      alignSelf: 'stretch',
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    step3PosesDivider: {
+      width: '100%',
+      height: 2,
+      backgroundColor: '#0022FF',
+      borderRadius: 1,
+      marginBottom: 14,
+    },
+    step3PosesHeader: {
+      width: '100%',
+      marginBottom: 10,
+      paddingHorizontal: 0,
+    },
+    step3PosesTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 16,
+      color: '#FFFFFF',
+    },
+    step3PosesCaption: {
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.55)',
+      marginTop: 2,
     },
     placeholderCard: {
       flex: 1,
@@ -4601,12 +4717,6 @@ function getStyles(theme: any) {
       fontFamily: theme.regularFont,
       fontSize: 12,
       color: theme.mutedForegroundColor,
-    },
-    trimRangeText: {
-      fontFamily: theme.mediumFont,
-      fontSize: 12,
-      color: theme.textColor,
-      marginBottom: 10,
     },
     trimTimeline: {
       height: 44,

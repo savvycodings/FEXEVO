@@ -22,6 +22,8 @@ export type CoachRichTextProps = {
   numberOfLines?: number
   /** Soften chip look for muted body copy (e.g. insight cards). */
   muted?: boolean
+  /** Override cyan chip border/text (e.g. red errors / green corrections). */
+  accentColor?: string
 }
 
 /**
@@ -35,6 +37,7 @@ export function CoachRichText({
   containerStyle,
   numberOfLines,
   muted = false,
+  accentColor,
 }: CoachRichTextProps) {
   const { theme } = useContext(ThemeContext)
   const styles = useMemo(() => getStyles(theme), [theme])
@@ -48,6 +51,15 @@ export function CoachRichText({
   const lineHeight = typeof flatStyle?.lineHeight === 'number' ? flatStyle.lineHeight : 22
   const fontFamily =
     typeof flatStyle?.fontFamily === 'string' ? flatStyle.fontFamily : theme.regularFont
+
+  const chipBorder = accentColor
+    ? accentColor.startsWith('#')
+      ? `${accentColor}BF`
+      : accentColor
+    : muted
+      ? 'rgba(0, 184, 255, 0.55)'
+      : CHIP_BORDER
+  const chipText = accentColor ?? CHIP_TEXT
 
   const hasChips = segments.some((s) => s.type === 'chip')
   if (!hasChips) {
@@ -76,8 +88,20 @@ export function CoachRichText({
       {segments.map((seg, idx) => {
         if (seg.type === 'chip') {
           return (
-            <View key={`c-${idx}-${seg.value}`} style={muted ? styles.chipWrapMuted : styles.chipWrap}>
-              <Text allowFontScaling={false} style={muted ? styles.chipTextMuted : styles.chipText}>
+            <View
+              key={`c-${idx}-${seg.value}`}
+              style={[
+                muted ? styles.chipWrapMuted : styles.chipWrap,
+                { borderColor: chipBorder },
+              ]}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[
+                  muted ? styles.chipTextMuted : styles.chipText,
+                  { color: chipText },
+                ]}
+              >
                 {seg.value}
               </Text>
             </View>

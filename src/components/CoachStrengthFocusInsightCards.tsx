@@ -10,10 +10,9 @@ export type CoachStrengthFocusInsightCardsProps = {
   content: CoachInsightCardsContent
 }
 
-/**
- * Flat Strength / Focus highlights — same section styling as coach feedback text
- * (no filled card boxes), with left icon chips for scanning.
- */
+const STRENGTH_CARD_BG = '#18259A'
+const FOCUS_CARD_BG = '#174A97'
+
 export function CoachStrengthFocusInsightCards({ content }: CoachStrengthFocusInsightCardsProps) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -31,9 +30,9 @@ export function CoachStrengthFocusInsightCards({ content }: CoachStrengthFocusIn
   return (
     <View style={styles.stack}>
       {hasStrength ? (
-        <View style={[styles.section, styles.sectionFirst]}>
+        <View style={[styles.card, styles.strengthCard]}>
           <View style={styles.titleRow}>
-            <View style={styles.iconChip}>
+            <View style={[styles.iconChip, styles.strengthIconChip]}>
               <Feather name="award" size={14} color="#FFFFFF" />
             </View>
             <View style={styles.titleTextCol}>
@@ -61,7 +60,7 @@ export function CoachStrengthFocusInsightCards({ content }: CoachStrengthFocusIn
       ) : null}
 
       {hasFocus ? (
-        <View style={[styles.section, !hasStrength ? styles.sectionFirst : null]}>
+        <View style={[styles.card, styles.focusCard]}>
           <View style={styles.titleRow}>
             <View style={styles.iconChip}>
               <Feather name="crosshair" size={14} color="#FFFFFF" />
@@ -101,31 +100,36 @@ function getStyles(theme: {
   return StyleSheet.create({
     stack: {
       width: '100%',
-      gap: 4,
+      gap: 10,
     },
-    section: {
+    card: {
       width: '100%',
-      paddingTop: 16,
-      paddingBottom: 2,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: 'rgba(255,255,255,0.1)',
+      borderRadius: 22,
+      paddingHorizontal: 18,
+      paddingVertical: 16,
     },
-    sectionFirst: {
-      borderTopWidth: 0,
-      paddingTop: 0,
+    strengthCard: {
+      backgroundColor: STRENGTH_CARD_BG,
+    },
+    focusCard: {
+      backgroundColor: FOCUS_CARD_BG,
     },
     titleRow: {
       flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
+      alignItems: 'flex-start',
+      gap: 14,
     },
     iconChip: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: 'rgba(0, 110, 255, 0.35)',
+      width: 34,
+      height: 34,
+      borderRadius: 12,
+      backgroundColor: '#1D6FFF',
       alignItems: 'center',
       justifyContent: 'center',
+      marginTop: 2,
+    },
+    strengthIconChip: {
+      backgroundColor: '#0022FF',
     },
     titleTextCol: {
       flex: 1,
@@ -133,20 +137,21 @@ function getStyles(theme: {
     },
     title: {
       fontFamily: theme.semiBoldFont,
-      fontSize: 16,
+      fontSize: 14,
       color: '#FFFFFF',
     },
     headline: {
       fontFamily: theme.boldFont ?? theme.semiBoldFont,
-      fontSize: 16,
-      lineHeight: 22,
+      fontSize: 18,
+      lineHeight: 24,
       color: '#00B8FF',
-      marginTop: 4,
+      marginTop: 6,
     },
     bodyWrap: {
-      marginTop: 10,
+      marginTop: 12,
       marginLeft: 0,
       width: '100%',
+      paddingLeft: 48,
     },
     bodyContainer: {
       width: '100%',
@@ -155,8 +160,8 @@ function getStyles(theme: {
     body: {
       fontFamily: theme.regularFont,
       fontSize: 14,
-      lineHeight: 22,
-      color: '#FFFFFF',
+      lineHeight: 21,
+      color: 'rgba(196, 212, 255, 0.8)',
     },
   })
 }

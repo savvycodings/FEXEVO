@@ -75,7 +75,6 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
     const [isReady, setIsReady] = useState(false)
     const [isPlaying, setIsPlaying] = useState(false)
     const [positionMs, setPositionMs] = useState(0)
-    const [seekHint, setSeekHint] = useState(false)
 
     const selectionLo = Math.min(selectionStartMs, selectionEndMs)
     const selectionHi = Math.max(selectionStartMs, selectionEndMs)
@@ -113,7 +112,6 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
 
     useEffect(() => {
       setIsReady(false)
-      setSeekHint(false)
       setIsPlaying(false)
       loopActiveRef.current = false
       setPositionMs(0)
@@ -134,7 +132,7 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
           loopActiveRef.current = false
           emitPosition(clamped)
         } catch {
-          setSeekHint(true)
+          /* ignore seek failures */
         }
       },
       [emitPosition]
@@ -171,7 +169,6 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
           setIsPlaying(true)
           emitPosition(lo)
         } catch {
-          setSeekHint(true)
           loopActiveRef.current = false
           setIsPlaying(false)
         }
@@ -294,7 +291,7 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
                 }}
                 onPlaybackStatusUpdate={handlePlaybackStatus}
                 onError={() => {
-                  setSeekHint(true)
+                  /* ignore */
                 }}
               />
               {!isReady ? (
@@ -350,11 +347,6 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
         <Text allowFontScaling={false} style={styles.timeLine}>
           {formatTimeMs(positionMs)} · selection {formatTimeMs(selectionLo)}–{formatTimeMs(selectionHi)}
         </Text>
-        {seekHint ? (
-          <Text allowFontScaling={false} style={styles.warnLine}>
-            Scrub may be slow on remote video; use the timeline below to adjust handles.
-          </Text>
-        ) : null}
       </View>
     )
   }
@@ -429,11 +421,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     fontSize: 12,
     color: 'rgba(200, 220, 255, 0.85)',
-  },
-  warnLine: {
-    marginTop: 4,
-    paddingHorizontal: 4,
-    fontSize: 11,
-    color: 'rgba(255, 200, 120, 0.95)',
   },
 })

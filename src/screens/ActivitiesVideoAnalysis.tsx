@@ -41,6 +41,7 @@ import {
   parseBiomechanicsSummary,
   type BiomechanicsSummary,
 } from '../lib/biomechanicsSummary'
+import { pickCoachAnalysisLocale, filterLegacyCoachPlaceholderLines } from '../lib/coachLocaleAnalysis'
 import {
   buildCoachInsightCardsContent,
   formatActivityShotTitle,
@@ -163,14 +164,13 @@ function parseCorrectionContext(raw: unknown): {
   return { coaching, frameCount, frameIndices }
 }
 
-/** LLM copy may live under `ai_analysis.en` or at the top level of `ai_analysis`. */
-function aiAnalysisEnBlock(ai: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
-  if (!ai) return undefined
-  const en = ai.en
-  if (en && typeof en === 'object' && !Array.isArray(en)) {
-    return en as Record<string, unknown>
-  }
-  return ai
+/** LLM copy may live under `ai_analysis.en` / `ai_analysis.es` or at the top level. */
+function aiAnalysisLocaleBlock(
+  ai: Record<string, unknown> | undefined,
+  language: string | null | undefined
+): Record<string, unknown> | undefined {
+  const picked = pickCoachAnalysisLocale(ai, language)
+  return picked ?? undefined
 }
 
 function parseCorrectionImages(raw: unknown): CorrectionPair[] {
@@ -352,9 +352,6 @@ function getStyles(theme: any) {
       marginHorizontal: pad,
       marginTop: 4,
       marginBottom: 18,
-      paddingTop: 16,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: 'rgba(255,255,255,0.1)',
     },
     physicalMetricsWrap: {
       marginHorizontal: pad,
@@ -567,7 +564,7 @@ export function ActivitiesVideoAnalysis({
   session: ActivitySession
   onBack: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
   const { width: winW } = useWindowDimensions()
@@ -688,7 +685,7 @@ export function ActivitiesVideoAnalysis({
           video_duration_ms: overlayBody?.video_duration_ms,
         } as Record<string, unknown>
         const ai = metrics?.ai_analysis as Record<string, unknown> | undefined
-        const en = aiAnalysisEnBlock(ai)
+        const en = aiAnalysisLocaleBlock(ai, i18n.language)
         const retrievalBlock = metrics?.retrieval as Record<string, unknown> | undefined
         const shotHyp = retrievalBlock?.shot_hypothesis as Record<string, unknown> | undefined
         const rating = typeof ai?.rating === 'string' ? ai.rating : null
@@ -709,14 +706,12 @@ export function ActivitiesVideoAnalysis({
         const strengthsRaw = Array.isArray(en?.strengths)
           ? en.strengths.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
           : Array.isArray(en?.observations)
-            ? en.observations.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+            ? filterLegacyCoachPlaceholderLines(en.observations)
             : []
         const actionableRaw = Array.isArray(en?.actionable_corrections)
           ? en.actionable_corrections.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
           : []
-        const recommendationsRaw = Array.isArray(en?.recommendations)
-          ? en.recommendations.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-          : []
+        const recommendationsRaw = filterLegacyCoachPlaceholderLines(en?.recommendations)
         const humanShotLabel =
           humanShotLabelFromStoredMetrics(metrics) ??
           (typeof shotHyp?.stroke_label === 'string' && shotHyp.stroke_label.trim()
@@ -784,13 +779,13 @@ export function ActivitiesVideoAnalysis({
       } catch {
         /* no pose overlay */
       } finally {
-        if (!cancelled) setCorrectionsLoading(false)
+        if (!cancelled)         setCorrectionsLoading(false)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [session.analysisId])
+  }, [session.analysisId, i18n.language])
 
   const effectiveSession = useMemo((): ActivitySession => {
     if (aiSnapshot === null) return session

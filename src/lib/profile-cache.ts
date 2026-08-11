@@ -15,6 +15,8 @@ export type CachedProfile = {
     phone?: string | null;
     areaLocation?: string | null;
     birthDate?: string | null;
+    heightCm?: number | null;
+    weightKg?: number | null;
     gender?: string | null;
     level?: string | null;
     rankingOrg?: string | null;

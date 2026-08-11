@@ -204,7 +204,15 @@ function normBboxToOverlayRectPixels(
   naturalSize: { w: number; h: number } | null
 ): OverlayRect | null {
   if (x2 <= x1 || y2 <= y1) return null
-  if (naturalSize) {
+  if (naturalSize && naturalSize.w > 0 && naturalSize.h > 0) {
+    if (aspectRatiosMatch(videoW, videoH, naturalSize.w, naturalSize.h)) {
+      return {
+        x: x1 * videoW,
+        y: y1 * videoH,
+        w: (x2 - x1) * videoW,
+        h: (y2 - y1) * videoH,
+      }
+    }
     const videoAR = naturalSize.w / naturalSize.h
     const boxAR = videoW / videoH
     let scale = 1
@@ -232,22 +240,9 @@ function normBboxToOverlayRectPixels(
   }
 }
 
-function overlayRectSensible(
-  r: OverlayRect,
-  videoW: number,
-  videoH: number
-): boolean {
-  if (!Number.isFinite(r.x) || !Number.isFinite(r.y) || !Number.isFinite(r.w) || !Number.isFinite(r.h)) {
-    return false
-  }
-  if (r.w < 0.5 || r.h < 0.5) return false
-  const cx = r.x + r.w / 2
-  const cy = r.y + r.h / 2
-  return cx >= -r.w * 0.5 && cx <= videoW + r.w * 0.5 && cy >= -r.h * 0.5 && cy <= videoH + r.h * 0.5
-}
-
 /**
- * Map normalized 0–1 paddle/ball box to overlay pixels (same contain + rotation as Activities / technique UIs).
+ * Map normalized 0–1 paddle/ball box to overlay pixels.
+ * Uses the same rotate flag as landmarks (encoded vs presented), then fill-when-AR-matches.
  */
 export function projectBboxToOverlayRect(
   rb: [number, number, number, number] | null | undefined,
@@ -256,32 +251,33 @@ export function projectBboxToOverlayRect(
     videoH: number
     encodedNatural: { w: number; h: number } | null
     naturalSize: { w: number; h: number } | null
+    /** When set, forces rotate on/off. Default: encoded WxH ≠ presented WxH. */
+    rotate?: boolean
   }
 ): OverlayRect | null {
   if (!hasValidBbox2d(rb ?? null) || !rb) return null
-  const [ox1, oy1, ox2, oy2] = rb
+  let [x1, y1, x2, y2] = rb
   const { videoW, videoH, encodedNatural, naturalSize } = options
 
-  if (encodedNatural && naturalSize && landmarksNeedRotateForContainer(encodedNatural, naturalSize)) {
-    const r = bboxNormRotate90LikeLandmarks(ox1, oy1, ox2, oy2)
-    let rRot: OverlayRect | null = null
-    if (r.x2 > r.x1 && r.y2 > r.y1) {
-      rRot = normBboxToOverlayRectPixels(r.x1, r.y1, r.x2, r.y2, videoW, videoH, naturalSize)
-    }
-    const rNo = normBboxToOverlayRectPixels(ox1, oy1, ox2, oy2, videoW, videoH, naturalSize)
-    if (rRot && rNo) {
-      const okRot = overlayRectSensible(rRot, videoW, videoH)
-      const okNo = overlayRectSensible(rNo, videoW, videoH)
-      if (okRot && !okNo) return rRot
-      if (!okRot && okNo) return rNo
-    }
-    if (rRot && overlayRectSensible(rRot, videoW, videoH)) return rRot
-    if (rNo && overlayRectSensible(rNo, videoW, videoH)) return rNo
-    return rRot ?? rNo
+  const rotate =
+    typeof options.rotate === 'boolean'
+      ? options.rotate
+      : !!(
+          encodedNatural &&
+          naturalSize &&
+          landmarksNeedRotateForContainer(encodedNatural, naturalSize)
+        )
+
+  if (rotate) {
+    const r = bboxNormRotate90LikeLandmarks(x1, y1, x2, y2)
+    x1 = r.x1
+    y1 = r.y1
+    x2 = r.x2
+    y2 = r.y2
   }
 
-  if (ox2 <= ox1 || oy2 <= oy1) return null
-  return normBboxToOverlayRectPixels(ox1, oy1, ox2, oy2, videoW, videoH, naturalSize)
+  if (x2 <= x1 || y2 <= y1) return null
+  return normBboxToOverlayRectPixels(x1, y1, x2, y2, videoW, videoH, naturalSize)
 }
 
 function landmarkVisible(lm: LandmarkPoint | undefined): boolean {
@@ -310,6 +306,65 @@ export function containerSizeFromNatural(ns: {
   return { w: iw, h: ih }
 }
 
+/** True when pose landmarks span a taller-than-wide region (phone portrait clip). */
+export function landmarksSuggestPortrait(
+  landmarks: Record<string, LandmarkPoint> | null | undefined
+): boolean {
+  if (!landmarks) return false
+  let minX = 1
+  let maxX = 0
+  let minY = 1
+  let maxY = 0
+  let n = 0
+  for (const p of Object.values(landmarks)) {
+    if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') continue
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue
+    minX = Math.min(minX, p.x)
+    maxX = Math.max(maxX, p.x)
+    minY = Math.min(minY, p.y)
+    maxY = Math.max(maxY, p.y)
+    n += 1
+  }
+  if (n < 5) return false
+  const bw = maxX - minX
+  const bh = maxY - minY
+  if (bw <= 0.02 || bh <= 0.02) return false
+  return bh > bw * 1.08
+}
+
+const ASPECT_MATCH_EPS = 0.02
+
+/** True when box aspect matches presented video aspect closely enough that CONTAIN has no bars. */
+export function aspectRatiosMatch(
+  aW: number,
+  aH: number,
+  bW: number,
+  bH: number,
+  eps = ASPECT_MATCH_EPS
+): boolean {
+  if (aW <= 0 || aH <= 0 || bW <= 0 || bH <= 0) return false
+  return Math.abs(aW / aH - bW / bH) <= eps
+}
+
+/**
+ * Pixel aspect for layout (full width × matching height).
+ * Uses **encoded** buffer WxH — the aspect `ResizeMode.CONTAIN` fits against.
+ * Do not orientation-swap here: a taller “presented” box letterboxes the buffer
+ * and desyncs the skeleton from the painted frame.
+ */
+export function resolveDisplaySizeForVideo(opts: {
+  encoded: { w: number; h: number } | null
+  container: { w: number; h: number } | null
+  orientation?: 'portrait' | 'landscape' | null
+}): { w: number; h: number } {
+  const { encoded, container } = opts
+  const w = encoded?.w ?? container?.w ?? 16
+  const h = encoded?.h ?? container?.h ?? 9
+  if (w <= 0 || h <= 0) return { w: 16, h: 9 }
+  return { w, h }
+}
+
+/** True when encoded buffer WxH differs from presented layout (needs 90° CW landmark remap). */
 export function landmarksNeedRotateForContainer(
   encoded: { w: number; h: number },
   container: { w: number; h: number }
@@ -373,4 +428,25 @@ export function projectLandmark(
   const lm = landmarks[name]
   if (!landmarkVisible(lm)) return null
   return { x: lm!.x * width, y: lm!.y * height }
+}
+
+/**
+ * Prefer fill (x*W, y*H) when box AR matches presented AR (CONTAIN has no bars).
+ * Fall back to contain letterbox math only when aspects diverge.
+ */
+export function projectLandmarkToOverlayPx(
+  name: string,
+  landmarks: Record<string, LandmarkPoint>,
+  boxW: number,
+  boxH: number,
+  naturalW: number | null,
+  naturalH: number | null
+): { x: number; y: number } | null {
+  if (naturalW == null || naturalH == null || naturalW <= 0 || naturalH <= 0) {
+    return projectLandmark(name, landmarks, boxW, boxH)
+  }
+  if (aspectRatiosMatch(boxW, boxH, naturalW, naturalH)) {
+    return projectLandmark(name, landmarks, boxW, boxH)
+  }
+  return landmarkToContainPx(name, landmarks, naturalW, naturalH, boxW, boxH)
 }
