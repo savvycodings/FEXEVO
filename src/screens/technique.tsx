@@ -17,7 +17,7 @@ import {
 } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useState, useContext, useRef, useEffect, useMemo, useCallback, useId } from 'react'
+import { useState, useContext, useRef, useEffect, useLayoutEffect, useMemo, useCallback, useId } from 'react'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import {
@@ -66,6 +66,7 @@ import { ProLibraryGradientFrame } from '../components/ProLibraryGradientFrame'
 import { ProLibraryGradientProgressBar } from '../components'
 import { proLibraryChrome } from '../theme/proLibraryChrome'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
+import { PaddlePongGame } from '../components/PaddlePongGame'
 import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
 import { SentToSupportModal } from '../components/SentToSupportModal'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
@@ -415,6 +416,13 @@ export function Technique() {
   const [videoDurationSeconds, setVideoDurationSeconds] = useState<number | null>(null)
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
+  /** Mini paddle game over the analysis loading video. */
+  const [paddleGameOpen, setPaddleGameOpen] = useState(false)
+  /** Progress / finished chip on the game header while analysis runs. */
+  const [analysisGameBanner, setAnalysisGameBanner] = useState<'progress' | 'finished' | null>(
+    null
+  )
+  const paddleGameOpenRef = useRef(false)
   const [analysisJson, setAnalysisJson] = useState<any>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   /** Last-10 completed analyses with physical_metrics for Step 3 compare panel. */
@@ -1227,6 +1235,8 @@ export function Technique() {
     setOverlayTotalFrames(null)
     setUploadError(null)
     setProcessFailedVisible(false)
+    setPaddleGameOpen(false)
+    setAnalysisGameBanner(null)
     setGeminiCorrectionImages([])
     setFalCorrectionImages([])
     setComfyCorrectionImages([])
@@ -1248,6 +1258,48 @@ export function Technique() {
   const openProcessFailedScreen = useCallback(() => {
     setProcessFailedVisible(true)
   }, [])
+
+  useEffect(() => {
+    if (analysisLoading) {
+      setAnalysisGameBanner('progress')
+    }
+  }, [analysisLoading])
+
+  const showPaddleGame = paddleGameOpen
+  paddleGameOpenRef.current = paddleGameOpen
+  const showAnalysisOverlay =
+    analysisLoading || (paddleGameOpen && analysisGameBanner === 'finished')
+
+  /** Hide bottom tab bar only while the paddle game is open. */
+  useLayoutEffect(() => {
+    const tabBarBottomPad = insets.bottom + 10
+    const tabBarHeight = 66 + tabBarBottomPad
+    const visibleTabBarStyle = {
+      backgroundColor: 'transparent',
+      borderTopWidth: 0,
+      elevation: 0,
+      shadowOpacity: 0,
+      height: tabBarHeight,
+      paddingTop: 4,
+      paddingBottom: tabBarBottomPad,
+      paddingHorizontal: 4,
+    }
+    navigation.setOptions({
+      tabBarStyle: showPaddleGame
+        ? {
+            display: 'none',
+            height: 0,
+            overflow: 'hidden',
+            opacity: 0,
+          }
+        : visibleTabBarStyle,
+    } as never)
+    return () => {
+      navigation.setOptions({
+        tabBarStyle: visibleTabBarStyle,
+      } as never)
+    }
+  }, [showPaddleGame, navigation, insets.bottom])
 
   const handleSendToSupport = useCallback(() => {
     setSentToSupportVisible(true)
@@ -1438,6 +1490,8 @@ export function Technique() {
         note: 'POST /technique/analyze blocks until Modal + LLM + DB finish (often 2–6 min). Unsloth chat UI streams; this path does not yet.',
       })
       setAnalysisLoading(true)
+      setPaddleGameOpen(false)
+      setAnalysisGameBanner('progress')
       setAnalysisError(null)
       if (options.resetState ?? true) {
         setAnalysisJson(null)
@@ -1500,6 +1554,8 @@ export function Technique() {
       if (!analysisId) {
         setAnalysisError(errorMsg)
         setAnalysisLoading(false)
+        setPaddleGameOpen(false)
+        setAnalysisGameBanner(null)
         openProcessFailedScreen()
         return
       }
@@ -1589,14 +1645,25 @@ export function Technique() {
         if (!failed) {
           setAnalysisError(t('techniqueExtra.analyzeFailed'))
         }
+        setPaddleGameOpen(false)
+        setAnalysisGameBanner(null)
         openProcessFailedScreen()
-      } else if (options.navigateOnDone ?? true) {
-        setStep(3)
+      } else {
+        if (paddleGameOpenRef.current) {
+          setAnalysisGameBanner('finished')
+        } else {
+          setAnalysisGameBanner(null)
+        }
+        if (options.navigateOnDone ?? true) {
+          setStep(3)
+        }
       }
     } catch (err: unknown) {
       console.error('[Technique] runAnalysis error', err)
       setAnalysisError(formatApiError(err, t('techniqueExtra.analyzeError')))
       setAnalysisLoading(false)
+      setPaddleGameOpen(false)
+      setAnalysisGameBanner(null)
       openProcessFailedScreen()
     }
   }
@@ -1948,19 +2015,100 @@ export function Technique() {
         In-tab overlay (not Modal / body portal): fills the tab scene only — below Header, above bottom tab bar.
         Matches Expo / React Navigation layout so the nav bar stays visible and usable after analysis.
       */}
-      {analysisLoading ? (
+      {showAnalysisOverlay ? (
         <View
           style={[styles.analysisLoadingOverlay, { padding: 0, margin: 0 }]}
           pointerEvents="auto"
         >
-          <Video
-            source={LOADING_VIDEO_CLIP}
-            style={styles.analysisLoadingVideoCover}
-            resizeMode={ResizeMode.COVER}
-            shouldPlay
-            isLooping
-            isMuted
-          />
+          {paddleGameOpen ? (
+            <View style={styles.paddleGameOverlayInner}>
+              <View style={styles.paddleGameHeaderRow}>
+                <TouchableOpacity
+                  style={styles.paddleGameBackBtn}
+                  onPress={() => {
+                    setPaddleGameOpen(false)
+                    if (analysisGameBanner === 'finished') {
+                      setAnalysisGameBanner(null)
+                    }
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back"
+                >
+                  <Ionicons name="chevron-back" size={26} color="#86A7D2" />
+                  <Text allowFontScaling={false} style={styles.paddleGameBackLabel}>
+                    Back
+                  </Text>
+                </TouchableOpacity>
+                {analysisGameBanner === 'progress' || analysisGameBanner === 'finished' ? (
+                  <View
+                    style={[
+                      styles.analysisStatusChip,
+                      analysisGameBanner === 'finished'
+                        ? styles.analysisStatusChipFinished
+                        : styles.analysisStatusChipProgress,
+                    ]}
+                  >
+                    {analysisGameBanner === 'progress' ? (
+                      <ActivityIndicator size="small" color="#00BBFF" />
+                    ) : (
+                      <Ionicons name="checkmark-circle" size={16} color="#00BBFF" />
+                    )}
+                    <Text
+                      allowFontScaling={false}
+                      style={[
+                        styles.analysisStatusChipText,
+                        analysisGameBanner === 'finished' && styles.analysisStatusChipTextFinished,
+                      ]}
+                    >
+                      {analysisGameBanner === 'progress' ? 'Analyzing…' : 'Finished'}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <PaddlePongGame paused={false} />
+            </View>
+          ) : (
+            <>
+              <Video
+                source={LOADING_VIDEO_CLIP}
+                style={styles.analysisLoadingVideoCover}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay
+                isLooping
+                isMuted
+              />
+              {analysisGameBanner === 'progress' ? (
+                <View style={styles.analysisStatusChipFloating}>
+                  <ActivityIndicator size="small" color="#00BBFF" />
+                  <Text allowFontScaling={false} style={styles.analysisStatusChipText}>
+                    Analyzing…
+                  </Text>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                style={[
+                  styles.playGameBtn,
+                  { bottom: Math.max(16, FLOATING_NAV_RESERVE + 8) },
+                ]}
+                onPress={() => setPaddleGameOpen(true)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Play Game"
+              >
+                <LinearGradient
+                  colors={['#00BBFF', '#0022FF']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={styles.playGameBtnInner}
+                >
+                  <Text allowFontScaling={false} style={styles.playGameBtnText}>
+                    Play Game
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       ) : null}
       {processFailedVisible ? (
@@ -4889,6 +5037,91 @@ function getStyles(theme: any) {
     /** Edge-to-edge in tab scene; COVER removes CONTAIN letterboxing band above the tab bar. */
     analysisLoadingVideoCover: {
       ...StyleSheet.absoluteFillObject,
+    },
+    playGameBtn: {
+      position: 'absolute',
+      alignSelf: 'center',
+      left: 24,
+      right: 24,
+      zIndex: 2,
+    },
+    playGameBtnInner: {
+      height: 52,
+      borderRadius: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    playGameBtnText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 17,
+      color: '#FFFFFF',
+      letterSpacing: 0.2,
+    },
+    paddleGameOverlayInner: {
+      flex: 1,
+      width: '100%',
+      backgroundColor: theme.backgroundColor ?? '#030A17',
+    },
+    paddleGameHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingRight: 12,
+      zIndex: 2,
+    },
+    paddleGameBackBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 2,
+      paddingHorizontal: 12,
+      paddingTop: 6,
+      paddingBottom: 10,
+    },
+    paddleGameBackLabel: {
+      fontFamily: theme.regularFont,
+      fontSize: 15,
+      color: '#86A7D2',
+    },
+    analysisStatusChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+    },
+    analysisStatusChipProgress: {
+      backgroundColor: 'rgba(0, 102, 255, 0.14)',
+      borderColor: 'rgba(0, 187, 255, 0.45)',
+    },
+    analysisStatusChipFinished: {
+      backgroundColor: 'rgba(0, 187, 255, 0.16)',
+      borderColor: 'rgba(0, 187, 255, 0.7)',
+    },
+    analysisStatusChipFloating: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      zIndex: 3,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      backgroundColor: 'rgba(3, 10, 23, 0.72)',
+      borderColor: 'rgba(0, 187, 255, 0.45)',
+    },
+    analysisStatusChipText: {
+      fontFamily: theme.mediumFont,
+      fontSize: 13,
+      color: '#8FD7FF',
+    },
+    analysisStatusChipTextFinished: {
+      color: '#00BBFF',
     },
     clipRow: {
       flexDirection: 'row',

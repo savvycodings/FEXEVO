@@ -18,3 +18,4 @@ export type { ShieldHeroRowProps, ShieldHeroRowCardProps } from './ShieldHeroRow
 export { AICoachCoachReviewBanner } from './AICoachCoachReviewBanner'
 export { TechniqueAnalysisVideoPanel } from './TechniqueAnalysisVideoPanel'
 export type { TechniqueAnalysisVideoPanelProps } from './TechniqueAnalysisVideoPanel'
+export { PaddlePongGame } from './PaddlePongGame'
