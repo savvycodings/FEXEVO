@@ -67,6 +67,7 @@ import { ProLibraryGradientProgressBar } from '../components'
 import { proLibraryChrome } from '../theme/proLibraryChrome'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
 import { PaddlePongGame } from '../components/PaddlePongGame'
+import { AnalyzingDashSpinner } from '../components/AnalyzingDashSpinner'
 import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
 import { SentToSupportModal } from '../components/SentToSupportModal'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
@@ -132,6 +133,8 @@ const CHOOSE_FILE_ICON = require('../../assets/aicoach/choosefileicon.svg')
 const FAIL_ICON = require('../../assets/aicoach/failicon.png')
 const FAIL_MOTION_VIDEO = require('../../assets/aicoach/failmotion.mp4')
 const UPLOADING_STEP_ICON = require('../../assets/actiities/uploading.svg')
+const ANALYSIS_COMPLETE_ICON = require('../../assets/game/complete.svg')
+const XEVO_GAME_LOGO = require('../../assets/game/xevologo.png')
 /**
  * failmotion video is a square; side energy reaches the L/R edges.
  * Slightly overscale past the overlay width so soft edges still hit the screen
@@ -2040,28 +2043,31 @@ export function Technique() {
                     Back
                   </Text>
                 </TouchableOpacity>
-                {analysisGameBanner === 'progress' || analysisGameBanner === 'finished' ? (
-                  <View
-                    style={[
-                      styles.analysisStatusChip,
-                      analysisGameBanner === 'finished'
-                        ? styles.analysisStatusChipFinished
-                        : styles.analysisStatusChipProgress,
-                    ]}
+                {analysisGameBanner === 'finished' ? (
+                  <TouchableOpacity
+                    style={[styles.analysisStatusChip, styles.analysisStatusChipFinished]}
+                    onPress={() => {
+                      setPaddleGameOpen(false)
+                      setAnalysisGameBanner(null)
+                    }}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="View Analysis"
                   >
-                    {analysisGameBanner === 'progress' ? (
-                      <ActivityIndicator size="small" color="#00BBFF" />
-                    ) : (
-                      <Ionicons name="checkmark-circle" size={16} color="#00BBFF" />
-                    )}
-                    <Text
-                      allowFontScaling={false}
-                      style={[
-                        styles.analysisStatusChipText,
-                        analysisGameBanner === 'finished' && styles.analysisStatusChipTextFinished,
-                      ]}
-                    >
-                      {analysisGameBanner === 'progress' ? 'Analyzing…' : 'Finished'}
+                    <LocalSvgAsset
+                      assetModule={ANALYSIS_COMPLETE_ICON}
+                      width={24}
+                      height={24}
+                    />
+                    <Text allowFontScaling={false} style={styles.analysisStatusChipText}>
+                      View Analysis
+                    </Text>
+                  </TouchableOpacity>
+                ) : analysisGameBanner === 'progress' ? (
+                  <View style={[styles.analysisStatusChip, styles.analysisStatusChipProgress]}>
+                    <AnalyzingDashSpinner size={22} color="#00B8FF" />
+                    <Text allowFontScaling={false} style={styles.analysisStatusChipText}>
+                      Analyzing…
                     </Text>
                   </View>
                 ) : null}
@@ -2078,35 +2084,38 @@ export function Technique() {
                 isLooping
                 isMuted
               />
-              {analysisGameBanner === 'progress' ? (
-                <View style={styles.analysisStatusChipFloating}>
-                  <ActivityIndicator size="small" color="#00BBFF" />
-                  <Text allowFontScaling={false} style={styles.analysisStatusChipText}>
-                    Analyzing…
-                  </Text>
-                </View>
-              ) : null}
-              <TouchableOpacity
-                style={[
-                  styles.playGameBtn,
-                  { bottom: Math.max(16, FLOATING_NAV_RESERVE + 8) },
-                ]}
-                onPress={() => setPaddleGameOpen(true)}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel="Play Game"
-              >
-                <LinearGradient
-                  colors={['#00BBFF', '#0022FF']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.playGameBtnInner}
+              <View style={styles.analysisLoadingTopCta} pointerEvents="box-none">
+                <Text
+                  allowFontScaling={false}
+                  style={styles.analysisChallengeText}
                 >
-                  <Text allowFontScaling={false} style={styles.playGameBtnText}>
-                    Play Game
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                  While{' '}
+                  <Image
+                    source={XEVO_GAME_LOGO}
+                    style={styles.analysisChallengeLogo}
+                    resizeMode="contain"
+                  />{' '}
+                  does the work, you do the challenge.
+                </Text>
+                <TouchableOpacity
+                  style={styles.playGameBtn}
+                  onPress={() => setPaddleGameOpen(true)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Play a Game"
+                >
+                  <LinearGradient
+                    colors={['#00BBFF', '#0022FF']}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={styles.playGameBtnInner}
+                  >
+                    <Text allowFontScaling={false} style={styles.playGameBtnText}>
+                      Play a Game
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             </>
           )}
         </View>
@@ -5038,12 +5047,34 @@ function getStyles(theme: any) {
     analysisLoadingVideoCover: {
       ...StyleSheet.absoluteFillObject,
     },
-    playGameBtn: {
+    analysisLoadingTopCta: {
       position: 'absolute',
-      alignSelf: 'center',
-      left: 24,
-      right: 24,
+      top: 0,
+      left: 0,
+      right: 0,
       zIndex: 2,
+      alignItems: 'center',
+      paddingTop: 18,
+      paddingHorizontal: 20,
+    },
+    analysisChallengeText: {
+      fontFamily: theme.mediumFont,
+      fontSize: 15,
+      lineHeight: 24,
+      color: '#00B8FF',
+      textAlign: 'center',
+      marginBottom: 14,
+      paddingHorizontal: 4,
+    },
+    analysisChallengeLogo: {
+      width: 72,
+      height: 20,
+      transform: [{ translateY: 3 }],
+    },
+    playGameBtn: {
+      alignSelf: 'center',
+      maxWidth: 340,
+      width: '100%',
     },
     playGameBtnInner: {
       height: 52,
@@ -5064,9 +5095,11 @@ function getStyles(theme: any) {
     },
     paddleGameHeaderRow: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
-      paddingRight: 12,
+      paddingTop: 6,
+      paddingRight: 14,
+      paddingBottom: 8,
       zIndex: 2,
     },
     paddleGameBackBtn: {
@@ -5075,8 +5108,8 @@ function getStyles(theme: any) {
       alignSelf: 'flex-start',
       gap: 2,
       paddingHorizontal: 12,
-      paddingTop: 6,
-      paddingBottom: 10,
+      paddingTop: 2,
+      paddingBottom: 4,
     },
     paddleGameBackLabel: {
       fontFamily: theme.regularFont,
@@ -5086,42 +5119,28 @@ function getStyles(theme: any) {
     analysisStatusChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      alignSelf: 'flex-start',
+      gap: 11,
+      minHeight: 52,
+      marginTop: 6,
+      paddingHorizontal: 22,
+      paddingVertical: 14,
       borderRadius: 999,
-      borderWidth: 1,
+      backgroundColor: '#041641',
     },
     analysisStatusChipProgress: {
-      backgroundColor: 'rgba(0, 102, 255, 0.14)',
-      borderColor: 'rgba(0, 187, 255, 0.45)',
+      borderWidth: 0,
+      borderColor: 'transparent',
     },
     analysisStatusChipFinished: {
-      backgroundColor: 'rgba(0, 187, 255, 0.16)',
-      borderColor: 'rgba(0, 187, 255, 0.7)',
-    },
-    analysisStatusChipFloating: {
-      position: 'absolute',
-      top: 12,
-      right: 12,
-      zIndex: 3,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 999,
-      borderWidth: 1,
-      backgroundColor: 'rgba(3, 10, 23, 0.72)',
-      borderColor: 'rgba(0, 187, 255, 0.45)',
+      borderWidth: 2.5,
+      borderColor: '#00B8FF',
     },
     analysisStatusChipText: {
       fontFamily: theme.mediumFont,
-      fontSize: 13,
-      color: '#8FD7FF',
-    },
-    analysisStatusChipTextFinished: {
-      color: '#00BBFF',
+      fontSize: 18,
+      lineHeight: 22,
+      color: '#00B8FF',
     },
     clipRow: {
       flexDirection: 'row',

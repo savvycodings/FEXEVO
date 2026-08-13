@@ -8,17 +8,20 @@ import {
   Modal,
   TouchableOpacity,
   Pressable,
+  Platform,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native'
 import { useContext } from 'react'
 import { LinearGradient } from 'expo-linear-gradient'
+import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Circle as SvgCircle } from 'react-native-svg'
 import { ThemeContext } from '../context'
 import { ProLibraryGradientFrame } from './ProLibraryGradientFrame'
 
 const COURT_IMG = require('../../assets/game/courtgame.png')
 const PADDLE_IMG = require('../../assets/game/padle.png')
 const BALL_IMG = require('../../assets/game/ball.png')
+const XEVO_LOGO = require('../../assets/game/xevologo.png')
 
 const MODAL_FILL = '#030A17'
 const FRAME_OUTER_RADIUS = 28
@@ -65,6 +68,217 @@ type CourtMetrics = {
 function formatScore(n: number): string {
   return String(Math.max(0, Math.floor(n))).padStart(2, '0')
 }
+
+type ScorePillProps = {
+  variant: 'xevo' | 'you'
+  value: number
+  fontFamily?: string
+}
+
+function ScorePill({ variant, value, fontFamily }: ScorePillProps) {
+  const isXevo = variant === 'xevo'
+  return (
+    <View
+      style={[
+        stylesScorePill.glowWrap,
+        isXevo ? stylesScorePill.glowXevo : stylesScorePill.glowYou,
+      ]}
+    >
+      <View
+        style={[
+          stylesScorePill.pill,
+          isXevo ? stylesScorePill.pillXevo : stylesScorePill.pillYou,
+        ]}
+      >
+        {/* Inner shadow / inset glow clipped to the pill */}
+        {isXevo ? (
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(0, 89, 255, 0.55)', 'transparent', 'rgba(0, 89, 255, 0.35)']}
+            locations={[0, 0.42, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={stylesScorePill.innerShadow}
+          />
+        ) : (
+          <>
+            <View pointerEvents="none" style={stylesScorePill.innerShadowYouRim} />
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(0, 255, 9, 0.85)', 'transparent', 'rgba(0, 255, 9, 0.65)']}
+              locations={[0, 0.4, 1]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={stylesScorePill.innerShadow}
+            />
+          </>
+        )}
+
+        {isXevo ? (
+          <>
+            <Image source={XEVO_LOGO} style={stylesScorePill.logo} resizeMode="contain" />
+            <Text
+              allowFontScaling={false}
+              style={[stylesScorePill.labelXevo, fontFamily ? { fontFamily } : null]}
+            >
+              SCORE
+            </Text>
+          </>
+        ) : (
+          <Text
+            allowFontScaling={false}
+            style={[stylesScorePill.labelYou, fontFamily ? { fontFamily } : null]}
+          >
+            YOUR SCORE
+          </Text>
+        )}
+
+        <View
+          style={[
+            stylesScorePill.circle,
+            isXevo ? stylesScorePill.circleXevo : stylesScorePill.circleYou,
+          ]}
+        >
+          {/* Soft #00B8FF inner blur (not a hard outline) */}
+          <Svg
+            pointerEvents="none"
+            width={CIRCLE_SIZE}
+            height={CIRCLE_SIZE}
+            style={stylesScorePill.circleBlurSvg}
+          >
+            <Defs>
+              <SvgRadialGradient
+                id={isXevo ? 'scoreCircleBlurXevo' : 'scoreCircleBlurYou'}
+                cx="50%"
+                cy="50%"
+                rx="50%"
+                ry="50%"
+              >
+                <Stop offset="0%" stopColor="#00B8FF" stopOpacity="0" />
+                <Stop offset="45%" stopColor="#00B8FF" stopOpacity="0.12" />
+                <Stop offset="78%" stopColor="#00B8FF" stopOpacity="0.45" />
+                <Stop offset="100%" stopColor="#00B8FF" stopOpacity="0.85" />
+              </SvgRadialGradient>
+            </Defs>
+            <SvgCircle
+              cx={CIRCLE_SIZE / 2}
+              cy={CIRCLE_SIZE / 2}
+              r={CIRCLE_SIZE / 2}
+              fill={`url(#${isXevo ? 'scoreCircleBlurXevo' : 'scoreCircleBlurYou'})`}
+            />
+          </Svg>
+          <Text
+            allowFontScaling={false}
+            style={[stylesScorePill.circleText, fontFamily ? { fontFamily } : null]}
+          >
+            {formatScore(value)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  )
+}
+
+const CIRCLE_SIZE = 34
+
+const stylesScorePill = StyleSheet.create({
+  glowWrap: {
+    borderRadius: 999,
+    alignSelf: 'flex-start',
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
+  },
+  glowXevo: {
+    shadowColor: '#0059FF',
+    shadowRadius: 12,
+  },
+  glowYou: {
+    shadowColor: '#00FF09',
+    shadowRadius: 12,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    minHeight: 40,
+    paddingLeft: 10,
+    paddingRight: 4,
+    paddingVertical: 4,
+    gap: 6,
+    overflow: 'hidden',
+  },
+  pillXevo: {
+    backgroundColor: '#041641',
+  },
+  pillYou: {
+    backgroundColor: '#C2FF00',
+  },
+  innerShadow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 999,
+  },
+  /** Visible #00FF09 inset rim on YOUR SCORE */
+  innerShadowYouRim: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 999,
+    borderWidth: 2.5,
+    borderColor: '#00FF09',
+  },
+  logo: {
+    width: 48,
+    height: 16,
+    marginRight: -2,
+  },
+  labelXevo: {
+    color: '#00B8FF',
+    fontSize: 10,
+    letterSpacing: 0.6,
+    fontWeight: '600',
+    marginLeft: -4,
+  },
+  labelYou: {
+    color: '#020A17',
+    fontSize: 11,
+    letterSpacing: 0.4,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  circle: {
+    width: CIRCLE_SIZE,
+    height: CIRCLE_SIZE,
+    borderRadius: CIRCLE_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  circleXevo: {
+    backgroundColor: 'rgba(0, 89, 255, 0.5)',
+  },
+  circleYou: {
+    backgroundColor: '#020A17',
+  },
+  circleBlurSvg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  circleText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    lineHeight: 16,
+    zIndex: 1,
+  },
+})
 
 function randSign(): number {
   return Math.random() < 0.5 ? -1 : 1
@@ -465,16 +679,32 @@ export function PaddlePongGame({ paused = false }: Props) {
     }
   }, [resetBall])
 
+  const courtWidth = layoutW > 0 ? Math.min(layoutW, 340) : undefined
+
   return (
     <View style={styles.root} onLayout={(e) => setLayoutW(e.nativeEvent.layout.width)}>
-      <Text allowFontScaling={false} style={styles.score}>
-        {formatScore(opponentScore)}
-      </Text>
+      <View
+        style={[
+          styles.scoreRow,
+          courtWidth != null ? { width: courtWidth } : null,
+        ]}
+      >
+        <ScorePill
+          variant="xevo"
+          value={opponentScore}
+          fontFamily={theme.semiBoldFont}
+        />
+        <ScorePill
+          variant="you"
+          value={playerScore}
+          fontFamily={theme.semiBoldFont}
+        />
+      </View>
 
       <View
         style={[
           styles.courtOuter,
-          layoutW > 0 ? { width: Math.min(layoutW, 340) } : null,
+          courtWidth != null ? { width: courtWidth } : null,
         ]}
       >
         <View style={styles.court} onLayout={onCourtLayout} {...panResponder.panHandlers}>
@@ -518,10 +748,6 @@ export function PaddlePongGame({ paused = false }: Props) {
           ) : null}
         </View>
       </View>
-
-      <Text allowFontScaling={false} style={styles.score}>
-        {formatScore(playerScore)}
-      </Text>
 
       <Modal visible={missVisible} transparent animationType="fade" onRequestClose={onRetry}>
         <View style={styles.modalOverlay}>
@@ -582,19 +808,15 @@ function getStyles(theme: {
       alignItems: 'center',
       justifyContent: 'flex-start',
       paddingHorizontal: 0,
-      paddingTop: 10,
+      paddingTop: 22,
       paddingBottom: 16,
     },
-    score: {
-      color: '#FFFFFF',
-      fontFamily: theme.semiBoldFont ?? 'System',
-      fontSize: 48,
-      lineHeight: 56,
-      letterSpacing: 2,
-      textAlign: 'center',
-      alignSelf: 'stretch',
-      marginTop: 4,
-      marginBottom: 4,
+    scoreRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      alignSelf: 'center',
+      marginBottom: 14,
     },
     courtOuter: {
       alignSelf: 'center',
