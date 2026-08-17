@@ -2078,19 +2078,8 @@ export function Technique() {
                 isLooping
                 isMuted
               />
-              {analysisGameBanner === 'progress' ? (
-                <View style={styles.analysisStatusChipFloating}>
-                  <ActivityIndicator size="small" color="#00BBFF" />
-                  <Text allowFontScaling={false} style={styles.analysisStatusChipText}>
-                    Analyzing…
-                  </Text>
-                </View>
-              ) : null}
               <TouchableOpacity
-                style={[
-                  styles.playGameBtn,
-                  { bottom: Math.max(16, FLOATING_NAV_RESERVE + 8) },
-                ]}
+                style={styles.playGameBtn}
                 onPress={() => setPaddleGameOpen(true)}
                 activeOpacity={0.85}
                 accessibilityRole="button"
@@ -5040,20 +5029,20 @@ function getStyles(theme: any) {
     },
     playGameBtn: {
       position: 'absolute',
-      alignSelf: 'center',
-      left: 24,
-      right: 24,
-      zIndex: 2,
+      top: 12,
+      right: 12,
+      zIndex: 3,
     },
     playGameBtnInner: {
-      height: 52,
-      borderRadius: 26,
+      height: 36,
+      paddingHorizontal: 14,
+      borderRadius: 999,
       alignItems: 'center',
       justifyContent: 'center',
     },
     playGameBtnText: {
       fontFamily: theme.semiBoldFont,
-      fontSize: 17,
+      fontSize: 13,
       color: '#FFFFFF',
       letterSpacing: 0.2,
     },
@@ -5099,21 +5088,6 @@ function getStyles(theme: any) {
     analysisStatusChipFinished: {
       backgroundColor: 'rgba(0, 187, 255, 0.16)',
       borderColor: 'rgba(0, 187, 255, 0.7)',
-    },
-    analysisStatusChipFloating: {
-      position: 'absolute',
-      top: 12,
-      right: 12,
-      zIndex: 3,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 999,
-      borderWidth: 1,
-      backgroundColor: 'rgba(3, 10, 23, 0.72)',
-      borderColor: 'rgba(0, 187, 255, 0.45)',
     },
     analysisStatusChipText: {
       fontFamily: theme.mediumFont,

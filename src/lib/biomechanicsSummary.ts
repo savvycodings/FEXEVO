@@ -91,10 +91,6 @@ export function parseBiomechanicsSummary(
   return raw as BiomechanicsSummary
 }
 
-function fmtMs(n: number): string {
-  return `${Math.round(n)} ms`
-}
-
 function fmtDeg(n: number): string {
   const rounded = Math.round(n)
   const sign = rounded > 0 ? '+' : ''
@@ -134,7 +130,6 @@ export function pickPrimaryEvidenceRows(
   const rows: MotionEvidenceRow[] = []
   const angles = summary.angles_deg_proxy ?? {}
   const speeds = summary.speeds_body ?? {}
-  const contact = summary.contact ?? {}
   const bodyUnit = labels.bodyLengthsUnit ?? 'body lengths/s'
 
   const torsoDelta = asFiniteNumber(angles.torso_sep_delta_deg)
@@ -198,21 +193,6 @@ export function pickPrimaryEvidenceRows(
       valueNote,
       accent: 'neutral',
       icon: 'wrist',
-    })
-  }
-
-  const contactMs = asFiniteNumber(contact.contact_window_ms)
-  const contactCount =
-    typeof contact.yolo_contact_count === 'number' ? contact.yolo_contact_count : 0
-  if (contactMs != null && contactMs >= 0 && contactCount > 0) {
-    const value = fmtMs(contactMs)
-    rows.push({
-      id: 'contact_window',
-      text: `${labels.contactWindow}: ${value}`,
-      label: labels.contactWindow,
-      value,
-      accent: 'alert',
-      icon: 'contact',
     })
   }
 
