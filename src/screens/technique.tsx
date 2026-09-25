@@ -49,9 +49,13 @@ import { authClient } from '../lib/auth-client'
 import { formatApiError } from '../lib/formatApiError'
 import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type { MainStackParamList } from '../navigation/types'
+import type { MainStackParamList, MainTabParamList, UserShotDeclaration } from '../navigation/types'
+import {
+  beginSelfAnalyzeCapture,
+  takeSelfAnalyzeShot,
+} from '../lib/pendingSelfAnalyzeShot'
 import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { LOADING_OVERLAY_SCRIM } from '../constants/loadingVideoFullscreen'
@@ -433,6 +437,7 @@ export function Technique() {
   const { invalidate: invalidateSessionData } = useSessionData()
   const { data: session } = authClient.useSession()
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>()
+  const route = useRoute<RouteProp<MainTabParamList, 'AICoach'>>()
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
   const [scrollBodyH, setScrollBodyH] = useState(0)
@@ -447,6 +452,9 @@ export function Technique() {
   const [rankingValue, setRankingValue] = useState('')
   const [uploading, setUploading] = useState(false)
   const [sendVideoToCoach, setSendVideoToCoach] = useState(false)
+  const [userShot, setUserShot] = useState<UserShotDeclaration | null>(null)
+  const pickVideoRef = useRef<(() => Promise<void>) | null>(null)
+  const pickGalleryRef = useRef<(() => Promise<void>) | null>(null)
   const [assignedCoach, setAssignedCoach] = useState<AICoachAssignedCoach | null>(null)
   const [coachBannerLoaded, setCoachBannerLoaded] = useState(false)
   const coachFetchGeneration = useRef(0)
@@ -1481,13 +1489,14 @@ export function Technique() {
     )
   }
 
+  function openShotStepper(action: HowToAction) {
+    beginSelfAnalyzeCapture(action)
+    navigation.navigate('StudentShotCategory', { flow: 'self-analyze' })
+  }
+
   function startHowToFlow(action: HowToAction) {
     if (skipHowToModal) {
-      if (action === 'record') {
-        void pickVideo()
-      } else {
-        void pickFromGallery()
-      }
+      openShotStepper(action)
       return
     }
     setPendingHowToAction(action)
@@ -1508,12 +1517,32 @@ export function Technique() {
       setSkipHowToModal(true)
       await AsyncStorage.setItem(HOWTO_HIDE_KEY, '1').catch(() => {})
     }
-    if (action === 'record') {
-      await pickVideo()
-    } else if (action === 'gallery') {
-      await pickFromGallery()
+    if (action === 'record' || action === 'gallery') {
+      openShotStepper(action)
     }
   }
+
+  pickVideoRef.current = pickVideo
+  pickGalleryRef.current = pickFromGallery
+
+  const resumeDeclaredCapture = useCallback(() => {
+    const ready = takeSelfAnalyzeShot()
+    if (!ready) return
+    setUserShot(ready.shot)
+    if (ready.action === 'record') void pickVideoRef.current?.()
+    else void pickGalleryRef.current?.()
+  }, [])
+
+  useFocusEffect(
+    useCallback(() => {
+      resumeDeclaredCapture()
+    }, [resumeDeclaredCapture])
+  )
+
+  useEffect(() => {
+    if (route.params?.declaredAt == null) return
+    resumeDeclaredCapture()
+  }, [route.params?.declaredAt, resumeDeclaredCapture])
 
   async function uploadVideo(uri: string, fileName: string, mimeType: string): Promise<void> {
     try {
@@ -1639,6 +1668,17 @@ export function Technique() {
                 : {}),
             ...(videoDurationSeconds != null && videoDurationSeconds > 0
               ? { videoDurationMs: Math.round(videoDurationSeconds * 1000) }
+              : {}),
+            ...(userShot
+              ? {
+                  userShot: {
+                    category: userShot.category,
+                    strokePreset: userShot.strokePreset,
+                    shotLabel: userShot.shotLabel,
+                    skillLevel: userShot.skillLevel,
+                    viewId: userShot.viewId,
+                  },
+                }
               : {}),
           }),
         })

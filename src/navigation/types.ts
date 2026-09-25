@@ -45,7 +45,22 @@ export type CoachStudentChatParams = {
   peerRole?: "coach" | "student";
 };
 
-export type StudentShotSelectParams = CoachStudentChatParams & {
+/** Coach send keeps today's upload. Self-analyze returns the tags to AI Coach. */
+export type ShotStepperFlow = "coach-send" | "self-analyze";
+
+export type UserShotDeclaration = {
+  category: TrainCategory;
+  strokePreset: TrainStrokePreset;
+  shotLabel: string;
+  skillLevel: string;
+  viewId: "front" | "side" | "diagonal" | "behind";
+};
+
+export type StudentShotCategoryParams = Partial<CoachStudentChatParams> & {
+  flow?: ShotStepperFlow;
+};
+
+export type StudentShotSelectParams = StudentShotCategoryParams & {
   category: TrainCategory;
 };
 
@@ -58,14 +73,14 @@ export type StudentReviewTagParams = StudentShotSelectParams & {
 export type MyCoachTabStackParamList = {
   MyCoachMain: undefined;
   StudentProfile: CoachStudentChatParams;
-  StudentShotCategory: CoachStudentChatParams;
+  StudentShotCategory: StudentShotCategoryParams;
   StudentShotSelect: StudentShotSelectParams;
   StudentReviewTag: StudentReviewTagParams;
   CoachStudentChat: CoachStudentChatParams;
 };
 
 export type MainTabParamList = {
-  AICoach: undefined;
+  AICoach: { userShot?: UserShotDeclaration; declaredAt?: number } | undefined;
   Playlist: undefined;
   MyCoach: NavigatorScreenParams<MyCoachTabStackParamList>;
   Activities: { openAnalysisId?: string } | undefined;
@@ -99,4 +114,8 @@ export type MainStackParamList = {
   StudentSentVideo: { sentVideoId: string; notificationId?: string };
   /** Admin hub: browse members by coach/student role (same card style as hub). */
   AdminMembers: { filter: "all" | "coach" | "student" };
+  /** AI Coach self-analyze reuses the coach shot stepper, then returns to the tab. */
+  StudentShotCategory: StudentShotCategoryParams;
+  StudentShotSelect: StudentShotSelectParams;
+  StudentReviewTag: StudentReviewTagParams;
 };

@@ -23,6 +23,7 @@ import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
 import { coachUploadCategoryTitleKey } from '../lib/coachStudentUploadShots'
 import { formatTrainSkillLevel, TRAIN_SKILL_LEVEL_IDS, type TrainSkillLevelId } from '../lib/trainSkillLevel'
 import { uploadCoachSentVideo } from '../lib/coachSentVideoUpload'
+import { completeSelfAnalyzeShot } from '../lib/pendingSelfAnalyzeShot'
 import { DOMAIN } from '../../constants'
 
 const SHOT_TITLE_ICON = require('../../assets/reviewandtags/shottitle.svg')
@@ -80,7 +81,7 @@ export function StudentReviewTagScreen() {
   const route = useRoute<R>()
   const { width: winW } = useWindowDimensions()
 
-  const { category, labelKey, labelLine2Key, peerUserId, strokePreset } = route.params
+  const { category, labelKey, labelLine2Key, peerUserId, strokePreset, flow } = route.params
   const [skillLevel, setSkillLevel] = useState<TrainSkillLevelId | null>(null)
   const [viewId, setViewId] = useState<CoachUploadViewId | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -105,6 +106,22 @@ export function StudentReviewTagScreen() {
 
   const onUpload = useCallback(async () => {
     if (skillLevel == null || viewId == null || uploading) return
+    if (flow === 'self-analyze') {
+      const userShot = {
+        category,
+        strokePreset,
+        shotLabel: strokeLabel,
+        skillLevel: formatTrainSkillLevel(skillLevel),
+        viewId,
+      }
+      completeSelfAnalyzeShot(userShot)
+      ;(navigation as { navigate: (name: string, params?: object) => void }).navigate('Main', {
+        screen: 'AICoach',
+        params: { userShot, declaredAt: Date.now() },
+      })
+      return
+    }
+    if (!peerUserId) return
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
       Alert.alert(t('commonAlerts.permissionNeeded'), t('coachFlow.permissionPhotos'))
@@ -139,15 +156,17 @@ export function StudentReviewTagScreen() {
       Alert.alert(t('coachFlow.videoSentTitle'), t('coachFlow.videoSentBody'), [
         {
           text: t('commonAlerts.ok'),
-          onPress: () =>
+          onPress: () => {
+            if (!peerUserId || route.params.peerName == null || route.params.peerLocation == null) return
             navigation.navigate('StudentProfile', {
               peerUserId,
               peerName: route.params.peerName,
               peerLocation: route.params.peerLocation,
-              actualScore: route.params.actualScore,
-              lastScore: route.params.lastScore,
+              actualScore: route.params.actualScore ?? 0,
+              lastScore: route.params.lastScore ?? 0,
               peerImageUri: route.params.peerImageUri,
-            }),
+            })
+          },
         },
       ])
     } catch (e: any) {
@@ -166,6 +185,7 @@ export function StudentReviewTagScreen() {
     strokeLabel,
     navigation,
     route.params,
+    flow,
   ])
 
   return (

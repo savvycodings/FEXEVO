@@ -666,6 +666,9 @@ function AuthenticatedStack() {
       <Stack.Screen name="StudentCoachReview" component={StudentCoachReviewScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="StudentSentVideo" component={StudentSentVideoScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="AdminMembers" component={AdminMembersScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="StudentShotCategory" component={StudentShotCategoryScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="StudentShotSelect" component={StudentShotSelectScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="StudentReviewTag" component={StudentReviewTagScreen} layout={screenEntranceLayout} />
         </Stack.Navigator>
       </SessionDataProvider>
     </View>
