@@ -34,8 +34,12 @@ export function LogoutConfirmModal({ visible, onCancel, onConfirm }: LogoutConfi
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel={t('profileSettingsUi.close')} />
-        <View style={[styles.cardWrap, { width: cardWidth }]} pointerEvents="box-none">
+        <Pressable
+          style={[StyleSheet.absoluteFill, styles.backdrop]}
+          onPress={onCancel}
+          accessibilityLabel={t('profileSettingsUi.close')}
+        />
+        <View style={[styles.cardWrap, { width: cardWidth }]} pointerEvents="auto">
           <ProLibraryGradientFrame
             borderRadius={FRAME_OUTER_RADIUS}
             innerBorderRadius={innerRadius}
@@ -96,8 +100,13 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       alignItems: 'center',
       paddingHorizontal: 24,
     },
+    backdrop: {
+      zIndex: 0,
+    },
     cardWrap: {
       maxWidth: '100%',
+      zIndex: 1,
+      elevation: 6,
     },
     content: {
       paddingHorizontal: 24,

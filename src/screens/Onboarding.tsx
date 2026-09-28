@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
 import { SignIn } from "./SignIn";
+import { ForgotPassword } from "./ForgotPassword";
 import { SignUp, SignUpDraft } from "./SignUp";
 import { ProfileSetup } from "./ProfileSetup";
 import { AccountCreated } from "./AccountCreated";
@@ -22,7 +23,7 @@ function SignInScreen({ navigation }: { navigation: any }) {
   const styles = getStyles(theme);
   return (
     <View style={styles.screenContainer}>
-      <SignIn />
+      <SignIn onForgotPassword={() => navigation.navigate("ForgotPassword")} />
       <TouchableOpacity
         style={[styles.switchLink, { paddingBottom: insets.bottom + 20 }]}
         onPress={() => navigation.navigate("SignUp")}
@@ -162,6 +163,9 @@ export function Onboarding(props?: {
         component={SignInScreen}
         options={{ title: "Sign in" }}
       />
+      <Stack.Screen name="ForgotPassword" options={{ title: "Reset password" }}>
+        {({ navigation }) => <ForgotPassword onBack={() => navigation.navigate("SignIn")} />}
+      </Stack.Screen>
       <Stack.Screen
         name="SignUp"
         options={{ title: "Sign up" }}

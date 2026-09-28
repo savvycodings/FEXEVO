@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
 import { authClient } from "../lib/auth-client";
+import { clearDismissedSession } from "../lib/signOut";
 import {
   signInWithSocial,
   type SocialProvider,
@@ -141,6 +142,7 @@ export function SignUp(props?: SignUpProps) {
         provider,
         userId: sessionData.user.id,
       });
+      clearDismissedSession();
     } finally {
       setSocialLoading(null);
     }
