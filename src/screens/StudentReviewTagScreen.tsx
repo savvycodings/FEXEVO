@@ -17,7 +17,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { vercel as defaultTheme } from '../theme'
-import type { MyCoachTabStackParamList } from '../navigation/types'
+import type { AICoachTabStackParamList, MyCoachTabStackParamList } from '../navigation/types'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
 import { coachUploadCategoryTitleKey } from '../lib/coachStudentUploadShots'
@@ -34,13 +34,25 @@ const LEVEL_ICONS: Record<TrainSkillLevelId, number> = {
   advanced: require('../../assets/reviewandtags/advanced.svg'),
 }
 
-type CoachUploadViewId = 'front' | 'side' | 'diagonal' | 'behind'
+const DIAGONAL_ICON = require('../../assets/reviewandtags/diaganal.svg')
+
+type CoachUploadViewId =
+  | 'front'
+  | 'side'
+  | 'behind'
+  | 'deg45_right_side_left_camera'
+  | 'deg45_right_side_right_camera'
+  | 'deg45_left_side_right_camera'
+  | 'deg45_left_side_left_camera'
 
 const VIEW_OPTIONS: { id: CoachUploadViewId; icon: number; labelKey: string }[] = [
   { id: 'front', icon: require('../../assets/reviewandtags/front.svg'), labelKey: 'studentProfile.views.front' },
-  { id: 'side', icon: require('../../assets/reviewandtags/side.svg'), labelKey: 'studentProfile.views.side' },
-  { id: 'diagonal', icon: require('../../assets/reviewandtags/diaganal.svg'), labelKey: 'studentProfile.views.diagonal' },
   { id: 'behind', icon: require('../../assets/reviewandtags/behind.svg'), labelKey: 'studentProfile.views.behind' },
+  { id: 'side', icon: require('../../assets/reviewandtags/side.svg'), labelKey: 'studentProfile.views.side' },
+  { id: 'deg45_right_side_left_camera', icon: DIAGONAL_ICON, labelKey: 'studentProfile.views.deg45RightSideLeftCamera' },
+  { id: 'deg45_right_side_right_camera', icon: DIAGONAL_ICON, labelKey: 'studentProfile.views.deg45RightSideRightCamera' },
+  { id: 'deg45_left_side_right_camera', icon: DIAGONAL_ICON, labelKey: 'studentProfile.views.deg45LeftSideRightCamera' },
+  { id: 'deg45_left_side_left_camera', icon: DIAGONAL_ICON, labelKey: 'studentProfile.views.deg45LeftSideLeftCamera' },
 ]
 
 const BG = '#050A18'
@@ -115,10 +127,8 @@ export function StudentReviewTagScreen() {
         viewId,
       }
       completeSelfAnalyzeShot(userShot)
-      ;(navigation as { navigate: (name: string, params?: object) => void }).navigate('Main', {
-        screen: 'AICoach',
-        params: { userShot, declaredAt: Date.now() },
-      })
+      const aiNav = navigation as unknown as NativeStackNavigationProp<AICoachTabStackParamList>
+      aiNav.navigate('AICoachMain', { userShot, declaredAt: Date.now() })
       return
     }
     if (!peerUserId) return
@@ -322,9 +332,10 @@ export function StudentReviewTagScreen() {
                   </View>
                   <Text
                     allowFontScaling={false}
-                    numberOfLines={1}
+                    numberOfLines={3}
                     style={[
                       styles.tileLabel,
+                      styles.viewTileLabel,
                       active && styles.tileLabelActive,
                       { fontFamily: fonts.mediumFont },
                     ]}
@@ -478,6 +489,7 @@ const styles = StyleSheet.create({
   },
   viewRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: TILE_GAP,
   },
   levelTile: {
@@ -501,7 +513,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     alignItems: 'stretch',
     justifyContent: 'flex-end',
-    minHeight: 104,
+    minHeight: 132,
     borderWidth: 1.5,
     borderColor: 'transparent',
     overflow: 'hidden',
@@ -526,6 +538,11 @@ const styles = StyleSheet.create({
   },
   tileLabelActive: {
     color: TILE_SELECTED_STROKE,
+  },
+  viewTileLabel: {
+    fontSize: 11,
+    lineHeight: 13,
+    paddingHorizontal: 4,
   },
   uploadOuter: {
     marginTop: 22,

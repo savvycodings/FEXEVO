@@ -35,6 +35,7 @@ export const ADMIN_TRAIN_SHOTS_BY_CATEGORY: Record<
   readonly AdminTrainShotItem[]
 > = {
   save_return: [
+    { label: "Slice Serve", presetId: "slice_serve" },
     { label: "Forehand Return", presetId: "forehand_return_with_lob" },
     { label: "Forehand Return with lob", presetId: "forehand_return_with_lob" },
     { label: "Backhand Return", presetId: "backhand_return" },
@@ -78,6 +79,7 @@ export const ADMIN_TRAIN_SHOTS_BY_CATEGORY: Record<
     { label: "Contrapared backhand", presetId: "contrapared_boast" },
   ],
   overhead: [
+    { label: "Smash", presetId: "smash" },
     { label: "Bandeja (jump)", presetId: "bandeja" },
     { label: "Bandeja 1", presetId: "bandeja" },
     { label: "Vibora", presetId: "backhand_volley" },

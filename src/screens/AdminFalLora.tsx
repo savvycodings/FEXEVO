@@ -25,21 +25,16 @@ import {
   TRAIN_CATEGORIES,
   TRAIN_STROKE_PRESETS,
   TRAIN_STROKE_PRESET_GROUPS,
+  TRAIN_VIEW_PROFILE_PICKER,
   type TrainCategory,
   type TrainStrokePreset,
+  type TrainViewProfile,
 } from "../lib/train-taxonomy";
 
 const ADMIN_UI_PASSWORD = "xevodev";
 const ADMIN_HEADER_SECRET = "xevodev";
 
-type ViewProfile = "front" | "diagonal" | "side" | "behind";
-
-const VIEW_PROFILE_LABELS: Record<ViewProfile, string> = {
-  front: "Front",
-  diagonal: "Diagonal (~45°)",
-  side: "Side",
-  behind: "Behind",
-};
+type ViewProfile = TrainViewProfile;
 type TrainSkillLevel = "beginner" | "intermediate" | "advanced";
 
 function absoluteBackendUrl(relativeOrAbsolute: string): string {
@@ -491,17 +486,20 @@ export function AdminFalLora({ onClose, skipPasswordGate }: Props) {
 
         <Text style={styles.label}>View profile</Text>
         <View style={styles.viewProfileRow}>
-          {(["front", "diagonal", "side", "behind"] as ViewProfile[]).map((v) => {
-            const active = viewProfile === v;
+          {TRAIN_VIEW_PROFILE_PICKER.map((v) => {
+            const active = viewProfile === v.id;
             return (
               <TouchableOpacity
-                key={v}
+                key={v.id}
                 style={[styles.viewProfilePill, active && styles.viewProfilePillActive]}
-                onPress={() => setViewProfile(v)}
+                onPress={() => setViewProfile(v.id)}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.viewProfilePillText, active && styles.viewProfilePillTextActive]}>
-                  {VIEW_PROFILE_LABELS[v]}
+                <Text
+                  style={[styles.viewProfilePillText, active && styles.viewProfilePillTextActive]}
+                  numberOfLines={2}
+                >
+                  {v.label}
                 </Text>
               </TouchableOpacity>
             );

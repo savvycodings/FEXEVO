@@ -30,7 +30,9 @@ export type TrainStrokePreset =
   | "contrapared_boast"
   | "side_wall_backhand"
   | "side_wall_forehand"
-  | "bandeja";
+  | "bandeja"
+  | "smash"
+  | "slice_serve";
 
 export type TrainCategoryDef = {
   id: TrainCategory;
@@ -67,6 +69,8 @@ export const TRAIN_STROKE_PRESETS: { id: TrainStrokePreset; label: string }[] = 
   { id: "side_wall_forehand", label: "Side wall forehand" },
   { id: "contrapared_boast", label: "Contrapared boast" },
   { id: "bandeja", label: "Bandeja" },
+  { id: "smash", label: "Smash" },
+  { id: "slice_serve", label: "Slice serve" },
 ];
 
 /**
@@ -108,8 +112,40 @@ export const TRAIN_STROKE_PRESET_GROUPS: {
   },
   {
     title: "Overhead",
-    presetIds: ["bandeja"],
+    presetIds: ["bandeja", "smash"],
   },
+  {
+    title: "Serve",
+    presetIds: ["slice_serve"],
+  },
+];
+
+/** Camera angle stored on a pro clip and on a declared analysis. `diagonal` is legacy. */
+export const TRAIN_VIEW_PROFILES = [
+  "front",
+  "side",
+  "behind",
+  "diagonal",
+  "deg45_right_side_left_camera",
+  "deg45_right_side_right_camera",
+  "deg45_left_side_right_camera",
+  "deg45_left_side_left_camera",
+] as const;
+
+export type TrainViewProfile = (typeof TRAIN_VIEW_PROFILES)[number];
+
+/** Angles offered when tagging a new clip. The old single `diagonal` stays valid but is not listed. */
+export const TRAIN_VIEW_PROFILE_PICKER: {
+  id: Exclude<TrainViewProfile, "diagonal">;
+  label: string;
+}[] = [
+  { id: "front", label: "Front" },
+  { id: "behind", label: "Behind" },
+  { id: "side", label: "Side" },
+  { id: "deg45_right_side_left_camera", label: "45° right side, left camera" },
+  { id: "deg45_right_side_right_camera", label: "45° right side, right camera" },
+  { id: "deg45_left_side_right_camera", label: "45° left side, right camera" },
+  { id: "deg45_left_side_left_camera", label: "45° left side, left camera" },
 ];
 
 export function trainStrokeLabel(id: TrainStrokePreset): string {

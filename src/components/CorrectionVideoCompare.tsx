@@ -19,8 +19,6 @@ const SCRUB_TRACK_REST = '#808080'
 
 /** Re-seek the follower only past this drift, so status updates do not fight playback. */
 const SYNC_TOLERANCE_MS = 140
-/** Floor between seeks while dragging; expo-av drops requests if they arrive faster. */
-const SEEK_THROTTLE_MS = 70
 /** Half the split-handle column, used to centre it on the split. */
 const HANDLE_HALF = 28
 
@@ -33,6 +31,13 @@ const MAX_HEIGHT_RATIO = 0.8
 const MAX_SCREEN_SHARE = 0.4
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
+
+function formatClock(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
 
 export type CorrectionVideoCompareProps = {
   /** The athlete's own clip — shown left of the split. */
@@ -77,7 +82,9 @@ export function CorrectionVideoCompare({
   const originalRef = useRef<Video>(null)
 
   const [aspect, setAspect] = useState<number | null>(null)
+  const [originalAspect, setOriginalAspect] = useState<number | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [clock, setClock] = useState({ positionMs: 0, durationMs: 0 })
 
   const split = useSharedValue(clamp01(initialSplit))
   const splitStart = useSharedValue(clamp01(initialSplit))
@@ -86,7 +93,8 @@ export function CorrectionVideoCompare({
 
   const durationRef = useRef(0)
   const trackWidthRef = useRef(0)
-  const lastSeekAtRef = useRef(0)
+  const pendingSeekRef = useRef<{ fraction: number; pause: boolean } | null>(null)
+  const seekingRef = useRef(false)
 
   // A new object literal here on every render replaces the native player's source, which is
   // what previously restarted the clip whenever a status tick re-rendered the component.
@@ -123,6 +131,13 @@ export function CorrectionVideoCompare({
         progress.value = clamp01((master.positionMillis ?? 0) / durationRef.current)
       }
 
+      const pos = master.positionMillis ?? 0
+      const dur = durationRef.current
+      setClock((prev) => {
+        if (prev.durationMs === dur && Math.abs(prev.positionMs - pos) < 200) return prev
+        return { positionMs: pos, durationMs: dur }
+      })
+
       const follower = originalRef.current
       if (!follower) return
       void follower
@@ -141,19 +156,40 @@ export function CorrectionVideoCompare({
     [followerTargetMs, isScrubbing, progress]
   )
 
-  const seekToFraction = useCallback(
-    (fraction: number, force: boolean) => {
-      const duration = durationRef.current
-      if (duration <= 0) return
-      const now = Date.now()
-      if (!force && now - lastSeekAtRef.current < SEEK_THROTTLE_MS) return
-      lastSeekAtRef.current = now
+  const pumpSeek = useCallback(() => {
+    if (seekingRef.current) return
+    const job = pendingSeekRef.current
+    if (!job) return
+    pendingSeekRef.current = null
+    const duration = durationRef.current
+    if (duration <= 0) return
+    seekingRef.current = true
+    const masterMs = clamp01(job.fraction) * duration
+    const followerMs = followerTargetMs(masterMs)
+    void Promise.all([
+      correctedRef.current?.setPositionAsync(masterMs) ?? Promise.resolve(),
+      originalRef.current?.setPositionAsync(followerMs) ?? Promise.resolve(),
+    ])
+      .then(async () => {
+        if (job.pause && !pendingSeekRef.current) {
+          await correctedRef.current?.pauseAsync().catch(() => {})
+          await originalRef.current?.pauseAsync().catch(() => {})
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        seekingRef.current = false
+        if (pendingSeekRef.current) pumpSeek()
+      })
+  }, [followerTargetMs])
 
-      const masterMs = clamp01(fraction) * duration
-      void correctedRef.current?.setPositionAsync(masterMs).catch(() => {})
-      void originalRef.current?.setPositionAsync(followerTargetMs(masterMs)).catch(() => {})
+  const queueSeek = useCallback(
+    (fraction: number, pause: boolean) => {
+      const previous = pendingSeekRef.current
+      pendingSeekRef.current = { fraction, pause: pause || Boolean(previous?.pause) }
+      pumpSeek()
     },
-    [followerTargetMs]
+    [pumpSeek]
   )
 
   const togglePlay = useCallback(async () => {
@@ -188,19 +224,19 @@ export function CorrectionVideoCompare({
           const w = trackWidthRef.current
           if (w <= 0) return
           progress.value = clamp01(e.x / w)
-          runOnJS(seekToFraction)(progress.value, true)
+          runOnJS(queueSeek)(progress.value, false)
         })
         .onUpdate((e) => {
           const w = trackWidthRef.current
           if (w <= 0) return
           progress.value = clamp01(e.x / w)
-          runOnJS(seekToFraction)(progress.value, false)
+          runOnJS(queueSeek)(progress.value, false)
         })
         .onFinalize(() => {
-          runOnJS(seekToFraction)(progress.value, true)
+          runOnJS(queueSeek)(progress.value, true)
           isScrubbing.value = false
         }),
-    [isScrubbing, progress, seekToFraction]
+    [isScrubbing, progress, queueSeek]
   )
 
   // Anchored to the handle rather than the whole card: a card-wide raw responder competed
@@ -224,6 +260,14 @@ export function CorrectionVideoCompare({
   }))
   const trackFillStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }))
   const thumbStyle = useAnimatedStyle(() => ({ left: `${progress.value * 100}%` }))
+  const aspectsDiffer =
+    aspect != null && originalAspect != null && Math.abs(aspect - originalAspect) > 0.04
+  const resizeMode = aspectsDiffer ? ResizeMode.CONTAIN : ResizeMode.COVER
+  const showContact =
+    typeof windowStartMs === 'number' &&
+    windowStartMs >= 0 &&
+    typeof windowEndMs === 'number' &&
+    windowEndMs > windowStartMs
 
   const styles = useMemo(
     () =>
@@ -310,6 +354,23 @@ export function CorrectionVideoCompare({
           top: -4,
           marginLeft: -7,
         },
+        contactTick: {
+          position: 'absolute',
+          left: '50%',
+          marginLeft: -1,
+          top: -3,
+          width: 2,
+          height: 12,
+          borderRadius: 1,
+          backgroundColor: '#FFFFFF',
+        },
+        timeLabel: {
+          fontFamily: theme.semiBoldFont,
+          fontSize: 11,
+          color: 'rgba(200, 215, 230, 0.9)',
+          minWidth: 72,
+          textAlign: 'right',
+        },
       }),
     [theme.semiBoldFont, width, videoH]
   )
@@ -342,7 +403,7 @@ export function CorrectionVideoCompare({
                 ref={correctedRef}
                 source={correctedSource}
                 style={styles.fill}
-                resizeMode={ResizeMode.COVER}
+                resizeMode={resizeMode}
                 useNativeControls={false}
                 isLooping
                 isMuted
@@ -356,7 +417,15 @@ export function CorrectionVideoCompare({
                   ref={originalRef}
                   source={originalSource}
                   style={styles.fill}
-                  resizeMode={ResizeMode.COVER}
+                  resizeMode={resizeMode}
+                  onReadyForDisplay={(e) => {
+                    const ns = e.naturalSize
+                    if (!ns || ns.width <= 0 || ns.height <= 0) return
+                    const next = ns.height / ns.width
+                    setOriginalAspect((prev) =>
+                      prev != null && Math.abs(prev - next) < 0.001 ? prev : next
+                    )
+                  }}
                   useNativeControls={false}
                   isLooping
                   isMuted
@@ -388,10 +457,14 @@ export function CorrectionVideoCompare({
             >
               <View style={styles.trackBg}>
                 <Animated.View style={[styles.trackFill, trackFillStyle]} />
+                {showContact ? <View pointerEvents="none" style={styles.contactTick} /> : null}
                 <Animated.View style={[styles.thumb, thumbStyle]} />
               </View>
             </View>
           </GestureDetector>
+          <Text allowFontScaling={false} style={styles.timeLabel}>
+            {formatClock(clock.positionMs)} / {formatClock(clock.durationMs)}
+          </Text>
         </View>
       </View>
     </View>

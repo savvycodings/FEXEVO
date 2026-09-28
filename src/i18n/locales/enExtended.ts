@@ -279,6 +279,10 @@ export const enExtended = {
       side: "Side",
       diagonal: "Diagonal",
       behind: "Behind",
+      deg45RightSideLeftCamera: "45° right side, left camera",
+      deg45RightSideRightCamera: "45° right side, right camera",
+      deg45LeftSideRightCamera: "45° left side, right camera",
+      deg45LeftSideLeftCamera: "45° left side, left camera",
     },
     shotSections: {
       serve: "Serve",
@@ -347,6 +351,7 @@ export const enExtended = {
       bandeja: "Bandeja",
       vibora: "Víbora",
       flatSmash: "Flat smash",
+      smash: "Smash",
       kickSmash: "Kick smash",
       por3Smash: "Por 3 smash",
       por4Smash: "Por 4 smash",

@@ -280,6 +280,10 @@ export const esExtended = {
       side: "Lateral",
       diagonal: "Diagonal",
       behind: "Trasera",
+      deg45RightSideLeftCamera: "45° lado derecho, cámara izquierda",
+      deg45RightSideRightCamera: "45° lado derecho, cámara derecha",
+      deg45LeftSideRightCamera: "45° lado izquierdo, cámara derecha",
+      deg45LeftSideLeftCamera: "45° lado izquierdo, cámara izquierda",
     },
     shotSections: {
       serve: "Saque",
@@ -348,6 +352,7 @@ export const esExtended = {
       bandeja: "Bandeja",
       vibora: "Víbora",
       flatSmash: "Smash plano",
+      smash: "Smash",
       kickSmash: "Smash kick",
       por3Smash: "Por 3 smash",
       por4Smash: "Por 4 smash",

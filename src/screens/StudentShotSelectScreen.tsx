@@ -16,7 +16,9 @@ import { ThemeContext } from '../context'
 import { vercel as defaultTheme } from '../theme'
 import type { MyCoachTabStackParamList } from '../navigation/types'
 import {
+  ANALYSIS_CORE_SHOTS,
   COACH_STUDENT_UPLOAD_SHOT_SECTIONS,
+  analysisCoreTitleKey,
   coachUploadCategoryTitleKey,
   type CoachUploadShotItem,
 } from '../lib/coachStudentUploadShots'
@@ -87,8 +89,11 @@ export function StudentShotSelectScreen() {
   const route = useRoute<R>()
   const { width: winW } = useWindowDimensions()
 
-  const { category } = route.params
-  const sections = COACH_STUDENT_UPLOAD_SHOT_SECTIONS[category] ?? []
+  const { category, coreGroup } = route.params
+  const sections = coreGroup
+    ? [{ sectionTitleKey: analysisCoreTitleKey(coreGroup), shots: ANALYSIS_CORE_SHOTS[coreGroup] }]
+    : COACH_STUDENT_UPLOAD_SHOT_SECTIONS[category] ?? []
+  const pageTitleKey = coreGroup ? analysisCoreTitleKey(coreGroup) : coachUploadCategoryTitleKey(category)
 
   const panelInnerW = winW - HORIZONTAL_PAD * 2 - 32
   const chipW = (panelInnerW - CHIP_GAP) / 2
@@ -141,7 +146,7 @@ export function StudentShotSelectScreen() {
 
         <EntranceView index={1} replayKey={focusKey}>
           <Text allowFontScaling={false} style={[styles.pageTitle, { fontFamily: fonts.semiBoldFont }]}>
-            {t(coachUploadCategoryTitleKey(category))}
+            {t(pageTitleKey)}
           </Text>
           <Text allowFontScaling={false} style={[styles.pageSubtitle, { fontFamily: fonts.regularFont }]}>
             {t('studentProfile.selectAStroke')}

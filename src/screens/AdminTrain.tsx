@@ -37,20 +37,15 @@ import { formatTrainSkillLevel, TRAIN_SKILL_LEVEL_IDS } from "../lib/trainSkillL
 import {
   TRAIN_CATEGORIES,
   TRAIN_STROKE_PRESETS,
+  TRAIN_VIEW_PROFILE_PICKER,
   type TrainCategory,
   type TrainStrokePreset,
+  type TrainViewProfile,
 } from "../lib/train-taxonomy";
 
 const ADMIN_UI_PASSWORD = "xevodev";
 const ADMIN_HEADER_SECRET = "xevodev";
-type ViewProfile = "front" | "diagonal" | "side" | "behind";
-
-const VIEW_PROFILE_LABELS: Record<ViewProfile, string> = {
-  front: "Front",
-  diagonal: "Diagonal (~45°)",
-  side: "Side",
-  behind: "Behind",
-};
+type ViewProfile = TrainViewProfile;
 
 type TrainSkillLevel = "beginner" | "intermediate" | "advanced";
 function absoluteBackendUrl(relativeOrAbsolute: string): string {
@@ -755,17 +750,20 @@ export function AdminTrain({ onClose, skipPasswordGate }: Props) {
         </View>
         <Text style={styles.label}>View profile</Text>
         <View style={styles.pillGrid}>
-          {(["front", "diagonal", "side", "behind"] as ViewProfile[]).map((v) => {
-            const active = viewProfile === v;
+          {TRAIN_VIEW_PROFILE_PICKER.map((v) => {
+            const active = viewProfile === v.id;
             return (
               <TouchableOpacity
-                key={v}
-                onPress={() => setViewProfile(v)}
+                key={v.id}
+                onPress={() => setViewProfile(v.id)}
                 style={[styles.viewProfilePill, active && styles.viewProfilePillActive]}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.viewProfilePillText, active && styles.viewProfilePillTextActive]}>
-                  {VIEW_PROFILE_LABELS[v]}
+                <Text
+                  style={[styles.viewProfilePillText, active && styles.viewProfilePillTextActive]}
+                  numberOfLines={2}
+                >
+                  {v.label}
                 </Text>
               </TouchableOpacity>
             );

@@ -1,3 +1,4 @@
+import type { AnalysisCoreGroup } from '../navigation/types'
 import type { TrainCategory, TrainStrokePreset } from './train-taxonomy'
 
 export type CoachUploadShotItem = {
@@ -183,6 +184,46 @@ export const COACH_STUDENT_UPLOAD_SHOT_SECTIONS: Partial<
       ],
     },
   ],
+}
+
+/** AI Coach analysis menu. Lobs stay `ground_strokes`; slice serve stays `save_return`. */
+export const ANALYSIS_CORE_CATEGORIES: {
+  coreGroup: AnalysisCoreGroup
+  category: TrainCategory
+  labelKey: string
+}[] = [
+  { coreGroup: 'net_play', category: 'net_play', labelKey: 'studentProfile.categories.netPlay' },
+  { coreGroup: 'groundstrokes', category: 'ground_strokes', labelKey: 'studentProfile.categories.groundstrokes' },
+  { coreGroup: 'lobs', category: 'ground_strokes', labelKey: 'studentProfile.shotSections.lobs' },
+  { coreGroup: 'overheads', category: 'overhead', labelKey: 'studentProfile.categories.overheads' },
+  { coreGroup: 'serves', category: 'save_return', labelKey: 'studentProfile.shotSections.serve' },
+]
+
+export const ANALYSIS_CORE_SHOTS: Record<AnalysisCoreGroup, CoachUploadShotItem[]> = {
+  net_play: [
+    { labelKey: 'studentProfile.shots.forehandVolley', presetId: 'forehand_volley' },
+    { labelKey: 'studentProfile.shots.backhandVolley', presetId: 'backhand_volley' },
+  ],
+  groundstrokes: [
+    { labelKey: 'studentProfile.shots.forehandDrive', presetId: 'forehand_drive' },
+    { labelKey: 'studentProfile.shots.backhandDrive', presetId: 'backhand_drive' },
+  ],
+  lobs: [
+    { labelKey: 'studentProfile.shots.forehandLob', presetId: 'forehand_lob' },
+    { labelKey: 'studentProfile.shots.backhandLob', presetId: 'backhand_lob' },
+  ],
+  overheads: [
+    { labelKey: 'studentProfile.shots.bandeja', presetId: 'bandeja' },
+    { labelKey: 'studentProfile.shots.smash', presetId: 'smash' },
+  ],
+  serves: [
+    { labelKey: 'studentProfile.shots.sliceServe', presetId: 'slice_serve' },
+  ],
+}
+
+export function analysisCoreTitleKey(group: AnalysisCoreGroup): string {
+  return ANALYSIS_CORE_CATEGORIES.find((item) => item.coreGroup === group)?.labelKey
+    ?? 'studentProfile.shotCategoryTitle'
 }
 
 export function coachUploadCategoryTitleKey(category: TrainCategory): string {

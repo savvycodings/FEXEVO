@@ -1,5 +1,5 @@
 import type { NavigatorScreenParams } from "@react-navigation/native";
-import type { TrainCategory, TrainStrokePreset } from "../lib/train-taxonomy";
+import type { TrainCategory, TrainStrokePreset, TrainViewProfile } from "../lib/train-taxonomy";
 
 export type ClubId = "i95" | "reserve";
 
@@ -53,8 +53,11 @@ export type UserShotDeclaration = {
   strokePreset: TrainStrokePreset;
   shotLabel: string;
   skillLevel: string;
-  viewId: "front" | "side" | "diagonal" | "behind";
+  viewId: TrainViewProfile;
 };
+
+/** AI Coach analysis menu groups. Lobs and serves reuse an existing train category. */
+export type AnalysisCoreGroup = "net_play" | "groundstrokes" | "lobs" | "overheads" | "serves";
 
 export type StudentShotCategoryParams = Partial<CoachStudentChatParams> & {
   flow?: ShotStepperFlow;
@@ -62,6 +65,8 @@ export type StudentShotCategoryParams = Partial<CoachStudentChatParams> & {
 
 export type StudentShotSelectParams = StudentShotCategoryParams & {
   category: TrainCategory;
+  /** Set on the AI Coach analysis menu so lobs and serves are not the full category. */
+  coreGroup?: AnalysisCoreGroup;
 };
 
 export type StudentReviewTagParams = StudentShotSelectParams & {
@@ -79,8 +84,21 @@ export type MyCoachTabStackParamList = {
   CoachStudentChat: CoachStudentChatParams;
 };
 
+/** AI Coach tab: analysis screen plus the shot stepper, under the shared header. */
+export type AICoachMainParams = {
+  userShot?: UserShotDeclaration;
+  declaredAt?: number;
+};
+
+export type AICoachTabStackParamList = {
+  AICoachMain: AICoachMainParams | undefined;
+  StudentShotCategory: StudentShotCategoryParams;
+  StudentShotSelect: StudentShotSelectParams;
+  StudentReviewTag: StudentReviewTagParams;
+};
+
 export type MainTabParamList = {
-  AICoach: { userShot?: UserShotDeclaration; declaredAt?: number } | undefined;
+  AICoach: NavigatorScreenParams<AICoachTabStackParamList> | undefined;
   Playlist: undefined;
   MyCoach: NavigatorScreenParams<MyCoachTabStackParamList>;
   Activities: { openAnalysisId?: string } | undefined;
@@ -114,8 +132,4 @@ export type MainStackParamList = {
   StudentSentVideo: { sentVideoId: string; notificationId?: string };
   /** Admin hub: browse members by coach/student role (same card style as hub). */
   AdminMembers: { filter: "all" | "coach" | "student" };
-  /** AI Coach self-analyze reuses the coach shot stepper, then returns to the tab. */
-  StudentShotCategory: StudentShotCategoryParams;
-  StudentShotSelect: StudentShotSelectParams;
-  StudentReviewTag: StudentReviewTagParams;
 };

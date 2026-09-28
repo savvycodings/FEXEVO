@@ -71,6 +71,7 @@ import type {
   MainTabParamList,
   MainStackParamList,
   MyCoachTabStackParamList,
+  AICoachTabStackParamList,
 } from './navigation/types'
 
 export type {
@@ -81,6 +82,7 @@ export type {
   MainTabParamList,
   MainStackParamList,
   MyCoachTabStackParamList,
+  AICoachTabStackParamList,
   CoachStudentChatParams,
 } from './navigation/types'
 
@@ -92,6 +94,7 @@ const Stack = createNativeStackNavigator<MainStackParamList>()
 const ProgressStack = createNativeStackNavigator<ProgressTabStackParamList>()
 const YouStack = createNativeStackNavigator<YouTabStackParamList>()
 const MyCoachStack = createNativeStackNavigator<MyCoachTabStackParamList>()
+const AICoachStack = createNativeStackNavigator<AICoachTabStackParamList>()
 
 function ProgressTabStack() {
   const { theme: ctxTheme } = useContext(ThemeContext)
@@ -141,6 +144,29 @@ function MyCoachTabStack() {
       <MyCoachStack.Screen name="StudentReviewTag" component={StudentReviewTagScreen} />
       <MyCoachStack.Screen name="CoachStudentChat" component={CoachStudentChatScreen} layout={screenEntranceLayout} />
     </MyCoachStack.Navigator>
+  )
+}
+
+function AICoachTabStack({ techniqueResetKey }: { techniqueResetKey: number }) {
+  const { theme: ctxTheme } = useContext(ThemeContext)
+  const theme = ctxTheme?.backgroundColor != null ? ctxTheme : defaultTheme
+  const stackBg = theme.backgroundColor ?? '#030A17'
+  const screenOptions = useMemo(
+    (): NativeStackNavigationOptions => ({
+      headerShown: false,
+      contentStyle: { backgroundColor: stackBg },
+    }),
+    [stackBg]
+  )
+  return (
+    <AICoachStack.Navigator initialRouteName="AICoachMain" screenOptions={screenOptions}>
+      <AICoachStack.Screen name="AICoachMain">
+        {() => <Technique key={techniqueResetKey} />}
+      </AICoachStack.Screen>
+      <AICoachStack.Screen name="StudentShotCategory" component={StudentShotCategoryScreen} />
+      <AICoachStack.Screen name="StudentShotSelect" component={StudentShotSelectScreen} />
+      <AICoachStack.Screen name="StudentReviewTag" component={StudentReviewTagScreen} />
+    </AICoachStack.Navigator>
   )
 }
 
@@ -551,10 +577,8 @@ function MainTabsLayoutInner({
           },
         })}
       >
-        <Tab.Screen name="AICoach" options={{ title: tabLabels.AICoach }} layout={screenEntranceLayout}>
-          {() => (
-            <Technique key={techniqueResetKey} />
-          )}
+        <Tab.Screen name="AICoach" options={{ title: tabLabels.AICoach }}>
+          {() => <AICoachTabStack techniqueResetKey={techniqueResetKey} />}
         </Tab.Screen>
         <Tab.Screen name="MyCoach" options={{ title: tabLabels.MyCoach }} component={MyCoachTabStack} />
         <Tab.Screen name="Activities" options={{ title: tabLabels.Activities }} component={ActivitiesScreen} layout={screenEntranceLayout} />
@@ -666,9 +690,6 @@ function AuthenticatedStack() {
       <Stack.Screen name="StudentCoachReview" component={StudentCoachReviewScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="StudentSentVideo" component={StudentSentVideoScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="AdminMembers" component={AdminMembersScreen} layout={screenEntranceLayout} />
-      <Stack.Screen name="StudentShotCategory" component={StudentShotCategoryScreen} layout={screenEntranceLayout} />
-      <Stack.Screen name="StudentShotSelect" component={StudentShotSelectScreen} layout={screenEntranceLayout} />
-      <Stack.Screen name="StudentReviewTag" component={StudentReviewTagScreen} layout={screenEntranceLayout} />
         </Stack.Navigator>
       </SessionDataProvider>
     </View>

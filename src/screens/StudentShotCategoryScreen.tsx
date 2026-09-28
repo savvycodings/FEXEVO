@@ -15,6 +15,7 @@ import { ThemeContext } from '../context'
 import { vercel as defaultTheme } from '../theme'
 import type { MyCoachTabStackParamList } from '../navigation/types'
 import { COACH_STUDENT_UPLOAD_CATEGORIES } from '../lib/coachStudentUploadCategories'
+import { ANALYSIS_CORE_CATEGORIES } from '../lib/coachStudentUploadShots'
 import type { TrainCategory } from '../lib/train-taxonomy'
 import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
 
@@ -48,8 +49,23 @@ export function StudentShotCategoryScreen() {
 
   const focusKey = usePageFocusKey()
 
-  const onSelectCategory = (category: TrainCategory) => {
-    navigation.navigate('StudentShotSelect', { ...studentParams, category })
+  const selfAnalyze = studentParams?.flow === 'self-analyze'
+  const categories = selfAnalyze
+    ? ANALYSIS_CORE_CATEGORIES.map((item) => ({
+        key: item.coreGroup,
+        category: item.category,
+        labelKey: item.labelKey,
+        coreGroup: item.coreGroup,
+      }))
+    : COACH_STUDENT_UPLOAD_CATEGORIES.map((item) => ({
+        key: item.id,
+        category: item.id,
+        labelKey: item.labelKey,
+        coreGroup: undefined,
+      }))
+
+  const onSelectCategory = (category: TrainCategory, coreGroup?: (typeof ANALYSIS_CORE_CATEGORIES)[number]['coreGroup']) => {
+    navigation.navigate('StudentShotSelect', { ...studentParams, category, coreGroup })
   }
 
   return (
@@ -88,12 +104,12 @@ export function StudentShotCategoryScreen() {
         </EntranceView>
 
         <EntranceView index={2} replayKey={focusKey} style={styles.categoryPanel}>
-          {COACH_STUDENT_UPLOAD_CATEGORIES.map((item, index) => (
+          {categories.map((item, index) => (
             <TouchableOpacity
-              key={item.id}
+              key={item.key}
               activeOpacity={0.82}
-              onPress={() => onSelectCategory(item.id)}
-              style={[styles.categoryBtn, index < COACH_STUDENT_UPLOAD_CATEGORIES.length - 1 && styles.categoryBtnGap]}
+              onPress={() => onSelectCategory(item.category, item.coreGroup)}
+              style={[styles.categoryBtn, index < categories.length - 1 && styles.categoryBtnGap]}
               accessibilityRole="button"
               accessibilityLabel={t(item.labelKey)}
             >

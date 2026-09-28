@@ -49,9 +49,19 @@ import { authClient } from '../lib/auth-client'
 import { formatApiError } from '../lib/formatApiError'
 import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+  type CompositeNavigationProp,
+  type RouteProp,
+} from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type { MainStackParamList, MainTabParamList, UserShotDeclaration } from '../navigation/types'
+import type {
+  AICoachTabStackParamList,
+  MainStackParamList,
+  UserShotDeclaration,
+} from '../navigation/types'
 import {
   beginSelfAnalyzeCapture,
   takeSelfAnalyzeShot,
@@ -436,8 +446,14 @@ export function Technique() {
   const { theme } = useContext(ThemeContext)
   const { invalidate: invalidateSessionData } = useSessionData()
   const { data: session } = authClient.useSession()
-  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>()
-  const route = useRoute<RouteProp<MainTabParamList, 'AICoach'>>()
+  const navigation =
+    useNavigation<
+      CompositeNavigationProp<
+        NativeStackNavigationProp<AICoachTabStackParamList, 'AICoachMain'>,
+        NativeStackNavigationProp<MainStackParamList>
+      >
+    >()
+  const route = useRoute<RouteProp<AICoachTabStackParamList, 'AICoachMain'>>()
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
   const [scrollBodyH, setScrollBodyH] = useState(0)
