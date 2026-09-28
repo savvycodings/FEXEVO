@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Share,
+  ActivityIndicator,
+  Image,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,7 +19,14 @@ import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
 import { ClubBannerImage } from "../components/ClubBannerImage";
 import { ClubPfpImage } from "../components/ClubPfpImage";
-import { getClubDetail } from "../lib/club-detail-data";
+import {
+  fetchClubDetail,
+  clubBannerUri,
+  clubLogoUri,
+  clubGalleryUris,
+  type ClubSummary,
+} from "../lib/clubsApi";
+import { amenityLabel } from "../lib/clubAmenitiesCatalog";
 import type { MainStackParamList } from "../navigation/types";
 
 const ABOUT_ICON = require("../../assets/youpage/abouticon.svg");
@@ -26,14 +35,6 @@ const BOOK_VIDEO_ICON = require("../../assets/youpage/bookvideocall.svg");
 const SHARE_ICON_SVG = require("../../assets/coachs/shareicon.svg");
 
 const SHARE_ICON_SIZE = 22;
-
-const GALLERY_MODULES = [
-  require("../../assets/youpage/img1.svg"),
-  require("../../assets/youpage/img2.svg"),
-  require("../../assets/youpage/img3.svg"),
-  require("../../assets/youpage/img4.svg"),
-  require("../../assets/youpage/img5.svg"),
-] as const;
 
 const CLUB_BANNER_ASPECT = 160 / 370;
 const GALLERY_SIZE = 80;
@@ -57,7 +58,23 @@ export function ClubDetailScreen() {
   const styles = useMemo(() => getStyles(theme), [theme]);
 
   const clubId = route.params.clubId;
-  const club = useMemo(() => getClubDetail(clubId), [clubId]);
+  const [club, setClub] = useState<ClubSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void (async () => {
+      const result = await fetchClubDetail(clubId);
+      if (cancelled) return;
+      setClub(result);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clubId]);
+
   const horizontalPad = Math.max(16, insets.left, insets.right);
   const bannerW = winW;
   const bannerH = bannerW * CLUB_BANNER_ASPECT;
@@ -75,6 +92,24 @@ export function ClubDetailScreen() {
     },
     [navigation]
   );
+
+  if (loading) {
+    return (
+      <View style={styles.root}>
+        <Header
+          flatOverlay
+          onBackPress={() => navigation.goBack()}
+          onProPress={() => navigation.navigate("ProSubscription")}
+          onSettingsPress={() => navigation.navigate("ProfileSettings")}
+          onNotificationsPress={() => navigation.navigate("Notifications")}
+        />
+        <View style={[styles.fallback, { paddingHorizontal: horizontalPad }]}>
+          <ActivityIndicator color={ACCENT} />
+        </View>
+        <MainTabBarChrome />
+      </View>
+    );
+  }
 
   if (!club) {
     return (
@@ -94,12 +129,13 @@ export function ClubDetailScreen() {
     );
   }
 
-  const { title: clubTitle, subtitle: clubSubtitle, address: clubAddress } = club;
+  const subtitle = [club.city, club.country].filter(Boolean).join(", ");
+  const galleryUris = clubGalleryUris(club);
 
   async function onShare() {
     try {
       await Share.share({
-        message: `${clubTitle} — ${clubSubtitle}\n${clubAddress}`,
+        message: `${club!.name}${subtitle ? ` — ${subtitle}` : ""}\n${club!.address}`,
       });
     } catch {
       /* dismissed */
@@ -138,38 +174,30 @@ export function ClubDetailScreen() {
             <View style={styles.bannerClip}>
               <ClubBannerImage
                 key={`banner-${clubId}`}
-                bannerMod={club.bannerMod}
-                bannerPng={club.bannerPng}
+                uri={clubBannerUri(club)}
                 width={bannerW}
                 height={bannerH}
               />
             </View>
           </View>
           <View style={styles.heroOverlap}>
-            {club.pfpUseWhiteRing === false ? (
+            <View style={styles.avatarOuter}>
               <ClubPfpImage
                 key={`pfp-${clubId}`}
-                pfpMod={club.pfpMod}
-                pfpPng={club.pfpPng}
-                size={AVATAR_OUTER}
+                uri={clubLogoUri(club)}
+                size={AVATAR_INNER}
+                fallbackLabel={club.name}
               />
-            ) : (
-              <View style={styles.avatarOuter}>
-                <ClubPfpImage
-                  key={`pfp-${clubId}`}
-                  pfpMod={club.pfpMod}
-                  pfpPng={club.pfpPng}
-                  size={AVATAR_INNER}
-                />
-              </View>
-            )}
+            </View>
             <View style={styles.heroTitles}>
               <Text style={styles.heroTitle} numberOfLines={2}>
-                {club.title}
+                {club.name}
               </Text>
-              <Text style={styles.heroSubtitle} numberOfLines={2}>
-                {club.subtitle}
-              </Text>
+              {subtitle ? (
+                <Text style={styles.heroSubtitle} numberOfLines={2}>
+                  {subtitle}
+                </Text>
+              ) : null}
             </View>
           </View>
         </View>
@@ -191,37 +219,80 @@ export function ClubDetailScreen() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.galleryScroll}
-          nestedScrollEnabled
-        >
-          {GALLERY_MODULES.map((mod, i) => (
-            <View key={i} style={styles.galleryThumb}>
-              <LocalSvgAsset assetModule={mod} width={GALLERY_SIZE} height={GALLERY_SIZE} />
-            </View>
-          ))}
-        </ScrollView>
+        {galleryUris.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.galleryScroll}
+            nestedScrollEnabled
+          >
+            {galleryUris.map((uri) => (
+              <View key={uri} style={styles.galleryThumb}>
+                <Image
+                  source={{ uri }}
+                  style={{ width: GALLERY_SIZE, height: GALLERY_SIZE }}
+                  resizeMode="cover"
+                />
+              </View>
+            ))}
+          </ScrollView>
+        ) : null}
 
         <View style={styles.locSection}>
-          <Text style={styles.locHeading}>Locaction</Text>
+          <Text style={styles.locHeading}>Location</Text>
           <View style={styles.locRule} />
           <Text style={styles.addressText}>{club.address}</Text>
-          <Text style={styles.infoLine}>
-            <Text style={styles.infoLabel}>Teléfono: </Text>
-            <Text style={styles.infoValue}>{club.phone}</Text>
-          </Text>
-          <Text style={styles.infoLine}>
-            <Text style={styles.infoLabel}>Horario: </Text>
-            <Text style={styles.infoValue}>{club.hours}</Text>
-          </Text>
+          {club.phone ? (
+            <Text style={styles.infoLine}>
+              <Text style={styles.infoLabel}>Phone: </Text>
+              <Text style={styles.infoValue}>{club.phone}</Text>
+            </Text>
+          ) : null}
+          {club.hoursText ? (
+            <Text style={styles.infoLine}>
+              <Text style={styles.infoLabel}>Hours: </Text>
+              <Text style={styles.infoValue}>{club.hoursText}</Text>
+            </Text>
+          ) : null}
         </View>
 
-        <View style={styles.aboutSection}>
-          <Text style={styles.aboutHeading}>About</Text>
-          <Text style={styles.aboutBody}>{club.aboutBody}</Text>
-        </View>
+        {club.courts.length > 0 ? (
+          <View style={styles.locSection}>
+            <Text style={styles.locHeading}>Courts</Text>
+            <View style={styles.locRule} />
+            {club.courts.map((court) => (
+              <Text key={court.id} style={styles.infoLine}>
+                <Text style={styles.infoValue}>{court.name}</Text>
+                <Text style={styles.infoLabel}>
+                  {"  ·  "}
+                  {court.indoorOutdoor}
+                  {court.hasLighting ? " · lighting" : ""}
+                </Text>
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {club.amenityKeys.length > 0 ? (
+          <View style={styles.locSection}>
+            <Text style={styles.locHeading}>Amenities</Text>
+            <View style={styles.locRule} />
+            <View style={styles.amenityWrap}>
+              {club.amenityKeys.map((key) => (
+                <View key={key} style={styles.amenityChip}>
+                  <Text style={styles.amenityChipText}>{amenityLabel(key)}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {club.description ? (
+          <View style={styles.aboutSection}>
+            <Text style={styles.aboutHeading}>About</Text>
+            <Text style={styles.aboutBody}>{club.description}</Text>
+          </View>
+        ) : null}
       </ScrollView>
       <MainTabBarChrome />
     </View>
@@ -381,6 +452,23 @@ function getStyles(theme: {
       color: "#FFFFFF",
       fontFamily: theme.regularFont ?? "System",
       fontSize: 15,
+    },
+    amenityWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    amenityChip: {
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: OUTLINE_BORDER,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+    },
+    amenityChipText: {
+      color: "#FFFFFF",
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 13,
     },
     aboutSection: {
       marginTop: 28,

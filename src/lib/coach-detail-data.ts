@@ -2,8 +2,6 @@ import type { CoachId } from "../navigation/types";
 
 export type CoachDetailModel = {
   id: CoachId;
-  /** Row card shown in invite list (same as `coach-invite-data`). */
-  listBanner: number;
   displayName: string;
   fullLegalName: string;
   headline: string;
@@ -17,7 +15,6 @@ export type CoachDetailModel = {
 const COACH_DETAIL: Record<CoachId, CoachDetailModel> = {
   carlos: {
     id: "carlos",
-    listBanner: require("../../assets/coachs/carlos.png"),
     displayName: "Carlos Moreno",
     fullLegalName: "Carlos Moreno Holguin",
     headline: "Jugador Profesional de Pádel & Coach",
@@ -30,7 +27,6 @@ const COACH_DETAIL: Record<CoachId, CoachDetailModel> = {
   },
   steve: {
     id: "steve",
-    listBanner: require("../../assets/coachs/steve.png"),
     displayName: "Steve Shuga",
     fullLegalName: "Steve Shuga",
     headline: "Personalized Trainer · Miami",
@@ -43,7 +39,6 @@ const COACH_DETAIL: Record<CoachId, CoachDetailModel> = {
   },
   slama: {
     id: "slama",
-    listBanner: require("../../assets/coachs/slama.png"),
     displayName: "Slama Splinter",
     fullLegalName: "Slama Splinter",
     headline: "PRO Player · International circuit",
