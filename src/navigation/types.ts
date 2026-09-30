@@ -1,7 +1,8 @@
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import type { TrainCategory, TrainStrokePreset, TrainViewProfile } from "../lib/train-taxonomy";
 
-export type ClubId = "i95" | "reserve";
+/** Real clubs use their server-issued slug as the id; no longer a fixed literal set. */
+export type ClubId = string;
 
 export type CoachId = "steve" | "carlos" | "slama";
 

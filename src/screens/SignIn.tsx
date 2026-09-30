@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
 import { authClient } from "../lib/auth-client";
+import { clearDismissedSession } from "../lib/signOut";
 import {
   signInWithSocial,
   type SocialProvider,
@@ -29,7 +30,7 @@ import { AuthPasswordField } from "../components/AuthPasswordField";
 
 const APP_LOGO = require("../../assets/logo.png");
 
-export function SignIn() {
+export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { theme } = useContext(ThemeContext);
@@ -84,6 +85,7 @@ export function SignIn() {
       userId: sessionData.user.id,
       sessionId: sessionData.session.id,
     });
+    clearDismissedSession();
   };
 
   const handleSocialSignIn = async (provider: SocialProvider) => {
@@ -106,6 +108,7 @@ export function SignIn() {
         userId: sessionData.user.id,
         sessionId: sessionData.session.id,
       });
+      clearDismissedSession();
     } finally {
       setSocialLoading(null);
     }
@@ -179,7 +182,13 @@ export function SignIn() {
           </LinearGradient>
         </TouchableOpacity>
 
-        <TouchableOpacity activeOpacity={0.8} style={styles.forgotWrap}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.forgotWrap}
+          onPress={onForgotPassword}
+          disabled={!onForgotPassword || loading || !!socialLoading}
+          accessibilityRole="button"
+        >
           <Text allowFontScaling={false} style={styles.forgotText}>{t("auth.forgotPassword")}</Text>
         </TouchableOpacity>
 

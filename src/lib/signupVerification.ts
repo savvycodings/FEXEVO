@@ -1,5 +1,6 @@
 import { authClient } from "./auth-client";
 import { publicApiFetch } from "./apiFetch";
+import { clearDismissedSession } from "./signOut";
 
 type SendCodeResponse = { ok?: boolean; retryAfterSec?: number };
 type VerifyCodeResponse = { ok?: boolean; verificationToken?: string };
@@ -72,5 +73,6 @@ export async function registerVerifiedSignup(input: {
     return { ok: false, message: signInRes.error.message || "Account created but sign-in failed." };
   }
 
+  clearDismissedSession();
   return { ok: true };
 }

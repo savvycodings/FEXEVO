@@ -1,7 +1,7 @@
 import './global.css';
 import './src/i18n';
 import 'react-native-gesture-handler'
-import { useState, useEffect, useRef, useCallback, useContext } from 'react'
+import { useState, useEffect, useRef, useCallback, useContext, useSyncExternalStore } from 'react'
 import { DarkTheme, NavigationContainer, type Theme as NavigationTheme } from '@react-navigation/native'
 import { Main } from './src/main'
 import { useFonts } from 'expo-font'
@@ -32,6 +32,7 @@ import {
 } from '@gorhom/bottom-sheet'
 import { StyleSheet, LogBox, View, Text } from 'react-native'
 import { authClient } from './src/lib/auth-client'
+import { getDismissedSessionId, subscribeDismissedSession } from './src/lib/signOut'
 import { Onboarding } from './src/screens'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
@@ -191,6 +192,16 @@ function AuthGate(props: {
 }) {
   const { theme } = useContext(ThemeContext)
   const { data: session, isPending } = authClient.useSession()
+  const dismissedSessionId = useSyncExternalStore(
+    subscribeDismissedSession,
+    getDismissedSessionId,
+    getDismissedSessionId
+  )
+  const sessionId = session?.session?.id ?? null
+  const signedIn =
+    Boolean(session?.user?.id && sessionId) &&
+    dismissedSessionId !== "*" &&
+    sessionId !== dismissedSessionId
   const [profileChecked, setProfileChecked] = useState(false)
   const [profileComplete, setProfileComplete] = useState(false)
 
@@ -221,19 +232,19 @@ function AuthGate(props: {
     void checkProfile()
   }, [checkProfile])
 
-  if (session && (isPending || !profileChecked)) {
-    return (
-      <AuthLoadingScreen theme={theme} />
-    )
-  }
-
-  if (!session) {
+  if (!signedIn) {
     return (
       <SafeAreaProvider>
         <NavigationContainer theme={navigationTheme}>
           <Onboarding />
         </NavigationContainer>
       </SafeAreaProvider>
+    )
+  }
+
+  if (isPending || !profileChecked) {
+    return (
+      <AuthLoadingScreen theme={theme} />
     )
   }
 

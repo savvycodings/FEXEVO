@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { ThemeContext } from "../context";
 import { registerVerifiedSignup } from "../lib/signupVerification";
+import { clearDismissedSession } from "../lib/signOut";
 import { authClient } from "../lib/auth-client";
 import { Header, LanguageToggle } from "../components";
 import { SignUpDraft } from "./SignUp";
@@ -279,6 +280,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         Alert.alert(t("profileSetup.sessionError"), t("profileSetup.sessionErrorMsg"));
         return;
       }
+      clearDismissedSession();
     }
 
     const form = new FormData();

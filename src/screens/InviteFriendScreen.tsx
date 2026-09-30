@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -8,7 +8,7 @@ import {
   TextInput,
   Text,
   Platform,
-  Image,
+  ActivityIndicator,
   BackHandler,
   ScrollView,
 } from "react-native";
@@ -24,8 +24,13 @@ import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
 import { ClubBannerImage } from "../components/ClubBannerImage";
 import { ClubPfpImage } from "../components/ClubPfpImage";
-import { CLUB_LIST_ROWS } from "../lib/club-detail-data";
-import { COACH_CARD_ASPECT, COACH_INVITE_CARDS } from "../lib/coach-invite-data";
+import {
+  fetchClubs,
+  clubBannerUri,
+  clubLogoUri,
+  type ClubSummary,
+} from "../lib/clubsApi";
+import { fetchCoachDirectory, type CoachDirectoryEntry } from "../lib/coachDirectoryApi";
 import { useTranslation } from "react-i18next";
 
 type InviteSegment = "friends" | "coaches" | "clubs";
@@ -46,6 +51,12 @@ const CLUB_PLACEHOLDER_WHITE = "rgba(255, 255, 255, 0.55)";
 const CLUB_BANNER_ASPECT = 160 / 370;
 const CLUB_AVATAR = 44;
 
+function matchesQuery(query: string, fields: Array<string | null | undefined>): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return fields.some((field) => field?.toLowerCase().includes(needle));
+}
+
 type InviteSearchNav = NativeStackNavigationProp<MainStackParamList, "InviteSearch">;
 
 export function InviteFriendScreen() {
@@ -58,9 +69,36 @@ export function InviteFriendScreen() {
   const [segment, setSegment] = useState<InviteSegment>("friends");
   const [query, setQuery] = useState("");
 
+  const [clubs, setClubs] = useState<ClubSummary[] | null>(null);
+  const [coaches, setCoaches] = useState<CoachDirectoryEntry[] | null>(null);
+
+  const visibleCoaches = useMemo(() => {
+    if (coaches == null) return null;
+    return coaches.filter((coach) => matchesQuery(query, [coach.name, coach.username]));
+  }, [coaches, query]);
+
+  const visibleClubs = useMemo(() => {
+    if (clubs == null) return null;
+    return clubs.filter((club) =>
+      matchesQuery(query, [club.name, club.city, club.country, club.region, club.address]),
+    );
+  }, [clubs, query]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchClubs().then((result) => {
+      if (!cancelled) setClubs(result);
+    });
+    void fetchCoachDirectory().then((result) => {
+      if (!cancelled) setCoaches(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const cardW = winW - 40;
   const bannerH = cardW * CLUB_BANNER_ASPECT;
-  const coachCardH = cardW * COACH_CARD_ASPECT;
   const btnW = Math.min(370, winW - 40);
   const btnH = btnW * (60 / 370);
 
@@ -210,68 +248,98 @@ export function InviteFriendScreen() {
         </View>
 
         {segment === "coaches" ? (
-          <View style={styles.coachesList}>
-            {COACH_INVITE_CARDS.map((coach, index) => (
-              <TouchableOpacity
-                key={coach.id}
-                activeOpacity={0.9}
-                style={index > 0 ? styles.coachCardFollow : undefined}
-                onPress={() => navigation.navigate("CoachDetail", { coachId: coach.id })}
-                accessibilityRole="button"
-                accessibilityLabel={coach.accessibilityLabel}
-              >
-                <View style={styles.coachCardOuter}>
-                  <Image
-                    source={coach.source}
-                    style={{ width: cardW, height: coachCardH }}
-                    resizeMode="contain"
-                  />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : segment === "clubs" ? (
-          <View style={styles.clubsList}>
-            {CLUB_LIST_ROWS.map((club, index) => (
-              <TouchableOpacity
-                key={club.id}
-                activeOpacity={0.9}
-                style={index > 0 ? styles.clubCardFollow : undefined}
-                onPress={() => navigation.navigate("ClubDetail", { clubId: club.id })}
-                accessibilityRole="button"
-                accessibilityLabel={club.title}
-              >
-                <View
-                  style={[
-                    styles.clubBannerOuter,
-                    { borderRadius: club.bannerCornerRadius ?? 16 },
-                  ]}
+          visibleCoaches == null ? (
+            <ActivityIndicator style={styles.listLoading} color={TAB_ACTIVE} />
+          ) : visibleCoaches.length === 0 ? (
+            <Text style={styles.emptyListText}>
+              {coaches != null && coaches.length > 0 ? "No coaches match your search" : "No coaches yet"}
+            </Text>
+          ) : (
+            <View style={styles.coachesList}>
+              {visibleCoaches.map((coach, index) => (
+                <TouchableOpacity
+                  key={coach.id}
+                  activeOpacity={0.9}
+                  style={index > 0 ? styles.coachRowFollow : undefined}
+                  onPress={() =>
+                    navigation.navigate("CoachDetail", {
+                      coachId: coach.id,
+                      coachName: coach.name,
+                      coachImageUri: coach.imageUri,
+                    })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={coach.name}
                 >
-                  <ClubBannerImage
-                    bannerMod={club.bannerMod}
-                    bannerPng={club.bannerPng}
-                    width={cardW}
-                    height={bannerH}
-                  />
-                </View>
-                <View style={styles.clubProfileRow}>
-                  <View style={styles.clubAvatarSlot}>
-                    <ClubPfpImage pfpMod={club.pfpMod} pfpPng={club.pfpPng} size={CLUB_AVATAR} />
+                  <View style={styles.coachRow}>
+                    <View style={styles.clubAvatarSlot}>
+                      <ClubPfpImage uri={coach.imageUri} size={CLUB_AVATAR} fallbackLabel={coach.name} />
+                    </View>
+                    <View style={styles.clubTextCol}>
+                      <Text style={styles.clubTitle} numberOfLines={1}>
+                        {coach.name}
+                      </Text>
+                      {coach.username ? (
+                        <Text style={styles.clubSubtitle} numberOfLines={1}>
+                          @{coach.username}
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
-                  <View style={styles.clubTextCol}>
-                    <Text style={styles.clubTitle} numberOfLines={2}>
-                      {club.title}
-                    </Text>
-                    <Text style={styles.clubSubtitle} numberOfLines={2}>
-                      {club.subtitle}
-                    </Text>
-                  </View>
-                </View>
-                {index < CLUB_LIST_ROWS.length - 1 ? <View style={styles.clubDivider} /> : null}
-              </TouchableOpacity>
-            ))}
-            <View style={styles.clubDivider} />
-          </View>
+                  {index < visibleCoaches.length - 1 ? <View style={styles.clubDivider} /> : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )
+        ) : segment === "clubs" ? (
+          visibleClubs == null ? (
+            <ActivityIndicator style={styles.listLoading} color={TAB_ACTIVE} />
+          ) : visibleClubs.length === 0 ? (
+            <Text style={styles.emptyListText}>
+              {clubs != null && clubs.length > 0 ? "No clubs match your search" : "No clubs yet"}
+            </Text>
+          ) : (
+            <View style={styles.clubsList}>
+              {visibleClubs.map((club, index) => {
+                const subtitle = [club.city, club.country].filter(Boolean).join(", ");
+                return (
+                  <TouchableOpacity
+                    key={club.id}
+                    activeOpacity={0.9}
+                    style={index > 0 ? styles.clubCardFollow : undefined}
+                    onPress={() => navigation.navigate("ClubDetail", { clubId: club.slug })}
+                    accessibilityRole="button"
+                    accessibilityLabel={club.name}
+                  >
+                    <View style={[styles.clubBannerOuter, { borderRadius: 16 }]}>
+                      <ClubBannerImage
+                        uri={clubBannerUri(club)}
+                        width={cardW}
+                        height={bannerH}
+                      />
+                    </View>
+                    <View style={styles.clubProfileRow}>
+                      <View style={styles.clubAvatarSlot}>
+                        <ClubPfpImage uri={clubLogoUri(club)} size={CLUB_AVATAR} fallbackLabel={club.name} />
+                      </View>
+                      <View style={styles.clubTextCol}>
+                        <Text style={styles.clubTitle} numberOfLines={2}>
+                          {club.name}
+                        </Text>
+                        {subtitle ? (
+                          <Text style={styles.clubSubtitle} numberOfLines={2}>
+                            {subtitle}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    {index < visibleClubs.length - 1 ? <View style={styles.clubDivider} /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={styles.clubDivider} />
+            </View>
+          )
         ) : (
           <>
             <View style={styles.emptyBlock} />
@@ -407,13 +475,23 @@ function getStyles(theme: {
     coachesList: {
       marginTop: 16,
     },
-    coachCardFollow: {
+    coachRowFollow: {
       marginTop: 16,
     },
-    coachCardOuter: {
-      borderRadius: 20,
-      overflow: "hidden",
-      backgroundColor: "#FFFFFF",
+    coachRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    listLoading: {
+      marginTop: 32,
+    },
+    emptyListText: {
+      marginTop: 32,
+      textAlign: "center",
+      color: "rgba(255, 255, 255, 0.6)",
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 14,
     },
     clubsList: {
       marginTop: 16,
