@@ -20,7 +20,7 @@ import { vercel as defaultTheme } from '../theme'
 import type { AICoachTabStackParamList, MyCoachTabStackParamList } from '../navigation/types'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
-import { coachUploadCategoryTitleKey } from '../lib/coachStudentUploadShots'
+import { analysisCoreTitleKey, coachUploadCategoryTitleKey } from '../lib/coachStudentUploadShots'
 import { formatTrainSkillLevel, TRAIN_SKILL_LEVEL_IDS, type TrainSkillLevelId } from '../lib/trainSkillLevel'
 import { uploadCoachSentVideo } from '../lib/coachSentVideoUpload'
 import { completeSelfAnalyzeShot } from '../lib/pendingSelfAnalyzeShot'
@@ -55,8 +55,18 @@ const VIEW_OPTIONS: { id: CoachUploadViewId; icon: number; labelKey: string }[] 
   { id: 'deg45_left_side_left_camera', icon: DIAGONAL_ICON, labelKey: 'studentProfile.views.deg45LeftSideLeftCamera' },
 ]
 
+/** AI Coach shot stepper shows these views only; the rest stay available to the coach upload flow. */
+const SELF_ANALYZE_HIDDEN_VIEWS = new Set<CoachUploadViewId>(['side'])
+const SELF_ANALYZE_VIEW_OPTIONS = VIEW_OPTIONS.filter((opt) => !SELF_ANALYZE_HIDDEN_VIEWS.has(opt.id))
+
 const BG = '#050A18'
 const PANEL_BG = '#041641'
+const HEADER_BOX_FILL = 'rgba(0, 39, 132, 0.5)'
+const HEADER_BOX_TEXT = '#2A88F4'
+const HEADER_BOX_STROKE = '#2A88F4'
+const SELF_VIEW_COLS = 3
+const SELF_VIEW_GAP = 10
+const SELF_VIEW_ICON_H = 58
 const TILE_IDLE_FILL = 'rgba(0, 39, 132, 0.5)' // #002784 @ 50%
 const TILE_SELECTED_FILL = '#0034A6'
 const TILE_SELECTED_STROKE = '#00B8FF'
@@ -93,16 +103,20 @@ export function StudentReviewTagScreen() {
   const route = useRoute<R>()
   const { width: winW } = useWindowDimensions()
 
-  const { category, labelKey, labelLine2Key, peerUserId, strokePreset, flow } = route.params
+  const { category, coreGroup, labelKey, labelLine2Key, peerUserId, strokePreset, flow } = route.params
+  const selfAnalyze = flow === 'self-analyze'
   const [skillLevel, setSkillLevel] = useState<TrainSkillLevelId | null>(null)
   const [viewId, setViewId] = useState<CoachUploadViewId | null>(null)
   const [uploading, setUploading] = useState(false)
-  const canUpload = skillLevel != null && viewId != null && !uploading
+  const canUpload = selfAnalyze
+    ? viewId != null && !uploading
+    : skillLevel != null && viewId != null && !uploading
   const focusKey = usePageFocusKey()
 
   const panelInnerW = winW - HORIZONTAL_PAD * 2 - 32
   const levelTileW = (panelInnerW - TILE_GAP * 2) / 3
   const viewTileW = (panelInnerW - TILE_GAP * 3) / 4
+  const selfViewTileW = Math.floor((panelInnerW - SELF_VIEW_GAP * (SELF_VIEW_COLS - 1)) / SELF_VIEW_COLS) - 1
 
   const fonts = useMemo(
     () => ({
@@ -114,16 +128,17 @@ export function StudentReviewTagScreen() {
   )
 
   const categoryLabel = t(coachUploadCategoryTitleKey(category))
+  const selfAnalyzeCategoryLabel = t(coreGroup ? analysisCoreTitleKey(coreGroup) : coachUploadCategoryTitleKey(category))
   const strokeLabel = shotTitleText(t, labelKey, labelLine2Key)
 
   const onUpload = useCallback(async () => {
-    if (skillLevel == null || viewId == null || uploading) return
+    if (viewId == null || uploading) return
     if (flow === 'self-analyze') {
       const userShot = {
         category,
         strokePreset,
         shotLabel: strokeLabel,
-        skillLevel: formatTrainSkillLevel(skillLevel),
+        skillLevel: skillLevel != null ? formatTrainSkillLevel(skillLevel) : '',
         viewId,
       }
       completeSelfAnalyzeShot(userShot)
@@ -131,7 +146,7 @@ export function StudentReviewTagScreen() {
       aiNav.navigate('AICoachMain', { userShot, declaredAt: Date.now() })
       return
     }
-    if (!peerUserId) return
+    if (skillLevel == null || !peerUserId) return
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
       Alert.alert(t('commonAlerts.permissionNeeded'), t('coachFlow.permissionPhotos'))
@@ -209,6 +224,126 @@ export function StudentReviewTagScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
+        {selfAnalyze ? (
+        <>
+        <View style={styles.headerBoxPanel}>
+          <TouchableOpacity
+            onPress={() => navigation.pop(2)}
+            activeOpacity={0.85}
+            style={styles.categoryFilledBox}
+            accessibilityRole="button"
+            accessibilityLabel={t('studentProfile.backToCategory')}
+          >
+            <Text
+              allowFontScaling={false}
+              numberOfLines={1}
+              style={[styles.headerBoxText, { fontFamily: fonts.mediumFont }]}
+            >
+              {selfAnalyzeCategoryLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <EntranceView index={0} distance={14} replayKey={focusKey} style={[styles.headerBoxPanel, styles.stackedPanel]}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+            style={styles.strokeOutlineBox}
+            accessibilityRole="button"
+            accessibilityLabel={strokeLabel}
+          >
+            <Ionicons name="chevron-back" size={20} color={HEADER_BOX_STROKE} style={styles.headerBoxChevron} />
+            <Text
+              allowFontScaling={false}
+              numberOfLines={1}
+              style={[styles.headerBoxText, { fontFamily: fonts.mediumFont }]}
+            >
+              {strokeLabel}
+            </Text>
+          </TouchableOpacity>
+        </EntranceView>
+
+        <EntranceView index={1} distance={18} replayKey={focusKey} style={[styles.panel, styles.stackedPanel]}>
+          <Text allowFontScaling={false} style={[styles.sectionLabel, { fontFamily: fonts.regularFont }]}>
+            {t('studentProfile.view')}
+          </Text>
+          <View style={styles.selfViewGrid}>
+            {SELF_ANALYZE_VIEW_OPTIONS.map((opt) => {
+              const active = viewId === opt.id
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  activeOpacity={0.82}
+                  onPress={() => setViewId(opt.id)}
+                  style={[styles.selfViewTile, { width: selfViewTileW }, active && styles.tileActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={t(opt.labelKey)}
+                >
+                  <View style={[styles.tileIconClip, { height: SELF_VIEW_ICON_H }]}>
+                    <LocalSvgAsset
+                      assetModule={opt.icon}
+                      width={selfViewTileW * VIEW_ICON_W_SCALE}
+                      height={SELF_VIEW_ICON_H}
+                      fillColor={active ? TILE_SELECTED_STROKE : TILE_IDLE_ICON}
+                    />
+                  </View>
+                  <Text
+                    allowFontScaling={false}
+                    numberOfLines={2}
+                    style={[
+                      styles.tileLabel,
+                      styles.selfViewTileLabel,
+                      active && styles.tileLabelActive,
+                      { fontFamily: fonts.mediumFont },
+                    ]}
+                  >
+                    {t(opt.labelKey).replace(', ', ',\n')}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={canUpload ? 0.88 : 1}
+            disabled={!canUpload}
+            onPress={() => void onUpload()}
+            style={styles.uploadOuter}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canUpload }}
+          >
+            {canUpload ? (
+              <LinearGradient
+                colors={['#00B8FF', '#1848BA']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.uploadGradient}
+              >
+                <Text allowFontScaling={false} style={[styles.uploadText, { fontFamily: fonts.mediumFont }]}>
+                  {t('studentProfile.continueToSetClip')}
+                </Text>
+              </LinearGradient>
+            ) : (
+              <LinearGradient
+                colors={['rgba(0, 57, 132, 0.55)', 'rgba(4, 22, 65, 0.75)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={styles.uploadGradient}
+              >
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.uploadTextDisabled, { fontFamily: fonts.mediumFont }]}
+                >
+                  {t('studentProfile.continueToSetClip')}
+                </Text>
+              </LinearGradient>
+            )}
+          </TouchableOpacity>
+        </EntranceView>
+        </>
+        ) : (
+        <>
         <EntranceView index={0} replayKey={focusKey}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -389,6 +524,8 @@ export function StudentReviewTagScreen() {
             )}
           </TouchableOpacity>
         </EntranceView>
+        </>
+        )}
       </ScrollView>
     </View>
   )
@@ -568,5 +705,66 @@ const styles = StyleSheet.create({
     color: UPLOAD_DISABLED_FG,
     fontSize: 16,
     lineHeight: 20,
+  },
+  headerBoxPanel: {
+    backgroundColor: PANEL_BG,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+  },
+  stackedPanel: {
+    marginTop: 14,
+  },
+  categoryFilledBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
+    borderRadius: 14,
+    backgroundColor: HEADER_BOX_FILL,
+    paddingHorizontal: 44,
+  },
+  strokeOutlineBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
+    borderWidth: 2,
+    borderColor: HEADER_BOX_STROKE,
+    borderRadius: 14,
+    backgroundColor: HEADER_BOX_FILL,
+    paddingHorizontal: 44,
+  },
+  headerBoxChevron: {
+    position: 'absolute',
+    left: 16,
+  },
+  headerBoxText: {
+    color: HEADER_BOX_TEXT,
+    fontSize: 16,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  selfViewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: SELF_VIEW_GAP,
+  },
+  selfViewTile: {
+    backgroundColor: TILE_IDLE_FILL,
+    borderRadius: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    minHeight: 118,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+  },
+  selfViewTileLabel: {
+    fontSize: 12,
+    lineHeight: 15,
+    paddingHorizontal: 6,
   },
 })

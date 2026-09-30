@@ -29,6 +29,7 @@ const PANEL_BG = '#041641'
 const CHIP_FILL = 'rgba(0, 39, 132, 0.5)'
 const CHIP_TEXT = '#2A88F4'
 const BACK_MUTED = '#86A7D2'
+const CATEGORY_BOX_STROKE = '#2A88F4'
 
 const HORIZONTAL_PAD = 20
 const CHIP_GAP = 10
@@ -89,7 +90,8 @@ export function StudentShotSelectScreen() {
   const route = useRoute<R>()
   const { width: winW } = useWindowDimensions()
 
-  const { category, coreGroup } = route.params
+  const { category, coreGroup, flow } = route.params
+  const selfAnalyze = flow === 'self-analyze'
   const sections = coreGroup
     ? [{ sectionTitleKey: analysisCoreTitleKey(coreGroup), shots: ANALYSIS_CORE_SHOTS[coreGroup] }]
     : COACH_STUDENT_UPLOAD_SHOT_SECTIONS[category] ?? []
@@ -129,31 +131,64 @@ export function StudentShotSelectScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <EntranceView index={0} replayKey={focusKey}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.85}
-            style={styles.backRow}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityLabel={t('studentProfile.backToCategory')}
-          >
-            <Ionicons name="chevron-back" size={30} color={BACK_MUTED} />
-            <Text allowFontScaling={false} style={[styles.backLabel, { fontFamily: fonts.regularFont }]}>
-              {t('studentProfile.backToCategory')}
-            </Text>
-          </TouchableOpacity>
-        </EntranceView>
+        {selfAnalyze ? (
+          <View style={styles.categoryBoxPanel}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.85}
+              style={styles.categoryBox}
+              accessibilityRole="button"
+              accessibilityLabel={t('studentProfile.backToCategory')}
+            >
+              <Ionicons
+                name="chevron-back"
+                size={20}
+                color={CATEGORY_BOX_STROKE}
+                style={styles.categoryBoxChevron}
+              />
+              <Text
+                allowFontScaling={false}
+                numberOfLines={1}
+                style={[styles.categoryBoxText, { fontFamily: fonts.mediumFont }]}
+              >
+                {t(pageTitleKey)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <EntranceView index={0} replayKey={focusKey}>
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.85}
+                style={styles.backRow}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityLabel={t('studentProfile.backToCategory')}
+              >
+                <Ionicons name="chevron-back" size={30} color={BACK_MUTED} />
+                <Text allowFontScaling={false} style={[styles.backLabel, { fontFamily: fonts.regularFont }]}>
+                  {t('studentProfile.backToCategory')}
+                </Text>
+              </TouchableOpacity>
+            </EntranceView>
 
-        <EntranceView index={1} replayKey={focusKey}>
-          <Text allowFontScaling={false} style={[styles.pageTitle, { fontFamily: fonts.semiBoldFont }]}>
-            {t(pageTitleKey)}
-          </Text>
-          <Text allowFontScaling={false} style={[styles.pageSubtitle, { fontFamily: fonts.regularFont }]}>
-            {t('studentProfile.selectAStroke')}
-          </Text>
-        </EntranceView>
+            <EntranceView index={1} replayKey={focusKey}>
+              <Text allowFontScaling={false} style={[styles.pageTitle, { fontFamily: fonts.semiBoldFont }]}>
+                {t(pageTitleKey)}
+              </Text>
+              <Text allowFontScaling={false} style={[styles.pageSubtitle, { fontFamily: fonts.regularFont }]}>
+                {t('studentProfile.selectAStroke')}
+              </Text>
+            </EntranceView>
+          </>
+        )}
 
-        <EntranceView index={2} replayKey={focusKey} style={styles.shotPanel}>
+        <EntranceView
+          index={selfAnalyze ? 0 : 2}
+          distance={selfAnalyze ? 18 : undefined}
+          replayKey={focusKey}
+          style={[styles.shotPanel, selfAnalyze && styles.shotPanelAfterCategoryBox]}
+        >
           {sections.map((section, sectionIndex) => (
             <View
               key={section.sectionTitleKey}
@@ -217,6 +252,33 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     opacity: 0.92,
   },
+  categoryBoxPanel: {
+    backgroundColor: PANEL_BG,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+  },
+  categoryBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
+    borderWidth: 2,
+    borderColor: CATEGORY_BOX_STROKE,
+    borderRadius: 14,
+    backgroundColor: CHIP_FILL,
+    paddingHorizontal: 44,
+  },
+  categoryBoxChevron: {
+    position: 'absolute',
+    left: 16,
+  },
+  categoryBoxText: {
+    color: CHIP_TEXT,
+    fontSize: 16,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
   shotPanel: {
     marginTop: 24,
     backgroundColor: PANEL_BG,
@@ -224,6 +286,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 22,
+  },
+  shotPanelAfterCategoryBox: {
+    marginTop: 14,
   },
   sectionBlock: {
     marginTop: 22,

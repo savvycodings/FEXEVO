@@ -274,6 +274,7 @@ export const enExtended = {
     level: "Level",
     view: "View",
     uploadVideo: "Upload Video",
+    continueToSetClip: "Continue to Set Clip",
     views: {
       front: "Front",
       side: "Side",

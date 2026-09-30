@@ -147,6 +147,12 @@ function MyCoachTabStack() {
   )
 }
 
+/** AI Coach shot picker steps cross-fade so category → stroke → view reads as one screen. */
+const SHOT_FLOW_STEP_OPTIONS: NativeStackNavigationOptions = {
+  animation: 'fade',
+  animationDuration: 220,
+}
+
 function AICoachTabStack({ techniqueResetKey }: { techniqueResetKey: number }) {
   const { theme: ctxTheme } = useContext(ThemeContext)
   const theme = ctxTheme?.backgroundColor != null ? ctxTheme : defaultTheme
@@ -163,9 +169,9 @@ function AICoachTabStack({ techniqueResetKey }: { techniqueResetKey: number }) {
       <AICoachStack.Screen name="AICoachMain">
         {() => <Technique key={techniqueResetKey} />}
       </AICoachStack.Screen>
-      <AICoachStack.Screen name="StudentShotCategory" component={StudentShotCategoryScreen} />
-      <AICoachStack.Screen name="StudentShotSelect" component={StudentShotSelectScreen} />
-      <AICoachStack.Screen name="StudentReviewTag" component={StudentReviewTagScreen} />
+      <AICoachStack.Screen name="StudentShotCategory" component={StudentShotCategoryScreen} options={SHOT_FLOW_STEP_OPTIONS} />
+      <AICoachStack.Screen name="StudentShotSelect" component={StudentShotSelectScreen} options={SHOT_FLOW_STEP_OPTIONS} />
+      <AICoachStack.Screen name="StudentReviewTag" component={StudentReviewTagScreen} options={SHOT_FLOW_STEP_OPTIONS} />
     </AICoachStack.Navigator>
   )
 }

@@ -275,6 +275,7 @@ export const esExtended = {
     level: "Nivel",
     view: "Vista",
     uploadVideo: "Subir video",
+    continueToSetClip: "Continuar para definir el clip",
     views: {
       front: "Frontal",
       side: "Lateral",
