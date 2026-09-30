@@ -87,7 +87,6 @@ export function CorrectionVideoCompare({
   const [clock, setClock] = useState({ positionMs: 0, durationMs: 0 })
 
   const split = useSharedValue(clamp01(initialSplit))
-  const splitStart = useSharedValue(clamp01(initialSplit))
   const progress = useSharedValue(0)
   const isScrubbing = useSharedValue(false)
 
@@ -239,22 +238,25 @@ export function CorrectionVideoCompare({
     [isScrubbing, progress, queueSeek]
   )
 
-  // Anchored to the handle rather than the whole card: a card-wide raw responder competed
-  // with the parent ScrollView, which is what made the split feel jumpy.
+  // The pan lives on a stationary full-card overlay. A gesture on the moving handle, which
+  // Reanimated translates over two Android video textures, kills the process on touch.
+  // A vertical drag fails so the parent scroll view still owns the page.
   const splitGesture = useMemo(
     () =>
       Gesture.Pan()
-        .minDistance(0)
-        .onBegin(() => {
-          splitStart.value = split.value
-        })
+        .activeOffsetX([-10, 10])
+        .failOffsetY([-16, 16])
         .onUpdate((e) => {
-          split.value = clamp01(splitStart.value + e.translationX / width)
+          if (width <= 0) return
+          const edge = 1 / width
+          split.value = Math.min(1 - edge, Math.max(edge, e.x / width))
         }),
-    [split, splitStart, width]
+    [split, width]
   )
 
-  const beforeClipStyle = useAnimatedStyle(() => ({ width: split.value * width }))
+  const beforeClipStyle = useAnimatedStyle(() => ({
+    width: Math.min(Math.max(width - 1, 1), Math.max(1, split.value * width)),
+  }))
   const handleColumnStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: split.value * width - HANDLE_HALF }],
   }))
@@ -291,6 +293,13 @@ export function CorrectionVideoCompare({
         card: { position: 'relative', width, height: videoH, overflow: 'hidden' },
         fill: { position: 'absolute', left: 0, top: 0, width, height: videoH },
         beforeClip: { position: 'absolute', left: 0, top: 0, bottom: 0, overflow: 'hidden' },
+        splitTouch: {
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width,
+          height: videoH,
+        },
         sliderTrack: {
           position: 'absolute',
           left: 0,
@@ -432,14 +441,18 @@ export function CorrectionVideoCompare({
                 />
               </Animated.View>
               <GestureDetector gesture={splitGesture}>
-                <Animated.View style={[styles.sliderTrack, handleColumnStyle]}>
-                  <View style={styles.dividerLine} />
-                  <View style={styles.handle}>
-                    <FeatherIcon name="chevron-left" size={14} color="#fff" />
-                    <FeatherIcon name="chevron-right" size={14} color="#fff" />
-                  </View>
-                </Animated.View>
+                <View style={styles.splitTouch} />
               </GestureDetector>
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.sliderTrack, handleColumnStyle]}
+              >
+                <View style={styles.dividerLine} />
+                <View style={styles.handle}>
+                  <FeatherIcon name="chevron-left" size={14} color="#fff" />
+                  <FeatherIcon name="chevron-right" size={14} color="#fff" />
+                </View>
+              </Animated.View>
             </View>
           </View>
         </ProLibraryGradientFrame>
