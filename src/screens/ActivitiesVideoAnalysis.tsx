@@ -35,6 +35,7 @@ import {
 import { CoachRichText } from '../components/CoachRichText'
 import { CoachStrengthFocusInsightCards } from '../components/CoachStrengthFocusInsightCards'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
+import { CorrectionVideoCompare } from '../components/CorrectionVideoCompare'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
 import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidenceSection'
 import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
@@ -423,14 +424,6 @@ function getStyles(theme: any) {
       borderRadius: 8,
       backgroundColor: '#000',
     },
-    correctionWanVideo: {
-      width: '100%',
-      aspectRatio: 16 / 9,
-      borderRadius: 8,
-      backgroundColor: '#000',
-      overflow: 'hidden',
-      marginTop: 8,
-    },
     correctionPoseVideo: {
       width: 140,
       aspectRatio: 1,
@@ -635,7 +628,10 @@ export function ActivitiesVideoAnalysis({
     startImage: string
     video: string
     poseVideo?: string
+    windowStartMs: number | null
+    windowEndMs: number | null
   } | null>(null)
+  const [correctionCompareW, setCorrectionCompareW] = useState(0)
 
   const [isFavorite, setIsFavorite] = useState(false)
 
@@ -829,6 +825,10 @@ export function ActivitiesVideoAnalysis({
                 typeof videoBody.poseVideo === 'string' && videoBody.poseVideo.trim()
                   ? videoBody.poseVideo.trim()
                   : undefined,
+              windowStartMs:
+                typeof videoBody.windowStartMs === 'number' ? videoBody.windowStartMs : null,
+              windowEndMs:
+                typeof videoBody.windowEndMs === 'number' ? videoBody.windowEndMs : null,
             })
           }
         }
@@ -1369,19 +1369,24 @@ export function ActivitiesVideoAnalysis({
                 <Text allowFontScaling={false} style={styles.summarySectionTitle}>
                   {t('analysis.correctedVideo')}
                 </Text>
-                <Video
-                  source={{ uri: toDisplayImageUri(correctionVideo.video) }}
-                  posterSource={
-                    correctionVideo.startImage
-                      ? { uri: toDisplayImageUri(correctionVideo.startImage) }
-                      : undefined
-                  }
-                  usePoster={Boolean(correctionVideo.startImage)}
-                  style={styles.correctionWanVideo}
-                  resizeMode={ResizeMode.CONTAIN}
-                  useNativeControls
-                  isLooping
-                />
+                <View
+                  style={{ marginTop: 10 }}
+                  onLayout={(e) => {
+                    const w = Math.floor(e.nativeEvent.layout.width)
+                    setCorrectionCompareW((prev) => (prev === w ? prev : w))
+                  }}
+                >
+                  {correctionCompareW > 0 ? (
+                    <CorrectionVideoCompare
+                      originalUri={videoUri(session.videoPath)}
+                      correctedUri={toDisplayImageUri(correctionVideo.video)}
+                      videoKey={`activity-correction-${session.analysisId}`}
+                      width={correctionCompareW}
+                      windowStartMs={correctionVideo.windowStartMs}
+                      windowEndMs={correctionVideo.windowEndMs}
+                    />
+                  ) : null}
+                </View>
                 {correctionVideo.poseVideo ? (
                   <View style={{ marginTop: 8 }}>
                     <Text allowFontScaling={false} style={styles.correctionPairColLabel}>

@@ -55,6 +55,7 @@ import { vercel as defaultTheme } from './theme'
 import { authClient } from './lib/auth-client'
 import { DOMAIN } from '../constants'
 import { registerCorrectionNotificationDeepLink } from './lib/correctionImageNotifications'
+import { watchPendingMagicShots } from './lib/magicShotJob'
 import { getCachedProfile, setCachedProfile } from './lib/profile-cache'
 import { SessionDataProvider, useSessionData } from './context/SessionDataContext'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
@@ -387,6 +388,8 @@ function MainTabsLayoutInner({
   useEffect(() => {
     return registerCorrectionNotificationDeepLink(stackNavigation)
   }, [stackNavigation])
+
+  useEffect(() => watchPendingMagicShots(), [])
 
   const headerSearchLeft =
     activeTabName === 'Progress' || activeTabName === 'You' || activeTabName === 'Activities'

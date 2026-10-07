@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 const TICK_ICON = require('../../assets/coachs/tickicon.svg')
 const MSG_ICON = require('../../assets/coachs/msgicon.svg')
 const FOLLOWER_ICON = require('../../assets/coachs/followericon.svg')
+const MAGIC_SHOT_ICON = require('../../assets/magicshot/notif-icon.svg')
 
 const ICON_SIZE = 52
 
@@ -125,6 +126,7 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
           </Text>
         ) : (
           notifications.map((n) => {
+            const isMagicShot = n.kind === 'correction_videos_ready'
             const icon =
               n.kind === 'coach_review_ready' && n.refType === 'coach_video_review'
                 ? TICK_ICON
@@ -173,7 +175,7 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                         return
                       }
                       if (
-                        n.kind === 'correction_images_ready' &&
+                        (n.kind === 'correction_images_ready' || isMagicShot) &&
                         n.refType === 'technique_analysis' &&
                         n.refId
                       ) {
@@ -186,22 +188,39 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                   style={styles.row}
                 >
                   <View style={styles.iconWrap}>
-                    <LocalSvgAsset assetModule={icon} width={ICON_SIZE} height={ICON_SIZE} />
+                    {isMagicShot ? (
+                      <LocalSvgAsset assetModule={MAGIC_SHOT_ICON} width={24} height={24} />
+                    ) : (
+                      <LocalSvgAsset assetModule={icon} width={ICON_SIZE} height={ICON_SIZE} />
+                    )}
                   </View>
-                  <View style={styles.textCol}>
-                    <Text allowFontScaling={false} style={styles.rowTitle} numberOfLines={2}>
-                      {n.title}
-                    </Text>
-                    {n.body ? (
-                      <Text allowFontScaling={false} style={styles.rowBody} numberOfLines={2}>
-                        {n.body}
+                  {isMagicShot ? (
+                    <View style={[styles.textCol, styles.magicTextCol]}>
+                      <Text allowFontScaling={false} style={styles.magicTitle} numberOfLines={2}>
+                        <Text style={styles.magicBrand}>{t('technique.magicShot.brand')}</Text>
+                        {t('technique.magicShot.notificationRowSuffix')}
                       </Text>
-                    ) : null}
-                    <Text allowFontScaling={false} style={styles.rowTime}>
-                      {formatNotiTime(n.createdAt)}
-                      {n.readAt ? t('notifications.readSuffix') : ''}
-                    </Text>
-                  </View>
+                      <Text allowFontScaling={false} style={[styles.rowTime, styles.magicTime]}>
+                        {formatNotiTime(n.createdAt)}
+                        {n.readAt ? t('notifications.readSuffix') : ''}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.textCol}>
+                      <Text allowFontScaling={false} style={styles.rowTitle} numberOfLines={2}>
+                        {n.title}
+                      </Text>
+                      {n.body ? (
+                        <Text allowFontScaling={false} style={styles.rowBody} numberOfLines={2}>
+                          {n.body}
+                        </Text>
+                      ) : null}
+                      <Text allowFontScaling={false} style={styles.rowTime}>
+                        {formatNotiTime(n.createdAt)}
+                        {n.readAt ? t('notifications.readSuffix') : ''}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
                 <View style={styles.rowDivider} />
               </View>
@@ -278,6 +297,10 @@ function getStyles(theme: any) {
         default: {},
       }),
     },
+    magicTextCol: { gap: 4 },
+    magicTitle: { fontFamily: theme.regularFont, fontSize: 16, color: '#FFFFFF' },
+    magicBrand: { fontFamily: theme.blackFont },
+    magicTime: { marginTop: 0 },
     rowBody: {
       fontFamily: theme.regularFont,
       fontSize: 13,

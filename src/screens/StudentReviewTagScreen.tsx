@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   Alert,
+  Image,
 } from 'react-native'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -24,6 +25,8 @@ import { analysisCoreTitleKey, coachUploadCategoryTitleKey } from '../lib/coachS
 import { formatTrainSkillLevel, TRAIN_SKILL_LEVEL_IDS, type TrainSkillLevelId } from '../lib/trainSkillLevel'
 import { uploadCoachSentVideo } from '../lib/coachSentVideoUpload'
 import { completeSelfAnalyzeShot } from '../lib/pendingSelfAnalyzeShot'
+import { CAMERA_ANGLES, type CameraAngle, type CameraAngleId } from '../lib/cameraAngles'
+import { CameraAngleExampleModal } from '../components/CameraAngleExampleModal'
 import { DOMAIN } from '../../constants'
 
 const SHOT_TITLE_ICON = require('../../assets/reviewandtags/shottitle.svg')
@@ -34,31 +37,6 @@ const LEVEL_ICONS: Record<TrainSkillLevelId, number> = {
   advanced: require('../../assets/reviewandtags/advanced.svg'),
 }
 
-const DIAGONAL_ICON = require('../../assets/reviewandtags/diaganal.svg')
-
-type CoachUploadViewId =
-  | 'front'
-  | 'side'
-  | 'behind'
-  | 'deg45_right_side_left_camera'
-  | 'deg45_right_side_right_camera'
-  | 'deg45_left_side_right_camera'
-  | 'deg45_left_side_left_camera'
-
-const VIEW_OPTIONS: { id: CoachUploadViewId; icon: number; labelKey: string }[] = [
-  { id: 'front', icon: require('../../assets/reviewandtags/front.svg'), labelKey: 'studentProfile.views.front' },
-  { id: 'behind', icon: require('../../assets/reviewandtags/behind.svg'), labelKey: 'studentProfile.views.behind' },
-  { id: 'side', icon: require('../../assets/reviewandtags/side.svg'), labelKey: 'studentProfile.views.side' },
-  { id: 'deg45_right_side_left_camera', icon: DIAGONAL_ICON, labelKey: 'studentProfile.views.deg45RightSideLeftCamera' },
-  { id: 'deg45_right_side_right_camera', icon: DIAGONAL_ICON, labelKey: 'studentProfile.views.deg45RightSideRightCamera' },
-  { id: 'deg45_left_side_right_camera', icon: DIAGONAL_ICON, labelKey: 'studentProfile.views.deg45LeftSideRightCamera' },
-  { id: 'deg45_left_side_left_camera', icon: DIAGONAL_ICON, labelKey: 'studentProfile.views.deg45LeftSideLeftCamera' },
-]
-
-/** AI Coach shot stepper shows these views only; the rest stay available to the coach upload flow. */
-const SELF_ANALYZE_HIDDEN_VIEWS = new Set<CoachUploadViewId>(['side'])
-const SELF_ANALYZE_VIEW_OPTIONS = VIEW_OPTIONS.filter((opt) => !SELF_ANALYZE_HIDDEN_VIEWS.has(opt.id))
-
 const BG = '#050A18'
 const PANEL_BG = '#041641'
 const HEADER_BOX_FILL = 'rgba(0, 39, 132, 0.5)'
@@ -66,7 +44,10 @@ const HEADER_BOX_TEXT = '#2A88F4'
 const HEADER_BOX_STROKE = '#2A88F4'
 const SELF_VIEW_COLS = 3
 const SELF_VIEW_GAP = 10
-const SELF_VIEW_ICON_H = 58
+/** Height over width of the angle tile artwork (front/back/side are 117x155). */
+const VIEW_TILE_ASPECT = 155 / 117
+/** Navy behind the tile artwork, so the narrower 45° tiles blend into the box. */
+const VIEW_TILE_FILL = '#01194D'
 const TILE_IDLE_FILL = 'rgba(0, 39, 132, 0.5)' // #002784 @ 50%
 const TILE_SELECTED_FILL = '#0034A6'
 const TILE_SELECTED_STROKE = '#00B8FF'
@@ -77,10 +58,8 @@ const BACK_MUTED = '#86A7D2'
 const HORIZONTAL_PAD = 20
 const TILE_GAP = 8
 const LEVEL_ICON_H = 38
-const VIEW_ICON_H = 64
 /** Crop built-in SVG side margins so silhouettes sit closer to tile edges. */
 const LEVEL_ICON_W_SCALE = 1.5
-const VIEW_ICON_W_SCALE = 1.85
 
 type Nav = NativeStackNavigationProp<MyCoachTabStackParamList, 'StudentReviewTag'>
 type R = RouteProp<MyCoachTabStackParamList, 'StudentReviewTag'>
@@ -106,7 +85,8 @@ export function StudentReviewTagScreen() {
   const { category, coreGroup, labelKey, labelLine2Key, peerUserId, strokePreset, flow } = route.params
   const selfAnalyze = flow === 'self-analyze'
   const [skillLevel, setSkillLevel] = useState<TrainSkillLevelId | null>(null)
-  const [viewId, setViewId] = useState<CoachUploadViewId | null>(null)
+  const [viewId, setViewId] = useState<CameraAngleId | null>(null)
+  const [exampleAngleId, setExampleAngleId] = useState<CameraAngleId | null>(null)
   const [uploading, setUploading] = useState(false)
   const canUpload = selfAnalyze
     ? viewId != null && !uploading
@@ -126,6 +106,24 @@ export function StudentReviewTagScreen() {
     }),
     [theme.regularFont, theme.mediumFont, theme.semiBoldFont]
   )
+
+  const renderViewTile = (angle: CameraAngle, tileW: number) => {
+    const active = viewId === angle.id
+    const tileH = Math.round(tileW * VIEW_TILE_ASPECT)
+    return (
+      <TouchableOpacity
+        key={angle.id}
+        activeOpacity={0.82}
+        onPress={() => setExampleAngleId(angle.id)}
+        style={[styles.viewTile, { width: tileW, height: tileH }, active && styles.viewTileActive]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        accessibilityLabel={t(angle.labelKey)}
+      >
+        <Image source={angle.tile} style={styles.viewTileImage} resizeMode="contain" />
+      </TouchableOpacity>
+    )
+  }
 
   const categoryLabel = t(coachUploadCategoryTitleKey(category))
   const selfAnalyzeCategoryLabel = t(coreGroup ? analysisCoreTitleKey(coreGroup) : coachUploadCategoryTitleKey(category))
@@ -268,41 +266,7 @@ export function StudentReviewTagScreen() {
             {t('studentProfile.view')}
           </Text>
           <View style={styles.selfViewGrid}>
-            {SELF_ANALYZE_VIEW_OPTIONS.map((opt) => {
-              const active = viewId === opt.id
-              return (
-                <TouchableOpacity
-                  key={opt.id}
-                  activeOpacity={0.82}
-                  onPress={() => setViewId(opt.id)}
-                  style={[styles.selfViewTile, { width: selfViewTileW }, active && styles.tileActive]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={t(opt.labelKey)}
-                >
-                  <View style={[styles.tileIconClip, { height: SELF_VIEW_ICON_H }]}>
-                    <LocalSvgAsset
-                      assetModule={opt.icon}
-                      width={selfViewTileW * VIEW_ICON_W_SCALE}
-                      height={SELF_VIEW_ICON_H}
-                      fillColor={active ? TILE_SELECTED_STROKE : TILE_IDLE_ICON}
-                    />
-                  </View>
-                  <Text
-                    allowFontScaling={false}
-                    numberOfLines={2}
-                    style={[
-                      styles.tileLabel,
-                      styles.selfViewTileLabel,
-                      active && styles.tileLabelActive,
-                      { fontFamily: fonts.mediumFont },
-                    ]}
-                  >
-                    {t(opt.labelKey).replace(', ', ',\n')}
-                  </Text>
-                </TouchableOpacity>
-              )
-            })}
+            {CAMERA_ANGLES.map((angle) => renderViewTile(angle, selfViewTileW))}
           </View>
 
           <TouchableOpacity
@@ -441,45 +405,7 @@ export function StudentReviewTagScreen() {
             {t('studentProfile.view')}
           </Text>
           <View style={styles.viewRow}>
-            {VIEW_OPTIONS.map((opt) => {
-              const active = viewId === opt.id
-              return (
-                <TouchableOpacity
-                  key={opt.id}
-                  activeOpacity={0.82}
-                  onPress={() => setViewId(opt.id)}
-                  style={[
-                    styles.viewTile,
-                    { width: viewTileW },
-                    active && styles.tileActive,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={t(opt.labelKey)}
-                >
-                  <View style={[styles.tileIconClip, { height: VIEW_ICON_H }]}>
-                    <LocalSvgAsset
-                      assetModule={opt.icon}
-                      width={viewTileW * VIEW_ICON_W_SCALE}
-                      height={VIEW_ICON_H}
-                      fillColor={active ? TILE_SELECTED_STROKE : TILE_IDLE_ICON}
-                    />
-                  </View>
-                  <Text
-                    allowFontScaling={false}
-                    numberOfLines={3}
-                    style={[
-                      styles.tileLabel,
-                      styles.viewTileLabel,
-                      active && styles.tileLabelActive,
-                      { fontFamily: fonts.mediumFont },
-                    ]}
-                  >
-                    {t(opt.labelKey)}
-                  </Text>
-                </TouchableOpacity>
-              )
-            })}
+            {CAMERA_ANGLES.map((angle) => renderViewTile(angle, viewTileW))}
           </View>
 
           <TouchableOpacity
@@ -527,6 +453,16 @@ export function StudentReviewTagScreen() {
         </>
         )}
       </ScrollView>
+      <CameraAngleExampleModal
+        visible={exampleAngleId != null}
+        angleId={exampleAngleId ?? CAMERA_ANGLES[0]!.id}
+        onChangeAngle={setExampleAngleId}
+        onSelect={(id) => {
+          setViewId(id)
+          setExampleAngleId(null)
+        }}
+        onClose={() => setExampleAngleId(null)}
+      />
     </View>
   )
 }
@@ -643,17 +579,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   viewTile: {
-    backgroundColor: TILE_IDLE_FILL,
+    backgroundColor: VIEW_TILE_FILL,
     borderRadius: 14,
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingHorizontal: 0,
-    alignItems: 'stretch',
-    justifyContent: 'flex-end',
-    minHeight: 132,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: 'transparent',
     overflow: 'hidden',
+  },
+  viewTileActive: {
+    borderColor: TILE_SELECTED_STROKE,
+  },
+  viewTileImage: {
+    width: '100%',
+    height: '100%',
   },
   tileIconClip: {
     width: '100%',
@@ -675,11 +612,6 @@ const styles = StyleSheet.create({
   },
   tileLabelActive: {
     color: TILE_SELECTED_STROKE,
-  },
-  viewTileLabel: {
-    fontSize: 11,
-    lineHeight: 13,
-    paddingHorizontal: 4,
   },
   uploadOuter: {
     marginTop: 22,
@@ -747,24 +679,7 @@ const styles = StyleSheet.create({
   selfViewGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    columnGap: SELF_VIEW_GAP,
     rowGap: SELF_VIEW_GAP,
-  },
-  selfViewTile: {
-    backgroundColor: TILE_IDLE_FILL,
-    borderRadius: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
-    alignItems: 'stretch',
-    justifyContent: 'flex-start',
-    minHeight: 118,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    overflow: 'hidden',
-  },
-  selfViewTileLabel: {
-    fontSize: 12,
-    lineHeight: 15,
-    paddingHorizontal: 6,
   },
 })

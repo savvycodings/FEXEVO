@@ -15,6 +15,7 @@ import {
   Inter_700Bold,
   Inter_800ExtraBold,
   Inter_900Black,
+  Inter_700Bold_Italic,
 } from '@expo-google-fonts/inter'
 import { ThemeContext, AppContext } from './src/context'
 import * as themes from './src/theme'
@@ -71,6 +72,7 @@ export default function App() {
     Inter_700Bold,
     Inter_800ExtraBold,
     Inter_900Black,
+    Inter_700Bold_Italic,
   })
 
   useEffect(() => {

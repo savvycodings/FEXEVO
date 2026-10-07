@@ -79,6 +79,8 @@ import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimC
 import { ProLibraryGradientProgressBar } from '../components'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
 import { CorrectionVideoCompare } from '../components/CorrectionVideoCompare'
+import { MagicShotCard } from '../components/MagicShotCard'
+import { useMagicShotJob } from '../lib/magicShotJob'
 import { PaddlePongGame } from '../components/PaddlePongGame'
 import { AnalyzingDashSpinner } from '../components/AnalyzingDashSpinner'
 import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
@@ -148,6 +150,12 @@ const FAIL_MOTION_VIDEO = require('../../assets/aicoach/failmotion.mp4')
 const UPLOADING_STEP_ICON = require('../../assets/actiities/uploading.svg')
 const ANALYSIS_COMPLETE_ICON = require('../../assets/game/complete.svg')
 const XEVO_GAME_LOGO = require('../../assets/game/xevologo.png')
+/** xevologo.png is 164x69; a box of the same aspect leaves no empty space beside the logo. */
+const XEVO_GAME_LOGO_ASPECT = 164 / 69
+const CHALLENGE_FONT_SIZE = 15
+const CHALLENGE_MIN_SCALE = 0.7
+/** Must match `analysisLoadingTopCta` paddingHorizontal. */
+const CHALLENGE_SIDE_PADDING = 20
 /**
  * failmotion video is a square; side energy reaches the L/R edges.
  * Slightly overscale past the overlay width so soft edges still hit the screen
@@ -219,18 +227,14 @@ const COACH_BANNER_SLOT_PADDING_V = 6 + 2
  * left a large empty gap above the tab bar.
  */
 const TAB_SCENE_SCROLL_BOTTOM_PAD = 20
-/**
- * The bottom tab bar floats over the tab scene (other screens reserve `insets.bottom + 74`).
- * Step 1's frame must reserve the same so the box ends above the nav on every device.
- */
-const FLOATING_NAV_RESERVE = 74
 /** Step 1 upload box uses tighter side padding than other steps so it takes more width. */
 const STEP1_HORIZONTAL_PADDING = 14
 /**
- * Share of the visible step-1 slot (below the header, above the tab bar) used by the
- * upload frame. Kept under 1 so the card scales with the screen and never overflows into scroll.
+ * Gap between the step 1 upload frame and the tab bar. The tab bar is laid out below the scene,
+ * not over it, so the measured `scrollBody` already ends at the nav; reserving the nav height
+ * again left a large empty band above it.
  */
-const STEP1_FRAME_HEIGHT_RATIO = 0.86
+const STEP1_BOTTOM_GAP = 14
 const LEVEL_OPTIONS = [
   'Beginner',
   'High Beginner',
@@ -461,6 +465,10 @@ export function Technique() {
   const route = useRoute<RouteProp<AICoachTabStackParamList, 'AICoachMain'>>()
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
+  /** Shrinks the loading-screen challenge line so it stays on one row on narrow phones. */
+  const [challengeScale, setChallengeScale] = useState(1)
+  const challengeFontSize = CHALLENGE_FONT_SIZE * challengeScale
+  const challengeLogoH = Math.round(challengeFontSize * 1.3)
   const [scrollBodyH, setScrollBodyH] = useState(0)
   const [step, setStep] = useState(1)
   const [dominantHand, setDominantHand] = useState<'left' | 'right' | null>(null)
@@ -538,9 +546,11 @@ export function Technique() {
     shortSide: number
     minimum: number
   } | null>(null)
-  const [correctionVideo, setCorrectionVideo] = useState<CorrectionVideoRow | null>(null)
-  const [correctionsLoadingVideo, setCorrectionsLoadingVideo] = useState(false)
-  const [correctionsVideoError, setCorrectionsVideoError] = useState<string | null>(null)
+  const magicShot = useMagicShotJob(
+    analysisId,
+    SHOW_COMFY_CORRECTIONS && analysisJson?.status === 'completed'
+  )
+  const correctionVideo: CorrectionVideoRow | null = magicShot.video
   const [correctionsTestError, setCorrectionsTestError] = useState<string | null>(null)
   /** Server-extracted video frames paired with bundled testimgegen PNGs (no AI gen) */
   const [testPoseCorrectionImages, setTestPoseCorrectionImages] = useState<CorrectionPairRow[]>([])
@@ -611,8 +621,8 @@ export function Technique() {
   }, [scrollBodyH, winH, insets.top, insets.bottom, step, assignedCoach])
 
   /**
-   * Upload panel: a fraction of the visible slot on this screen (header to tab bar),
-   * not the full measured wrap. Filling the wrap made the card too tall and scrollable.
+   * Upload panel fills the slot between the header (or coach banner) and the tab bar,
+   * leaving `STEP1_BOTTOM_GAP` above the nav.
    */
   const step1FrameMeasured = step === 1 && scrollBodyH > 0
   const step1FrameDims = useMemo(() => {
@@ -622,11 +632,11 @@ export function Technique() {
     }
     const maxW = winW - STEP1_HORIZONTAL_PADDING * 2
     const paddingTop = 12
-    const paddingBottom = insets.bottom + FLOATING_NAV_RESERVE
-    const availH = Math.max(260, effectiveScrollBodyH - paddingTop - paddingBottom)
-    const h = Math.max(260, Math.round(availH * STEP1_FRAME_HEIGHT_RATIO))
+    const h = Math.max(260, Math.floor(effectiveScrollBodyH - paddingTop - STEP1_BOTTOM_GAP))
     return { w: maxW, h }
-  }, [step, winW, effectiveScrollBodyH, insets.bottom])
+  }, [step, winW, effectiveScrollBodyH])
+  /** Shrinks with height too, so the upload and record controls still fit when the coach banner shortens the frame. */
+  const step1IconSize = Math.round(Math.min(130, step1FrameDims.w * 0.42, step1FrameDims.h * 0.28))
 
   const isScrubbingRef = useRef(false)
   const [trimCarouselScrubbing, setTrimCarouselScrubbing] = useState(false)
@@ -1157,61 +1167,6 @@ export function Technique() {
   ])
 
   useEffect(() => {
-    if (!SHOW_COMFY_CORRECTIONS) return
-    if (!analysisId || analysisJson?.status !== 'completed') return
-    if (correctionVideo?.video) return
-    if (analysisJson?.metrics?.has_correction_videos !== true) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await authClient
-          .$fetch<{
-            frame?: number | null
-            startImage?: string | null
-            video?: string | null
-            poseVideo?: string | null
-            windowStartMs?: number | null
-            windowEndMs?: number | null
-          }>(`/technique/analysis/${analysisId}/correction-videos`, {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-          })
-          .catch(() => null)
-        const body = ((res as { data?: unknown })?.data ?? res) as {
-          frame?: number | null
-          startImage?: string | null
-          video?: string | null
-          poseVideo?: string | null
-          windowStartMs?: number | null
-          windowEndMs?: number | null
-        } | null
-        if (cancelled || !body || typeof body.video !== 'string' || !body.video.trim()) return
-        setCorrectionVideo({
-          frame: typeof body.frame === 'number' ? body.frame : 0,
-          startImage: typeof body.startImage === 'string' ? body.startImage : '',
-          video: body.video.trim(),
-          poseVideo:
-            typeof body.poseVideo === 'string' && body.poseVideo.trim()
-              ? body.poseVideo.trim()
-              : undefined,
-          windowStartMs: typeof body.windowStartMs === 'number' ? body.windowStartMs : null,
-          windowEndMs: typeof body.windowEndMs === 'number' ? body.windowEndMs : null,
-        })
-      } catch {
-        /* cached video optional */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [
-    analysisId,
-    analysisJson?.status,
-    analysisJson?.metrics?.has_correction_videos,
-    correctionVideo?.video,
-  ])
-
-  useEffect(() => {
     setTestPoseCorrectionImages([])
     setCorrectionsTestError(null)
   }, [analysisId])
@@ -1368,12 +1323,9 @@ export function Technique() {
     setCorrectionsError(null)
     setCorrectionsFalError(null)
     setCorrectionsComfyError(null)
-    setCorrectionVideo(null)
-    setCorrectionsVideoError(null)
     setCorrectionsLoadingGemini(false)
     setCorrectionsLoadingFal(false)
     setCorrectionsLoadingComfy(false)
-    setCorrectionsLoadingVideo(false)
     setActiveCorrection(0)
     setCompareSplit(0.5)
     setCorrectionViewMode('drag')
@@ -2081,90 +2033,6 @@ export function Technique() {
     }
   }
 
-  async function generateComfyCorrectionVideo() {
-    if (correctionsLoadingVideo || !analysisId) return
-    try {
-      setCorrectionsLoadingVideo(true)
-      setCorrectionsVideoError(null)
-      const res = await authClient
-        .$fetch<{
-          frame?: number
-          startImage?: string
-          video?: string
-          poseVideo?: string
-          error?: string
-        }>('/technique/correction-videos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ analysisId }),
-        })
-        .catch((err: any) => {
-          const nested =
-            err?.error?.error ??
-            err?.error?.message ??
-            err?.data?.error ??
-            err?.message
-          return {
-            error:
-              typeof nested === 'string'
-                ? nested
-                : nested && typeof nested === 'object' && typeof nested.message === 'string'
-                  ? nested.message
-                  : 'Failed to generate video',
-          } as { error: string }
-        })
-
-      const raw = res as any
-      const body = (raw?.data ?? raw) as {
-        frame?: number
-        startImage?: string
-        video?: string
-        poseVideo?: string
-        windowStartMs?: number | null
-        windowEndMs?: number | null
-        error?: unknown
-      }
-
-      const extractError = (value: unknown): string | null => {
-        if (typeof value === 'string' && value.trim()) return value.trim()
-        if (value && typeof value === 'object') {
-          const o = value as { message?: unknown; error?: unknown }
-          if (typeof o.message === 'string' && o.message.trim()) return o.message.trim()
-          if (typeof o.error === 'string' && o.error.trim()) return o.error.trim()
-        }
-        return null
-      }
-
-      if (typeof body?.video === 'string' && body.video.trim()) {
-        setCorrectionVideo({
-          frame: typeof body.frame === 'number' ? body.frame : 0,
-          startImage: typeof body.startImage === 'string' ? body.startImage : '',
-          video: body.video.trim(),
-          poseVideo:
-            typeof body.poseVideo === 'string' && body.poseVideo.trim()
-              ? body.poseVideo.trim()
-              : undefined,
-          windowStartMs: typeof body.windowStartMs === 'number' ? body.windowStartMs : null,
-          windowEndMs: typeof body.windowEndMs === 'number' ? body.windowEndMs : null,
-        })
-      } else {
-        const apiError =
-          extractError(body?.error) ||
-          extractError(raw?.error) ||
-          extractError(raw?.error?.error) ||
-          extractError(raw?.error?.message)
-        setCorrectionsVideoError(apiError || 'Video generation failed')
-      }
-    } catch (err: any) {
-      console.error('[Technique] generateComfyCorrectionVideo error', err)
-      setCorrectionsVideoError(
-        typeof err?.message === 'string' ? err.message : 'Failed to generate video'
-      )
-    } finally {
-      setCorrectionsLoadingVideo(false)
-    }
-  }
-
   async function generateTestPoseExtraction() {
     if (
       correctionsLoadingGemini ||
@@ -2325,18 +2193,39 @@ export function Technique() {
                 isMuted
               />
               <View style={styles.analysisLoadingTopCta} pointerEvents="box-none">
-                <Text
-                  allowFontScaling={false}
-                  style={styles.analysisChallengeText}
+                <View
+                  style={styles.analysisChallengeRow}
+                  onLayout={(e) => {
+                    const measured = e.nativeEvent.layout.width
+                    if (measured <= 0) return
+                    const available = winW - CHALLENGE_SIDE_PADDING * 2
+                    const next = Math.min(
+                      1,
+                      Math.max(CHALLENGE_MIN_SCALE, (challengeScale * available) / measured)
+                    )
+                    if (Math.abs(next - challengeScale) > 0.01) setChallengeScale(next)
+                  }}
                 >
-                  While{' '}
+                  <Text
+                    allowFontScaling={false}
+                    numberOfLines={1}
+                    style={[styles.analysisChallengeText, { fontSize: challengeFontSize }]}
+                  >
+                    While
+                  </Text>
                   <Image
                     source={XEVO_GAME_LOGO}
-                    style={styles.analysisChallengeLogo}
+                    style={{ height: challengeLogoH, width: challengeLogoH * XEVO_GAME_LOGO_ASPECT }}
                     resizeMode="contain"
-                  />{' '}
-                  does the work, you do the challenge.
-                </Text>
+                  />
+                  <Text
+                    allowFontScaling={false}
+                    numberOfLines={1}
+                    style={[styles.analysisChallengeText, { fontSize: challengeFontSize }]}
+                  >
+                    does the work, you do the challenge.
+                  </Text>
+                </View>
                 <TouchableOpacity
                   style={styles.playGameBtn}
                   onPress={() => setPaddleGameOpen(true)}
@@ -2704,7 +2593,7 @@ export function Technique() {
             styles.stepContentInner,
             step === 1
               ? {
-                  paddingBottom: insets.bottom + FLOATING_NAV_RESERVE,
+                  paddingBottom: STEP1_BOTTOM_GAP,
                   paddingHorizontal: STEP1_HORIZONTAL_PADDING,
                 }
               : step === 3
@@ -2993,8 +2882,8 @@ export function Technique() {
                       <Text style={styles.uploadTitle}>{t('technique.uploadTitle')}</Text>
                       <LocalSvgAsset
                         assetModule={CHOOSE_FILE_ICON}
-                        width={Math.min(130, Math.round(step1FrameDims.w * 0.42))}
-                        height={Math.min(130, Math.round(step1FrameDims.w * 0.42))}
+                        width={step1IconSize}
+                        height={step1IconSize}
                       />
                       <TouchableOpacity
                         style={styles.chooseFileBtn}
@@ -3684,62 +3573,16 @@ export function Technique() {
                                 </TouchableOpacity>
                               ))}
 
-                            {SHOW_COMFY_CORRECTIONS && correctionsVideoError && (
+                            {SHOW_COMFY_CORRECTIONS && !correctionVideo?.video && (
                               <View style={{ marginTop: 10 }}>
-                                <Text style={[styles.placeholderHint, { color: '#FF6B6B' }]}>
-                                  {correctionsVideoError}
-                                </Text>
-                                <TouchableOpacity
-                                  style={[styles.correctionGenerateButton, { marginTop: 8 }]}
-                                  onPress={() => void generateComfyCorrectionVideo()}
-                                  activeOpacity={0.9}
-                                >
-                                  <LinearGradient
-                                    colors={['#0022FF', '#00BBFF']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.correctionGenerateButtonInner}
-                                  >
-                                    <Text style={styles.correctionGenerateButtonText}>{t('technique.retry')}</Text>
-                                  </LinearGradient>
-                                </TouchableOpacity>
+                                <MagicShotCard
+                                  status={magicShot.status}
+                                  startedAt={magicShot.startedAt}
+                                  error={magicShot.error}
+                                  onGenerate={() => void magicShot.start()}
+                                />
                               </View>
                             )}
-
-                            {SHOW_COMFY_CORRECTIONS && correctionsLoadingVideo && (
-                              <View style={[styles.correctionLoadingWrap, { marginTop: 8 }]}>
-                                <ActivityIndicator size="small" color="#00BBFF" />
-                                <Text style={styles.correctionLoadingText}>
-                                  {t('technique.generatingVideo')}
-                                </Text>
-                                <Text style={[styles.correctionLoadingText, { fontSize: 11, marginTop: 4 }]}>
-                                  {t('technique.generatingVideoHint')}
-                                </Text>
-                              </View>
-                            )}
-
-                            {SHOW_COMFY_CORRECTIONS &&
-                              !correctionVideo?.video &&
-                              !correctionsLoadingVideo &&
-                              !correctionsVideoError && (
-                                <TouchableOpacity
-                                  style={[styles.correctionGenerateButton, { marginTop: 8 }]}
-                                  onPress={() => void generateComfyCorrectionVideo()}
-                                  activeOpacity={0.9}
-                                >
-                                  <LinearGradient
-                                    colors={['#0022FF', '#00BBFF']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.correctionGenerateButtonInner}
-                                  >
-                                    <FeatherIcon name="video" size={16} color="#fff" />
-                                    <Text style={styles.correctionGenerateButtonText}>
-                                      {t('technique.generateVideo')}
-                                    </Text>
-                                  </LinearGradient>
-                                </TouchableOpacity>
-                              )}
 
                             {SHOW_COMFY_CORRECTIONS && correctionVideo?.video ? (
                               <View style={styles.correctionVideoBlock}>
@@ -3749,6 +3592,11 @@ export function Technique() {
                                     correctedUri={toMediaUri(correctionVideo.video)}
                                     videoKey={`correction-${analysisId ?? 'video'}`}
                                     width={step3VideoWidth}
+                                    originalAspect={
+                                      trimPreviewNaturalSize && trimPreviewNaturalSize.w > 0
+                                        ? trimPreviewNaturalSize.h / trimPreviewNaturalSize.w
+                                        : null
+                                    }
                                     windowStartMs={correctionVideo.windowStartMs}
                                     windowEndMs={correctionVideo.windowEndMs}
                                   />
@@ -5412,19 +5260,19 @@ function getStyles(theme: any) {
       paddingTop: 18,
       paddingHorizontal: 20,
     },
+    analysisChallengeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 5,
+      marginBottom: 14,
+    },
     analysisChallengeText: {
       fontFamily: theme.mediumFont,
       fontSize: 15,
-      lineHeight: 24,
       color: '#00B8FF',
-      textAlign: 'center',
-      marginBottom: 14,
-      paddingHorizontal: 4,
-    },
-    analysisChallengeLogo: {
-      width: 72,
-      height: 20,
-      transform: [{ translateY: 3 }],
+      flexShrink: 0,
+      ...Platform.select({ android: { includeFontPadding: false }, default: {} }),
     },
     playGameBtn: {
       alignSelf: 'center',

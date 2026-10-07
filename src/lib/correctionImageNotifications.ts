@@ -68,7 +68,7 @@ export async function ensureCorrectionNotificationPermission(): Promise<boolean>
 function analysisIdFromNotificationData(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null
   const d = data as Record<string, unknown>
-  if (d.kind !== 'correction_images_ready') return null
+  if (d.kind !== 'correction_images_ready' && d.kind !== 'correction_videos_ready') return null
   const id = d.analysisId
   return typeof id === 'string' && id.trim().length > 0 ? id.trim() : null
 }
@@ -137,6 +137,32 @@ export async function notifyCorrectionImagesReady(opts: {
     if (isNativeModuleError(err)) notificationsUnavailable = true
     if (__DEV__) {
       console.warn('[correctionImageNotifications] schedule failed', err)
+    }
+  }
+}
+
+export async function notifyMagicShotReady(opts: {
+  analysisId: string
+  title: string
+  body: string
+}): Promise<void> {
+  const Notifications = await loadNotifications()
+  if (!Notifications) return
+  const granted = await ensureCorrectionNotificationPermission()
+  if (!granted) return
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: opts.title,
+        body: opts.body,
+        data: { kind: 'correction_videos_ready', analysisId: opts.analysisId },
+      },
+      trigger: null,
+    })
+  } catch (err) {
+    if (isNativeModuleError(err)) notificationsUnavailable = true
+    if (__DEV__) {
+      console.warn('[correctionImageNotifications] magic shot schedule failed', err)
     }
   }
 }

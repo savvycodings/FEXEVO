@@ -23,12 +23,12 @@ const SYNC_TOLERANCE_MS = 140
 const HANDLE_HALF = 28
 
 /**
- * Tallest the video box may get, as a multiple of its width, and as a share of the screen.
- * A portrait phone clip is about 1.2x taller than wide, which filled most of the screen and
- * magnified every compression artefact. Capping and cropping keeps the width full-bleed.
+ * Tallest the video box may get, as a share of the screen. A taller clip narrows the box to
+ * keep its exact aspect instead of being cropped into it.
  */
-const MAX_HEIGHT_RATIO = 0.8
-const MAX_SCREEN_SHARE = 0.4
+const MAX_SCREEN_SHARE = 0.7
+/** Below this aspect difference a late measurement is noise and must not resize the box. */
+const ASPECT_EPSILON = 0.01
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
@@ -47,6 +47,11 @@ export type CorrectionVideoCompareProps = {
   /** `key` for Video remount (e.g. analysis id). */
   videoKey: string
   width: number
+  /**
+   * Height / width of the athlete's clip when already known (e.g. from the trim preview), so the
+   * box has its final size before either video loads.
+   */
+  originalAspect?: number | null
   initialSplit?: number
   /**
    * Span of the original clip the corrected clip was generated from. The correction covers a
@@ -71,6 +76,7 @@ export function CorrectionVideoCompare({
   correctedUri,
   videoKey,
   width,
+  originalAspect: originalAspectHint,
   initialSplit = 0.5,
   windowStartMs,
   windowEndMs,
@@ -100,11 +106,43 @@ export function CorrectionVideoCompare({
   const correctedSource = useMemo(() => ({ uri: correctedUri }), [correctedUri])
   const originalSource = useMemo(() => ({ uri: originalUri }), [originalUri])
 
-  const videoH = useMemo(() => {
-    const natural = aspect != null ? width * aspect : width * (9 / 16)
-    const cap = Math.min(width * MAX_HEIGHT_RATIO, screenH * MAX_SCREEN_SHARE)
-    return Math.max(1, Math.ceil(Math.min(natural, cap)))
-  }, [width, aspect, screenH])
+  // The box always takes the athlete's clip aspect: that is the framing the corrected clip was
+  // generated from, and it lets both sides fill the exact same rectangle.
+  const measuredAspect =
+    originalAspect ??
+    (originalAspectHint != null && originalAspectHint > 0 ? originalAspectHint : null) ??
+    aspect ??
+    9 / 16
+
+  // Changing the box under a finger re-lays out the video textures mid-gesture, so a late
+  // measurement waits until the drag ends.
+  const interactingRef = useRef(false)
+  const [boxAspect, setBoxAspect] = useState(measuredAspect)
+  const pendingAspectRef = useRef<number | null>(null)
+  if (Math.abs(boxAspect - measuredAspect) > ASPECT_EPSILON) {
+    if (interactingRef.current) pendingAspectRef.current = measuredAspect
+    else setBoxAspect(measuredAspect)
+  }
+  const setInteracting = useCallback((active: boolean) => {
+    interactingRef.current = active
+    if (!active && pendingAspectRef.current != null) {
+      const next = pendingAspectRef.current
+      pendingAspectRef.current = null
+      setBoxAspect(next)
+    }
+  }, [])
+
+  const { boxW, videoH } = useMemo(() => {
+    const maxH = screenH * MAX_SCREEN_SHARE
+    const naturalH = width * boxAspect
+    if (naturalH <= maxH) {
+      return { boxW: Math.max(1, Math.floor(width)), videoH: Math.max(1, Math.round(naturalH)) }
+    }
+    return {
+      boxW: Math.max(1, Math.floor(maxH / boxAspect)),
+      videoH: Math.max(1, Math.round(maxH)),
+    }
+  }, [width, boxAspect, screenH])
 
   /** Where the original should sit for a given corrected-clip position. */
   const followerTargetMs = useCallback(
@@ -246,25 +284,28 @@ export function CorrectionVideoCompare({
       Gesture.Pan()
         .activeOffsetX([-10, 10])
         .failOffsetY([-16, 16])
+        .onBegin(() => {
+          runOnJS(setInteracting)(true)
+        })
         .onUpdate((e) => {
-          if (width <= 0) return
-          const edge = 1 / width
-          split.value = Math.min(1 - edge, Math.max(edge, e.x / width))
+          if (boxW <= 0) return
+          const edge = 1 / boxW
+          split.value = Math.min(1 - edge, Math.max(edge, e.x / boxW))
+        })
+        .onFinalize(() => {
+          runOnJS(setInteracting)(false)
         }),
-    [split, width]
+    [split, boxW, setInteracting]
   )
 
   const beforeClipStyle = useAnimatedStyle(() => ({
-    width: Math.min(Math.max(width - 1, 1), Math.max(1, split.value * width)),
+    width: Math.min(Math.max(boxW - 1, 1), Math.max(1, split.value * boxW)),
   }))
   const handleColumnStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: split.value * width - HANDLE_HALF }],
+    transform: [{ translateX: split.value * boxW - HANDLE_HALF }],
   }))
   const trackFillStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }))
   const thumbStyle = useAnimatedStyle(() => ({ left: `${progress.value * 100}%` }))
-  const aspectsDiffer =
-    aspect != null && originalAspect != null && Math.abs(aspect - originalAspect) > 0.04
-  const resizeMode = aspectsDiffer ? ResizeMode.CONTAIN : ResizeMode.COVER
   const showContact =
     typeof windowStartMs === 'number' &&
     windowStartMs >= 0 &&
@@ -277,7 +318,8 @@ export function CorrectionVideoCompare({
         outer: { width: '100%', alignItems: 'center' },
         column: { width, alignSelf: 'center' },
         labelRow: {
-          width: '100%',
+          width: boxW,
+          alignSelf: 'center',
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -288,16 +330,16 @@ export function CorrectionVideoCompare({
           fontSize: 11,
           color: 'rgba(200, 215, 230, 0.72)',
         },
-        frame: { width, alignSelf: 'center', marginBottom: 2 },
-        shell: { width, backgroundColor: '#000', alignItems: 'center' },
-        card: { position: 'relative', width, height: videoH, overflow: 'hidden' },
-        fill: { position: 'absolute', left: 0, top: 0, width, height: videoH },
+        frame: { width: boxW, alignSelf: 'center', marginBottom: 2 },
+        shell: { width: boxW, backgroundColor: '#000', alignItems: 'center' },
+        card: { position: 'relative', width: boxW, height: videoH, overflow: 'hidden' },
+        fill: { position: 'absolute', left: 0, top: 0, width: boxW, height: videoH },
         beforeClip: { position: 'absolute', left: 0, top: 0, bottom: 0, overflow: 'hidden' },
         splitTouch: {
           position: 'absolute',
           left: 0,
           top: 0,
-          width,
+          width: boxW,
           height: videoH,
         },
         sliderTrack: {
@@ -381,7 +423,7 @@ export function CorrectionVideoCompare({
           textAlign: 'right',
         },
       }),
-    [theme.semiBoldFont, width, videoH]
+    [theme.semiBoldFont, width, boxW, videoH]
   )
 
   return (
@@ -412,7 +454,7 @@ export function CorrectionVideoCompare({
                 ref={correctedRef}
                 source={correctedSource}
                 style={styles.fill}
-                resizeMode={resizeMode}
+                resizeMode={ResizeMode.COVER}
                 useNativeControls={false}
                 isLooping
                 isMuted
@@ -426,7 +468,7 @@ export function CorrectionVideoCompare({
                   ref={originalRef}
                   source={originalSource}
                   style={styles.fill}
-                  resizeMode={resizeMode}
+                  resizeMode={ResizeMode.CONTAIN}
                   onReadyForDisplay={(e) => {
                     const ns = e.naturalSize
                     if (!ns || ns.width <= 0 || ns.height <= 0) return

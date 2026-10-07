@@ -286,6 +286,16 @@ export const esExtended = {
       deg45LeftSideRightCamera: "45° lado izquierdo, cámara derecha",
       deg45LeftSideLeftCamera: "45° lado izquierdo, cámara izquierda",
     },
+    viewHints: {
+      front: "Coloca la cámara frente al jugador",
+      behind: "Coloca la cámara detrás del jugador",
+      side: "Coloca la cámara al lado del jugador",
+      deg45RightSideLeftCamera: "Coloca la cámara en el centro o a la izquierda de la esquina de la pista",
+      deg45RightSideRightCamera: "Coloca la cámara a la derecha de la esquina de la pista",
+      deg45LeftSideRightCamera: "Coloca la cámara en el centro o a la izquierda de la esquina de la pista",
+      deg45LeftSideLeftCamera: "Coloca la cámara en el centro o a la derecha de la esquina de la pista",
+    },
+    viewModalContinue: "Continuar",
     shotSections: {
       serve: "Saque",
       return: "Devolución",
@@ -471,6 +481,26 @@ export const esExtended = {
     subShotFallback: "Técnica",
     subPending: "Pendiente",
     subReviewed: "Revisado",
+  },
+  technique: {
+    magicShot: {
+      generatePrefix: "Generar ",
+      brand: "Magic Shot",
+      generating: "Generando…",
+      retry: "Intentar de nuevo",
+      whatIsPrefix: "¿Qué es ",
+      whatIsBrand: "Magic Shot?",
+      descPrefix: "Magic Shot es un video generado con IA por ",
+      descBrand: "AX EVO",
+      descSuffix: " que te muestra cómo realizar la postura correctamente.",
+      etaLabel: "Tiempo aproximado para la próxima generación:",
+      notifyHint:
+        "Cuando el video esté listo, AX EVO te avisará y podrás verlo en esta pantalla.",
+      failed: "Error al generar el Magic Shot",
+      notificationTitle: "Magic Shot",
+      notificationBody: "Video generado",
+      notificationRowSuffix: " Video generado",
+    },
   },
   techniqueExtra: {
     recordNewVideo: "O graba un video nuevo",
