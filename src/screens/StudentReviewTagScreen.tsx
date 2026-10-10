@@ -26,6 +26,7 @@ import { formatTrainSkillLevel, TRAIN_SKILL_LEVEL_IDS, type TrainSkillLevelId } 
 import { uploadCoachSentVideo } from '../lib/coachSentVideoUpload'
 import { completeSelfAnalyzeShot } from '../lib/pendingSelfAnalyzeShot'
 import { CAMERA_ANGLES, type CameraAngle, type CameraAngleId } from '../lib/cameraAngles'
+import { TEST_IDS } from '../lib/testIds'
 import { CameraAngleExampleModal } from '../components/CameraAngleExampleModal'
 import { DOMAIN } from '../../constants'
 
@@ -115,6 +116,7 @@ export function StudentReviewTagScreen() {
         key={angle.id}
         activeOpacity={0.82}
         onPress={() => setExampleAngleId(angle.id)}
+        testID={TEST_IDS.viewAngle(angle.id)}
         style={[styles.viewTile, { width: tileW, height: tileH }, active && styles.viewTileActive]}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
@@ -274,6 +276,7 @@ export function StudentReviewTagScreen() {
             activeOpacity={canUpload ? 0.88 : 1}
             disabled={!canUpload}
             onPress={() => void onUpload()}
+            testID={TEST_IDS.setClipContinue}
             style={styles.uploadOuter}
             accessibilityRole="button"
             accessibilityState={{ disabled: !canUpload }}
@@ -413,6 +416,7 @@ export function StudentReviewTagScreen() {
             activeOpacity={canUpload ? 0.88 : 1}
             disabled={!canUpload}
             onPress={() => void onUpload()}
+            testID={TEST_IDS.setClipContinue}
             style={styles.uploadOuter}
             accessibilityState={{ disabled: !canUpload }}
           >

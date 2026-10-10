@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { ThemeContext } from "../context";
 import { LanguageToggle } from "../components/LanguageToggle";
 import type { SignUpDraft } from "./SignUp";
+import { TEST_IDS } from '../lib/testIds'
 import {
   sendSignupVerificationCode,
   verifySignupVerificationCode,
@@ -100,6 +101,7 @@ function InvitationCodeBoxes({
         inputRefs.current[index] = el;
       }}
       style={[styles.codeBox, { fontFamily: theme.semiBoldFont }]}
+      testID={TEST_IDS.otpDigit(index)}
       value={digits[index]}
       onChangeText={(value) => applyDigits(value, index)}
       onKeyPress={({ nativeEvent }) => handleKeyPress(index, nativeEvent.key)}
@@ -280,6 +282,7 @@ export function VerifyEmail({ draft, onVerified, onBack }: VerifyEmailProps) {
           <TouchableOpacity
             style={styles.resendTouch}
             onPress={() => void requestCode(true)}
+            testID={TEST_IDS.verifyResend}
             disabled={inputsDisabled || resendSec > 0}
             activeOpacity={0.85}
           >
@@ -301,6 +304,7 @@ export function VerifyEmail({ draft, onVerified, onBack }: VerifyEmailProps) {
             <TouchableOpacity
               style={[styles.buttonOuter, { flex: 1 }, inputsDisabled && styles.buttonDisabled]}
               onPress={() => void handleVerify()}
+              testID={TEST_IDS.verifySubmit}
               disabled={inputsDisabled}
               activeOpacity={0.85}
             >

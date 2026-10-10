@@ -40,6 +40,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
 import { LogoutConfirmModal } from "../components/LogoutConfirmModal";
 import { profileImageSource } from "../lib/defaultProfilePicture";
+import { TEST_IDS } from '../lib/testIds'
 
 const MENU_SVG = {
   personal: require("../../assets/youpage/personalicon.svg"),
@@ -228,6 +229,10 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     return null;
   }, [locationCountry?.name, data.profile?.areaLocation]);
 
+  // Declared before shieldQuickBirthLabel reads them (const TDZ crashes the web build).
+  const [birthDayInput, setBirthDayInput] = useState("");
+  const [birthMonthInput, setBirthMonthInput] = useState("");
+  const [birthYearInput, setBirthYearInput] = useState("");
   const shieldQuickBirthLabel = useMemo(() => {
     const rawIso = data.profile?.birthDate;
     const iso = typeof rawIso === "string" ? rawIso.trim() : "";
@@ -295,9 +300,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     }, 120);
   }
 
-  const [birthDayInput, setBirthDayInput] = useState("");
-  const [birthMonthInput, setBirthMonthInput] = useState("");
-  const [birthYearInput, setBirthYearInput] = useState("");
   const [heightCmInput, setHeightCmInput] = useState("");
   const [weightKgInput, setWeightKgInput] = useState("");
   const [genderPickerOpen, setGenderPickerOpen] = useState(false);
@@ -722,15 +724,18 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     title,
     iconModule,
     onPress,
+    testID,
   }: {
     title: string;
     iconModule: number;
     onPress: () => void;
+    testID?: string;
   }) => (
     <TouchableOpacity
       style={styles.menuRow}
       activeOpacity={0.82}
       onPress={onPress}
+      testID={testID}
     >
       <View style={styles.menuRowLeft}>
         <View style={styles.menuIconSlot}>
@@ -773,6 +778,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             (primaryDisabled || primaryLoading) && styles.subsectionFooterDisabled,
           ]}
           onPress={onPrimary}
+          testID={TEST_IDS.settingsSave}
           disabled={primaryDisabled || primaryLoading}
           activeOpacity={0.85}
         >
@@ -867,6 +873,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 onBlur={() => scheduleBlurClearField()}
                 style={styles.personalFieldInput}
                 placeholder={t("profileSettingsUi.firstName")}
+                testID={TEST_IDS.settingsFirstName}
                 placeholderTextColor={phColor}
               />
             </View>
@@ -1749,21 +1756,25 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             title={t("profileSettingsUi.personalData")}
             iconModule={MENU_SVG.personal}
             onPress={() => setActiveSection("personal")}
+            testID={TEST_IDS.settingsSection("personal")}
           />
           <MenuRow
             title={t("profileSettingsUi.account")}
             iconModule={MENU_SVG.account}
             onPress={() => setActiveSection("account")}
+            testID={TEST_IDS.settingsSection("account")}
           />
           <MenuRow
             title={t("profileSettingsUi.location")}
             iconModule={MENU_SVG.location}
             onPress={() => setActiveSection("location")}
+            testID={TEST_IDS.settingsSection("location")}
           />
           <MenuRow
             title={t("profileSettingsUi.gameSettings")}
             iconModule={MENU_SVG.game}
             onPress={() => setActiveSection("game")}
+            testID={TEST_IDS.settingsSection("game")}
           />
         </AdminGradientCard>
 

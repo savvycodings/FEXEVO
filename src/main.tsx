@@ -68,6 +68,7 @@ import type {
 } from '@react-navigation/native-stack'
 import { useFocusEffect, useNavigation, useNavigationState } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
+import { TEST_IDS } from './lib/testIds'
 import type {
   ProgressTabStackParamList,
   YouTabStackParamList,
@@ -514,6 +515,7 @@ function MainTabsLayoutInner({
         key={viewerIsCoach ? 'coach-tabs' : 'student-tabs'}
         screenOptions={({ route }) => ({
           ...tabScreenOptions,
+          tabBarButtonTestID: TEST_IDS.tab(route.name),
           tabBarLabel:
             route.name === 'MyCoach' && viewerIsCoach
               ? renderCoachTabLabel(tabLabels.MyCoach)

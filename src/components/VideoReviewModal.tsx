@@ -17,7 +17,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import Svg, { Path } from 'react-native-svg'
 import { Video, ResizeMode } from 'expo-av'
 import { captureRef } from 'react-native-view-shot'
-import * as VideoThumbnails from 'expo-video-thumbnails'
+import * as VideoThumbnails from '../lib/videoThumbnails'
 import * as FileSystemLegacy from 'expo-file-system/legacy'
 
 const { width: SCREEN_W } = Dimensions.get('window')

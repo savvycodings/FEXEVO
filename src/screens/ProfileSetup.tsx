@@ -29,6 +29,7 @@ import {
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
 import { PAGE_TOP_EXTRA_PADDING } from "../../constants";
+import { TEST_IDS } from '../lib/testIds'
 
 const APP_LOGO = require("../../assets/logo.png");
 const COURT_IMAGE = require("../../assets/court.png");
@@ -454,6 +455,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               onChangeText={setDisplayName}
               style={styles.input}
               placeholder={t("profileSetup.yourName")}
+              testID={TEST_IDS.setupName}
               placeholderTextColor={theme.mutedForegroundColor}
             />
           </View>
@@ -468,6 +470,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 onChangeText={setUsername}
                 style={styles.input}
                 placeholder={t("profileSetup.username")}
+                testID={TEST_IDS.setupUsername}
                 placeholderTextColor={theme.mutedForegroundColor}
                 autoCapitalize="none"
               />
@@ -480,6 +483,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                     key={opt}
                     style={[styles.chip, gender === opt && styles.chipActive]}
                     onPress={() => setGender(opt)}
+                    testID={TEST_IDS.setupGender(opt)}
                     activeOpacity={0.85}
                   >
                     <Text
@@ -508,12 +512,14 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               label={t("profileSetup.leftHand")}
               active={dominantHand === "left"}
               onPress={() => selectDominantHand("left")}
+              testID={TEST_IDS.setupHand("left")}
               styles={styles}
             />
             <ChoicePill
               label={t("profileSetup.rightHand")}
               active={dominantHand === "right"}
               onPress={() => selectDominantHand("right")}
+              testID={TEST_IDS.setupHand("right")}
               styles={styles}
             />
           </View>
@@ -532,12 +538,14 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               label={t("common.left")}
               active={courtSide === "left"}
               onPress={() => setCourtSide("left")}
+              testID={TEST_IDS.setupCourt("left")}
               styles={styles}
             />
             <ChoicePill
               label={t("common.right")}
               active={courtSide === "right"}
               onPress={() => setCourtSide("right")}
+              testID={TEST_IDS.setupCourt("right")}
               styles={styles}
             />
           </View>
@@ -555,6 +563,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 onChangeText={(v) => setHeightCmInput(v.replace(/[^0-9.]/g, ""))}
                 keyboardType="decimal-pad"
                 placeholder={t("profileSetup.heightPlaceholder")}
+                testID={TEST_IDS.setupHeight}
                 placeholderTextColor="rgba(255,255,255,0.35)"
                 style={styles.anthroInput}
               />
@@ -576,6 +585,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 onChangeText={(v) => setWeightKgInput(v.replace(/[^0-9.]/g, ""))}
                 keyboardType="decimal-pad"
                 placeholder={t("profileSetup.weightPlaceholder")}
+                testID={TEST_IDS.setupWeight}
                 placeholderTextColor="rgba(255,255,255,0.35)"
                 style={styles.anthroInput}
               />
@@ -596,6 +606,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.primaryOuter, { flex: 1 }, !canContinueStep1 && { opacity: 0.45 }]}
+              testID={TEST_IDS.setupStep1Next}
               onPress={() => setStep(2)}
               disabled={!canContinueStep1}
               activeOpacity={0.85}
@@ -629,6 +640,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             <View style={styles.selectionBox}>
               <View style={styles.row}>
                 <ChoicePill
+                  testID={TEST_IDS.setupRankingNo}
                   label={t("common.no")}
                   active={hasRanking === false}
                   onPress={() => {
@@ -665,6 +677,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               <TouchableOpacity
                 style={[styles.primaryOuter, { flex: 1 }, hasRanking === null && { opacity: 0.45 }]}
                 onPress={() => setRankingSetupPhase("configure")}
+                testID={TEST_IDS.setupRankingNext}
                 disabled={hasRanking === null}
                 activeOpacity={0.85}
               >
@@ -739,6 +752,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                       <TouchableOpacity
                         key={opt}
                         style={[styles.levelOption, active && styles.levelOptionActive]}
+                        testID={TEST_IDS.setupLevel(opt)}
                         onPress={() => {
                           setCustomLevelText("");
                           setLevel(opt);
@@ -850,6 +864,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               <TouchableOpacity
                 style={[styles.primaryOuter, { flex: 1 }, (!canContinueStep2 || saving) && { opacity: 0.45 }]}
                 onPress={saveProfile}
+                testID={TEST_IDS.setupFinish}
                 disabled={!canContinueStep2 || saving}
                 activeOpacity={0.85}
               >
@@ -939,14 +954,17 @@ function ChoicePill({
   active,
   onPress,
   styles,
+  testID,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
   styles: any;
+  testID?: string;
 }) {
   return (
     <TouchableOpacity
+      testID={testID}
       style={[styles.choicePill, active && styles.choicePillActive]}
       onPress={onPress}
       activeOpacity={0.85}

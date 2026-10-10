@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Image, StyleSheet, Platform, PanResponder } from 'react-native'
-import { getThumbnailAsync } from 'expo-video-thumbnails'
+import { getThumbnailAsync } from '../lib/videoThumbnails'
 import * as FileSystem from 'expo-file-system/legacy'
 import Feather from '@expo/vector-icons/Feather'
 

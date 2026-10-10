@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { StatusBar } from 'expo-status-bar'
 import { WelcomeHeader, LanguageToggle } from '../components'
 import { useTranslation } from 'react-i18next'
+import { TEST_IDS } from '../lib/testIds'
 
 const WELCOME_SEEN_KEY = 'xevo_welcome_v1'
 
@@ -115,6 +116,7 @@ export function WelcomeIntro({ navigation }: Props) {
           <TouchableOpacity
             activeOpacity={0.9}
             style={styles.primaryBtnOuter}
+            testID={TEST_IDS.welcomeFreeTrial}
             onPress={async () => {
               await markWelcomeSeen()
               navigation.navigate('SignUp')
@@ -133,6 +135,7 @@ export function WelcomeIntro({ navigation }: Props) {
           {isLast ? (
             <TouchableOpacity
               style={styles.secondaryBtn}
+              testID={TEST_IDS.welcomeLogin}
               onPress={async () => {
                 await markWelcomeSeen()
                 navigation.replace('SignIn')
@@ -145,6 +148,7 @@ export function WelcomeIntro({ navigation }: Props) {
             <TouchableOpacity
               style={styles.secondaryBtn}
               onPress={() => setStep((s) => Math.min(s + 1, slides.length - 1))}
+              testID={TEST_IDS.welcomeNext}
               activeOpacity={0.85}
             >
               <Text style={styles.secondaryBtnText}>{t('common.next')}</Text>

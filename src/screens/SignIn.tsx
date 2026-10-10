@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { AuthFormField } from "../components/AuthFormField";
 import { AuthPasswordField } from "../components/AuthPasswordField";
+import { TEST_IDS } from '../lib/testIds'
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -145,6 +146,7 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
         <AuthFormField
           theme={theme}
           placeholder={t("auth.email")}
+          testID={TEST_IDS.signinEmail}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -156,6 +158,7 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
         <AuthPasswordField
           theme={theme}
           placeholder={t("auth.password")}
+          testID={TEST_IDS.signinPassword}
           value={password}
           onChangeText={setPassword}
           autoComplete="password"
@@ -166,6 +169,7 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
         <TouchableOpacity
           style={[styles.buttonOuter, (loading || socialLoading) && styles.buttonDisabled]}
           onPress={handleSignIn}
+          testID={TEST_IDS.signinSubmit}
           disabled={loading || !!socialLoading}
         >
           <LinearGradient
@@ -186,6 +190,7 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
           activeOpacity={0.8}
           style={styles.forgotWrap}
           onPress={onForgotPassword}
+          testID={TEST_IDS.signinForgot}
           disabled={!onForgotPassword || loading || !!socialLoading}
           accessibilityRole="button"
         >

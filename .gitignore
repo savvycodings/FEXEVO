@@ -20,3 +20,7 @@ android/local.properties
 # Google Cloud service account keys — never commit (GitHub push protection)
 gen-lang-client*.json
 *-service-account*.json
+dist-web/
+e2e/.auth/
+test-results/
+playwright-report/

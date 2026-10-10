@@ -16,6 +16,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { ThemeContext } from "../context";
 import { ADMIN_HUB_GATE_PASSWORD } from "../config/adminHubGate";
 import { AdminGradientCard } from "../components/AdminGradientCard";
+import { TEST_IDS } from '../lib/testIds'
 
 type Props = {
   onClose: () => void;
@@ -74,6 +75,7 @@ export function AdminHub({
           <TextInput
             value={gatePassword}
             onChangeText={setGatePassword}
+            testID={TEST_IDS.adminGatePassword}
             secureTextEntry
             placeholder="••••••••"
             placeholderTextColor={theme.mutedForegroundColor}
@@ -81,7 +83,7 @@ export function AdminHub({
             autoCapitalize="none"
             autoCorrect={false}
           />
-          <TouchableOpacity style={styles.primaryBtn} onPress={tryUnlock} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.primaryBtn} onPress={tryUnlock} activeOpacity={0.85} testID={TEST_IDS.adminGateUnlock}>
             <Text style={styles.primaryBtnText}>Continue</Text>
           </TouchableOpacity>
         </View>
@@ -108,6 +110,7 @@ export function AdminHub({
       >
         <AdminGradientCard
           onPress={() => navigation.navigate("AdminMembers", { filter: "all" })}
+          testID={TEST_IDS.adminMembers}
           style={styles.cardTouch}
           accessibilityRole="button"
           accessibilityLabel="View all members"

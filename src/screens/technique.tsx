@@ -32,7 +32,7 @@ import * as DocumentPicker from 'expo-document-picker'
 // expo-file-system v19 moved cacheDirectory/copyAsync/etc. to /legacy.
 import * as FileSystem from 'expo-file-system/legacy'
 import { Video, ResizeMode } from 'expo-av'
-import { getThumbnailAsync } from 'expo-video-thumbnails'
+import { getThumbnailAsync } from '../lib/videoThumbnails'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import FeatherIcon from '@expo/vector-icons/Feather'
 import Svg, {
@@ -121,6 +121,7 @@ import {
   MIN_ANALYZE_CLIP_MS,
 } from '../lib/techniqueClipLimits'
 import { uploadTechniqueVideo } from '../lib/techniqueVideoUpload'
+import { TEST_IDS } from '../lib/testIds'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const HORIZONTAL_PADDING = 24
@@ -2596,6 +2597,7 @@ export function Technique() {
                 <View style={styles.step2BottomBarHalf}>
                   <TouchableOpacity
                     style={[styles.analyseButton, styles.step2BottomBarBtnFill]}
+                    testID={TEST_IDS.techniqueAnalyse}
                     onPress={() => {
                       if (analysisReady) {
                         setStep(3)
@@ -2939,6 +2941,7 @@ export function Technique() {
                       <TouchableOpacity
                         style={styles.chooseFileBtn}
                         onPress={() => startHowToFlow('gallery')}
+                        testID={TEST_IDS.techniqueChooseFile}
                         activeOpacity={0.85}
                       >
                         <Text style={styles.chooseFileBtnText}>{t('technique.chooseFile')}</Text>
@@ -2974,7 +2977,7 @@ export function Technique() {
                     <Text allowFontScaling={false} style={styles.step3ScoreLabel}>
                       Overall Score
                     </Text>
-                    <Text allowFontScaling={false} style={styles.step3ScoreValue}>
+                    <Text allowFontScaling={false} style={styles.step3ScoreValue} testID={TEST_IDS.techniqueScore}>
                       {score}
                       <Text style={styles.step3ScoreOutOf}> /100</Text>
                     </Text>
@@ -3988,6 +3991,7 @@ export function Technique() {
             <TouchableOpacity
               activeOpacity={0.9}
               onPress={acceptHowToModal}
+              testID={TEST_IDS.howToAccept}
               style={styles.howToAcceptOuter}
             >
               <LinearGradient

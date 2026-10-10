@@ -1,0 +1,74 @@
+/**
+ * Stable test ids for the controls the e2e suite drives. React Native's `testID` becomes
+ * `data-testid` on the web build, so specs select by these instead of visible text (which
+ * changes with the language).
+ */
+export const TEST_IDS = {
+  // Welcome / onboarding
+  welcomeNext: 'welcome-next',
+  welcomeFreeTrial: 'welcome-free-trial',
+  welcomeLogin: 'welcome-login',
+  // Sign up / sign in / verification / reset
+  signupName: 'signup-name',
+  signupEmail: 'signup-email',
+  signupPassword: 'signup-password',
+  signupRepeat: 'signup-repeat',
+  signupCountry: 'signup-country',
+  signupSubmit: 'signup-submit',
+  countrySearch: 'country-search',
+  countryOption: (code: string) => `country-option-${code}`,
+  signinEmail: 'signin-email',
+  signinPassword: 'signin-password',
+  signinSubmit: 'signin-submit',
+  signinForgot: 'signin-forgot',
+  otpDigit: (i: number) => `otp-digit-${i}`,
+  verifySubmit: 'verify-submit',
+  accountCreatedDone: 'account-created-done',
+  verifyResend: 'verify-resend',
+  resetEmail: 'reset-email',
+  resetCode: 'reset-code',
+  resetPassword: 'reset-password',
+  resetRepeat: 'reset-repeat',
+  resetSubmit: 'reset-submit',
+  // Profile setup
+  setupName: 'setup-name',
+  setupUsername: 'setup-username',
+  setupGender: (g: string) => `setup-gender-${g}`,
+  setupHand: (h: string) => `setup-hand-${h}`,
+  setupCourt: (c: string) => `setup-court-${c}`,
+  setupHeight: 'setup-height',
+  setupWeight: 'setup-weight',
+  setupStep1Next: 'setup-step1-next',
+  setupRankingNo: 'setup-ranking-no',
+  setupRankingNext: 'setup-ranking-next',
+  setupLevel: (l: string) => `setup-level-${l}`,
+  setupFinish: 'setup-finish',
+  // Technique flow
+  techniqueChooseFile: 'technique-choose-file',
+  howToAccept: 'how-to-accept',
+  shotCategory: (key: string) => `shot-category-${key}`,
+  shotOption: (preset: string) => `shot-option-${preset}`,
+  techniqueAnalyse: 'technique-analyse',
+  techniqueScore: 'technique-score',
+  magicShotGenerate: 'magic-shot-generate',
+  // Profile settings
+  settingsSection: (key: string) => `settings-section-${key}`,
+  settingsFirstName: 'settings-first-name',
+  settingsSave: 'settings-save',
+  // Admin hub
+  adminGatePassword: 'admin-gate-password',
+  adminGateUnlock: 'admin-gate-unlock',
+  adminMembers: 'admin-members',
+  // Coach review
+  coachReviewGood: 'coach-review-good',
+  coachReviewBad: 'coach-review-bad',
+  coachReviewSubmit: 'coach-review-submit',
+  coachReviewSendGood: 'coach-review-send-good',
+  coachReviewSendBad: 'coach-review-send-bad',
+  // Tabs
+  tab: (name: string) => `tab-${name}`,
+  // Technique upload
+  viewAngle: (id: string) => `view-angle-${id}`,
+  viewAngleConfirm: 'view-angle-confirm',
+  setClipContinue: 'set-clip-continue',
+} as const

@@ -20,6 +20,7 @@ import { AuthFormField } from "../components/AuthFormField";
 import { AuthPasswordField } from "../components/AuthPasswordField";
 import { createAuthFormStyles } from "../components/authFormStyles";
 import { requestPasswordResetCode, resetPasswordWithCode } from "../lib/passwordReset";
+import { TEST_IDS } from '../lib/testIds'
 
 const APP_LOGO = require("../../assets/logo.png");
 const RESEND_COOLDOWN_SEC = 60;
@@ -161,6 +162,7 @@ export function ForgotPassword({ onBack, initialEmail = "" }: ForgotPasswordProp
               theme={theme}
               hasError={!!emailError}
               placeholder={t("auth.email")}
+              testID={TEST_IDS.resetEmail}
               value={email}
               onChangeText={(value) => {
                 setEmail(value);
@@ -180,6 +182,7 @@ export function ForgotPassword({ onBack, initialEmail = "" }: ForgotPasswordProp
               theme={theme}
               hasError={!!codeError}
               placeholder={t("auth.resetCodePlaceholder")}
+              testID={TEST_IDS.resetCode}
               value={code}
               onChangeText={(value) => {
                 setCode(value.replace(/\D/g, "").slice(0, 6));
@@ -197,6 +200,7 @@ export function ForgotPassword({ onBack, initialEmail = "" }: ForgotPasswordProp
               theme={theme}
               hasError={!!passwordError}
               placeholder={t("auth.passwordMinPlaceholder")}
+              testID={TEST_IDS.resetPassword}
               value={password}
               onChangeText={(value) => {
                 setPassword(value);
@@ -211,6 +215,7 @@ export function ForgotPassword({ onBack, initialEmail = "" }: ForgotPasswordProp
               theme={theme}
               hasError={!!confirmError}
               placeholder={t("auth.repeatPassword")}
+              testID={TEST_IDS.resetRepeat}
               value={confirmPassword}
               onChangeText={(value) => {
                 setConfirmPassword(value);
@@ -258,6 +263,7 @@ export function ForgotPassword({ onBack, initialEmail = "" }: ForgotPasswordProp
           <TouchableOpacity
             style={[styles.buttonOuter, loading && styles.buttonDisabled]}
             onPress={() => void (step === "email" ? handleSendCode() : handleReset())}
+            testID={TEST_IDS.resetSubmit}
             disabled={loading}
             activeOpacity={0.85}
           >

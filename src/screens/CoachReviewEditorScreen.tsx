@@ -22,7 +22,7 @@ import Svg, { Path, Polygon } from 'react-native-svg'
 import { Video, ResizeMode } from 'expo-av'
 import { LinearGradient } from 'expo-linear-gradient'
 import { captureRef } from 'react-native-view-shot'
-import * as VideoThumbnails from 'expo-video-thumbnails'
+import * as VideoThumbnails from '../lib/videoThumbnails'
 import * as FileSystemLegacy from 'expo-file-system/legacy'
 import { ThemeContext } from '../context'
 import { authClient } from '../lib/auth-client'
@@ -35,6 +35,7 @@ import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { Header } from '../components/Header'
 import { MainTabBarChrome } from '../components/MainTabBarChrome'
+import { TEST_IDS } from '../lib/testIds'
 
 const SMALLER_BRUSH_ICON = require('../../assets/videoanalysis/smallericon.svg')
 const BIGGER_BRUSH_ICON = require('../../assets/videoanalysis/biggericon.svg')
@@ -898,12 +899,14 @@ export function CoachReviewEditorScreen() {
                   value={goodCommentDraft}
                   onChangeText={setGoodCommentDraft}
                   placeholder={t('coachReview.goodComments')}
+                  testID={TEST_IDS.coachReviewGood}
                   placeholderTextColor="#86A7D2"
                   multiline
                   style={[styles.commentInput, { fontFamily: theme.regularFont }]}
                 />
                 <TouchableOpacity
                   onPress={() => sendComment('good')}
+                  testID={TEST_IDS.coachReviewSendGood}
                   activeOpacity={0.85}
                   hitSlop={6}
                   style={styles.commentSendBtn}
@@ -920,12 +923,14 @@ export function CoachReviewEditorScreen() {
                   value={badCommentDraft}
                   onChangeText={setBadCommentDraft}
                   placeholder={t('coachReview.badComments')}
+                  testID={TEST_IDS.coachReviewBad}
                   placeholderTextColor="#86A7D2"
                   multiline
                   style={[styles.commentInput, { fontFamily: theme.regularFont }]}
                 />
                 <TouchableOpacity
                   onPress={() => sendComment('wrong')}
+                  testID={TEST_IDS.coachReviewSendBad}
                   activeOpacity={0.85}
                   hitSlop={6}
                   style={styles.commentSendBtn}
@@ -989,6 +994,7 @@ export function CoachReviewEditorScreen() {
         <TouchableOpacity
           style={[styles.submitButtonOuter, submitting && styles.submitButtonDisabled]}
           onPress={() => void submit()}
+          testID={TEST_IDS.coachReviewSubmit}
           disabled={submitting}
           activeOpacity={0.88}
         >

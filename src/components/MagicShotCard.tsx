@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from './LocalSvgAsset'
 import type { MagicShotHandMismatch, MagicShotStatus } from '../lib/magicShotJob'
+import { TEST_IDS } from '../lib/testIds'
 
 const BEFORE_IMAGE = require('../../assets/magicshot/before.png')
 const AFTER_IMAGE = require('../../assets/magicshot/after.png')
@@ -158,6 +159,7 @@ export function MagicShotCard({
       activeOpacity={0.9}
       disabled={busy}
       onPress={onGenerate}
+      testID={TEST_IDS.magicShotGenerate}
       style={[styles.buttonWrap, busy && styles.buttonBusy]}
       accessibilityRole="button"
     >
