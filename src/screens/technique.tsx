@@ -3662,7 +3662,7 @@ export function Technique() {
                             )}
 
                             {SHOW_COMFY_CORRECTIONS && correctionVideo?.video ? (
-                              <View style={styles.correctionVideoBlock}>
+                              <View style={styles.correctionVideoBlock} testID={TEST_IDS.magicShotResult}>
                                 {uploadedVideoUrl ? (
                                   <CorrectionVideoCompare
                                     originalUri={uploadedVideoUrl}

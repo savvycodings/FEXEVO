@@ -51,6 +51,7 @@ export const TEST_IDS = {
   techniqueAnalyse: 'technique-analyse',
   techniqueScore: 'technique-score',
   magicShotGenerate: 'magic-shot-generate',
+  magicShotResult: 'magic-shot-result',
   // Profile settings
   settingsSection: (key: string) => `settings-section-${key}`,
   settingsFirstName: 'settings-first-name',

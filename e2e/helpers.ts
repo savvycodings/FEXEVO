@@ -46,6 +46,7 @@ export const T = {
   techniqueAnalyse: 'technique-analyse',
   techniqueScore: 'technique-score',
   magicShotGenerate: 'magic-shot-generate',
+  magicShotResult: 'magic-shot-result',
   // Profile settings
   settingsSection: (key: string) => `settings-section-${key}`,
   settingsFirstName: 'settings-first-name',
@@ -152,4 +153,25 @@ export async function openScreen(page: Page, name: string, params: object | unde
   page.off('pageerror', onErr)
   expect(errors, `${name} page errors`).toEqual([])
   return bodies
+}
+
+/** From the AI Coach home: pick Net Play → Forehand volley → Front, upload the fixture clip, analyse. */
+export async function uploadAndAnalyze(page: Page, fixturePath: string): Promise<string> {
+  await nav(page, 'Main', { screen: 'AICoach', params: { screen: 'AICoachMain' } })
+  await page.getByTestId(T.techniqueChooseFile).click()
+  await page.getByTestId(T.howToAccept).click()
+  await page.getByTestId(T.shotCategory('net_play')).click()
+  await page.getByTestId(T.shotOption('forehand_volley')).click()
+  await page.getByTestId(T.viewAngle('front')).click()
+  await page.getByTestId(T.viewAngleConfirm).click()
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByTestId(T.setClipContinue).click()
+  await (await chooser).setFiles(fixturePath)
+  const analyzed = page.waitForResponse((r) => r.url().includes('/technique/analyze') && r.request().method() === 'POST', { timeout: 90_000 })
+  await page.getByTestId(T.techniqueAnalyse).click()
+  const res = await analyzed
+  expect(res.status()).toBe(200)
+  const { analysisId } = (await res.json()) as { analysisId: string }
+  await expect(page.getByTestId(T.techniqueScore)).toHaveText(/\d+/, { timeout: 30_000 })
+  return analysisId
 }

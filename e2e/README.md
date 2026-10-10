@@ -44,6 +44,7 @@ The password for all three is `E2E-test-password-1!`.
 | --- | --- |
 | `onboarding-auth` | welcome slides; sign-in and reload; sign-up with the emailed code (fake outbox), account created, profile setup; password reset |
 | `technique` | upload through the file picker, the analysis score, Magic Shot (correction video) to `done`, Activities |
+| `magic-shot-video` | the pose-correction Magic Shot: result with the video, skeleton, overlay and corrections against the seeded pro reference. Its `@live` variant sends the same request to the real model on fal (about $0.20) |
 | `progress` | progress overview, daily quests, achievements list and detail, leaderboard, notifications |
 | `people` | coach review round trip (player sends, coach comments and submits, player sees it), clubs (create, approve, page, search), profile settings save, admin hub |
 | `route-smoke` | every route opens on the web without crashing, as the role that uses it |
