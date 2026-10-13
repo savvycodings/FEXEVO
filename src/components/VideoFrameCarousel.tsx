@@ -45,6 +45,8 @@ export type VideoFrameCarouselProps = {
   onScrubStart?: () => void
   onScrubEnd?: () => void
   onCenterFrameImageUriChange?: (uri: string | null) => void
+  /** Shown before the playhead time, e.g. "Contact"; the playhead then renders with tenths. */
+  playheadLabel?: string
 }
 
 function clamp01(v: number) {
@@ -56,6 +58,11 @@ function fmt(ms: number) {
   const m = Math.floor(total / 60)
   const s = total % 60
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function fmtTenths(ms: number) {
+  const tenths = Math.max(0, Math.floor(ms / 100)) % 10
+  return `${fmt(ms)}.${tenths}`
 }
 
 function timeMsToStripX(ms: number, durationMs: number, viewportW: number): number {
@@ -280,6 +287,7 @@ export function VideoFrameCarousel({
   onScrubStart,
   onScrubEnd,
   onCenterFrameImageUriChange,
+  playheadLabel,
 }: VideoFrameCarouselProps) {
   const [frames, setFrames] = useState<VideoFrameCarouselFrame[]>([])
   const [viewportW, setViewportW] = useState(0)
@@ -737,7 +745,7 @@ export function VideoFrameCarousel({
           {fmt(dragTrimStartMs)}
         </Text>
         <Text allowFontScaling={false} style={styles.timeTextCenter}>
-          {fmt(playheadTimeMs)}
+          {playheadLabel ? `${playheadLabel} ${fmtTenths(playheadTimeMs)}` : fmt(playheadTimeMs)}
           {' · '}
           {selectionSecLabel}
         </Text>

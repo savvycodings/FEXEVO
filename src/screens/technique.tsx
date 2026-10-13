@@ -11,7 +11,9 @@ import {
   Image,
   Platform,
   Alert,
+  Share,
   StatusBar,
+  Pressable,
   useWindowDimensions,
   type ImageSourcePropType,
 } from 'react-native'
@@ -85,6 +87,8 @@ import { PaddlePongGame } from '../components/PaddlePongGame'
 import { AnalyzingDashSpinner } from '../components/AnalyzingDashSpinner'
 import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
 import { SentToSupportModal } from '../components/SentToSupportModal'
+import { CoachCharacterAvatar } from '../components/CoachCharacterAvatar'
+import { useCoachAssistant } from '../context/CoachAssistantContext'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
 import {
@@ -139,7 +143,8 @@ const HOWTO_RIGHT2_IMAGE = require('../../assets/howto/right2.png')
 const HOWTO_X1_IMAGE = require('../../assets/howto/x1.png')
 const HOWTO_X2_IMAGE = require('../../assets/howto/x2.png')
 const LOADING_VIDEO_CLIP = require('../../assets/loadingvideo/loadingvideo.mp4')
-const SCORE_3BARS_ICON = require('../../assets/afteranylize/3bars.svg')
+const COACH_PILL_OUT_X = 46
+const COACH_PILL_OUT_Y = 8
 const CATEGORY_ICON_TECHNIQUE = require('../../assets/afteranylize/technique.svg')
 const CATEGORY_ICON_OUTCOME = require('../../assets/afteranylize/outcome.svg')
 const CATEGORY_ICON_TACTICS = require('../../assets/afteranylize/tactics.svg')
@@ -493,6 +498,12 @@ export function Technique() {
   const [videoDurationSeconds, setVideoDurationSeconds] = useState<number | null>(null)
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
+  const coachAssistant = useCoachAssistant()
+  const coachChatUsed = coachAssistant.hasChatted && coachAssistant.focusAnalysisId === analysisId
+  const openCoachChat = useCallback(
+    () => coachAssistant.openAssistant({ analysisId, videoUri: localVideoUri ?? uploadedVideoUrl }),
+    [coachAssistant, analysisId, localVideoUri, uploadedVideoUrl]
+  )
   /** Mini paddle game over the analysis loading video. */
   const [paddleGameOpen, setPaddleGameOpen] = useState(false)
   /** Progress / finished chip on the game header while analysis runs. */
@@ -551,6 +562,31 @@ export function Technique() {
     SHOW_COMFY_CORRECTIONS && analysisJson?.status === 'completed'
   )
   const correctionVideo: CorrectionVideoRow | null = magicShot.video
+  const [switchingHand, setSwitchingHand] = useState(false)
+  const [switchHandError, setSwitchHandError] = useState<string | null>(null)
+  const inviteFriendToMagicShot = useCallback(() => {
+    void Share.share({ message: t('technique.magicShot.mismatch.shareMessage') }).catch(() => {})
+  }, [t])
+  const switchHandAndRegenerate = useCallback(async () => {
+    const videoHand = magicShot.mismatch?.videoHand
+    if (!videoHand || switchingHand) return
+    setSwitchingHand(true)
+    setSwitchHandError(null)
+    const res = await authClient
+      .$fetch('/profile/hand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ dominantHand: videoHand }),
+      })
+      .catch((err: unknown) => ({ error: err }))
+    setSwitchingHand(false)
+    if ((res as { error?: unknown })?.error) {
+      setSwitchHandError(t('technique.magicShot.mismatch.switchFailed'))
+      return
+    }
+    invalidateSessionData()
+    void magicShot.start({ forceRegenerate: true })
+  }, [magicShot, switchingHand, invalidateSessionData, t])
   const [correctionsTestError, setCorrectionsTestError] = useState<string | null>(null)
   /** Server-extracted video frames paired with bundled testimgegen PNGs (no AI gen) */
   const [testPoseCorrectionImages, setTestPoseCorrectionImages] = useState<CorrectionPairRow[]>([])
@@ -786,6 +822,14 @@ export function Technique() {
     const totalMs = Math.round(videoDurationSeconds * 1000)
     return clampClipRangeMs(trimRange.startMs, trimRange.endMs, totalMs)
   }, [videoDurationSeconds, trimRange.startMs, trimRange.endMs])
+
+  /** Ball contact the user marked with the playhead, clamped into the trimmed clip like the carousel draws it. */
+  const contactMs = useMemo(() => {
+    if (currentTrimClip == null || videoDurationSeconds == null || videoDurationSeconds <= 0) return null
+    if (currentTrimClip.endMs <= currentTrimClip.startMs) return null
+    const raw = Math.round(videoDurationSeconds * 1000 * clamp01(markerProgress))
+    return Math.max(currentTrimClip.startMs, Math.min(currentTrimClip.endMs, raw))
+  }, [currentTrimClip, videoDurationSeconds, markerProgress])
 
   const correctionRegenerateBullets = useMemo(() => {
     const items: string[] = []
@@ -1618,7 +1662,7 @@ export function Technique() {
           body: JSON.stringify({
             techniqueVideoId: videoId,
             ...(currentTrimClip
-              ? { clips: [currentTrimClip] }
+              ? { clips: [currentTrimClip], ...(contactMs != null ? { contactMs } : {}) }
               : clips.length > 0
                 ? {
                     clips: clips.map((c) => {
@@ -2487,6 +2531,7 @@ export function Technique() {
                           }, 120)
                         }}
                         onCenterFrameImageUriChange={setStep2CenterFrameUri}
+                        playheadLabel={t('technique.contactLabel')}
                       />
                     ) : (
                       <View style={styles.step2CarouselLoading}>
@@ -2496,6 +2541,12 @@ export function Technique() {
                         </Text>
                       </View>
                     )
+                  ) : null}
+
+                  {uploadedVideoUrl != null && videoDurationSeconds != null && videoDurationSeconds > 0 ? (
+                    <Text allowFontScaling={false} style={styles.contactHintText}>
+                      {t('technique.contactHint')}
+                    </Text>
                   ) : null}
 
                   <View style={styles.setClipControlRow}>
@@ -2934,6 +2985,7 @@ export function Technique() {
                       Keep it up.
                     </Text>
                   </View>
+                  <View style={styles.coachRingHitArea}>
                   <View
                     style={[
                       styles.scoreCircleWrap,
@@ -2990,10 +3042,27 @@ export function Technique() {
                       />
                     </G>
                   </Svg>
-                  <View style={styles.scoreCircleCenter}>
-                    <LocalSvgAsset assetModule={SCORE_3BARS_ICON} width={40} height={40} />
-                  </View>
+                  <Pressable
+                    style={styles.scoreCircleCenter}
+                    onPress={openCoachChat}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('coachCharacter.needHelp')}
+                  >
+                    <CoachCharacterAvatar size={104} />
+                  </Pressable>
                 </View>
+                  {!coachChatUsed ? (
+                    <Pressable
+                      style={styles.coachHelpPill}
+                      onPress={openCoachChat}
+                      hitSlop={6}
+                    >
+                      <Text allowFontScaling={false} style={styles.coachHelpPillText}>
+                        {t('coachCharacter.needHelp')}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  </View>
                 </View>
               </View>
             )}
@@ -3580,6 +3649,11 @@ export function Technique() {
                                   startedAt={magicShot.startedAt}
                                   error={magicShot.error}
                                   onGenerate={() => void magicShot.start()}
+                                  mismatch={magicShot.mismatch}
+                                  onInviteFriend={inviteFriendToMagicShot}
+                                  onSwitchHand={() => void switchHandAndRegenerate()}
+                                  switchingHand={switchingHand}
+                                  switchHandError={switchHandError}
                                 />
                               </View>
                             )}
@@ -4949,6 +5023,33 @@ function getStyles(theme: any) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    /** Pads the ring so the pill stays inside a touchable parent (Android drops touches outside bounds). */
+    coachRingHitArea: {
+      position: 'relative' as const,
+      marginLeft: -COACH_PILL_OUT_X,
+      paddingLeft: COACH_PILL_OUT_X,
+      marginTop: -COACH_PILL_OUT_Y,
+      paddingTop: COACH_PILL_OUT_Y,
+      flexShrink: 0,
+    },
+    coachHelpPill: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      zIndex: 2,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 14,
+      borderBottomRightRadius: 4,
+      backgroundColor: '#041641',
+      borderWidth: 1,
+      borderColor: '#00B8FF',
+    },
+    coachHelpPillText: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 12,
+      color: '#FFFFFF',
+    },
     /** Same gradient ring treatment as Summary / Category rows (`retrievalMetaRowGradient`). */
     scoreBreakdownGradientWrap: {
       width: '100%',
@@ -5019,6 +5120,12 @@ function getStyles(theme: any) {
       paddingTop: 0,
       paddingBottom: 4,
       overflow: 'visible',
+    },
+    contactHintText: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.72)',
+      textAlign: 'center',
+      marginBottom: 8,
     },
     setClipControlRow: {
       marginTop: 2,

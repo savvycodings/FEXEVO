@@ -199,6 +199,8 @@ export const en = {
     chooseFile: "Choose File",
     recordLabel: "Or start recording a new video",
     setClip: "Set Clip",
+    contactLabel: "Contact",
+    contactHint: "Drag the white line to the moment the ball hits the paddle.",
     clearClips: "Clear all clips",
     tryNewVideo: "Try a new video",
     goToUpload: "Go to Upload",

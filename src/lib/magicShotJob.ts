@@ -17,10 +17,17 @@ export type MagicShotVideo = {
   windowEndMs: number | null
 }
 
+/** The profile's playing hand and the hand holding the racket in the video disagree. */
+export type MagicShotHandMismatch = { profileHand: 'left' | 'right'; videoHand: 'left' | 'right' }
+
+export type MagicShotErrorCode = 'handedness_mismatch'
+
 type JobSnapshot = {
   status: Exclude<MagicShotStatus, 'starting'>
   startedAt: string | null
   error: string | null
+  errorCode: MagicShotErrorCode | null
+  mismatch: MagicShotHandMismatch | null
   video: MagicShotVideo | null
 }
 
@@ -28,6 +35,20 @@ type PendingJob = { analysisId: string; startedAt: string | null }
 
 const PENDING_KEY = 'magicShot.pending'
 const POLL_MS = 10_000
+/** The handedness check fails a job within seconds, so look again soon after starting one. */
+const QUICK_CHECK_MS = 3_000
+
+function parseHand(v: unknown): 'left' | 'right' | null {
+  return v === 'left' || v === 'right' ? v : null
+}
+
+function parseMismatch(body: Record<string, unknown>): MagicShotHandMismatch | null {
+  if (body.code !== 'handedness_mismatch') return null
+  const d = body.detail as Record<string, unknown> | null | undefined
+  const profileHand = parseHand(d?.profileHand)
+  const videoHand = parseHand(d?.videoHand)
+  return profileHand && videoHand && profileHand !== videoHand ? { profileHand, videoHand } : null
+}
 
 function parseVideo(body: Record<string, unknown>): MagicShotVideo | null {
   const video = typeof body.video === 'string' ? body.video.trim() : ''
@@ -64,10 +85,13 @@ function toSnapshot(raw: unknown): JobSnapshot | null {
           ? 'done'
           : null
   if (!status) return null
+  const mismatch = status === 'failed' ? parseMismatch(body) : null
   return {
     status,
     startedAt: typeof body.startedAt === 'string' ? body.startedAt : null,
     error: typeof body.error === 'string' ? body.error : null,
+    errorCode: mismatch ? 'handedness_mismatch' : null,
+    mismatch,
     video,
   }
 }
@@ -188,6 +212,8 @@ export function useMagicShotJob(analysisId: string | null, enabled: boolean) {
   const [status, setStatus] = useState<MagicShotStatus>('idle')
   const [startedAt, setStartedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<MagicShotErrorCode | null>(null)
+  const [mismatch, setMismatch] = useState<MagicShotHandMismatch | null>(null)
   const [video, setVideo] = useState<MagicShotVideo | null>(null)
   const [focused, setFocused] = useState(false)
   const [appActive, setAppActive] = useState(AppState.currentState === 'active')
@@ -219,6 +245,8 @@ export function useMagicShotJob(analysisId: string | null, enabled: boolean) {
     setStatus(snap.status)
     setStartedAt(snap.startedAt)
     setError(snap.status === 'failed' ? snap.error : null)
+    setErrorCode(snap.errorCode)
+    setMismatch(snap.mismatch)
     setVideo(snap.status === 'done' ? snap.video : null)
   }, [])
 
@@ -236,6 +264,8 @@ export function useMagicShotJob(analysisId: string | null, enabled: boolean) {
     setStatus('idle')
     setStartedAt(null)
     setError(null)
+    setErrorCode(null)
+    setMismatch(null)
     setVideo(null)
     if (analysisId && enabled) void refresh()
   }, [analysisId, enabled, refresh])
@@ -257,6 +287,8 @@ export function useMagicShotJob(analysisId: string | null, enabled: boolean) {
       const gen = generation.current
       setStatus('starting')
       setError(null)
+      setErrorCode(null)
+      setMismatch(null)
       void ensureCorrectionNotificationPermission()
       const res = await authClient
         .$fetch('/technique/correction-videos', {
@@ -280,11 +312,12 @@ export function useMagicShotJob(analysisId: string | null, enabled: boolean) {
       }
       if (snap.status === 'running') {
         await addPending({ analysisId, startedAt: snap.startedAt })
+        setTimeout(() => void refresh(), QUICK_CHECK_MS)
       }
       apply(snap)
     },
-    [analysisId, enabled, status, apply]
+    [analysisId, enabled, status, apply, refresh]
   )
 
-  return { status, startedAt, error, video, start, refresh }
+  return { status, startedAt, error, errorCode, mismatch, video, start, refresh }
 }

@@ -103,6 +103,8 @@ export type MainTabParamList = {
   Playlist: undefined;
   MyCoach: NavigatorScreenParams<MyCoachTabStackParamList>;
   Activities: { openAnalysisId?: string } | undefined;
+  /** Opens the coach assistant overlay; the tab press is intercepted and never navigates. */
+  Assistant: undefined;
   Progress: NavigatorScreenParams<ProgressTabStackParamList>;
   You: NavigatorScreenParams<YouTabStackParamList>;
 };

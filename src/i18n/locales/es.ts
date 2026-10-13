@@ -199,6 +199,8 @@ export const es = {
     chooseFile: "Elegir archivo",
     recordLabel: "O graba un video nuevo",
     setClip: "Definir clip",
+    contactLabel: "Impacto",
+    contactHint: "Arrastra la línea blanca al momento en que la pelota toca la pala.",
     clearClips: "Borrar todos los clips",
     tryNewVideo: "Probar otro video",
     goToUpload: "Ir a subir",

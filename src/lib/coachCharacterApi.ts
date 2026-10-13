@@ -1,0 +1,109 @@
+import { authClient } from './auth-client'
+import { DOMAIN } from '../../constants'
+
+export function resolveCoachVideoUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (/^(https?|file|content):/i.test(url)) return url
+  return `${DOMAIN.replace(/\/+$/, '')}${url.startsWith('/') ? url : `/${url}`}`
+}
+
+export type CoachChatTurn = { role: 'user' | 'assistant'; content: string }
+
+export type CoachAnalysisFacts = {
+  analysisId: string
+  source: 'selected' | 'latest'
+  shotName: string | null
+  /** Server-relative (`/technique/video/:id`) or absolute; resolve with `resolveCoachVideoUrl`. */
+  videoUrl: string | null
+  score: number | null
+  rating: string | null
+  breakdown: { technique: number | null; outcome: number | null; tactics: number | null }
+  focusArea: string | null
+  strengths: string[]
+  corrections: string[]
+  createdAt: string
+}
+
+export type CoachDayFacts = {
+  count: number
+  averageScore: number | null
+  bestScore: number | null
+  sessions: Array<{ analysisId: string; score: number | null; focusArea: string | null; createdAt: string }>
+}
+
+export type CoachContext = {
+  kind: 'analysis' | 'day' | 'none'
+  analysis: CoachAnalysisFacts | null
+  day: CoachDayFacts | null
+}
+
+type FetchResult<T> = { data?: T | null; error?: { status?: number; message?: string } | null }
+
+const CONTEXT_TIMEOUT_MS = 10_000
+const CHAT_TIMEOUT_MS = 75_000
+
+async function post<T>(path: string, body: unknown, timeoutMs?: number): Promise<T> {
+  const res = (await authClient.$fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+    timeout: timeoutMs,
+  })) as FetchResult<T>
+  if (res?.error || !res?.data) {
+    const err = new Error(res?.error?.message || `Request failed: ${path}`) as Error & {
+      status?: number
+    }
+    err.status = res?.error?.status
+    throw err
+  }
+  return res.data
+}
+
+export async function fetchCoachContext(
+  message: string,
+  analysisId: string | null | undefined,
+  locale: string
+): Promise<CoachContext> {
+  try {
+    return await post<CoachContext>('/coach-character/context', {
+      message,
+      analysisId: analysisId ?? undefined,
+      locale,
+    }, CONTEXT_TIMEOUT_MS)
+  } catch {
+    return { kind: 'none', analysis: null, day: null }
+  }
+}
+
+export async function sendCoachChat(
+  messages: CoachChatTurn[],
+  analysisId: string | null | undefined,
+  locale: string
+): Promise<string> {
+  const data = await post<{ reply?: string }>('/coach-character/chat', {
+    messages,
+    analysisId: analysisId ?? undefined,
+    locale,
+  }, CHAT_TIMEOUT_MS)
+  return String(data.reply ?? '').trim()
+}
+
+/** Returns null when the voice instance is offline so callers stay text-only. */
+export async function fetchCoachSpeech(
+  text: string
+): Promise<{ audioBase64: string; mimeType: string } | null> {
+  try {
+    const data = await post<{ audioBase64?: string; mimeType?: string }>('/coach-character/speech', {
+      text,
+    })
+    if (!data.audioBase64) return null
+    return { audioBase64: data.audioBase64, mimeType: data.mimeType || 'audio/wav' }
+  } catch {
+    return null
+  }
+}
+
+export async function transcribeCoachAudio(audioBase64: string, language?: string): Promise<string> {
+  const data = await post<{ text?: string }>('/coach-character/transcribe', { audioBase64, language })
+  return String(data.text ?? '').trim()
+}

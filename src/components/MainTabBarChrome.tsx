@@ -24,6 +24,8 @@ import {
 import { useTranslation } from "react-i18next";
 import { useSessionData } from "../context/SessionDataContext";
 import type { MainStackParamList, MainTabParamList } from "../navigation/types";
+import { useCoachAssistant } from "../context/CoachAssistantContext";
+import { CoachTabOrb, TAB_ICON_SLOT } from "./CoachCharacterAvatar";
 
 const TAB_BAR_ACTIVE = "#FFFFFF";
 const TAB_BAR_INACTIVE = "#5B9DFF";
@@ -32,6 +34,7 @@ const TAB_ORDER: (keyof MainTabParamList)[] = [
   "AICoach",
   "MyCoach",
   "Activities",
+  "Assistant",
   "Playlist",
   "Progress",
   "You",
@@ -48,6 +51,7 @@ export function MainTabBarChrome({ activeTab }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { width: winW } = useWindowDimensions();
   const { viewerIsCoach } = useSessionData();
+  const { openAssistant } = useCoachAssistant();
 
   const tabBarBottomPad = insets.bottom + 10;
   const tabBarHeight = 66 + tabBarBottomPad;
@@ -65,7 +69,7 @@ export function MainTabBarChrome({ activeTab }: Props) {
           position: "relative",
           overflow: "hidden",
           height: tabBarHeight,
-          paddingTop: 4,
+          paddingTop: 8,
           paddingBottom: tabBarBottomPad,
           paddingHorizontal: 4,
           flexDirection: "row",
@@ -83,8 +87,10 @@ export function MainTabBarChrome({ activeTab }: Props) {
           minWidth: 0,
         },
         iconWrap: {
+          width: TAB_ICON_SLOT.width,
+          height: TAB_ICON_SLOT.height,
           marginTop: 0,
-          marginBottom: 2,
+          marginBottom: 4,
           alignItems: "center",
           justifyContent: "center",
         },
@@ -108,7 +114,9 @@ export function MainTabBarChrome({ activeTab }: Props) {
 
   const goToTab = useCallback(
     (screen: keyof MainTabParamList) => {
-      if (screen === "You") {
+      if (screen === "Assistant") {
+        openAssistant();
+      } else if (screen === "You") {
         navigation.navigate("Main", {
           screen: "You",
           params: { screen: "YouMain" },
@@ -129,7 +137,7 @@ export function MainTabBarChrome({ activeTab }: Props) {
         navigation.navigate("Main", { screen: screen as "AICoach" | "Activities" });
       }
     },
-    [navigation]
+    [navigation, openAssistant]
   );
 
   const tabLabels: Record<keyof MainTabParamList, string> = {
@@ -137,6 +145,7 @@ export function MainTabBarChrome({ activeTab }: Props) {
     Playlist: t("tabs.playlist"),
     MyCoach: t("tabs.myStudents"),
     Activities: viewerIsCoach ? t("tabs.calendar") : t("tabs.activities"),
+    Assistant: t("tabs.assistant"),
     Progress: t("tabs.progress"),
     You: t("tabs.you"),
   };
@@ -167,6 +176,8 @@ export function MainTabBarChrome({ activeTab }: Props) {
             )
           ) : tab === "Activities" ? (
             <NavIconActivities color={color} size={iconSize} />
+          ) : tab === "Assistant" ? (
+            <CoachTabOrb />
           ) : tab === "Progress" ? (
             <NavIconProgress color={color} size={iconSize} />
           ) : (

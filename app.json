@@ -22,6 +22,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "FacebookAppID": "3843873549080105",
         "FacebookDisplayName": "xevo paddle",
+        "NSMicrophoneUsageDescription": "Xevo uses the microphone so you can talk to your AI coach.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [

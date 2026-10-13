@@ -58,6 +58,8 @@ import { registerCorrectionNotificationDeepLink } from './lib/correctionImageNot
 import { watchPendingMagicShots } from './lib/magicShotJob'
 import { getCachedProfile, setCachedProfile } from './lib/profile-cache'
 import { SessionDataProvider, useSessionData } from './context/SessionDataContext'
+import { CoachAssistantProvider, useCoachAssistant } from './context/CoachAssistantContext'
+import { CoachTabOrb, TAB_ICON_SLOT } from './components/CoachCharacterAvatar'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import type {
@@ -223,6 +225,10 @@ function YouTabStack({
   )
 }
 
+function AssistantTabPlaceholder() {
+  return null
+}
+
 function MainTabsLayout(props: { profileRefreshTick: number; onProfileUpdated: () => void }) {
   return <MainTabsLayoutInner {...props} />
 }
@@ -249,13 +255,17 @@ function MainTabsLayoutInner({
     Playlist: t('tabs.playlist'),
     MyCoach: t('tabs.myStudents'),
     Activities: viewerIsCoach ? t('tabs.calendar') : t('tabs.activities'),
+    Assistant: t('tabs.assistant'),
     Progress: t('tabs.progress'),
     You: t('tabs.you'),
   }
+  const { openAssistant, closeAssistant } = useCoachAssistant()
 
   const goToTab = useCallback(
     (screen: keyof MainTabParamList) => {
-      if (screen === 'You') {
+      if (screen === 'Assistant') {
+        openAssistant()
+      } else if (screen === 'You') {
         stackNavigation.navigate('Main', {
           screen: 'You',
           params: { screen: 'YouMain' },
@@ -276,7 +286,7 @@ function MainTabsLayoutInner({
         stackNavigation.navigate('Main', { screen: screen as 'AICoach' | 'Activities' })
       }
     },
-    [stackNavigation]
+    [stackNavigation, openAssistant]
   )
 
   useEffect(() => {
@@ -464,7 +474,7 @@ function MainTabsLayoutInner({
           elevation: 0,
           shadowOpacity: 0,
           height: tabBarHeight,
-          paddingTop: 4,
+          paddingTop: 8,
           paddingBottom: tabBarBottomPad,
           paddingHorizontal: 4,
         },
@@ -475,8 +485,11 @@ function MainTabsLayoutInner({
           justifyContent: 'center',
         },
         tabBarIconStyle: {
+          width: TAB_ICON_SLOT.width,
+          height: TAB_ICON_SLOT.height,
           marginTop: 0,
-          marginBottom: 2,
+          marginBottom: 4,
+          overflow: 'visible',
         },
       }) as const,
     [tabBarHeight, tabBarBottomPad, tabBg]
@@ -576,6 +589,8 @@ function MainTabsLayoutInner({
                 )
               case 'Activities':
                 return <NavIconActivities color={c} size={s} />
+              case 'Assistant':
+                return <CoachTabOrb />
               case 'Progress':
                 return <NavIconProgress color={c} size={s} />
               case 'You':
@@ -585,12 +600,28 @@ function MainTabsLayoutInner({
             }
           },
         })}
+        screenListeners={({ route }) => ({
+          tabPress: () => {
+            if (route.name !== 'Assistant') closeAssistant()
+          },
+        })}
       >
         <Tab.Screen name="AICoach" options={{ title: tabLabels.AICoach }}>
           {() => <AICoachTabStack techniqueResetKey={techniqueResetKey} />}
         </Tab.Screen>
         <Tab.Screen name="MyCoach" options={{ title: tabLabels.MyCoach }} component={MyCoachTabStack} />
         <Tab.Screen name="Activities" options={{ title: tabLabels.Activities }} component={ActivitiesScreen} layout={screenEntranceLayout} />
+        <Tab.Screen
+          name="Assistant"
+          component={AssistantTabPlaceholder}
+          options={{ title: tabLabels.Assistant }}
+          listeners={{
+            tabPress: (e) => {
+              e.preventDefault()
+              openAssistant()
+            },
+          }}
+        />
         <Tab.Screen name="Playlist" component={CoachPlaylistScreen} layout={screenEntranceLayout} />
         <Tab.Screen name="Progress" options={{ title: tabLabels.Progress }} component={ProgressTabStack} />
         <Tab.Screen name="You" options={{ title: tabLabels.You }} layout={screenEntranceLayout}>
@@ -615,11 +646,13 @@ function AuthenticatedStack() {
   const [adminHubUnlocked, setAdminHubUnlocked] = useState(false)
   const [profileRefreshTick, setProfileRefreshTick] = useState(0)
   const onProfileUpdated = useCallback(() => setProfileRefreshTick((t) => t + 1), [])
+  const { closeAssistant } = useCoachAssistant()
 
   return (
     <View style={{ flex: 1, backgroundColor: stackContentBg }}>
       <SessionDataProvider profileRefreshTick={profileRefreshTick}>
         <Stack.Navigator
+          screenListeners={{ focus: closeAssistant }}
           screenOptions={{
             headerShown: false,
             /** Opaque route cards — default nav theme can still flash at edges if this is ever transparent. */
@@ -708,7 +741,9 @@ function AuthenticatedStack() {
 export function Main() {
   return (
     <SafeAreaProvider>
-      <AuthenticatedStack />
+      <CoachAssistantProvider>
+        <AuthenticatedStack />
+      </CoachAssistantProvider>
     </SafeAreaProvider>
   )
 }

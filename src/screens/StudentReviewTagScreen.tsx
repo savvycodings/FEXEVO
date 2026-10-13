@@ -129,15 +129,16 @@ export function StudentReviewTagScreen() {
   const selfAnalyzeCategoryLabel = t(coreGroup ? analysisCoreTitleKey(coreGroup) : coachUploadCategoryTitleKey(category))
   const strokeLabel = shotTitleText(t, labelKey, labelLine2Key)
 
-  const onUpload = useCallback(async () => {
-    if (viewId == null || uploading) return
+  const onUpload = useCallback(async (pickedViewId?: CameraAngleId) => {
+    const chosenViewId = pickedViewId ?? viewId
+    if (chosenViewId == null || uploading) return
     if (flow === 'self-analyze') {
       const userShot = {
         category,
         strokePreset,
         shotLabel: strokeLabel,
         skillLevel: skillLevel != null ? formatTrainSkillLevel(skillLevel) : '',
-        viewId,
+        viewId: chosenViewId,
       }
       completeSelfAnalyzeShot(userShot)
       const aiNav = navigation as unknown as NativeStackNavigationProp<AICoachTabStackParamList>
@@ -173,7 +174,7 @@ export function StudentReviewTagScreen() {
           strokePreset,
           shotLabel: strokeLabel,
           skillLevel: formatTrainSkillLevel(skillLevel),
-          viewId,
+          viewId: chosenViewId,
         },
       })
       Alert.alert(t('coachFlow.videoSentTitle'), t('coachFlow.videoSentBody'), [
@@ -460,6 +461,8 @@ export function StudentReviewTagScreen() {
         onSelect={(id) => {
           setViewId(id)
           setExampleAngleId(null)
+          // The view is the last choice in the AI coach flow, so Continue moves straight on to the clip.
+          if (selfAnalyze) void onUpload(id)
         }}
         onClose={() => setExampleAngleId(null)}
       />

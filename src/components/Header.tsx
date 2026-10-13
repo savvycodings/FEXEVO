@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LocalSvgAsset, prefetchSvgAssets } from './LocalSvgAsset'
 import { profileImageSource } from '../lib/defaultProfilePicture'
+import { useCoachAssistant } from '../context/CoachAssistantContext'
 
 const HEADER_MARK_SVG = require('../../assets/pro.svg')
 const SETTINGS_ICON = require('../../assets/youpage/settingsicon.svg')
@@ -68,9 +69,10 @@ export function Header({
 
   const leftSearch = headerLeftMode === 'search' && onSearchPress
   const bgBottom = theme.backgroundColor ?? '#030A17'
+  const { reportHeaderHeight } = useCoachAssistant()
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} onLayout={(e) => reportHeaderHeight(e.nativeEvent.layout.height)}>
       <LinearGradient
         pointerEvents="none"
         colors={['#071D47', bgBottom]}

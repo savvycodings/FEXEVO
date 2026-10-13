@@ -12,7 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from './LocalSvgAsset'
-import type { MagicShotStatus } from '../lib/magicShotJob'
+import type { MagicShotHandMismatch, MagicShotStatus } from '../lib/magicShotJob'
 
 const BEFORE_IMAGE = require('../../assets/magicshot/before.png')
 const AFTER_IMAGE = require('../../assets/magicshot/after.png')
@@ -33,6 +33,12 @@ type MagicShotCardProps = {
   startedAt: string | null
   error: string | null
   onGenerate: () => void
+  /** Set when the last generation was stopped because the video shows another player's hand. */
+  mismatch?: MagicShotHandMismatch | null
+  onInviteFriend?: () => void
+  onSwitchHand?: () => void
+  switchingHand?: boolean
+  switchHandError?: string | null
 }
 
 function remainingLabel(startedAt: string | null, now: number): string {
@@ -43,7 +49,17 @@ function remainingLabel(startedAt: string | null, now: number): string {
   return `${Math.ceil(left / 60_000)} m`
 }
 
-export function MagicShotCard({ status, startedAt, error, onGenerate }: MagicShotCardProps) {
+export function MagicShotCard({
+  status,
+  startedAt,
+  error,
+  onGenerate,
+  mismatch,
+  onInviteFriend,
+  onSwitchHand,
+  switchingHand = false,
+  switchHandError,
+}: MagicShotCardProps) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const styles = useMemo(() => getStyles(theme), [theme])
@@ -89,13 +105,22 @@ export function MagicShotCard({ status, startedAt, error, onGenerate }: MagicSho
     </View>
   )
 
-  return (
-    <View style={styles.card}>
+  const showMismatch = status === 'failed' && !!mismatch
+
+  const renderMismatch = (m: MagicShotHandMismatch) => (
+    <View style={styles.mismatchPanel}>
+      <Text style={styles.mismatchTitle}>{t('technique.magicShot.mismatch.title')}</Text>
+      <Text style={styles.body}>
+        {t('technique.magicShot.mismatch.body', {
+          profileHanded: t(`technique.magicShot.mismatch.handed.${m.profileHand}`),
+          videoHandName: t(`technique.magicShot.mismatch.handName.${m.videoHand}`),
+        })}
+      </Text>
       <TouchableOpacity
         activeOpacity={0.9}
-        disabled={busy}
-        onPress={onGenerate}
-        style={[styles.buttonWrap, busy && styles.buttonBusy]}
+        disabled={switchingHand}
+        onPress={onInviteFriend}
+        style={styles.buttonWrap}
         accessibilityRole="button"
       >
         <LinearGradient
@@ -105,32 +130,75 @@ export function MagicShotCard({ status, startedAt, error, onGenerate }: MagicSho
           end={{ x: 1, y: 1 }}
           style={styles.button}
         >
-          {busy ? (
-            <>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-              <Text style={styles.buttonText} allowFontScaling={false}>
-                {t('technique.magicShot.generating')}
-              </Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.buttonText} allowFontScaling={false}>
-                {status === 'failed' ? (
-                  t('technique.magicShot.retry')
-                ) : (
-                  <>
-                    {t('technique.magicShot.generatePrefix')}
-                    <Text style={styles.brandItalic}>{t('technique.magicShot.brand')}</Text>
-                  </>
-                )}
-              </Text>
-              <LocalSvgAsset assetModule={SPARKLE_ICON} width={24} height={24} />
-            </>
-          )}
+          <Text style={styles.buttonText} allowFontScaling={false}>
+            {t('technique.magicShot.mismatch.invite')}
+          </Text>
         </LinearGradient>
       </TouchableOpacity>
+      <TouchableOpacity
+        activeOpacity={0.8}
+        disabled={switchingHand}
+        onPress={onSwitchHand}
+        style={[styles.secondaryButton, switchingHand && styles.buttonBusy]}
+        accessibilityRole="button"
+      >
+        {switchingHand ? <ActivityIndicator size="small" color="#00B8FF" /> : null}
+        <Text style={styles.secondaryButtonText} allowFontScaling={false}>
+          {t('technique.magicShot.mismatch.switchHand', {
+            videoHanded: t(`technique.magicShot.mismatch.handed.${m.videoHand}`),
+          })}
+        </Text>
+      </TouchableOpacity>
+      {switchHandError ? <Text style={styles.errorText}>{switchHandError}</Text> : null}
+    </View>
+  )
 
-      {status === 'failed' && error ? (
+  const generateButton = (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      disabled={busy}
+      onPress={onGenerate}
+      style={[styles.buttonWrap, busy && styles.buttonBusy]}
+      accessibilityRole="button"
+    >
+      <LinearGradient
+        colors={['#00B8FF', '#0022FF']}
+        locations={[0.09, 0.91]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.button}
+      >
+        {busy ? (
+          <>
+            <ActivityIndicator size="small" color="#FFFFFF" />
+            <Text style={styles.buttonText} allowFontScaling={false}>
+              {t('technique.magicShot.generating')}
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.buttonText} allowFontScaling={false}>
+              {status === 'failed' ? (
+                t('technique.magicShot.retry')
+              ) : (
+                <>
+                  {t('technique.magicShot.generatePrefix')}
+                  <Text style={styles.brandItalic}>{t('technique.magicShot.brand')}</Text>
+                </>
+              )}
+            </Text>
+            <LocalSvgAsset assetModule={SPARKLE_ICON} width={24} height={24} />
+          </>
+        )}
+      </LinearGradient>
+    </TouchableOpacity>
+  )
+
+  return (
+    <View style={styles.card}>
+      {showMismatch && mismatch ? renderMismatch(mismatch) : generateButton}
+
+      {status === 'failed' && error && !showMismatch ? (
         <Text style={styles.errorText}>{error}</Text>
       ) : null}
 
@@ -225,6 +293,35 @@ function getStyles(theme: any) {
     },
     brandItalic: { fontFamily: 'Inter_700Bold_Italic' },
     errorText: { fontFamily: theme.regularFont, fontSize: 13, color: '#FF6B6B' },
+    mismatchPanel: {
+      width: '100%',
+      gap: 12,
+      borderWidth: 2,
+      borderColor: '#00B8FF',
+      borderRadius: 20,
+      padding: 16,
+      backgroundColor: '#01194D',
+    },
+    mismatchTitle: { fontFamily: theme.mediumFont, fontSize: 18, color: '#FFFFFF' },
+    secondaryButton: {
+      width: '100%',
+      minHeight: 52,
+      borderRadius: 20,
+      borderWidth: 2,
+      borderColor: '#00B8FF',
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+    },
+    secondaryButtonText: {
+      fontFamily: theme.mediumFont,
+      fontSize: 16,
+      color: '#00B8FF',
+      textAlign: 'center',
+      flexShrink: 1,
+    },
     copy: { width: '100%', gap: 10 },
     title: { fontFamily: theme.mediumFont, fontSize: 18, color: '#FFFFFF' },
     body: { fontFamily: theme.regularFont, fontSize: 13, color: '#FFFFFF', lineHeight: 18 },
