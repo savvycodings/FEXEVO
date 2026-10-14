@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as VideoThumbnails from 'expo-video-thumbnails'
+import { ResizeMode, Video, type AVPlaybackStatus } from 'expo-av'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import type { TFunction } from 'i18next'
 import { resolveCoachVideoUrl, type CoachContext } from '../lib/coachCharacterApi'
@@ -178,10 +179,11 @@ function usePulse(active: boolean) {
   return v
 }
 
-// The technique screen already runs several video players; a live player per trace exhausts the Java heap.
+// The technique screen already runs several video players; a live player per trace exhausts the Java heap,
+// so cards show a cached frame and only mount a player while the user plays the clip.
 const thumbnailCache = new Map<string, Promise<string | null>>()
 
-function clipThumbnail(uri: string): Promise<string | null> {
+export function clipThumbnail(uri: string): Promise<string | null> {
   let pending = thumbnailCache.get(uri)
   if (!pending) {
     pending = VideoThumbnails.getThumbnailAsync(uri, { time: 1000, quality: 0.6 })
@@ -198,6 +200,9 @@ function clipThumbnail(uri: string): Promise<string | null> {
 export function CoachClipCard({ uri }: { uri: string }) {
   const [thumb, setThumb] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [buffering, setBuffering] = useState(false)
   useEffect(() => {
     let alive = true
     void clipThumbnail(uri).then((t) => {
@@ -209,8 +214,32 @@ export function CoachClipCard({ uri }: { uri: string }) {
       alive = false
     }
   }, [uri])
+  const onPress = () => {
+    if (!playing) {
+      setPlaying(true)
+      setPaused(false)
+      setBuffering(true)
+    } else {
+      setPaused((p) => !p)
+    }
+  }
+  const onStatus = (s: AVPlaybackStatus) => {
+    if (!s.isLoaded) return
+    setBuffering(s.isBuffering && !s.isPlaying)
+    if (s.didJustFinish) {
+      setPlaying(false)
+      setPaused(false)
+    }
+  }
+  const showBadge = (thumb || playing) && (!playing || paused)
   return (
-    <View style={styles.videoWrap}>
+    <Pressable
+      style={styles.videoWrap}
+      onPress={onPress}
+      disabled={failed && !thumb}
+      accessibilityRole="button"
+      accessibilityLabel="Play shot"
+    >
       {thumb ? (
         <Image source={{ uri: thumb }} style={styles.video} resizeMode="cover" />
       ) : failed ? (
@@ -218,12 +247,27 @@ export function CoachClipCard({ uri }: { uri: string }) {
       ) : (
         <ActivityIndicator size="small" color={ACCENT} />
       )}
-      {thumb ? (
+      {playing ? (
+        <Video
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay={!paused}
+          isMuted={false}
+          onPlaybackStatusUpdate={onStatus}
+          onError={() => {
+            setPlaying(false)
+            setBuffering(false)
+          }}
+        />
+      ) : null}
+      {playing && buffering ? <ActivityIndicator style={styles.clipSpinner} size="small" color="#FFFFFF" /> : null}
+      {showBadge ? (
         <View style={styles.playBadge}>
           <Ionicons name="play" size={14} color="#FFFFFF" />
         </View>
       ) : null}
-    </View>
+    </Pressable>
   )
 }
 
@@ -329,18 +373,9 @@ type CoachThinkingTraceProps = {
 }
 
 export function CoachThinkingTrace({ trace, thinking, thinkingLabel, doneLabel, defaultOpen }: CoachThinkingTraceProps) {
-  const [open, setOpen] = useState(defaultOpen ?? thinking)
-  const wasThinking = useRef(thinking)
+  const [open, setOpen] = useState(defaultOpen ?? true)
   useEffect(() => {
-    if (thinking) {
-      wasThinking.current = true
-      setOpen(true)
-      return
-    }
-    if (!wasThinking.current) return
-    wasThinking.current = false
-    const id = setTimeout(() => setOpen(false), 1200)
-    return () => clearTimeout(id)
+    if (thinking) setOpen(true)
   }, [thinking])
   const seconds = Math.max(1, Math.round((trace.durationMs ?? 0) / 1000))
   const visibleSteps = trace.steps.filter((s) => s.status !== 'pending')
@@ -460,6 +495,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  clipSpinner: {
+    position: 'absolute',
   },
   chips: {
     flexDirection: 'row',

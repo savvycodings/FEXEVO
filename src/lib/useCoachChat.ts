@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Audio } from 'expo-av'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useTranslation } from 'react-i18next'
-import { buildCoachTraceSteps, type CoachTrace, type TraceStep } from '../components/CoachThinkingTrace'
+import {
+  buildCoachTraceSteps,
+  clipThumbnail,
+  type CoachTrace,
+  type TraceStep,
+} from '../components/CoachThinkingTrace'
 import {
   fetchCoachContext,
   fetchCoachSpeech,
@@ -13,6 +18,8 @@ import {
 
 const FIRST_STEP_MS = 450
 const STEP_MS = 700
+/** Longest the trace waits on the shot step for its frame before moving on. */
+const CLIP_WAIT_MS = 4000
 
 export type CoachChatMessage = CoachChatTurn & {
   id: string
@@ -242,6 +249,10 @@ export function useCoachChat({ analysisId, videoUri, active, onFirstMessage }: O
       try {
         const ctx = await fetchCoachContext(text, analysisId, lang)
         const steps = buildCoachTraceSteps(t, ctx, videoUri, lang)
+        const clipSteps = new Map<number, Promise<unknown>>()
+        steps.forEach((s, i) => {
+          if (s.content?.type === 'video') clipSteps.set(i, clipThumbnail(s.content.uri))
+        })
         for (let i = 0; i < steps.length; i++) {
           if (!mountedRef.current) return
           updateMessage(coachId, {
@@ -250,7 +261,11 @@ export function useCoachChat({ analysisId, videoUri, active, onFirstMessage }: O
               durationMs: null,
             },
           })
-          if (i < steps.length - 1) await sleep(i === 0 ? FIRST_STEP_MS : STEP_MS)
+          if (i < steps.length - 1) {
+            const minDelay = sleep(i === 0 ? FIRST_STEP_MS : STEP_MS)
+            const clip = clipSteps.get(i)
+            await (clip ? Promise.all([minDelay, Promise.race([clip, sleep(CLIP_WAIT_MS)])]) : minDelay)
+          }
         }
         const result = await replyPromise
         if (!mountedRef.current) return
