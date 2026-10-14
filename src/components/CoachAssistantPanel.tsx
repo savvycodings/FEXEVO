@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Image,
+  Keyboard,
   Platform,
   Pressable,
   ScrollView,
@@ -252,11 +253,12 @@ export function CoachAssistantPanel({
               <ScrollView
                 ref={scrollRef}
                 style={styles.flex}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={styles.listContainer}
                 onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
               >
+                <Pressable style={styles.listContent} onPress={Keyboard.dismiss} accessible={false}>
                 {messages.length === 0 ? (
                   <>
                     <CoachLine>
@@ -315,6 +317,7 @@ export function CoachAssistantPanel({
                     </View>
                   )
                 )}
+                </Pressable>
               </ScrollView>
             </View>
           ) : (
@@ -445,7 +448,11 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
   },
+  listContainer: {
+    flexGrow: 1,
+  },
   listContent: {
+    flexGrow: 1,
     paddingHorizontal: 30,
     paddingVertical: 20,
     gap: 14,
