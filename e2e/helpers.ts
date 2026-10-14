@@ -55,6 +55,9 @@ export const T = {
   adminGatePassword: 'admin-gate-password',
   adminGateUnlock: 'admin-gate-unlock',
   adminMembers: 'admin-members',
+  benchSubmission: (analysisId: string) => `bench-submission-${analysisId}`,
+  scoreBreakdown: 'score-breakdown',
+  scoreBreakdownStep: (n: number) => `score-breakdown-step-${n}`,
   // Coach review
   coachReviewGood: 'coach-review-good',
   coachReviewBad: 'coach-review-bad',

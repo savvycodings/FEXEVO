@@ -1,4 +1,5 @@
 import React from "react";
+import { TEST_IDS } from "../../lib/testIds";
 import {
   View,
   Text,
@@ -25,6 +26,7 @@ export function BenchSubmissionCard({ item, selected, onSelect, theme }: Props) 
     <TouchableOpacity
       style={[styles.card, selected && styles.cardSelected]}
       onPress={onSelect}
+      testID={TEST_IDS.benchSubmission(item.analysisId)}
       onLongPress={() => {
         if (item.videoUrl) void Linking.openURL(item.videoUrl);
       }}

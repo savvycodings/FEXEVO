@@ -16,6 +16,7 @@ import { ThemeContext } from "../context";
 import { LiquidScoreTile } from "../components/admin/LiquidScoreTile";
 import { BenchSubmissionCard } from "../components/admin/BenchSubmissionCard";
 import { BenchMatchPreviewPanel } from "../components/admin/BenchMatchPreviewPanel";
+import { ScoreBreakdownPanel } from "../components/admin/ScoreBreakdownPanel";
 import {
   fetchAccuracyCatalog,
   fetchAccuracyHistory,
@@ -246,6 +247,9 @@ export function AdminAccuracy({ onClose, skipPasswordGate, onOpenRetrievalBench 
             ))}
           </ScrollView>
         )}
+        {!matchPreviewLoading && !matchPreviewError ? (
+          <ScoreBreakdownPanel explanation={matchPreview?.scoreExplanation} />
+        ) : null}
         <BenchMatchPreviewPanel
           preview={matchPreview}
           loading={matchPreviewLoading}

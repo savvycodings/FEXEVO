@@ -114,6 +114,45 @@ export type BenchMatchPreview = {
     stroke_label: string;
     distance: number | null;
   }) | null;
+  scoreExplanation?: ScoreExplanation | null;
+};
+
+type Pillars = { technique: number; outcome: number; tactics: number };
+
+/** How an analysis' displayed technique score was built (BEXevo adminAccuracy/scoreExplanation). */
+export type ScoreExplanation = {
+  final: number;
+  rating: string | null;
+  scoringVersion: string | null;
+  inputs: {
+    poseFrames: number;
+    impactFrame: number | null;
+    shot: string | null;
+    embeddingSource: string | null;
+    topNeighbor: { stroke: string; distance: number | null } | null;
+    isPadel: boolean | null;
+    sportConfidence: number | null;
+  };
+  modelRaw: number | null;
+  pillarsRaw: Pillars | null;
+  pillarAverage: number | null;
+  boost: {
+    points: number;
+    merit: number | null;
+    perPillar: Pillars | null;
+    factors: Record<string, number> | null;
+  } | null;
+  pillarsFinal: Pillars | null;
+  confidence: {
+    score: number | null;
+    band: string | null;
+    pose: number | null;
+    tracking: number | null;
+    visibility: number | null;
+    plusMinus: number | null;
+  } | null;
+  feedback: { diagnosis: string | null; strengths: string[]; errors: string[]; corrections: string[] };
+  legacyPenaltyScore: number | null;
 };
 
 export async function fetchBenchMatchPreview(analysisId: string): Promise<BenchMatchPreview> {
