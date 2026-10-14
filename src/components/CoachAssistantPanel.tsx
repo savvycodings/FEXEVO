@@ -12,7 +12,8 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller'
+import Reanimated, { useAnimatedStyle } from 'react-native-reanimated'
 import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
@@ -158,6 +159,8 @@ type CoachAssistantPanelProps = {
   videoUri: string | null
   /** Opened from a shot: show the conversation panel right away instead of the idle pill. */
   startExpanded: boolean
+  /** Distance from the panel's bottom edge to the bottom of the screen (the tab bar underneath). */
+  bottomGap: number
   onClose: () => void
   onFirstMessage?: () => void
 }
@@ -167,10 +170,15 @@ export function CoachAssistantPanel({
   analysisId,
   videoUri,
   startExpanded,
+  bottomGap,
   onClose,
   onFirstMessage,
 }: CoachAssistantPanelProps) {
   const { t } = useTranslation()
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation()
+  const keyboardLift = useAnimatedStyle(() => ({
+    paddingBottom: Math.max(0, -keyboardHeight.value - bottomGap),
+  }))
   const chat = useCoachChat({ analysisId, videoUri, active: visible, onFirstMessage })
   const { messages, input, setInput, pending, muted, setMuted, micState, notice, playback } = chat
   const scrollRef = useRef<ScrollView>(null)
@@ -208,7 +216,7 @@ export function CoachAssistantPanel({
           accessibilityLabel={t('profileSettingsUi.close')}
         />
       )}
-      <KeyboardAvoidingView style={styles.flex} behavior="padding">
+      <Reanimated.View style={[styles.flex, keyboardLift]}>
         <View style={styles.column} pointerEvents="box-none">
           {expanded ? (
             <View style={styles.panel}>
@@ -373,7 +381,7 @@ export function CoachAssistantPanel({
             )}
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </Reanimated.View>
     </View>
   )
 }

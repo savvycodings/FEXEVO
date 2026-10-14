@@ -83,6 +83,7 @@ export function CoachAssistantProvider({ children }: { children: React.ReactNode
   }, [open])
 
   const onFirstMessage = useCallback(() => setHasChatted(true), [])
+  const tabBarHeight = tabBarHeightFor(insets.bottom)
 
   const value = useMemo<CoachAssistantValue>(
     () => ({
@@ -103,7 +104,7 @@ export function CoachAssistantProvider({ children }: { children: React.ReactNode
         pointerEvents={open ? 'box-none' : 'none'}
         style={[
           styles.layer,
-          { top: headerHeight || insets.top + 64, bottom: tabBarHeightFor(insets.bottom) },
+          { top: headerHeight || insets.top + 64, bottom: tabBarHeight },
           !open && styles.hidden,
         ]}
       >
@@ -113,6 +114,7 @@ export function CoachAssistantProvider({ children }: { children: React.ReactNode
           analysisId={focus.analysisId}
           videoUri={focus.videoUri}
           startExpanded={startExpanded}
+          bottomGap={tabBarHeight}
           onClose={closeAssistant}
           onFirstMessage={onFirstMessage}
         />
