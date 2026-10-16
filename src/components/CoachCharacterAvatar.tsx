@@ -57,8 +57,8 @@ export const TAB_ICON_SLOT = { width: 46, height: 30 } as const
 const TAB_ORB_CANVAS = { w: 50.5405, h: 51.4674 }
 const TAB_ORB_BALL = { x: 7.21986, y: 5.74035, d: 36.1003 }
 
-/** Tab-bar orb: the ball (not the glow) is centered in the shared icon slot. */
-export function CoachTabOrb({ ballSize = 28 }: { ballSize?: number }) {
+/** Tab-bar orb at its design size (36px ball, per Figma); the ball (not the glow) is centered in the shared icon slot. */
+export function CoachTabOrb({ ballSize = TAB_ORB_BALL.d }: { ballSize?: number }) {
   const k = ballSize / TAB_ORB_BALL.d
   const w = TAB_ORB_CANVAS.w * k
   const h = TAB_ORB_CANVAS.h * k
