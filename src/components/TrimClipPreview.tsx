@@ -20,6 +20,9 @@ import { ProLibraryGradientFrame } from './ProLibraryGradientFrame'
 import { proLibraryChrome } from '../theme/proLibraryChrome'
 import { useTranslation } from 'react-i18next'
 
+const CONTROL_BG = '#0A1E5C'
+const CONTROL_ICON = '#2A88F4'
+
 const PLAYBACK_RATE = 0.5
 const STEP_MS = 100
 const LOOP_END_TOLERANCE_MS = 80
@@ -41,13 +44,6 @@ export type TrimClipPreviewProps = {
   /** Fired while playing or after seek; parent syncs carousel playhead. */
   onPositionMsChange?: (positionMs: number) => void
   onReadyChange?: (ready: boolean) => void
-}
-
-function formatTimeMs(ms: number) {
-  const totalSec = Math.max(0, Math.floor(ms / 1000))
-  const min = Math.floor(totalSec / 60)
-  const sec = totalSec % 60
-  return `${min}:${sec.toString().padStart(2, '0')}`
 }
 
 export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreviewProps>(
@@ -278,6 +274,8 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
                 ref={videoRef}
                 source={{ uri: videoUri }}
                 style={styles.video}
+                // Web: expo-av sizes the <video> to its intrinsic ratio unless told to fill.
+                videoStyle={{ width: '100%', height: '100%' }}
                 resizeMode={ResizeMode.CONTAIN}
                 shouldPlay={false}
                 isMuted
@@ -310,7 +308,7 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
             hitSlop={10}
             accessibilityLabel={t('techniqueExtra.stepBack')}
           >
-            <Ionicons name="play-back" size={22} color="#FFFFFF" />
+            <Ionicons name="play-skip-back" size={22} color={CONTROL_ICON} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -321,7 +319,7 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
               isPlaying ? t('techniqueExtra.pausePreview') : t('techniqueExtra.previewClip')
             }
           >
-            <Ionicons name={isPlaying ? 'pause' : 'play'} size={26} color="#FFFFFF" />
+            <Ionicons name={isPlaying ? 'pause' : 'play'} size={30} color={CONTROL_ICON} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -330,7 +328,7 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
             hitSlop={10}
             accessibilityLabel={t('techniqueExtra.stepForward')}
           >
-            <Ionicons name="play-forward" size={22} color="#FFFFFF" />
+            <Ionicons name="play-skip-forward" size={22} color={CONTROL_ICON} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -339,14 +337,11 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
             activeOpacity={0.85}
           >
             <Text allowFontScaling={false} style={styles.previewClipBtnText}>
-              Preview clip (0.5×)
+              {t('technique.setClipScreen.previewClip')}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <Text allowFontScaling={false} style={styles.timeLine}>
-          {formatTimeMs(positionMs)} · selection {formatTimeMs(selectionLo)}–{formatTimeMs(selectionHi)}
-        </Text>
       </View>
     )
   }
@@ -388,38 +383,30 @@ const styles = StyleSheet.create({
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 14,
     gap: 8,
-    paddingHorizontal: 4,
   },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(22, 87, 207, 0.55)',
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: CONTROL_BG,
     alignItems: 'center',
     justifyContent: 'center',
   },
   previewClipBtn: {
     flex: 1,
-    minHeight: 40,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0, 110, 255, 0.45)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 187, 255, 0.5)',
+    marginLeft: 12,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: CONTROL_BG,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 10,
   },
   previewClipBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  timeLine: {
-    marginTop: 6,
-    paddingHorizontal: 4,
-    fontSize: 12,
-    color: 'rgba(200, 220, 255, 0.85)',
+    color: CONTROL_ICON,
+    fontSize: 16,
+    fontWeight: '500',
   },
 })

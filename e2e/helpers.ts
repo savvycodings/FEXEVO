@@ -158,18 +158,19 @@ export async function openScreen(page: Page, name: string, params: object | unde
   return bodies
 }
 
-/** From the AI Coach home: pick Net Play → Forehand volley → Front, upload the fixture clip, analyse. */
+/** From the AI Coach home: Choose File → how-to → upload the fixture clip → Net Play / Forehand volley / Front → analyse. */
 export async function uploadAndAnalyze(page: Page, fixturePath: string): Promise<string> {
   await nav(page, 'Main', { screen: 'AICoach', params: { screen: 'AICoachMain' } })
   await page.getByTestId(T.techniqueChooseFile).click()
+  // Accepting the how-to opens the file picker directly; the shot is declared after upload.
+  const chooser = page.waitForEvent('filechooser')
   await page.getByTestId(T.howToAccept).click()
+  await (await chooser).setFiles(fixturePath)
   await page.getByTestId(T.shotCategory('net_play')).click()
   await page.getByTestId(T.shotOption('forehand_volley')).click()
   await page.getByTestId(T.viewAngle('front')).click()
   await page.getByTestId(T.viewAngleConfirm).click()
-  const chooser = page.waitForEvent('filechooser')
   await page.getByTestId(T.setClipContinue).click()
-  await (await chooser).setFiles(fixturePath)
   const analyzed = page.waitForResponse((r) => r.url().includes('/technique/analyze') && r.request().method() === 'POST', { timeout: 90_000 })
   await page.getByTestId(T.techniqueAnalyse).click()
   const res = await analyzed

@@ -45,6 +45,11 @@ export const TEST_IDS = {
   setupFinish: 'setup-finish',
   // Technique flow
   techniqueChooseFile: 'technique-choose-file',
+  techniqueRecord: 'technique-record',
+  techniqueStopRecording: 'technique-stop-recording',
+  techniqueCancelRecording: 'technique-cancel-recording',
+  shotPickerBack: 'shot-picker-back',
+  techniqueUploadProgress: 'technique-upload-progress',
   howToAccept: 'how-to-accept',
   shotCategory: (key: string) => `shot-category-${key}`,
   shotOption: (preset: string) => `shot-option-${preset}`,
