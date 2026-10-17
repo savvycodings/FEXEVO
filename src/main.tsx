@@ -260,12 +260,13 @@ function MainTabsLayoutInner({
     Progress: t('tabs.progress'),
     You: t('tabs.you'),
   }
-  const { openAssistant, closeAssistant } = useCoachAssistant()
+  const { open, openAssistant, closeAssistant } = useCoachAssistant()
 
   const goToTab = useCallback(
     (screen: keyof MainTabParamList) => {
       if (screen === 'Assistant') {
-        openAssistant()
+        if (open) closeAssistant()
+        else openAssistant()
       } else if (screen === 'You') {
         stackNavigation.navigate('Main', {
           screen: 'You',
@@ -287,7 +288,7 @@ function MainTabsLayoutInner({
         stackNavigation.navigate('Main', { screen: screen as 'AICoach' | 'Activities' })
       }
     },
-    [stackNavigation, openAssistant]
+    [stackNavigation, open, openAssistant, closeAssistant]
   )
 
   useEffect(() => {
@@ -620,7 +621,8 @@ function MainTabsLayoutInner({
           listeners={{
             tabPress: (e) => {
               e.preventDefault()
-              openAssistant()
+              if (open) closeAssistant()
+              else openAssistant()
             },
           }}
         />

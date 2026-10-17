@@ -66,12 +66,6 @@ function fmtTenths(ms: number) {
   return `${fmt(ms)}.${tenths}`
 }
 
-/** `0:01` style, used in the analysis-range hint. */
-function fmtShort(ms: number) {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
-}
-
 function fmtSec(ms: number) {
   const sec = ms / 1000
   return Number.isInteger(sec) ? `${sec}s` : `${sec.toFixed(1)}s`
@@ -767,14 +761,6 @@ export function VideoFrameCarousel({
           {fmt(durationMs)}
         </Text>
       </View>
-      <Text allowFontScaling={false} style={styles.analysisHint}>
-        {t('technique.setClipScreen.analysisHint', {
-          start: fmtShort(dragTrimStartMs),
-          end: fmtShort(dragTrimEndMs),
-          dur: fmtSec(Math.round(selectionMs / 100) * 100),
-          max: maxClipDurationMs ? fmtSec(maxClipDurationMs) : '-',
-        })}
-      </Text>
     </View>
   )
 }
@@ -890,12 +876,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#FFFFFF',
     marginBottom: 10,
-  },
-  analysisHint: {
-    alignSelf: 'flex-end',
-    textAlign: 'right',
-    marginTop: 10,
-    fontSize: 12,
-    color: 'rgba(160,190,240,0.75)',
   },
 })

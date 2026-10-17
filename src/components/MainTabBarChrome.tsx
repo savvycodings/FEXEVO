@@ -51,7 +51,7 @@ export function MainTabBarChrome({ activeTab }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { width: winW } = useWindowDimensions();
   const { viewerIsCoach } = useSessionData();
-  const { openAssistant } = useCoachAssistant();
+  const { open, openAssistant, closeAssistant } = useCoachAssistant();
 
   const tabBarBottomPad = insets.bottom + 10;
   const tabBarHeight = 66 + tabBarBottomPad;
@@ -115,7 +115,8 @@ export function MainTabBarChrome({ activeTab }: Props) {
   const goToTab = useCallback(
     (screen: keyof MainTabParamList) => {
       if (screen === "Assistant") {
-        openAssistant();
+        if (open) closeAssistant();
+        else openAssistant();
       } else if (screen === "You") {
         navigation.navigate("Main", {
           screen: "You",
@@ -137,7 +138,7 @@ export function MainTabBarChrome({ activeTab }: Props) {
         navigation.navigate("Main", { screen: screen as "AICoach" | "Activities" });
       }
     },
-    [navigation, openAssistant]
+    [navigation, open, openAssistant, closeAssistant]
   );
 
   const tabLabels: Record<keyof MainTabParamList, string> = {

@@ -88,6 +88,7 @@ import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateMod
 import { SentToSupportModal } from '../components/SentToSupportModal'
 import { CoachCharacterAvatar } from '../components/CoachCharacterAvatar'
 import { useCoachAssistant } from '../context/CoachAssistantContext'
+import { useCoachEmotion } from '../lib/useCoachEmotion'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
 import {
@@ -512,6 +513,20 @@ export function Technique() {
     () => coachAssistant.openAssistant({ analysisId, videoUri: localVideoUri ?? uploadedVideoUrl }),
     [coachAssistant, analysisId, localVideoUri, uploadedVideoUrl]
   )
+  /** Wink when the AI Coach results step first appears. */
+  const step3PrevRef = useRef<number | null>(null)
+  const [step3EntryToken, setStep3EntryToken] = useState(0)
+  useEffect(() => {
+    if (step === 3 && step3PrevRef.current !== 3) setStep3EntryToken((n) => n + 1)
+    step3PrevRef.current = step
+  }, [step])
+  const { emotion: scoreMascotEmotion, playOneShot: playScoreMascot } = useCoachEmotion({
+    entryToken: step3EntryToken > 0 ? step3EntryToken : null,
+  })
+  const openCoachChatWithWink = useCallback(() => {
+    playScoreMascot('wink')
+    openCoachChat()
+  }, [playScoreMascot, openCoachChat])
   /** Mini paddle game over the analysis loading video. */
   const [paddleGameOpen, setPaddleGameOpen] = useState(false)
   /** Progress / finished chip on the game header while analysis runs. */
@@ -2588,12 +2603,6 @@ export function Technique() {
                     )
                   ) : null}
 
-                  {uploadedVideoUrl != null && videoDurationSeconds != null && videoDurationSeconds > 0 ? (
-                    <Text allowFontScaling={false} style={styles.contactHintText}>
-                      {t('technique.contactHint')}
-                    </Text>
-                  ) : null}
-
                   <View style={styles.clipsList}>
                     {/* Current blue-handle range, not yet set. */}
                     <View style={styles.clipRow}>
@@ -3132,17 +3141,17 @@ export function Technique() {
                   </Svg>
                   <Pressable
                     style={styles.scoreCircleCenter}
-                    onPress={openCoachChat}
+                    onPress={openCoachChatWithWink}
                     accessibilityRole="button"
                     accessibilityLabel={t('coachCharacter.needHelp')}
                   >
-                    <CoachCharacterAvatar size={104} />
+                    <CoachCharacterAvatar size={104} emotion={scoreMascotEmotion} />
                   </Pressable>
                 </View>
                   {!coachChatUsed ? (
                     <Pressable
                       style={styles.coachHelpPill}
-                      onPress={openCoachChat}
+                      onPress={openCoachChatWithWink}
                       hitSlop={6}
                     >
                       <Text allowFontScaling={false} style={styles.coachHelpPillText}>
@@ -5236,12 +5245,6 @@ function getStyles(theme: any) {
       paddingTop: 0,
       paddingBottom: 4,
       overflow: 'visible',
-    },
-    contactHintText: {
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.72)',
-      textAlign: 'center',
-      marginBottom: 8,
     },
     setClipControlRow: {
       marginTop: 2,

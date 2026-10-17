@@ -22,6 +22,7 @@ import { CoachCharacterAvatar, CoachEyes } from './CoachCharacterAvatar'
 import { CoachClipCard, CoachThinkingTrace } from './CoachThinkingTrace'
 import { COACH_CLOSE_IMAGE, COACH_MIC_IMAGE } from '../lib/coachCharacter'
 import { useCoachChat, type CoachChatMessage, type CoachPlayback } from '../lib/useCoachChat'
+import { useCoachEmotion } from '../lib/useCoachEmotion'
 
 const SURFACE = '#030A17'
 const USER_PILL = '#022360'
@@ -184,6 +185,8 @@ export function CoachAssistantPanel({
   const { messages, input, setInput, pending, muted, setMuted, micState, notice, playback } = chat
   const scrollRef = useRef<ScrollView>(null)
   const inputRef = useRef<TextInput>(null)
+  const openTokenRef = useRef(0)
+  const [entryToken, setEntryToken] = useState<number | null>(null)
 
   const expanded = startExpanded || messages.length > 0
   const suggestions = useMemo(
@@ -194,8 +197,30 @@ export function CoachAssistantPanel({
   const doneLabel = useCallback((s: number) => t('coachCharacter.trace.thoughtFor', { count: s }), [t])
   const canSend = input.trim().length > 0 && !pending && micState === 'idle'
 
+  const speaking = !!playback.playing
+  const listening = micState === 'recording'
+  const lastCoachText = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant' && messages[i].content) return messages[i].content
+    }
+    return null
+  }, [messages])
+  const { emotion: mascotEmotion } = useCoachEmotion({
+    thinking: pending,
+    speaking,
+    listening,
+    entryToken,
+    lastCoachText,
+    idleLife: visible,
+  })
+
   useEffect(() => {
-    if (!visible) inputRef.current?.blur()
+    if (!visible) {
+      inputRef.current?.blur()
+      return
+    }
+    openTokenRef.current += 1
+    setEntryToken(openTokenRef.current)
   }, [visible])
 
   const status =
@@ -258,7 +283,15 @@ export function CoachAssistantPanel({
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
               >
-                <Pressable style={styles.listContent} onPress={Keyboard.dismiss} accessible={false}>
+                <Pressable
+                  style={styles.listContent}
+                  onPress={() => {
+                    Keyboard.dismiss()
+                    // Idle open (no turns yet): empty space closes. Once a question exists, only X closes.
+                    if (messages.length === 0) onClose()
+                  }}
+                  accessible={false}
+                >
                 {messages.length === 0 ? (
                   <>
                     <CoachLine>
@@ -321,7 +354,7 @@ export function CoachAssistantPanel({
               </ScrollView>
             </View>
           ) : (
-            <View style={styles.idleSpacer} pointerEvents="box-none">
+            <Pressable style={styles.idleSpacer} onPress={onClose} accessible={false}>
               <View style={styles.suggestionsIdle}>
                 {suggestions.map((s) => (
                   <Pressable key={s} style={styles.userPill} onPress={() => void chat.send(s)}>
@@ -331,7 +364,7 @@ export function CoachAssistantPanel({
                   </Pressable>
                 ))}
               </View>
-            </View>
+            </Pressable>
           )}
 
           {status ? (
@@ -341,7 +374,12 @@ export function CoachAssistantPanel({
           ) : null}
 
           <View style={styles.pill}>
-            <CoachCharacterAvatar size={47.58} variant="pill" thinking={pending} style={styles.pillOrb} />
+            <CoachCharacterAvatar
+              size={47.58}
+              variant="pill"
+              emotion={mascotEmotion}
+              style={styles.pillOrb}
+            />
             <TextInput
               ref={inputRef}
               style={styles.input}
