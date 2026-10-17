@@ -23,6 +23,7 @@ import {
   type CoachUploadShotItem,
 } from '../lib/coachStudentUploadShots'
 import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
+import { TEST_IDS } from '../lib/testIds'
 
 const BG = '#050A18'
 const PANEL_BG = '#041641'
@@ -59,6 +60,7 @@ function ShotChip({
     <TouchableOpacity
       activeOpacity={0.82}
       onPress={onPress}
+      testID={TEST_IDS.shotOption(shot.presetId)}
       style={[styles.chip, { width, height: CHIP_H }]}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}

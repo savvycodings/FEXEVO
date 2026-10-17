@@ -50,7 +50,15 @@
     },
     "plugins": [
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Xevo uses the camera to record your padel shots for analysis.",
+          "microphonePermission": "Xevo records audio with your shot videos.",
+          "recordAudioAndroid": true
+        }
+      ]
     ],
     "extra": {
       "eas": {

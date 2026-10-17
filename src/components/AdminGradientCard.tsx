@@ -27,6 +27,7 @@ type Props = {
   style?: StyleProp<ViewStyle>
   /** Merged into inner panel after fill color. */
   innerStyle?: StyleProp<ViewStyle>
+  testID?: string
 } & A11y
 
 /**
@@ -38,6 +39,7 @@ export function AdminGradientCard({
   onPress,
   style,
   innerStyle,
+  testID,
   accessibilityRole,
   accessibilityLabel,
   accessibilityHint,
@@ -64,6 +66,7 @@ export function AdminGradientCard({
         onPress={onPress}
         activeOpacity={0.88}
         style={style}
+        testID={testID}
         accessibilityRole={accessibilityRole ?? 'button'}
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}

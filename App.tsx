@@ -39,6 +39,10 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { I18nBootstrap } from './src/i18n/I18nBootstrap'
 import { useTranslation } from 'react-i18next'
+import { EnvBadge } from './src/components/EnvBadge'
+import { appNavRef, exposeE2eNav } from './src/lib/e2eNav'
+
+exposeE2eNav()
 
 LogBox.ignoreLogs([
   'Key "cancelled" in the image picker result is deprecated and will be removed in SDK 48, use "canceled" instead',
@@ -127,6 +131,7 @@ export default function App() {
   if (!fontsLoaded) return null
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: APP_NAV_BG }}>
+      <EnvBadge />
       <KeyboardProvider preload={false}>
       <ThemeContext.Provider value={{
         theme: getTheme(theme),
@@ -278,7 +283,7 @@ function AuthGate(props: {
       }}
     >
       <ActionSheetProvider>
-        <NavigationContainer theme={navigationTheme}>
+        <NavigationContainer theme={navigationTheme} ref={appNavRef}>
           <Main />
         </NavigationContainer>
       </ActionSheetProvider>

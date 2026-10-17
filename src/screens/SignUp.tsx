@@ -30,6 +30,7 @@ import { AuthFormField } from "../components/AuthFormField";
 import { AuthPasswordField } from "../components/AuthPasswordField";
 import { AUTH_INPUT_FOCUS_BORDER, AUTH_INPUT_FOCUS_BORDER_WIDTH, AUTH_INPUT_ERROR_BORDER_WIDTH, createAuthFormStyles } from "../components/authFormStyles";
 import { findCountry, type Country } from "../lib/countries";
+import { TEST_IDS } from '../lib/testIds'
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -188,6 +189,7 @@ export function SignUp(props?: SignUpProps) {
           theme={theme}
           hasError={!!errors.name}
           placeholder={t("auth.name")}
+          testID={TEST_IDS.signupName}
           value={name}
           onChangeText={(v) => {
             setName(v);
@@ -201,6 +203,7 @@ export function SignUp(props?: SignUpProps) {
           theme={theme}
           hasError={!!errors.email}
           placeholder={t("auth.email")}
+          testID={TEST_IDS.signupEmail}
           value={email}
           onChangeText={(v) => {
             setEmail(v);
@@ -216,6 +219,7 @@ export function SignUp(props?: SignUpProps) {
           theme={theme}
           hasError={!!errors.password}
           placeholder={t("auth.passwordMinPlaceholder")}
+          testID={TEST_IDS.signupPassword}
           value={password}
           onChangeText={(v) => {
             setPassword(v);
@@ -229,6 +233,7 @@ export function SignUp(props?: SignUpProps) {
           theme={theme}
           hasError={!!errors.confirmPassword}
           placeholder={t("auth.repeatPassword")}
+          testID={TEST_IDS.signupRepeat}
           value={confirmPassword}
           onChangeText={(v) => {
             setConfirmPassword(v);
@@ -246,6 +251,7 @@ export function SignUp(props?: SignUpProps) {
             errors.country && styles.countryTriggerError,
           ]}
           onPress={() => setCountryPickerOpen(true)}
+          testID={TEST_IDS.signupCountry}
           activeOpacity={0.85}
           disabled={loading || !!socialLoading}
           accessibilityRole="button"
@@ -330,6 +336,7 @@ export function SignUp(props?: SignUpProps) {
           <TouchableOpacity
             style={[styles.buttonOuter, { flex: 1 }, (loading || socialLoading) && styles.buttonDisabled]}
             onPress={handleContinue}
+            testID={TEST_IDS.signupSubmit}
             disabled={loading || !!socialLoading}
           >
             <LinearGradient

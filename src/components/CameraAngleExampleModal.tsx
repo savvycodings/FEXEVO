@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from './LocalSvgAsset'
 import { CAMERA_ANGLES, cameraAngleById, type CameraAngleId } from '../lib/cameraAngles'
+import { TEST_IDS } from '../lib/testIds'
 
 const INFO_ICON = require('../../assets/angelvideo/modal/info.svg')
 
@@ -96,6 +97,7 @@ export function CameraAngleExampleModal({
               style={styles.button}
               activeOpacity={0.85}
               onPress={() => onSelect(angle.id)}
+              testID={TEST_IDS.viewAngleConfirm}
               accessibilityRole="button"
             >
               <Text allowFontScaling={false} style={styles.buttonText}>

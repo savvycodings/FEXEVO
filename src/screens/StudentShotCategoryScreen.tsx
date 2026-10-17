@@ -18,6 +18,7 @@ import { COACH_STUDENT_UPLOAD_CATEGORIES } from '../lib/coachStudentUploadCatego
 import { ANALYSIS_CORE_CATEGORIES } from '../lib/coachStudentUploadShots'
 import type { TrainCategory } from '../lib/train-taxonomy'
 import { EntranceView, usePageFocusKey } from '../components/PageEntrance'
+import { TEST_IDS } from '../lib/testIds'
 
 const BG = '#050A18'
 const PANEL_BG = '#041641'
@@ -109,6 +110,7 @@ export function StudentShotCategoryScreen() {
               key={item.key}
               activeOpacity={0.82}
               onPress={() => onSelectCategory(item.category, item.coreGroup)}
+              testID={TEST_IDS.shotCategory(item.key)}
               style={[styles.categoryBtn, index < categories.length - 1 && styles.categoryBtnGap]}
               accessibilityRole="button"
               accessibilityLabel={t(item.labelKey)}

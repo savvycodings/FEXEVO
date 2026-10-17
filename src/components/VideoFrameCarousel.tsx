@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Image, StyleSheet, Platform, PanResponder } from 'react-native'
-import { getThumbnailAsync } from 'expo-video-thumbnails'
+import { getThumbnailAsync } from '../lib/videoThumbnails'
 import * as FileSystem from 'expo-file-system/legacy'
 import Feather from '@expo/vector-icons/Feather'
+import { useTranslation } from 'react-i18next'
 
 const SHELL_BG = '#071741'
 const SHELL_BORDER = '#1657CF'
@@ -63,6 +64,17 @@ function fmt(ms: number) {
 function fmtTenths(ms: number) {
   const tenths = Math.max(0, Math.floor(ms / 100)) % 10
   return `${fmt(ms)}.${tenths}`
+}
+
+/** `0:01` style, used in the analysis-range hint. */
+function fmtShort(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+function fmtSec(ms: number) {
+  const sec = ms / 1000
+  return Number.isInteger(sec) ? `${sec}s` : `${sec.toFixed(1)}s`
 }
 
 function timeMsToStripX(ms: number, durationMs: number, viewportW: number): number {
@@ -289,6 +301,7 @@ export function VideoFrameCarousel({
   onCenterFrameImageUriChange,
   playheadLabel,
 }: VideoFrameCarouselProps) {
+  const { t } = useTranslation()
   const [frames, setFrames] = useState<VideoFrameCarouselFrame[]>([])
   const [viewportW, setViewportW] = useState(0)
   const [currentTimeMs, setCurrentTimeMs] = useState(0)
@@ -630,11 +643,7 @@ export function VideoFrameCarousel({
     })
   ).current
 
-  const selectionMs = Math.max(0, safeEndMs - safeStartMs)
-  const selectionSecLabel =
-    selectionMs >= 1000
-      ? `${(selectionMs / 1000).toFixed(1)}s`
-      : `${Math.max(1, Math.round(selectionMs))}ms`
+  const selectionMs = Math.max(0, Math.round(safeEndMs - safeStartMs))
   const selectedLeftEdge = startStripX
   const selectedRightEdge = endStripX
   const leftHandleRenderLeft =
@@ -648,10 +657,17 @@ export function VideoFrameCarousel({
 
   return (
     <View style={styles.shell}>
+      <Text allowFontScaling={false} style={styles.selectedLabel}>
+        {t('technique.setClipScreen.selectedLabel', {
+          ms: selectionMs,
+          max: maxClipDurationMs ? fmtSec(maxClipDurationMs) : '-',
+          full: fmtSec(Math.round(durationMs / 1000) * 1000),
+        })}
+      </Text>
       <View
         ref={stripOuterRef}
         collapsable={false}
-        style={styles.stripOuter}
+        style={[styles.stripOuter, WEB_STRIP_STYLE]}
         onLayout={(e) => {
           setViewportW(Math.max(0, e.nativeEvent.layout.width))
           measureStrip()
@@ -742,20 +758,29 @@ export function VideoFrameCarousel({
 
       <View style={styles.timesRow}>
         <Text allowFontScaling={false} style={styles.timeText}>
-          {fmt(dragTrimStartMs)}
+          {fmt(0)}
         </Text>
         <Text allowFontScaling={false} style={styles.timeTextCenter}>
-          {playheadLabel ? `${playheadLabel} ${fmtTenths(playheadTimeMs)}` : fmt(playheadTimeMs)}
-          {' · '}
-          {selectionSecLabel}
+          {playheadLabel ? `${playheadLabel} ${fmtTenths(playheadTimeMs)}` : fmt(playheadTimeMs)} - {selectionMs} ms
         </Text>
         <Text allowFontScaling={false} style={styles.timeText}>
-          {fmt(dragTrimEndMs)}
+          {fmt(durationMs)}
         </Text>
       </View>
+      <Text allowFontScaling={false} style={styles.analysisHint}>
+        {t('technique.setClipScreen.analysisHint', {
+          start: fmtShort(dragTrimStartMs),
+          end: fmtShort(dragTrimEndMs),
+          dur: fmtSec(Math.round(selectionMs / 100) * 100),
+          max: maxClipDurationMs ? fmtSec(maxClipDurationMs) : '-',
+        })}
+      </Text>
     </View>
   )
 }
+
+/** Web: drags on the strip move the handles instead of scrolling the page or selecting text. */
+const WEB_STRIP_STYLE = Platform.OS === 'web' ? ({ touchAction: 'none', userSelect: 'none' } as object) : null
 
 const styles = StyleSheet.create({
   shell: {
@@ -804,16 +829,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     height: TRACK_HEIGHT,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderColor: 'rgba(255,255,255,0.56)',
-    borderWidth: 1,
+    backgroundColor: 'transparent',
+    borderColor: '#1657CF',
+    borderTopWidth: FRAME_VERTICAL_INSET,
+    borderBottomWidth: FRAME_VERTICAL_INSET,
     zIndex: 4,
   },
   outsideMask: {
     position: 'absolute',
     top: 0,
     height: TRACK_HEIGHT,
-    backgroundColor: 'rgba(0,0,0,0.38)',
+    backgroundColor: 'rgba(5,10,24,0.55)',
     zIndex: 5,
   },
   handle: {
@@ -852,13 +878,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   timeText: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.72)',
+    fontSize: 12,
+    color: 'rgba(200,220,255,0.6)',
   },
   timeTextCenter: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 11,
+    fontSize: 12,
     color: '#FFFFFF',
+  },
+  selectedLabel: {
+    alignSelf: 'flex-end',
+    fontSize: 12,
+    color: '#FFFFFF',
+    marginBottom: 10,
+  },
+  analysisHint: {
+    alignSelf: 'flex-end',
+    textAlign: 'right',
+    marginTop: 10,
+    fontSize: 12,
+    color: 'rgba(160,190,240,0.75)',
   },
 })

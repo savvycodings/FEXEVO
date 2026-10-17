@@ -15,6 +15,7 @@ import {
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTranslation } from "react-i18next";
 import { ThemeContext } from "../context";
+import { TEST_IDS } from '../lib/testIds'
 import {
   getCountriesForPicker,
   countryMatchesSearchQuery,
@@ -70,6 +71,7 @@ export function CountryPickerModal({
               value={search}
               onChangeText={setSearch}
               placeholder={t("profileSettingsUi.searchCountry")}
+              testID={TEST_IDS.countrySearch}
               placeholderTextColor={LABEL_COLOR}
               style={styles.searchInput}
               autoCorrect={false}
@@ -94,6 +96,7 @@ export function CountryPickerModal({
               return (
                 <TouchableOpacity
                   style={[styles.row, isSelected && styles.rowActive]}
+                  testID={TEST_IDS.countryOption(item.code)}
                   onPress={() => {
                     onSelect(item);
                     setSearch("");

@@ -6,6 +6,7 @@ import { ThemeContext } from "../context";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "../components/LanguageToggle";
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
+import { TEST_IDS } from '../lib/testIds'
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -44,6 +45,7 @@ export function AccountCreated({ onDone }: AccountCreatedProps) {
         <TouchableOpacity
           style={styles.buttonOuter}
           onPress={onDone}
+          testID={TEST_IDS.accountCreatedDone}
           activeOpacity={0.9}
           accessibilityLabel={t("accountCreated.continueSetup")}
         >

@@ -32,7 +32,7 @@ import * as DocumentPicker from 'expo-document-picker'
 // expo-file-system v19 moved cacheDirectory/copyAsync/etc. to /legacy.
 import * as FileSystem from 'expo-file-system/legacy'
 import { Video, ResizeMode } from 'expo-av'
-import { getThumbnailAsync } from 'expo-video-thumbnails'
+import { getThumbnailAsync } from '../lib/videoThumbnails'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import FeatherIcon from '@expo/vector-icons/Feather'
 import Svg, {
@@ -64,12 +64,11 @@ import type {
   MainStackParamList,
   UserShotDeclaration,
 } from '../navigation/types'
-import {
-  beginSelfAnalyzeCapture,
-  takeSelfAnalyzeShot,
-} from '../lib/pendingSelfAnalyzeShot'
+import { takeSelfAnalyzeShot } from '../lib/pendingSelfAnalyzeShot'
 import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
+import InCardRecorder from '../components/InCardRecorder'
+import { ShotDetailsPicker } from '../components/ShotDetailsPicker'
 import { LOADING_OVERLAY_SCRIM } from '../constants/loadingVideoFullscreen'
 import {
   AICoachCoachReviewBanner,
@@ -121,6 +120,7 @@ import {
   MIN_ANALYZE_CLIP_MS,
 } from '../lib/techniqueClipLimits'
 import { uploadTechniqueVideo } from '../lib/techniqueVideoUpload'
+import { TEST_IDS } from '../lib/testIds'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const HORIZONTAL_PADDING = 24
@@ -133,6 +133,9 @@ const FRAME_HEIGHT = FRAME_WIDTH / FRAME_ASPECT
 const UPLOAD_PROGRESS_TRACK_WIDTH = Math.min(200, Math.max(168, Math.round(FRAME_WIDTH * 0.56)))
 const STROKE_WIDTH = 4
 const FRAME_RADIUS = 24
+/** Set Clip hint card thumbnail. */
+const STEP2_THUMB = 64
+const STEP2_TRASH_ICON = '#0A1E5C'
 const GRADIENT_COLORS = ['#0022FF', '#00BBFF', '#00BBFF', '#0022FF']
 const GRADIENT_STOPS = ['0%', '30%', '70%', '100%']
 const SCROLLUI_IMAGE = require('../../assets/scrollui.png')
@@ -483,10 +486,15 @@ export function Technique() {
   const [rankingOrg, setRankingOrg] = useState<string | null>(null)
   const [rankingValue, setRankingValue] = useState('')
   const [uploading, setUploading] = useState(false)
+  /** Record flow: live camera preview inside the step-1 card (replaces the system camera). */
+  const [inCardRecording, setInCardRecording] = useState(false)
+  /** After upload: declare shot category / type / camera angle before Set Clip. */
+  const [shotPickerOpen, setShotPickerOpen] = useState(false)
   const [sendVideoToCoach, setSendVideoToCoach] = useState(false)
   const [userShot, setUserShot] = useState<UserShotDeclaration | null>(null)
   const pickVideoRef = useRef<(() => Promise<void>) | null>(null)
   const pickGalleryRef = useRef<(() => Promise<void>) | null>(null)
+  const uploadVideoRef = useRef<((uri: string, fileName: string, mimeType: string) => Promise<void>) | null>(null)
   const [assignedCoach, setAssignedCoach] = useState<AICoachAssignedCoach | null>(null)
   const [coachBannerLoaded, setCoachBannerLoaded] = useState(false)
   const coachFetchGeneration = useRef(0)
@@ -1497,14 +1505,15 @@ export function Technique() {
     )
   }
 
-  function openShotStepper(action: HowToAction) {
-    beginSelfAnalyzeCapture(action)
-    navigation.navigate('StudentShotCategory', { flow: 'self-analyze' })
+  /** Straight to capture: record in the card, or open the file picker (no shot stepper). */
+  function startCapture(action: HowToAction) {
+    if (action === 'record') setInCardRecording(true)
+    else void pickFromGallery()
   }
 
   function startHowToFlow(action: HowToAction) {
     if (skipHowToModal) {
-      openShotStepper(action)
+      startCapture(action)
       return
     }
     setPendingHowToAction(action)
@@ -1521,29 +1530,47 @@ export function Technique() {
     const action = pendingHowToAction
     setShowHowToModal(false)
     setPendingHowToAction(null)
+    if (action === 'record' || action === 'gallery') {
+      // Web: open the file picker inside this tap's user activation. iOS: a picker presented
+      // while the how-to Modal is still dismissing never shows, so wait for the close animation.
+      if (Platform.OS === 'web') startCapture(action)
+      else setTimeout(() => startCapture(action), 400)
+    }
     if (hideHowToNextTime) {
       setSkipHowToModal(true)
       await AsyncStorage.setItem(HOWTO_HIDE_KEY, '1').catch(() => {})
-    }
-    if (action === 'record' || action === 'gallery') {
-      openShotStepper(action)
     }
   }
 
   pickVideoRef.current = pickVideo
   pickGalleryRef.current = pickFromGallery
+  uploadVideoRef.current = uploadVideo
 
   const resumeDeclaredCapture = useCallback(() => {
     const ready = takeSelfAnalyzeShot()
     if (!ready) return
     setUserShot(ready.shot)
-    if (ready.action === 'record') void pickVideoRef.current?.()
+    if (ready.action === 'record') setInCardRecording(true)
     else void pickGalleryRef.current?.()
+  }, [])
+
+  const handleInCardRecorded = useCallback((uri: string, fileName: string, mimeType: string) => {
+    setInCardRecording(false)
+    void uploadVideoRef.current?.(uri, fileName, mimeType)
+  }, [])
+
+  /** Permission denied or recording unsupported — fall back to the system camera / library picker. */
+  const handleInCardUnavailable = useCallback((reason: string) => {
+    console.warn('[Technique] In-card recorder unavailable, using system picker', reason)
+    setInCardRecording(false)
+    void pickVideoRef.current?.()
   }, [])
 
   useFocusEffect(
     useCallback(() => {
       resumeDeclaredCapture()
+      // Leaving the tab mid-take drops the recording and releases the camera.
+      return () => setInCardRecording(false)
     }, [resumeDeclaredCapture])
   )
 
@@ -1608,6 +1635,8 @@ export function Technique() {
       setActiveCorrection(0)
       setCompareSplit(0.5)
       setCorrectionViewMode('drag')
+      setUserShot(null)
+      setShotPickerOpen(true)
       setStep(2)
     } catch (err) {
       console.error('[Technique] Upload error', err)
@@ -2401,7 +2430,19 @@ export function Technique() {
         </View>
       ) : null}
       <View style={styles.scrollBody} onLayout={(e) => setScrollBodyH(e.nativeEvent.layout.height)}>
-        {step === 2 ? (
+        {shotPickerOpen ? (
+          <ShotDetailsPicker
+            videoUri={localVideoUri ?? uploadedVideoUrl}
+            onBack={() => {
+              setShotPickerOpen(false)
+              resetToNewVideo()
+            }}
+            onDone={(shot) => {
+              setUserShot(shot)
+              setShotPickerOpen(false)
+            }}
+          />
+        ) : step === 2 ? (
           <KeyboardAwareScrollView
             style={styles.stepContent}
             contentContainerStyle={[
@@ -2411,7 +2452,8 @@ export function Technique() {
             bounces
             nestedScrollEnabled
             directionalLockEnabled
-            scrollEnabled={!trimCarouselScrubbing}
+            // Web: the strip blocks page scroll with touch-action instead; toggling overflow here could leave the page stuck unscrollable.
+            scrollEnabled={Platform.OS === 'web' || !trimCarouselScrubbing}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -2419,8 +2461,11 @@ export function Technique() {
           >
             <View style={styles.step2}>
                 <View style={styles.step2VideoSummaryCard}>
+                  <Text allowFontScaling={false} style={styles.step2HintText}>
+                    {t('technique.setClipScreen.impactHint')}
+                  </Text>
                   <View style={styles.step2SummaryThumbOuter}>
-                    <Svg width={48} height={48} style={StyleSheet.absoluteFill}>
+                    <Svg width={STEP2_THUMB} height={STEP2_THUMB} style={StyleSheet.absoluteFill}>
                       <Defs>
                         <SvgLinearGradient id="step2SummaryThumbStroke" x1="0%" y1="0%" x2="100%" y2="100%">
                           {GRADIENT_COLORS.map((color, i) => (
@@ -2431,10 +2476,10 @@ export function Technique() {
                       <Rect
                         x={2}
                         y={2}
-                        width={44}
-                        height={44}
-                        rx={9}
-                        ry={9}
+                        width={STEP2_THUMB - 4}
+                        height={STEP2_THUMB - 4}
+                        rx={12}
+                        ry={12}
                         fill="#041641"
                         stroke="url(#step2SummaryThumbStroke)"
                         strokeWidth={3}
@@ -2549,35 +2594,53 @@ export function Technique() {
                     </Text>
                   ) : null}
 
-                  <View style={styles.setClipControlRow}>
-                    <TouchableOpacity
-                      style={[styles.step2TrimTrashBtn, clips.length === 0 && styles.step2TrimTrashBtnDisabled]}
-                      onPress={() => setClips([])}
-                      activeOpacity={0.85}
-                      disabled={clips.length === 0}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('techniqueExtra.clearAllClips')}
-                    >
-                      <FeatherIcon name="trash-2" size={20} color="#FFFFFF" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.setClipButton} onPress={addClipAtCurrentMarker} activeOpacity={0.9}>
-                      <Text style={styles.setClipButtonText}>{t('technique.setClip')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {clips.length > 0 && (
-                    <View style={styles.clipsList}>
-                      {clips.map((clip, idx) => (
-                        <View key={clip.id} style={styles.clipRow}>
-                          <Text style={styles.clipText}>
-                            Clip {idx + 1}: {formatTimeFromMs(clip.startMs)} - {formatTimeFromMs(clip.endMs)}
-                          </Text>
-                          <TouchableOpacity onPress={() => removeClip(clip.id)} hitSlop={8}>
-                            <FeatherIcon name="x-circle" size={18} color="rgba(255,255,255,0.75)" />
-                          </TouchableOpacity>
-                        </View>
-                      ))}
+                  <View style={styles.clipsList}>
+                    {/* Current blue-handle range, not yet set. */}
+                    <View style={styles.clipRow}>
+                      <TouchableOpacity
+                        style={[styles.step2TrimTrashBtn, clips.length === 0 && styles.step2TrimTrashBtnDisabled]}
+                        onPress={() => setClips([])}
+                        activeOpacity={0.85}
+                        disabled={clips.length === 0}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('techniqueExtra.clearAllClips')}
+                      >
+                        <FeatherIcon name="trash-2" size={20} color={STEP2_TRASH_ICON} />
+                      </TouchableOpacity>
+                      <Text style={styles.clipText} numberOfLines={1}>
+                        <Text style={styles.clipLabel}>CLIP {clips.length + 1}</Text>
+                        {'  '}
+                        {formatTimeFromMs(currentTrimClip?.startMs ?? trimRange.startMs)} -{' '}
+                        {formatTimeFromMs(currentTrimClip?.endMs ?? trimRange.endMs)}
+                      </Text>
+                      <TouchableOpacity style={styles.setClipButton} onPress={addClipAtCurrentMarker} activeOpacity={0.9}>
+                        <Text style={styles.setClipButtonText}>{t('technique.setClip')}</Text>
+                        <Ionicons name="lock-open-outline" size={20} color="#0A1120" />
+                      </TouchableOpacity>
                     </View>
-                  )}
+                    {clips.map((clip, idx) => (
+                      <View key={clip.id} style={styles.clipRow}>
+                        <TouchableOpacity
+                          style={styles.step2TrimTrashBtn}
+                          onPress={() => removeClip(clip.id)}
+                          activeOpacity={0.85}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('technique.setClipScreen.removeClip', { n: idx + 1 })}
+                        >
+                          <FeatherIcon name="trash-2" size={20} color={STEP2_TRASH_ICON} />
+                        </TouchableOpacity>
+                        <Text style={styles.clipText} numberOfLines={1}>
+                          <Text style={styles.clipLabel}>CLIP {idx + 1}</Text>
+                          {'  '}
+                          {formatTimeFromMs(clip.startMs)} - {formatTimeFromMs(clip.endMs)}
+                        </Text>
+                        <View style={styles.clipSetPill}>
+                          <Text style={styles.clipSetPillText}>{t('technique.setClipScreen.clipSet')}</Text>
+                          <Ionicons name="lock-closed-outline" size={20} color="#FFFFFF" />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
                 </View>
               <View style={styles.step2BottomBar}>
                 <View style={styles.step2BottomBarHalf}>
@@ -2596,6 +2659,7 @@ export function Technique() {
                 <View style={styles.step2BottomBarHalf}>
                   <TouchableOpacity
                     style={[styles.analyseButton, styles.step2BottomBarBtnFill]}
+                    testID={TEST_IDS.techniqueAnalyse}
                     onPress={() => {
                       if (analysisReady) {
                         setStep(3)
@@ -2612,9 +2676,9 @@ export function Technique() {
                     }
                   >
                     <LinearGradient
-                      colors={['#4B2CFF', '#00B4FF']}
-                      start={{ x: 0, y: 0.5 }}
-                      end={{ x: 1, y: 0.5 }}
+                      colors={['#5BC0FF', '#0A2BFF']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
                       style={styles.analyseButtonInner}
                     >
                       {analysisLoading ? (
@@ -2836,21 +2900,6 @@ export function Technique() {
 
         {step === 1 && (
           <View style={styles.step1}>
-            {uploading ? (
-              <View style={styles.uploadProgressWrap}>
-                <LocalSvgAsset assetModule={UPLOADING_STEP_ICON} width={56} height={56} />
-                <View style={styles.uploadProgressBarTrack}>
-                  <View
-                    style={[
-                      styles.uploadProgressBarFill,
-                      {
-                        width: `${Math.max(0, Math.min(100, uploadProgress))}%`,
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-            ) : (
               <View style={styles.frameWrap}>
                 {!step1FrameMeasured ? (
                   // Pre-measure: plain background-colored box at the fallback size (no glow/border),
@@ -2928,6 +2977,43 @@ export function Technique() {
                       strokeWidth={2}
                     />
                   </Svg>
+                  {uploading ? (
+                    <View style={styles.frameMedia}>
+                      {localVideoUri ? (
+                        <Video
+                          source={{ uri: localVideoUri }}
+                          style={StyleSheet.absoluteFill}
+                          // Web: expo-av sizes the <video> to its intrinsic ratio unless told to fill.
+                          videoStyle={{ width: '100%', height: '100%' }}
+                          resizeMode={ResizeMode.COVER}
+                          shouldPlay={false}
+                          isMuted
+                        />
+                      ) : null}
+                      <View style={styles.uploadDim} />
+                      <View style={styles.uploadProgressWrap} testID={TEST_IDS.techniqueUploadProgress}>
+                        <LocalSvgAsset assetModule={UPLOADING_STEP_ICON} width={64} height={64} />
+                        <View style={styles.uploadProgressBarTrack}>
+                          <View
+                            style={[
+                              styles.uploadProgressBarFill,
+                              {
+                                width: `${Math.max(0, Math.min(100, uploadProgress))}%`,
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.uploadingText}>{t('technique.uploadingVideo')}</Text>
+                      </View>
+                    </View>
+                  ) : inCardRecording ? (
+                    <InCardRecorder
+                      style={styles.frameMedia}
+                      onRecorded={handleInCardRecorded}
+                      onUnavailable={handleInCardUnavailable}
+                      onCancel={() => setInCardRecording(false)}
+                    />
+                  ) : (
                   <View style={styles.frameInner}>
                     <View style={styles.uploadSection}>
                       <Text style={styles.uploadTitle}>{t('technique.uploadTitle')}</Text>
@@ -2939,6 +3025,7 @@ export function Technique() {
                       <TouchableOpacity
                         style={styles.chooseFileBtn}
                         onPress={() => startHowToFlow('gallery')}
+                        testID={TEST_IDS.techniqueChooseFile}
                         activeOpacity={0.85}
                       >
                         <Text style={styles.chooseFileBtnText}>{t('technique.chooseFile')}</Text>
@@ -2949,16 +3036,17 @@ export function Technique() {
                       <TouchableOpacity
                         style={styles.recordButton}
                         onPress={() => startHowToFlow('record')}
+                        testID={TEST_IDS.techniqueRecord}
                         activeOpacity={0.85}
                       >
                         <View style={styles.recordButtonInner} />
                       </TouchableOpacity>
                     </View>
                   </View>
+                  )}
                 </View>
                 )}
               </View>
-            )}
           </View>
         )}
 
@@ -2974,7 +3062,7 @@ export function Technique() {
                     <Text allowFontScaling={false} style={styles.step3ScoreLabel}>
                       Overall Score
                     </Text>
-                    <Text allowFontScaling={false} style={styles.step3ScoreValue}>
+                    <Text allowFontScaling={false} style={styles.step3ScoreValue} testID={TEST_IDS.techniqueScore}>
                       {score}
                       <Text style={styles.step3ScoreOutOf}> /100</Text>
                     </Text>
@@ -3659,7 +3747,7 @@ export function Technique() {
                             )}
 
                             {SHOW_COMFY_CORRECTIONS && correctionVideo?.video ? (
-                              <View style={styles.correctionVideoBlock}>
+                              <View style={styles.correctionVideoBlock} testID={TEST_IDS.magicShotResult}>
                                 {uploadedVideoUrl ? (
                                   <CorrectionVideoCompare
                                     originalUri={uploadedVideoUrl}
@@ -3988,6 +4076,7 @@ export function Technique() {
             <TouchableOpacity
               activeOpacity={0.9}
               onPress={acceptHowToModal}
+              testID={TEST_IDS.howToAccept}
               style={styles.howToAcceptOuter}
             >
               <LinearGradient
@@ -4397,7 +4486,25 @@ function getStyles(theme: any) {
       borderRadius: 4,
       backgroundColor: '#00BBFF',
     },
-    step2: { position: 'relative' as const, flexShrink: 1, gap: 20, minHeight: 0 },
+    /** Recorder / upload preview inside the step-1 card, edge to edge within the stroke. */
+    frameMedia: {
+      position: 'absolute',
+      left: 2,
+      top: 2,
+      right: 2,
+      bottom: 2,
+      borderRadius: FRAME_RADIUS - 1,
+      overflow: 'hidden',
+      backgroundColor: '#000',
+    },
+    uploadDim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,10,28,0.62)' },
+    uploadingText: {
+      fontFamily: theme.regularFont,
+      fontSize: 16,
+      color: '#fff',
+      textAlign: 'center',
+    },
+    step2: { position: 'relative' as const, flexShrink: 0, gap: 20 },
     /** Step 2: scroll region + pinned actions above tab bar */
     step2SplitRoot: {
       flex: 1,
@@ -4407,7 +4514,7 @@ function getStyles(theme: any) {
     step2BottomBar: {
       flexDirection: 'row',
       alignItems: 'stretch',
-      gap: 8,
+      gap: 12,
       paddingTop: 6,
     },
     step2BottomBarHalf: {
@@ -4420,7 +4527,7 @@ function getStyles(theme: any) {
       flex: 1,
       alignSelf: 'stretch',
       width: '100%',
-      minHeight: 52,
+      minHeight: 64,
     },
     step2ThumbnailContainer: {
       marginTop: 8,
@@ -4524,20 +4631,29 @@ function getStyles(theme: any) {
     step2VideoSummaryCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'flex-end',
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: 18,
+      justifyContent: 'space-between',
+      gap: 16,
+      paddingVertical: 18,
+      paddingLeft: 18,
+      paddingRight: 16,
+      borderRadius: 24,
       borderWidth: 0,
       backgroundColor: '#041641',
       marginTop: 4,
       marginBottom: 4,
     },
+    step2HintText: {
+      flex: 1,
+      fontFamily: theme.regularFont,
+      fontSize: 16,
+      lineHeight: 22,
+      color: '#FFFFFF',
+    },
     step2SummaryThumbOuter: {
       position: 'relative' as const,
-      width: 48,
-      height: 48,
-      borderRadius: 10,
+      width: STEP2_THUMB,
+      height: STEP2_THUMB,
+      borderRadius: 14,
       overflow: 'hidden',
     },
     step2SummaryThumbInner: {
@@ -4603,9 +4719,9 @@ function getStyles(theme: any) {
       color: '#E8F0FF',
     },
     step2TryNewVideoBtn: {
-      borderRadius: 14,
+      borderRadius: 24,
       borderWidth: 0,
-      backgroundColor: '#041641',
+      backgroundColor: '#0A1E5C',
       paddingVertical: 15,
       paddingHorizontal: 12,
       alignItems: 'center',
@@ -4613,9 +4729,9 @@ function getStyles(theme: any) {
       minHeight: 52,
     },
     step2TryNewVideoText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
-      color: '#00B8FF',
+      fontFamily: theme.regularFont,
+      fontSize: 18,
+      color: '#2A88F4',
       textAlign: 'center',
     },
     step2InstructionMain: {
@@ -4692,7 +4808,7 @@ function getStyles(theme: any) {
       borderColor: 'rgba(255,255,255,0.4)',
     },
     analyseButton: {
-      borderRadius: 14,
+      borderRadius: 24,
       overflow: 'hidden',
       marginTop: 0,
     },
@@ -4704,12 +4820,12 @@ function getStyles(theme: any) {
       gap: 8,
       paddingVertical: 16,
       paddingHorizontal: 16,
-      borderRadius: 14,
-      minHeight: 52,
+      borderRadius: 24,
+      minHeight: 64,
     },
     analyseButtonText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 17,
+      fontFamily: theme.regularFont,
+      fontSize: 18,
       color: '#fff',
       textAlign: 'center',
     },
@@ -5136,12 +5252,12 @@ function getStyles(theme: any) {
       alignItems: 'center',
     },
     step2TrimTrashBtn: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#006EFF',
+      backgroundColor: '#5AB8FF',
     },
     step2TrimTrashBtnDisabled: {
       opacity: 0.35,
@@ -5236,21 +5352,45 @@ function getStyles(theme: any) {
       backgroundColor: 'rgba(255,255,255,0.48)',
     },
     setClipButton: {
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 10,
       backgroundColor: '#FFFFFF',
-      borderRadius: 24,
-      paddingHorizontal: 26,
-      paddingVertical: 12,
+      borderRadius: 16,
+      paddingHorizontal: 20,
+      height: 46,
+      minWidth: 140,
     },
     setClipButtonText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
+      fontFamily: theme.regularFont,
+      fontSize: 18,
       color: '#0A1120',
     },
+    clipSetPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      backgroundColor: '#1E50F0',
+      borderRadius: 16,
+      paddingHorizontal: 20,
+      height: 46,
+      minWidth: 140,
+    },
+    clipSetPillText: {
+      fontFamily: theme.regularFont,
+      fontSize: 18,
+      color: '#FFFFFF',
+    },
+    clipLabel: {
+      fontFamily: theme.semiBoldFont,
+      color: '#2A88F4',
+    },
     clipsList: {
-      marginBottom: 6,
-      gap: 8,
+      marginTop: 8,
+      marginBottom: 10,
+      gap: 14,
     },
     /**
      * Tab-scene fullscreen: `absoluteFill` within Technique’s `flex:1` root (between header & tab bar).
@@ -5455,17 +5595,12 @@ function getStyles(theme: any) {
     clipRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.1)',
-      backgroundColor: 'rgba(0,0,0,0.25)',
-      paddingHorizontal: 10,
-      paddingVertical: 9,
+      gap: 12,
     },
     clipText: {
-      fontFamily: theme.mediumFont,
-      fontSize: 12,
+      flex: 1,
+      fontFamily: theme.regularFont,
+      fontSize: 15,
       color: theme.textColor,
     },
     trimHandle: {
