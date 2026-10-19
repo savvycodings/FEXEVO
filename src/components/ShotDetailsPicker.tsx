@@ -27,6 +27,8 @@ const ANGLE_GAP = 10
 const ANGLE_TILE_ASPECT = 155 / 117
 /** Gap kept above a section when a tab scrolls to it. */
 const SCROLL_OFFSET = 12
+/** Space left below the Continue button after scrolling down to it. */
+const CONTINUE_SCROLL_MARGIN = 24
 const THUMB_SIZE = 96
 
 const ACCENT = '#2A88F4'
@@ -69,6 +71,9 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPicke
   const [viewportH, setViewportH] = useState(0)
   const [lastSectionY, setLastSectionY] = useState(0)
   const [contentEndY, setContentEndY] = useState(0)
+  /** Bottom edge of the Continue button, and whether picking an angle still owes a scroll down to it. */
+  const continueBottom = useRef<number | null>(null)
+  const scrollToContinuePending = useRef(false)
 
   const contentW = Math.min(winW, 640) - HORIZONTAL_PAD * 2
   const pillW = (contentW - GRID_GAP) / 2
@@ -81,6 +86,9 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPicke
   const bottomSpacer = Math.max(40, viewportH - (contentEndY - lastSectionY) - SCROLL_OFFSET)
   useEffect(() => setLastSectionY(sectionY.current[lastTab]), [lastTab])
   const canContinue = group != null && shot != null && viewId != null
+  useEffect(() => {
+    if (!canContinue) continueBottom.current = null
+  }, [canContinue])
 
   const fonts = useMemo(
     () => ({ regular: theme.regularFont, medium: theme.mediumFont, semiBold: theme.semiBoldFont }),
@@ -91,6 +99,14 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPicke
     setViewTab(tab)
     programmaticUntil.current = Date.now() + 600
     scrollRef.current?.scrollTo({ y: Math.max(0, sectionY.current[tab] - SCROLL_OFFSET), animated: true })
+  }
+
+  const scrollToContinue = () => {
+    if (continueBottom.current == null || viewportH === 0) return
+    scrollToContinuePending.current = false
+    setViewTab('camera')
+    programmaticUntil.current = Date.now() + 600
+    scrollRef.current?.scrollTo({ y: Math.max(0, continueBottom.current + CONTINUE_SCROLL_MARGIN - viewportH), animated: true })
   }
 
   const onScroll = (y: number) => {
@@ -296,6 +312,10 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPicke
             testID={TEST_IDS.setClipContinue}
             style={styles.continueOuter}
             accessibilityRole="button"
+            onLayout={(e) => {
+              continueBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height
+              if (scrollToContinuePending.current) scrollToContinue()
+            }}
           >
             <LinearGradient colors={['#00B8FF', '#1848BA']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.continueGradient}>
               <Text allowFontScaling={false} style={[styles.continueText, { fontFamily: fonts.medium }]}>
@@ -314,6 +334,11 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPicke
         onSelect={(id) => {
           setViewId(id)
           setExampleAngleId(null)
+          // First pick: the button's onLayout runs the scroll. Re-pick: the button is already laid out.
+          scrollToContinuePending.current = true
+          setTimeout(() => {
+            if (scrollToContinuePending.current) scrollToContinue()
+          }, 50)
         }}
         onClose={() => setExampleAngleId(null)}
       />
