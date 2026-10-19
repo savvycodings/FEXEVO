@@ -200,6 +200,13 @@ export const en = {
     uploadingVideo: "Uploading your video",
     setClipScreen: {
       impactHint: "Set the impact of the ball in the center of the timeline",
+      contactFrameTitle: "Pick the contact frame",
+      contactFrameHint: "Tap the frame where the ball meets the racket",
+      contactFrameInfo: "Frame {{frame}} · {{sec}}s · {{fps}} fps",
+      fpsAssumed: "(assumed)",
+      previousFrame: "Previous frame",
+      nextFrame: "Next frame",
+      frameN: "Frame {{n}}",
       previewClip: "Preview Clip (0.5x)",
       selectedLabel: "Selected {{ms}} ms (Max {{max}}) • Full Video {{full}}",
       clipSet: "Clip Setted",
