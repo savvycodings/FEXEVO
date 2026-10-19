@@ -90,11 +90,13 @@ export async function sendCoachChat(
 
 /** Returns null when the voice instance is offline so callers stay text-only. */
 export async function fetchCoachSpeech(
-  text: string
+  text: string,
+  locale?: string
 ): Promise<{ audioBase64: string; mimeType: string } | null> {
   try {
     const data = await post<{ audioBase64?: string; mimeType?: string }>('/coach-character/speech', {
       text,
+      locale: locale || undefined,
     })
     if (!data.audioBase64) return null
     return { audioBase64: data.audioBase64, mimeType: data.mimeType || 'audio/wav' }

@@ -144,7 +144,7 @@ export function useCoachChat({ analysisId, videoUri, active, onFirstMessage }: O
     async (id: string, text: string) => {
       const seq = ++autoPlaySeqRef.current
       updateMessage(id, { audioLoading: true })
-      const audio = await fetchCoachSpeech(text)
+      const audio = await fetchCoachSpeech(text, lang)
       if (!mountedRef.current) return
       if (!audio) {
         updateMessage(id, { audioLoading: false })
@@ -170,7 +170,7 @@ export function useCoachChat({ analysisId, videoUri, active, onFirstMessage }: O
         void playMessage(id)
       }
     },
-    [updateMessage, playMessage]
+    [updateMessage, playMessage, lang]
   )
 
   const stopRecording = useCallback(async (): Promise<string | null> => {
