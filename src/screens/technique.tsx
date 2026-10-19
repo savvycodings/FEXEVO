@@ -76,6 +76,7 @@ import {
 } from '../components/AICoachCoachReviewBanner'
 import { hasProfileImage, profileImageToAbsoluteUri } from '../lib/defaultProfilePicture'
 import { VideoFrameCarousel, normalizeThumbnailImageUri } from '../components/VideoFrameCarousel'
+import { ContactFrameGrid } from '../components/ContactFrameGrid'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientProgressBar } from '../components'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
@@ -2551,7 +2552,8 @@ export function Technique() {
                       )
                     }}
                     onDurationMs={(durationMs) => {
-                      const sec = Math.round(durationMs / 1000)
+                      // Keep milliseconds: whole seconds put the contact and clip times off by up to half a second.
+                      const sec = Math.round(durationMs) / 1000
                       setVideoDurationSeconds((prev) => (prev === sec ? prev : sec))
                     }}
                     onPositionMsChange={handleTrimPreviewPositionMs}
@@ -2614,6 +2616,22 @@ export function Technique() {
                         </Text>
                       </View>
                     )
+                  ) : null}
+
+                  {uploadedVideoUrl != null && videoDurationSeconds != null && videoDurationSeconds > 0 && currentTrimClip ? (
+                    <ContactFrameGrid
+                      videoUri={localVideoUri ?? uploadedVideoUrl}
+                      durationMs={Math.round(videoDurationSeconds * 1000)}
+                      contactMs={contactMs}
+                      clipStartMs={currentTrimClip.startMs}
+                      clipEndMs={currentTrimClip.endMs}
+                      onChangeContactMs={(ms) => {
+                        void trimPreviewRef.current?.pause()
+                        const p = clamp01(ms / (videoDurationSeconds * 1000))
+                        setMarkerProgressStable(p)
+                        void applyTrimVideoSeek(p)
+                      }}
+                    />
                   ) : null}
 
                   <View style={styles.clipsList}>

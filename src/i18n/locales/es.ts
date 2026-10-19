@@ -200,6 +200,13 @@ export const es = {
     uploadingVideo: "Subiendo tu video",
     setClipScreen: {
       impactHint: "Coloca el impacto de la pelota en el centro de la línea de tiempo",
+      contactFrameTitle: "Elige el fotograma del impacto",
+      contactFrameHint: "Toca el fotograma donde la pelota toca la pala",
+      contactFrameInfo: "Fotograma {{frame}} · {{sec}}s · {{fps}} fps",
+      fpsAssumed: "(estimado)",
+      previousFrame: "Fotograma anterior",
+      nextFrame: "Fotograma siguiente",
+      frameN: "Fotograma {{n}}",
       previewClip: "Vista previa (0.5x)",
       selectedLabel: "Seleccionado {{ms}} ms (Máx {{max}}) • Video completo {{full}}",
       clipSet: "Clip fijado",
