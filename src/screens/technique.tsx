@@ -120,7 +120,15 @@ import {
   MAX_ANALYZE_CLIP_MS,
   MIN_ANALYZE_CLIP_MS,
 } from '../lib/techniqueClipLimits'
-import { uploadTechniqueVideo } from '../lib/techniqueVideoUpload'
+import { LOW_RESOLUTION_ERROR, uploadTechniqueVideo } from '../lib/techniqueVideoUpload'
+
+/** Short side must be at least 720px (720p). Unknown sizes are left for the server. */
+const MIN_UPLOAD_SHORT_SIDE = 720
+
+function assetBelowMinResolution(width?: number | null, height?: number | null): boolean {
+  if (width == null || height == null || width <= 0 || height <= 0) return false
+  return Math.min(width, height) < MIN_UPLOAD_SHORT_SIDE
+}
 import { TEST_IDS } from '../lib/testIds'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
@@ -1478,6 +1486,10 @@ export function Technique() {
     [videoDurationSeconds]
   )
 
+  function showLowResolutionAlert() {
+    Alert.alert(t('technique.lowResolutionTitle'), t('technique.lowResolutionBlocked'))
+  }
+
   async function pickVideo() {
     let status = (await ImagePicker.requestCameraPermissionsAsync()).status
     let useLibrary = false
@@ -1491,11 +1503,12 @@ export function Technique() {
       ? await ImagePicker.launchImageLibraryAsync(VIDEO_LIBRARY_PICKER_OPTIONS)
       : await ImagePicker.launchCameraAsync(VIDEO_PICKER_OPTIONS)
     if (result.canceled || !result.assets?.[0]) return
-    await uploadVideo(
-      result.assets[0].uri,
-      result.assets[0].fileName ?? 'video.mp4',
-      result.assets[0].mimeType ?? 'video/mp4'
-    )
+    const asset = result.assets[0]
+    if (assetBelowMinResolution(asset.width, asset.height)) {
+      showLowResolutionAlert()
+      return
+    }
+    await uploadVideo(asset.uri, asset.fileName ?? 'video.mp4', asset.mimeType ?? 'video/mp4')
   }
 
   async function pickDocument() {
@@ -1513,11 +1526,12 @@ export function Technique() {
     if (mediaPerm.status !== 'granted') return
     const result = await ImagePicker.launchImageLibraryAsync(VIDEO_LIBRARY_PICKER_OPTIONS)
     if (result.canceled || !result.assets?.[0]) return
-    await uploadVideo(
-      result.assets[0].uri,
-      result.assets[0].fileName ?? 'video.mp4',
-      result.assets[0].mimeType ?? 'video/mp4'
-    )
+    const asset = result.assets[0]
+    if (assetBelowMinResolution(asset.width, asset.height)) {
+      showLowResolutionAlert()
+      return
+    }
+    await uploadVideo(asset.uri, asset.fileName ?? 'video.mp4', asset.mimeType ?? 'video/mp4')
   }
 
   /** Straight to capture: record in the card, or open the file picker (no shot stepper). */
@@ -1617,16 +1631,9 @@ export function Technique() {
         url: data.url ? `${data.url.slice(0, 50)}...` : '',
         sendVideoToCoach,
         dimensions: data.width && data.height ? `${data.width}x${data.height}` : 'unknown',
-        lowResolution: data.lowResolution === true,
       })
 
-      const shortSide =
-        data.width && data.height ? Math.min(data.width, data.height) : null
-      setLowResolutionUpload(
-        data.lowResolution && shortSide
-          ? { shortSide, minimum: data.minRecommendedShortSide ?? 720 }
-          : null
-      )
+      setLowResolutionUpload(null)
 
       if (data.localUri) {
         setLocalVideoUri(data.localUri)
@@ -1655,6 +1662,12 @@ export function Technique() {
       setStep(2)
     } catch (err) {
       console.error('[Technique] Upload error', err)
+      if (err instanceof Error && err.message === LOW_RESOLUTION_ERROR) {
+        setLocalVideoUri(null)
+        setUploadError(t('technique.lowResolutionBlocked'))
+        showLowResolutionAlert()
+        return
+      }
       const message = err instanceof Error ? err.message : 'Upload failed. Please try again.'
       setUploadError(message)
       setUploadProgress(0)
@@ -3404,10 +3417,7 @@ export function Technique() {
                               <View style={styles.lowResolutionNotice}>
                                 <FeatherIcon name="alert-triangle" size={14} color="#FFB020" />
                                 <Text style={styles.lowResolutionNoticeText}>
-                                  {t('technique.lowResolutionWarning', {
-                                    shortSide: lowResolutionUpload.shortSide,
-                                    minimum: lowResolutionUpload.minimum,
-                                  })}
+                                  {t('technique.lowResolutionBlocked')}
                                 </Text>
                               </View>
                             ) : null}

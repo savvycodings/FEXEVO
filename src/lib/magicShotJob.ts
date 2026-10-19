@@ -67,7 +67,13 @@ function parseVideo(body: Record<string, unknown>): MagicShotVideo | null {
 function extractError(raw: any): string | null {
   const candidates = [raw?.error?.error, raw?.error?.message, raw?.error, raw?.message]
   for (const c of candidates) {
-    if (typeof c === 'string' && c.trim()) return c.trim()
+    if (typeof c === 'string' && c.trim()) {
+      const msg = c.trim()
+      if (/720p/i.test(msg) || /LOW_RESOLUTION/i.test(msg)) {
+        return i18n.t('technique.lowResolutionBlocked')
+      }
+      return msg
+    }
   }
   return null
 }

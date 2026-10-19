@@ -103,11 +103,14 @@ type UploadResponseBody = {
   id?: string
   url?: string
   error?: string
+  code?: string
   width?: number
   height?: number
   lowResolution?: boolean
   minRecommendedShortSide?: number
 }
+
+export const LOW_RESOLUTION_ERROR = 'LOW_RESOLUTION'
 
 function parseUploadResponseBody(text: string): UploadResponseBody {
   try {
@@ -115,6 +118,13 @@ function parseUploadResponseBody(text: string): UploadResponseBody {
   } catch {
     return { error: 'Invalid server response' }
   }
+}
+
+function throwUploadFailure(body: UploadResponseBody, status?: number): never {
+  if (body.code === LOW_RESOLUTION_ERROR || body.lowResolution === true) {
+    throw new Error(LOW_RESOLUTION_ERROR)
+  }
+  throw new Error(body.error || (status != null ? `Upload failed (${status})` : 'Upload failed'))
 }
 
 function uploadViaXhr(
@@ -140,7 +150,11 @@ function uploadViaXhr(
         resolve(body)
         return
       }
-      reject(new Error(body.error || `Upload failed (${xhr.status})`))
+      try {
+        throwUploadFailure(body, xhr.status)
+      } catch (err) {
+        reject(err)
+      }
     }
 
     xhr.onerror = () => reject(new Error('Upload failed due to a network error'))
@@ -190,8 +204,7 @@ async function uploadViaFileSystem(
     throw new Error('Upload failed')
   }
   if (result.status < 200 || result.status >= 300) {
-    const body = parseUploadResponseBody(result.body ?? '')
-    throw new Error(body.error || `Upload failed (${result.status})`)
+    throwUploadFailure(parseUploadResponseBody(result.body ?? ''), result.status)
   }
   return parseUploadResponseBody(result.body ?? '')
 }
@@ -247,7 +260,10 @@ export async function uploadTechniqueVideo(opts: {
 
   onProgress(UPLOAD_END)
   if (!data.id) {
-    throw new Error(data.error || 'Upload failed. Please try again.')
+    throwUploadFailure(data)
+  }
+  if (data.lowResolution === true || data.code === LOW_RESOLUTION_ERROR) {
+    throw new Error(LOW_RESOLUTION_ERROR)
   }
 
   onProgress(mapFinishProgress())
@@ -257,7 +273,7 @@ export async function uploadTechniqueVideo(opts: {
     localUri: Platform.OS !== 'web' ? uploadUri : undefined,
     width: data.width,
     height: data.height,
-    lowResolution: data.lowResolution === true,
+    lowResolution: false,
     minRecommendedShortSide: data.minRecommendedShortSide,
   }
 }

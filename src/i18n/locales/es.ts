@@ -233,8 +233,9 @@ export const es = {
     startOver: "Empezar de nuevo",
     current: "Actual",
     corrected: "Corregido",
-    lowResolutionWarning:
-      "Este clip es de {{shortSide}}p, por debajo de los {{minimum}}p recomendados. La corrección con IA tiene poco detalle con el que trabajar, así que el vídeo generado se verá borroso.",
+    lowResolutionTitle: "Se necesita 720p",
+    lowResolutionBlocked: "Elige un video de al menos 720p.",
+    lowResolutionWarning: "Elige un video de al menos 720p.",
     sideBySide: "Lado a lado",
     dragCompare: "Arrastra para comparar",
     techniqueRating: "Valoración técnica",
