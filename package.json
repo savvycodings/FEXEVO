@@ -13,7 +13,7 @@
     "web:local": "EXPO_PUBLIC_BACKEND_URL=http://localhost:3050 EXPO_PUBLIC_ENV_LABEL=local expo start --web --port 8090",
     "web:prod": "EXPO_PUBLIC_BACKEND_URL=https://bexevo-production.up.railway.app EXPO_PUBLIC_ENV_LABEL=production expo start --web --port 8091",
     "web:export": "EXPO_PUBLIC_BACKEND_URL=${EXPO_PUBLIC_BACKEND_URL:-http://localhost:3050} EXPO_PUBLIC_ENV_LABEL=${EXPO_PUBLIC_ENV_LABEL:-local} expo export --clear --platform web --output-dir dist-web",
-    "web:export:e2e": "EXPO_PUBLIC_E2E=1 EXPO_PUBLIC_ADMIN_HUB_PASSWORD=e2e-admin-gate EXPO_PUBLIC_SHOW_COMFY_CORRECTIONS=true EXPO_PUBLIC_ENABLE_LEGACY_CORRECTIONS=false EXPO_PUBLIC_BACKEND_URL=${EXPO_PUBLIC_BACKEND_URL:-http://localhost:3050} EXPO_PUBLIC_ENV_LABEL=${EXPO_PUBLIC_ENV_LABEL:-local} expo export --clear --no-minify --platform web --output-dir dist-web",
+    "web:export:e2e": "EXPO_PUBLIC_E2E=1 EXPO_PUBLIC_ADMIN_HUB_PASSWORD=axevodev EXPO_PUBLIC_SHOW_COMFY_CORRECTIONS=true EXPO_PUBLIC_ENABLE_LEGACY_CORRECTIONS=false EXPO_PUBLIC_BACKEND_URL=${EXPO_PUBLIC_BACKEND_URL:-http://localhost:3050} EXPO_PUBLIC_ENV_LABEL=${EXPO_PUBLIC_ENV_LABEL:-local} expo export --clear --no-minify --platform web --output-dir dist-web",
     "e2e": "playwright test --grep-invert @live",
     "e2e:live": "playwright test --grep @live"
   },

@@ -34,7 +34,7 @@ The global setup refuses to run unless `GET /__e2e/health` reports `fakes: true`
 | --- | --- | --- |
 | player | `e2e-player@xevo.test` | student, linked to the coach, 120 XP, one notification |
 | coach | `e2e-coach@xevo.test` | coach of the player |
-| admin | `e2e-admin@xevo.test` | admin hub gate password `e2e-admin-gate` (set in both `.env.e2e` and the e2e web build) |
+| admin | `e2e-admin@xevo.test` | admin hub gate password `axevodev` (set in both `.env.e2e` and the e2e web build) |
 
 The password for all three is `E2E-test-password-1!`.
 
