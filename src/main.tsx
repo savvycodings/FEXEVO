@@ -405,6 +405,7 @@ function MainTabsLayoutInner({
 
   const headerSearchLeft =
     activeTabName === 'Progress' || activeTabName === 'You' || activeTabName === 'Activities'
+  const coachHomeHeader = !viewerIsCoach && (activeTabName == null || activeTabName === 'AICoach')
 
   const { width: winW } = useWindowDimensions()
   /** Padding inside tab bar above home indicator — must fit inside explicit height below */
@@ -502,8 +503,11 @@ function MainTabsLayoutInner({
       <View style={styles.container}>
       <Header
         flatOverlay
-        onProPress={() => stackNavigation.navigate('ProSubscription')}
-        onProfilePress={headerSearchLeft ? undefined : () => goToTab('You')}
+        mark={coachHomeHeader ? 'logo' : 'pro'}
+        onProPress={
+          coachHomeHeader ? undefined : () => stackNavigation.navigate('ProSubscription')
+        }
+        onProfilePress={headerSearchLeft || coachHomeHeader ? undefined : () => goToTab('You')}
         profileName={profileName}
         profileRank={profileRank}
         profileImageUri={profileImageUri}

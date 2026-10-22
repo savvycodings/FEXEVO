@@ -4,6 +4,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native'
@@ -147,8 +148,9 @@ export function CoachHome({
     .slice()
     .reverse()
     .slice(-10)
-  const heroHeight = Math.round(Math.min(440, Math.max(220, winH * 0.4)))
-  const nameSize = winW < 360 ? 26 : 32
+  // Crop the pose hero so the player fills the band and the record/gallery/cloud actions stay on screen.
+  const heroHeight = Math.round(Math.min(236, Math.max(200, winH * 0.27)))
+  const nameSize = winW < 360 ? 26 : 30
 
   return (
     <View style={styles.page}>
@@ -182,12 +184,14 @@ export function CoachHome({
       ) : null}
 
       {!hasHistory && ready ? (
-        <Image
-          source={HERO}
-          resizeMode="contain"
-          style={[styles.hero, { height: heroHeight }]}
-          accessibilityIgnoresInvertColors
-        />
+        <View style={[styles.heroFrame, { height: heroHeight }]}>
+          <Image
+            source={HERO}
+            resizeMode="cover"
+            style={styles.heroImage}
+            accessibilityIgnoresInvertColors
+          />
+        </View>
       ) : null}
 
       {!hasHistory && ready ? (
@@ -323,18 +327,18 @@ function AnalyzeBlock({
   const { t } = useTranslation()
   return (
     <View style={styles.analyzeWrap}>
-      <Pressable
+      <TouchableOpacity
         accessibilityRole="button"
         onPress={onAnalyze}
-        style={({ pressed }) => [styles.analyzeCard, pressed && styles.pressed]}
+        activeOpacity={0.82}
+        style={styles.analyzeCard}
       >
         <LinearGradient
           colors={['#0A39A7', '#061F5B', '#041641']}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
+          style={styles.analyzeFill}
         />
-        <View pointerEvents="none" style={styles.analyzeGlow} />
         <View style={styles.analyzeRow}>
           <LinearGradient
             colors={['#00BBFF', '#0B285A']}
@@ -356,18 +360,18 @@ function AnalyzeBlock({
             <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
           </LinearGradient>
         </View>
-      </Pressable>
+      </TouchableOpacity>
       <View style={styles.sourceRow}>
         <SourceButton
           testID={TEST_IDS.techniqueRecord}
-          icon="videocam-outline"
+          icon="camera-outline"
           label={t('technique.home.record')}
           onPress={onRecord}
           font={fonts.regularFont}
         />
         <SourceButton
           testID={TEST_IDS.techniqueChooseFile}
-          icon="images-outline"
+          icon="image-outline"
           label={t('technique.home.gallery')}
           onPress={onGallery}
           font={fonts.regularFont}
@@ -397,17 +401,20 @@ function SourceButton({
   testID?: string
 }) {
   return (
-    <Pressable
+    <TouchableOpacity
       testID={testID}
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.sourceBtn, pressed && styles.pressed]}
+      activeOpacity={0.82}
+      style={styles.sourceBtn}
     >
-      <Ionicons name={icon} size={14} color="#FFFFFF" />
+      <View style={styles.sourceIconTile}>
+        <Ionicons name={icon} size={16} color="#3DB7FF" />
+      </View>
       <Text allowFontScaling={false} numberOfLines={2} style={[styles.sourceLabel, { fontFamily: font }]}>
         {label}
       </Text>
-    </Pressable>
+    </TouchableOpacity>
   )
 }
 
@@ -618,7 +625,7 @@ function LatestCard({
 }
 
 const styles = StyleSheet.create({
-  page: { width: '100%', gap: 20, paddingBottom: 12 },
+  page: { width: '100%', gap: 12, paddingBottom: 4 },
   greeting: {
     borderRadius: 20,
     overflow: 'hidden',
@@ -650,11 +657,17 @@ const styles = StyleSheet.create({
   sessionBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 21 },
   sessionBar: { width: 4, borderRadius: 4, backgroundColor: '#00B8FF' },
   sessionCount: { color: '#86A7D2', fontSize: 12, textAlign: 'left' },
-  hero: { width: '100%', marginVertical: 4 },
+  heroFrame: {
+    width: '100%',
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#020814',
+  },
+  heroImage: { width: '100%', height: '100%' },
   headline: { gap: 2 },
-  headlineLine: { color: '#00BBFF', fontSize: 28, lineHeight: 32 },
+  headlineLine: { color: '#00C2FF', fontSize: 28, lineHeight: 32 },
   headlineLineDeep: { color: '#3D6BFF' },
-  headlineSub: { color: '#86A7D2', fontSize: 13, marginTop: 6, lineHeight: 18 },
+  headlineSub: { color: '#86A7D2', fontSize: 13, marginTop: 4, lineHeight: 18 },
   analyzeWrap: { gap: 10 },
   analyzeCard: {
     borderRadius: 20,
@@ -662,12 +675,10 @@ const styles = StyleSheet.create({
     borderColor: '#00B8FF',
     overflow: 'hidden',
     backgroundColor: '#041641',
-    boxShadow: '0px 0px 20px 0px rgba(0, 184, 255, 0.5)',
   },
-  analyzeGlow: {
+  analyzeFill: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 20,
-    boxShadow: 'inset 0px 0px 10px 0px #00B8FF',
   },
   analyzeRow: {
     flexDirection: 'row',
@@ -695,23 +706,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sourceRow: { flexDirection: 'row', gap: 5 },
+  sourceRow: { width: '100%', flexDirection: 'row', alignItems: 'stretch', gap: 8 },
   sourceBtn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 0,
     minWidth: 0,
-    height: 40,
+    height: 68,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingLeft: 10,
-    paddingRight: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#0B285A',
-    backgroundColor: 'rgba(3, 31, 77, 0.2)',
-    boxShadow: '0px 0px 3px 0px rgba(0, 75, 255, 0.3)',
+    gap: 6,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#00C8FF',
+    backgroundColor: '#041633',
   },
-  sourceLabel: { flex: 1, color: '#FFFFFF', fontSize: 10, lineHeight: 12 },
+  sourceIconTile: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#00C8FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sourceLabel: { flexShrink: 1, color: '#FFFFFF', fontSize: 11, lineHeight: 14 },
   pressed: { opacity: 0.82 },
   coachSlot: { width: '100%' },
   performanceWrap: { gap: 5 },

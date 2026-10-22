@@ -16,6 +16,7 @@ import { profileImageSource } from '../lib/defaultProfilePicture'
 import { useCoachAssistant } from '../context/CoachAssistantContext'
 
 const HEADER_MARK_SVG = require('../../assets/pro.svg')
+const HEADER_WORDMARK = require('../../assets/logo.png')
 const SETTINGS_ICON = require('../../assets/youpage/settingsicon.svg')
 const SEARCH_ICON = require('../../assets/youpage/searchicon.svg')
 const NOTI_ICON = require('../../assets/coachs/notiicon.svg')
@@ -30,6 +31,8 @@ const HEADER_BOTTOM_STROKE = 'rgba(0, 102, 255, 0.2)'
 type HeaderProps = {
   /** Opens Pro subscription screen (top-right PRO badge). */
   onProPress?: () => void
+  /** AI Coach home shows the Xevo wordmark instead of the PRO badge. */
+  mark?: 'pro' | 'logo'
   onLogoPress?: () => void
   onProfilePress?: () => void
   profileName?: string
@@ -50,6 +53,7 @@ type HeaderProps = {
 
 export function Header({
   onProPress,
+  mark = 'pro',
   onLogoPress,
   onProfilePress,
   profileName,
@@ -156,14 +160,23 @@ export function Header({
             <LocalSvgAsset assetModule={SETTINGS_ICON} width={26} height={26} />
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity
-          style={styles.rightButton}
-          activeOpacity={0.6}
-          onPress={onProPress ?? onLogoPress ?? handlePresentModalPress}
-          accessibilityLabel="Open Pro subscription"
-        >
-          <LocalSvgAsset assetModule={HEADER_MARK_SVG} width={65} height={24} />
-        </TouchableOpacity>
+        {mark === 'logo' ? (
+          <Image
+            source={HEADER_WORDMARK}
+            style={styles.wordmark}
+            resizeMode="contain"
+            accessibilityLabel="Xevo"
+          />
+        ) : (
+          <TouchableOpacity
+            style={styles.rightButton}
+            activeOpacity={0.6}
+            onPress={onProPress ?? onLogoPress ?? handlePresentModalPress}
+            accessibilityLabel="Open Pro subscription"
+          >
+            <LocalSvgAsset assetModule={HEADER_MARK_SVG} width={65} height={24} />
+          </TouchableOpacity>
+        )}
       </View>
       </View>
     </View>
@@ -293,6 +306,11 @@ function getStyles(
       marginRight: -10,
       justifyContent: 'center',
       alignItems: 'center',
+    },
+    wordmark: {
+      width: 92,
+      height: 34,
+      marginLeft: 4,
     },
     /** Fallback only if `pro.svg` fails to resolve (asset load). */
     markFallback: {
