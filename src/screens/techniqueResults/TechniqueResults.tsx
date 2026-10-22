@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { ResultSectionPill, type ResultSectionId } from '../../components/ResultSectionPill'
+import type { PhysicalMetricsValues } from '../../lib/physicalMetrics'
+import type { PoseFrameRow } from '../../lib/techniquePose'
 import { MetricsPage } from './MetricsPage'
 import { ProReferencePage } from './ProReferencePage'
 import { ShotInfoPage } from './ShotInfoPage'
@@ -14,19 +16,47 @@ type Props = {
   tabs: Tab[]
   /** Current score view. Owned by the technique screen so analysis state stays put. */
   smartFocus: ReactNode
+  score: number | null
+  rating: string | null
+  summary: string | null
+  shotLabel: string | null
+  physicalMetrics: PhysicalMetricsValues | null
+  poseFrames: PoseFrameRow[]
+  impactFrame: number | null
 }
 
 /**
  * Results pill and its four pages. Pages stay mounted and only change visibility,
  * so switching tabs does not reload the analysis.
  */
-export function TechniqueResults({ section, onSectionChange, tabs, smartFocus }: Props) {
+export function TechniqueResults({
+  section,
+  onSectionChange,
+  tabs,
+  smartFocus,
+  score,
+  rating,
+  summary,
+  shotLabel,
+  physicalMetrics,
+  poseFrames,
+  impactFrame,
+}: Props) {
   return (
     <View style={styles.wrap}>
       <ResultSectionPill tabs={tabs} value={section} onChange={onSectionChange} />
       <SmartFocusPage visible={section === 'smartFocus'}>{smartFocus}</SmartFocusPage>
       <ShotInfoPage visible={section === 'shotInfo'} />
-      <MetricsPage visible={section === 'metrics'} />
+      <MetricsPage
+        visible={section === 'metrics'}
+        score={score}
+        rating={rating}
+        summary={summary}
+        shotLabel={shotLabel}
+        metrics={physicalMetrics}
+        poseFrames={poseFrames}
+        impactFrame={impactFrame}
+      />
       <ProReferencePage visible={section === 'proReference'} />
     </View>
   )

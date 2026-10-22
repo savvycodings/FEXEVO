@@ -113,6 +113,7 @@ import {
 } from '../components/CoachAnalysisAccordions'
 import { buildCoachInsightCardsContent } from '../lib/coachInsightCards'
 import { pickCoachAnalysisLocale, filterLegacyCoachPlaceholderLines } from '../lib/coachLocaleAnalysis'
+import { stripCoachRichMarkers } from '../lib/coachRichText'
 import { stripTrainClipIndexSuffix } from '../lib/trainShotDisplay'
 import { normalizePoseData, resolveTotalFrames, type PoseFrameRow } from '../lib/techniquePose'
 import {
@@ -866,6 +867,13 @@ export function Technique() {
     () => parsePhysicalMetricsFromAnalysis(aiAnalysis as Record<string, unknown> | null),
     [aiAnalysis]
   )
+  const metricsBlurb = useMemo(() => {
+    const diagnosis =
+      typeof localeAnalysis?.diagnosis === 'string' ? localeAnalysis.diagnosis.trim() : ''
+    const raw = diagnosis || strengthsList[0] || ''
+    const text = stripCoachRichMarkers(raw)
+    return text || null
+  }, [localeAnalysis?.diagnosis, strengthsList])
 
   const biomechanicsSummary = useMemo(
     () => parseBiomechanicsSummary(metrics as Record<string, unknown> | null | undefined),
@@ -3148,6 +3156,17 @@ export function Technique() {
               section={resultSection}
               onSectionChange={onResultSectionChange}
               tabs={resultSectionTabs}
+              score={score}
+              rating={typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null}
+              summary={metricsBlurb}
+              shotLabel={userShot?.shotLabel ?? proReferenceShot}
+              physicalMetrics={physicalMetrics}
+              poseFrames={step3PoseFrames}
+              impactFrame={
+                typeof biomechanicsSummary?.timing?.impact_frame === 'number'
+                  ? biomechanicsSummary.timing.impact_frame
+                  : null
+              }
               smartFocus={
             <>
             {uploadedVideoUrl && analysisJson?.status === 'completed' ? (

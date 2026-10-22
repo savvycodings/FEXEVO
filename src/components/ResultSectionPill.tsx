@@ -5,19 +5,19 @@ import { ThemeContext } from '../context'
 /** Which results section is on screen. Local UI state only — not a route. */
 export type ResultSectionId = 'smartFocus' | 'shotInfo' | 'metrics' | 'proReference'
 
-type Tab = { id: ResultSectionId; label: string }
+type Tab<T extends string> = { id: T; label: string }
 
-type PillProps = {
-  tabs: Tab[]
-  value: ResultSectionId
-  onChange: (id: ResultSectionId) => void
+type PillProps<T extends string> = {
+  tabs: Tab<T>[]
+  value: T
+  onChange: (id: T) => void
 }
 
 /**
  * Segmented control for the AI Coach results step.
  * It only reports the selected id. Callers keep analysis data in the parent.
  */
-export function ResultSectionPill({ tabs, value, onChange }: PillProps) {
+export function ResultSectionPill<T extends string>({ tabs, value, onChange }: PillProps<T>) {
   const { theme } = useContext(ThemeContext)
   return (
     <View style={styles.track}>

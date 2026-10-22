@@ -11,12 +11,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
-import { ACTIVITIES_FAVORITES_STORAGE_KEY } from '../constants/activitiesFavorites'
 import { DOMAIN } from '../../constants'
 import { authClient } from '../lib/auth-client'
 import { normalizePoseData, type PoseFrameRow, resolveTotalFrames } from '../lib/techniquePose'
@@ -38,6 +35,11 @@ import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoad
 import { CorrectionVideoCompare } from '../components/CorrectionVideoCompare'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
 import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidenceSection'
+import { ResultSectionPill } from '../components/ResultSectionPill'
+import { stripCoachRichMarkers } from '../lib/coachRichText'
+import { MetricsPage } from './techniqueResults/MetricsPage'
+import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
+import { useNavigation } from '@react-navigation/native'
 import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
 import {
   parseBiomechanicsSummary,
@@ -64,11 +66,9 @@ const SHOW_COMFY_CORRECTIONS =
     .trim()
     .toLowerCase() === 'true'
 
-const ACTIVITIES_STAR_SVG = require('../../assets/actiities/star.svg')
 const GOOD_INDICATOR_ICON = require('../../assets/videoanalysis/goodindicator.svg')
 const BAD_INDICATOR_ICON = require('../../assets/videoanalysis/badindicaor.svg')
-const ACTIVITIES_STAR_FILLED_SVG = require('../../assets/actiities/star-filled.svg')
-/** Back chevron + favorites star outline (matches `star.svg` stroke). */
+/** Back chevron on the analysis title. */
 const NAV_ICON_TINT = '#86A7D2'
 
 const VA = {
@@ -231,7 +231,7 @@ function getStyles(theme: any) {
   return StyleSheet.create({
     gradient: { flex: 1 },
     scroll: { flex: 1 },
-    scrollInner: { paddingBottom: 36 },
+    scrollInner: { paddingBottom: 12 },
     titleNavRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -245,7 +245,7 @@ function getStyles(theme: any) {
     },
     titleNavCenter: {
       flex: 1,
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'center',
       minWidth: 0,
     },
@@ -253,10 +253,7 @@ function getStyles(theme: any) {
       fontFamily: theme.boldFont ?? theme.semiBoldFont,
       fontSize: 20,
       color: '#FFFFFF',
-      textAlign: 'center',
-    },
-    titleStarBtn: {
-      padding: 6,
+      textAlign: 'left',
     },
     /** Wraps the video panel; radii are applied inside the panel for stacked layout. */
     videoShell: {
@@ -579,8 +576,8 @@ export function ActivitiesVideoAnalysis({
   onBack: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const navigation = useNavigation()
   const { theme } = useContext(ThemeContext)
-  const insets = useSafeAreaInsets()
   const { width: winW } = useWindowDimensions()
   /** Video width: screen minus mock gutters (video sits in `videoShell`). */
   const videoW = useMemo(() => Math.max(160, Math.floor(winW - 2 * SCREEN_GUTTER)), [winW])
@@ -633,47 +630,9 @@ export function ActivitiesVideoAnalysis({
   } | null>(null)
   const [correctionCompareW, setCorrectionCompareW] = useState(0)
 
-  const [isFavorite, setIsFavorite] = useState(false)
+  const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'proReference'>('metrics')
 
   const styles = useMemo(() => getStyles(theme), [theme])
-
-  useEffect(() => {
-    let cancel = false
-    ;(async () => {
-      try {
-        const raw = await AsyncStorage.getItem(ACTIVITIES_FAVORITES_STORAGE_KEY)
-        if (cancel) return
-        const parsed = raw ? JSON.parse(raw) : []
-        setIsFavorite(Array.isArray(parsed) && parsed.includes(session.analysisId))
-      } catch {
-        setIsFavorite(false)
-      }
-    })()
-    return () => {
-      cancel = true
-    }
-  }, [session.analysisId])
-
-  const toggleFavorite = useCallback(async () => {
-    try {
-      const raw = await AsyncStorage.getItem(ACTIVITIES_FAVORITES_STORAGE_KEY)
-      const parsed = raw ? JSON.parse(raw) : []
-      const list: string[] = Array.isArray(parsed)
-        ? parsed.filter((x): x is string => typeof x === 'string')
-        : []
-      const next = new Set(list)
-      if (next.has(session.analysisId)) {
-        next.delete(session.analysisId)
-        setIsFavorite(false)
-      } else {
-        next.add(session.analysisId)
-        setIsFavorite(true)
-      }
-      await AsyncStorage.setItem(ACTIVITIES_FAVORITES_STORAGE_KEY, JSON.stringify([...next]))
-    } catch {
-      /* ignore */
-    }
-  }, [session.analysisId])
 
   useEffect(() => {
     let cancelled = false
@@ -932,6 +891,17 @@ export function ActivitiesVideoAnalysis({
   const correctionPairs =
     correctionGemini.length > 0 ? correctionGemini : correctionFal
 
+  const proCompareRows: ProCompareRow[] = []
+  const angleProxy = aiSnapshot?.biomechanicsSummary?.angles_deg_proxy
+  const elbow = angleProxy?.elbow_impact_deg
+  if (typeof elbow === 'number' && Number.isFinite(elbow)) {
+    proCompareRows.push({ label: t('analysis.elbowAngle'), you: `${Math.round(elbow)}°` })
+  }
+  const torso = angleProxy?.torso_sep_delta_deg ?? angleProxy?.shoulder_hip_sep_impact_deg
+  if (typeof torso === 'number' && Number.isFinite(torso)) {
+    proCompareRows.push({ label: t('analysis.torsoRotation'), you: `${Math.round(torso)}°` })
+  }
+
   const proReferenceShot = aiSections?.strokeLabel
     ? stripTrainClipIndexSuffix(aiSections.strokeLabel)
     : null
@@ -1041,6 +1011,12 @@ export function ActivitiesVideoAnalysis({
     </View>
   ) : null
 
+  const metricsSummary = useMemo(() => {
+    const raw = aiSections?.diagnosis?.trim() || aiSections?.strengths[0] || ''
+    const text = stripCoachRichMarkers(raw)
+    return text || null
+  }, [aiSections])
+
   return (
     <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
       <ScrollView
@@ -1050,7 +1026,7 @@ export function ActivitiesVideoAnalysis({
           // Sits below the global <Header/> in main.tsx, which already pads insets.top.
           // Matches the Activities Shots home page (paddingTop: 8) so the back row has
           // the same top padding when you tap into a shot.
-          { paddingBottom: 28 + insets.bottom, paddingTop: 8 },
+          { paddingTop: 8 },
         ]}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews={Platform.OS === 'android' ? false : undefined}
@@ -1068,43 +1044,77 @@ export function ActivitiesVideoAnalysis({
           </TouchableOpacity>
           <View style={styles.titleNavCenter}>
             <Text allowFontScaling={false} style={styles.shotTitleMain} numberOfLines={2}>
-              {shotTitle}
+              {t('analysis.yourAnalysis')}
             </Text>
           </View>
-          <TouchableOpacity
-            style={styles.titleStarBtn}
-            onPress={toggleFavorite}
-            activeOpacity={0.85}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isFavorite ? t('analysis.removeFavorite') : t('analysis.addFavorite')
+        </View>
+
+        <ResultSectionPill
+          tabs={[
+            { id: 'overview' as const, label: t('analysis.overview') },
+            { id: 'shotInfo' as const, label: t('analysis.shotInfo') },
+            { id: 'metrics' as const, label: t('analysis.metrics') },
+            { id: 'proReference' as const, label: t('technique.resultSections.proReference') },
+          ]}
+          value={analysisTab}
+          onChange={setAnalysisTab}
+        />
+
+        {analysisTab === 'metrics' ? (
+          <MetricsPage
+            visible
+            score={
+              aiSnapshot?.scorePercent ??
+              (typeof session.score === 'number' ? Math.round(session.score) : null)
             }
-          >
-            <LocalSvgAsset
-              assetModule={isFavorite ? ACTIVITIES_STAR_FILLED_SVG : ACTIVITIES_STAR_SVG}
-              width={24}
-              height={24}
-              style={{ opacity: isFavorite ? 1 : 0.55 }}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.videoShell}>
-          <TechniqueAnalysisVideoPanel
-            videoUri={videoUri(session.videoPath)}
-            videoKey={session.analysisId}
-            width={videoW}
+            rating={aiSnapshot?.rating ?? session.rating ?? null}
+            summary={metricsSummary}
+            shotLabel={session.shotLabel ?? shotTitle}
+            metrics={aiSnapshot?.physicalMetrics ?? null}
             poseFrames={poseFrames}
-            totalVidFrames={totalVidFrames}
-            qualitySession={effectiveSession}
-            isLooping
-            playerLayout="default"
-            showLegend
-            skeletonColorMode="segment"
+            impactFrame={
+              typeof aiSnapshot?.biomechanicsSummary?.timing?.impact_frame === 'number'
+                ? aiSnapshot.biomechanicsSummary.timing.impact_frame
+                : null
+            }
           />
-        </View>
+        ) : null}
 
+        {analysisTab === 'shotInfo' ? (
+          <View style={styles.extraCard}>
+            <Text allowFontScaling={false} style={styles.aiSubTitle}>
+              {t('analysis.session')}
+            </Text>
+            <Text allowFontScaling={false} style={styles.commentBody}>
+              {t('analysis.stroke')}: {shotTitle}
+              {'\n'}
+              {t('analysis.category')}: {aiSections?.category || '—'}
+              {'\n'}
+              {t('analysis.level')}: {aiSections?.level || '—'}
+            </Text>
+            {aiSections?.shotContext ? (
+              <Text allowFontScaling={false} style={[styles.commentBody, { marginTop: 8 }]}>
+                {stripCoachRichMarkers(aiSections.shotContext)}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {analysisTab === 'proReference' ? (
+          <ProReferenceCompare
+            videoUri={videoUri(session.videoPath)}
+            referenceImageUri={correctionPairs[0]?.correctedImage ?? null}
+            rows={proCompareRows}
+            score={
+              aiSnapshot?.scorePercent ??
+              (typeof session.score === 'number' ? Math.round(session.score) : null)
+            }
+            onSave={() => navigation.getParent()?.navigate('Progress' as never)}
+          />
+        ) : null}
+
+        {analysisTab === 'overview' ? (
+        <>
         <View style={styles.primaryMetricsCard}>
           <View style={styles.primaryHalf}>
             <View style={styles.primaryBigRow}>
@@ -1407,6 +1417,8 @@ export function ActivitiesVideoAnalysis({
         ) : null}
 
         {coachReviewStandalone}
+        </>
+        ) : null}
       </ScrollView>
     </View>
   )
