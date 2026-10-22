@@ -87,6 +87,7 @@ function PoseSkeletonOverlay({
   strokeWidth = 3,
   showJointMetrics = false,
   jointAngles = [],
+  highlightedLandmarks = [],
 }: {
   landmarks: Record<string, LandmarkPoint>
   boxW: number
@@ -99,6 +100,7 @@ function PoseSkeletonOverlay({
   strokeWidth?: number
   showJointMetrics?: boolean
   jointAngles?: ComputedJointAngle[]
+  highlightedLandmarks?: readonly string[]
 }) {
   const arcR = Math.max(10, Math.min(22, boxW * 0.035))
   const labelDist = arcR + 10
@@ -143,6 +145,24 @@ function PoseSkeletonOverlay({
             )
           })
         : null}
+
+      {highlightedLandmarks.map((name) => {
+        const pt = projectLmPx(name, landmarks, boxW, boxH, naturalW, naturalH)
+        if (!pt) return null
+        return (
+          <React.Fragment key={`hi-${name}`}>
+            <Circle
+              cx={pt.x}
+              cy={pt.y}
+              r={dotR * 2.8}
+              fill="rgba(36,84,255,0.35)"
+              stroke="#FFFFFF"
+              strokeWidth={2}
+            />
+            <Circle cx={pt.x} cy={pt.y} r={dotR * 1.2} fill="#FFFFFF" />
+          </React.Fragment>
+        )
+      })}
 
       {showJointMetrics
         ? jointAngles.map((j) => {
@@ -225,6 +245,14 @@ export type TechniqueAnalysisVideoPanelProps = {
   detailedChrome?: 'full' | 'poseCorrected' | 'none'
   /** Override scrub-dot visibility. Default: shown unless stacked without `showScrubDotsInStacked`. */
   showScrubDots?: boolean
+  /** Play/scrub strip under the frame. Off for the Smart Focus preview. */
+  showPlaybackControls?: boolean
+  /** Start playing as soon as the clip is ready. */
+  autoPlay?: boolean
+  /** Landmark names to ring on the player. Empty shows the skeleton only. */
+  highlightedLandmarks?: readonly string[]
+  /** Degree arcs on the skeleton. Defaults to `showDetailedPoseOverlay`. */
+  showJointAngles?: boolean
 }
 
 /**
@@ -248,6 +276,10 @@ export function TechniqueAnalysisVideoPanel({
   showDetailedPoseOverlay = false,
   detailedChrome = 'full',
   showScrubDots,
+  showPlaybackControls = true,
+  autoPlay = false,
+  highlightedLandmarks,
+  showJointAngles,
 }: TechniqueAnalysisVideoPanelProps) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -391,7 +423,7 @@ export function TechniqueAnalysisVideoPanel({
   }, [activePose])
 
   useEffect(() => {
-    if (!showDetailedPoseOverlay || !landmarksForPoseOverlay) {
+    if (!(showJointAngles ?? showDetailedPoseOverlay) || !landmarksForPoseOverlay) {
       setJointAngles([])
       return
     }
@@ -411,7 +443,7 @@ export function TechniqueAnalysisVideoPanel({
       return { ...j, deg: smoothed ?? j.deg }
     })
     setJointAngles(next)
-  }, [showDetailedPoseOverlay, landmarksForPoseOverlay, width, videoH, paintSize])
+  }, [showDetailedPoseOverlay, showJointAngles, landmarksForPoseOverlay, width, videoH, paintSize])
 
   const racketOverlayBox = useMemo(() => {
     const est = estimatedVideoFrame
@@ -763,6 +795,7 @@ export function TechniqueAnalysisVideoPanel({
       strokeWidth={lineStrokeW}
       showJointMetrics={showDetailedPoseOverlay}
       jointAngles={jointAngles}
+      highlightedLandmarks={highlightedLandmarks}
     />
   ) : null
 
@@ -851,6 +884,8 @@ export function TechniqueAnalysisVideoPanel({
           encodedNatural ? ResizeMode.STRETCH : ResizeMode.CONTAIN
         }
         useNativeControls={false}
+        shouldPlay={autoPlay}
+        isMuted={autoPlay}
         isLooping={isLooping}
         progressUpdateIntervalMillis={33}
         onLoad={(s) => {
@@ -926,6 +961,7 @@ export function TechniqueAnalysisVideoPanel({
         >
           {framedVideo}
         </View>
+        {showPlaybackControls ? (
         <View
           style={[
             styles.controlsStrip,
@@ -978,6 +1014,7 @@ export function TechniqueAnalysisVideoPanel({
             </View>
           </View>
         </View>
+        ) : null}
         {showLegendUi ? (
           <View style={[styles.overlayLegendRow, stacked && styles.overlayLegendRowStacked]}>
             <View style={styles.overlayLegendItem}>

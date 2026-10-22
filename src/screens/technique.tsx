@@ -77,6 +77,10 @@ import {
 import { hasProfileImage, profileImageToAbsoluteUri } from '../lib/defaultProfilePicture'
 import { VideoFrameCarousel, normalizeThumbnailImageUri } from '../components/VideoFrameCarousel'
 import { ContactFrameGrid } from '../components/ContactFrameGrid'
+import { type ResultSectionId } from '../components/ResultSectionPill'
+import { TechniqueResults } from './techniqueResults/TechniqueResults'
+import { SmartFocusJointVideo } from './techniqueResults/SmartFocusJointVideo'
+import { CoachHome } from './coachHome/CoachHome'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientProgressBar } from '../components'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
@@ -286,7 +290,7 @@ type RunAnalysisOptions = {
   resetState?: boolean
 }
 
-type HowToAction = 'record' | 'gallery'
+type HowToAction = 'record' | 'gallery' | 'cloud'
 
 type CorrectionModeIconProps = {
   color: string
@@ -498,6 +502,8 @@ export function Technique() {
   const [uploading, setUploading] = useState(false)
   /** Record flow: live camera preview inside the step-1 card (replaces the system camera). */
   const [inCardRecording, setInCardRecording] = useState(false)
+  /** Existing-user homepage once we know they have a completed analysis. */
+  const [homeHasHistory, setHomeHasHistory] = useState<boolean | null>(null)
   /** After upload: declare shot category / type / camera angle before Set Clip. */
   const [shotPickerOpen, setShotPickerOpen] = useState(false)
   const [sendVideoToCoach, setSendVideoToCoach] = useState(false)
@@ -515,6 +521,9 @@ export function Technique() {
   const [uploadedVideoId, setUploadedVideoId] = useState<string | null>(null)
   const [videoDurationSeconds, setVideoDurationSeconds] = useState<number | null>(null)
   const [analysisId, setAnalysisId] = useState<string | null>(null)
+  /** Which results sub-page is showing. Does not reload analysis. */
+  const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
+  const resultsScrollRef = useRef<ScrollView>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const coachAssistant = useCoachAssistant()
   const coachChatUsed = coachAssistant.hasChatted && coachAssistant.focusAnalysisId === analysisId
@@ -529,6 +538,26 @@ export function Technique() {
     if (step === 3 && step3PrevRef.current !== 3) setStep3EntryToken((n) => n + 1)
     step3PrevRef.current = step
   }, [step])
+  /** New analysis, or leaving results, always lands back on Smart Focus. Tab switches do not. */
+  useEffect(() => {
+    setResultSection('smartFocus')
+  }, [analysisId, step])
+  const resultSectionTabs = useMemo(
+    () =>
+      (
+        [
+          ['smartFocus', 'technique.resultSections.smartFocus'],
+          ['shotInfo', 'technique.resultSections.shotInfo'],
+          ['metrics', 'technique.resultSections.metrics'],
+          ['proReference', 'technique.resultSections.proReference'],
+        ] as const
+      ).map(([id, key]) => ({ id, label: t(key) })),
+    [t]
+  )
+  const onResultSectionChange = useCallback((id: ResultSectionId) => {
+    setResultSection(id)
+    resultsScrollRef.current?.scrollTo({ y: 0, animated: false })
+  }, [])
   const { emotion: scoreMascotEmotion, playOneShot: playScoreMascot } = useCoachEmotion({
     entryToken: step3EntryToken > 0 ? step3EntryToken : null,
   })
@@ -1538,6 +1567,7 @@ export function Technique() {
   /** Straight to capture: record in the card, or open the file picker (no shot stepper). */
   function startCapture(action: HowToAction) {
     if (action === 'record') setInCardRecording(true)
+    else if (action === 'cloud') void pickDocument()
     else void pickFromGallery()
   }
 
@@ -1560,7 +1590,7 @@ export function Technique() {
     const action = pendingHowToAction
     setShowHowToModal(false)
     setPendingHowToAction(null)
-    if (action === 'record' || action === 'gallery') {
+    if (action === 'record' || action === 'gallery' || action === 'cloud') {
       // Web: open the file picker inside this tap's user activation. iOS: a picker presented
       // while the how-to Modal is still dismissing never shows, so wait for the close animation.
       if (Platform.OS === 'web') startCapture(action)
@@ -2222,6 +2252,33 @@ export function Technique() {
     }
   }
 
+  const showCoachHome = step === 1 && !uploading && !inCardRecording
+  const coachBanner =
+    coachBannerLoaded && assignedCoach ? (
+      <AICoachCoachReviewBanner
+        assignedCoach={assignedCoach}
+        fonts={{
+          semiBoldFont: theme.semiBoldFont,
+          mediumFont: theme.mediumFont,
+          regularFont: theme.regularFont,
+        }}
+        sendVideoToCoach={sendVideoToCoach}
+        onSendVideoToCoachChange={setSendVideoToCoach}
+        interactionBusy={uploading}
+        onPressCoach={() =>
+          navigation.navigate('CoachDetail', {
+            coachId: assignedCoach.id,
+            coachName: assignedCoach.name,
+            coachImageUri: assignedCoach.imageUri,
+          })
+        }
+      />
+    ) : null
+  const openActivitiesTab = useCallback(() => {
+    const parent = navigation.getParent()
+    if (parent) parent.navigate('Activities' as never)
+  }, [navigation])
+
   return (
     <View style={styles.container}>
       {/*
@@ -2436,27 +2493,8 @@ export function Technique() {
           resetToNewVideo()
         }}
       />
-      {step === 1 && coachBannerLoaded && assignedCoach ? (
-        <View style={styles.coachBannerSlot}>
-          <AICoachCoachReviewBanner
-            assignedCoach={assignedCoach}
-            fonts={{
-              semiBoldFont: theme.semiBoldFont,
-              mediumFont: theme.mediumFont,
-              regularFont: theme.regularFont,
-            }}
-            sendVideoToCoach={sendVideoToCoach}
-            onSendVideoToCoachChange={setSendVideoToCoach}
-            interactionBusy={uploading}
-            onPressCoach={() =>
-              navigation.navigate('CoachDetail', {
-                coachId: assignedCoach.id,
-                coachName: assignedCoach.name,
-                coachImageUri: assignedCoach.imageUri,
-              })
-            }
-          />
-        </View>
+      {step === 1 && !showCoachHome && coachBanner ? (
+        <View style={styles.coachBannerSlot}>{coachBanner}</View>
       ) : null}
       <View style={styles.scrollBody} onLayout={(e) => setScrollBodyH(e.nativeEvent.layout.height)}>
         {shotPickerOpen ? (
@@ -2743,6 +2781,7 @@ export function Technique() {
           </KeyboardAwareScrollView>
         ) : (
         <ScrollView
+          ref={resultsScrollRef}
           style={styles.stepContent}
           contentContainerStyle={[
             styles.stepContentInner,
@@ -2759,8 +2798,8 @@ export function Technique() {
                 : { paddingBottom: TAB_SCENE_SCROLL_BOTTOM_PAD },
             step === 1 && uploading && scrollBodyH > 0 ? { minHeight: scrollBodyH } : null,
           ]}
-          scrollEnabled={step !== 1}
-          bounces={step !== 1}
+          scrollEnabled={step !== 1 || showCoachHome}
+          bounces={step !== 1 || showCoachHome}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -2938,7 +2977,20 @@ export function Technique() {
           </View>
         )}
 
-        {step === 1 && (
+        {step === 1 && showCoachHome ? (
+          <CoachHome
+            displayName={typeof session?.user?.name === 'string' ? session.user.name : ''}
+            onAnalyze={() => startHowToFlow('gallery')}
+            onRecord={() => startHowToFlow('record')}
+            onGallery={() => startHowToFlow('gallery')}
+            onCloud={() => startHowToFlow('cloud')}
+            onViewActivities={openActivitiesTab}
+            onHasHistory={setHomeHasHistory}
+            coach={homeHasHistory ? coachBanner : null}
+          />
+        ) : null}
+
+        {step === 1 && !showCoachHome && (
           <View style={styles.step1}>
               <View style={styles.frameWrap}>
                 {!step1FrameMeasured ? (
@@ -3092,6 +3144,25 @@ export function Technique() {
 
         {step === 3 && (
           <View style={styles.step2}>
+            <TechniqueResults
+              section={resultSection}
+              onSectionChange={onResultSectionChange}
+              tabs={resultSectionTabs}
+              smartFocus={
+            <>
+            {uploadedVideoUrl && analysisJson?.status === 'completed' ? (
+              <SmartFocusJointVideo
+                videoUri={uploadedVideoUrl}
+                videoKey={analysisId ?? 'technique-step3'}
+                width={step3VideoWidth}
+                poseFrames={step3PoseFrames}
+                totalVidFrames={step3TotalVidFrames}
+                qualitySession={{
+                  rating: typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null,
+                  score: score ?? null,
+                }}
+              />
+            ) : null}
             {score != null && (
               <View style={styles.step3ScoreHero}>
                 <Text allowFontScaling={false} style={styles.step3AiCoachTitle}>
@@ -3982,6 +4053,9 @@ export function Technique() {
                 </TouchableOpacity>
               </View>
             ) : null}
+            </>
+              }
+            />
           </View>
         )}
         </ScrollView>
