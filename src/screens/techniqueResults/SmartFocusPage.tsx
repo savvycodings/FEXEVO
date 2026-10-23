@@ -15,6 +15,6 @@ export function SmartFocusPage({ visible, children }: Props) {
 }
 
 const styles = StyleSheet.create({
-  shown: { alignSelf: 'stretch' },
+  shown: { alignSelf: 'stretch', overflow: 'visible' },
   hidden: { display: 'none' },
 })
