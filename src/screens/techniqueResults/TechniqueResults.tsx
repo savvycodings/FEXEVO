@@ -23,6 +23,8 @@ type Props = {
   physicalMetrics: PhysicalMetricsValues | null
   poseFrames: PoseFrameRow[]
   impactFrame: number | null
+  /** Pro Reference compare. The third tab stays this compare, not a separate angles view. */
+  proReference?: ReactNode
   /** Smart Focus only: sit the pill on top of the video instead of above it. */
   floatPill?: boolean
 }
@@ -43,6 +45,7 @@ export function TechniqueResults({
   physicalMetrics,
   poseFrames,
   impactFrame,
+  proReference,
   floatPill = false,
 }: Props) {
   const overlay = floatPill && section === 'smartFocus'
@@ -69,7 +72,9 @@ export function TechniqueResults({
         poseFrames={poseFrames}
         impactFrame={impactFrame}
       />
-      <ProReferencePage visible={section === 'proReference'} />
+      {section === 'proReference' ? (
+        proReference ?? <ProReferencePage visible />
+      ) : null}
       {overlay ? (
         <View pointerEvents="box-none" style={styles.pillOverlay}>
           {pill}

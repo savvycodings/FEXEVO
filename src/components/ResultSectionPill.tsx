@@ -57,6 +57,8 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     backgroundColor: '#07183F',
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(46, 120, 220, 0.45)',
     padding: 4,
     marginBottom: 18,
   },
@@ -70,7 +72,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   segmentSelected: {
-    backgroundColor: '#2454FF',
+    backgroundColor: '#1C8FFF',
+    shadowColor: '#1C8FFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.85,
+    shadowRadius: 8,
+    elevation: 6,
   },
   label: {
     color: '#C5D4F5',

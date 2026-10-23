@@ -19,7 +19,7 @@ import {
 } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useState, useContext, useRef, useEffect, useLayoutEffect, useMemo, useCallback, useId } from 'react'
+import { useState, useContext, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import {
@@ -79,7 +79,9 @@ import { VideoFrameCarousel, normalizeThumbnailImageUri } from '../components/Vi
 import { ContactFrameGrid } from '../components/ContactFrameGrid'
 import { type ResultSectionId } from '../components/ResultSectionPill'
 import { TechniqueResults } from './techniqueResults/TechniqueResults'
-import { SmartFocusJointVideo } from './techniqueResults/SmartFocusJointVideo'
+import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
+import { Smart3DView } from './techniqueResults/Smart3DView'
+import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
 import { CoachHome } from './coachHome/CoachHome'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientProgressBar } from '../components'
@@ -91,9 +93,6 @@ import { PaddlePongGame } from '../components/PaddlePongGame'
 import { AnalyzingDashSpinner } from '../components/AnalyzingDashSpinner'
 import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
 import { SentToSupportModal } from '../components/SentToSupportModal'
-import { CoachCharacterAvatar } from '../components/CoachCharacterAvatar'
-import { useCoachAssistant } from '../context/CoachAssistantContext'
-import { useCoachEmotion } from '../lib/useCoachEmotion'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
 import {
@@ -524,34 +523,22 @@ export function Technique() {
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   /** Which results sub-page is showing. Does not reload analysis. */
   const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
+  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose'>('overview')
   const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
   const resultsScrollRef = useRef<ScrollView>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
-  const coachAssistant = useCoachAssistant()
-  const coachChatUsed = coachAssistant.hasChatted && coachAssistant.focusAnalysisId === analysisId
-  const openCoachChat = useCallback(
-    () => coachAssistant.openAssistant({ analysisId, videoUri: localVideoUri ?? uploadedVideoUrl }),
-    [coachAssistant, analysisId, localVideoUri, uploadedVideoUrl]
-  )
-  /** Wink when the AI Coach results step first appears. */
-  const step3PrevRef = useRef<number | null>(null)
-  const [step3EntryToken, setStep3EntryToken] = useState(0)
-  useEffect(() => {
-    if (step === 3 && step3PrevRef.current !== 3) setStep3EntryToken((n) => n + 1)
-    step3PrevRef.current = step
-  }, [step])
-  /** New analysis, or leaving results, always lands back on Smart Focus. Tab switches do not. */
+  /** New analysis, or leaving results, always lands back on Overview. Tab switches do not. */
   useEffect(() => {
     setResultSection('smartFocus')
+    setResultsDetail('overview')
   }, [analysisId, step])
   const resultSectionTabs = useMemo(
     () =>
       (
         [
-          ['smartFocus', 'technique.resultSections.smartFocus'],
-          ['shotInfo', 'technique.resultSections.shotInfo'],
-          ['metrics', 'technique.resultSections.metrics'],
-          ['proReference', 'technique.resultSections.proReference'],
+          ['smartFocus', 'analysis.overview'],
+          ['metrics', 'analysis.metrics'],
+          ['proReference', 'analysis.proReference'],
         ] as const
       ).map(([id, key]) => ({ id, label: t(key) })),
     [t]
@@ -560,13 +547,6 @@ export function Technique() {
     setResultSection(id)
     resultsScrollRef.current?.scrollTo({ y: 0, animated: false })
   }, [])
-  const { emotion: scoreMascotEmotion, playOneShot: playScoreMascot } = useCoachEmotion({
-    entryToken: step3EntryToken > 0 ? step3EntryToken : null,
-  })
-  const openCoachChatWithWink = useCallback(() => {
-    playScoreMascot('wink')
-    openCoachChat()
-  }, [playScoreMascot, openCoachChat])
   /** Mini paddle game over the analysis loading video. */
   const [paddleGameOpen, setPaddleGameOpen] = useState(false)
   /** Progress / finished chip on the game header while analysis runs. */
@@ -832,13 +812,6 @@ export function Technique() {
     aiAnalysis != null
       ? storedAiConfidenceToPercent(aiAnalysis as Record<string, unknown>)
       : { score: null, band: null, uncertaintyPlusMinus: null }
-  const SCORE_RADIUS = 70
-  const SCORE_STROKE = 10
-  const scoreRingPx = (SCORE_RADIUS + SCORE_STROKE) * 2
-  const scoreCirc = 2 * Math.PI * SCORE_RADIUS
-  const scoreProgress = score != null ? score / 100 : 0
-  /** Stable unique id for SVG gradient url(#...) */
-  const scoreRingGradientId = `scoreRingGrad_${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const localeAnalysis = useMemo(
     () =>
       pickCoachAnalysisLocale(
@@ -880,6 +853,19 @@ export function Technique() {
     () => parseBiomechanicsSummary(metrics as Record<string, unknown> | null | undefined),
     [metrics]
   )
+  const proCompareRows = useMemo(() => {
+    const rows: ProCompareRow[] = []
+    const angles = biomechanicsSummary?.angles_deg_proxy
+    const elbow = angles?.elbow_impact_deg
+    if (typeof elbow === 'number' && Number.isFinite(elbow)) {
+      rows.push({ label: t('analysis.elbowAngle'), you: `${Math.round(elbow)}°` })
+    }
+    const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
+    if (typeof torso === 'number' && Number.isFinite(torso)) {
+      rows.push({ label: t('analysis.torsoRotation'), you: `${Math.round(torso)}°` })
+    }
+    return rows
+  }, [biomechanicsSummary, t])
 
   const proReferenceShot = useMemo(() => {
     const label = retrieval?.shot_hypothesis?.stroke_label
@@ -2818,6 +2804,8 @@ export function Technique() {
               </View>
             </View>
           </KeyboardAwareScrollView>
+        ) : step === 3 && resultsDetail === 'pose' ? (
+          <Smart3DView onClose={() => setResultsDetail('overview')} />
         ) : (
         <ScrollView
           ref={resultsScrollRef}
@@ -3186,6 +3174,22 @@ export function Technique() {
 
         {step === 3 && (
           <View style={styles.step2}>
+            <View style={styles.analysisTitleRow}>
+              <TouchableOpacity
+                onPress={resetToNewVideo}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={t('analysis.back')}
+              >
+                <Ionicons name="chevron-back" size={24} color="#86A7D2" />
+              </TouchableOpacity>
+              <Text
+                allowFontScaling={false}
+                style={[styles.analysisTitle, { fontFamily: theme.semiBoldFont }]}
+              >
+                {t('analysis.yourAnalysis')}
+              </Text>
+            </View>
             <TechniqueResults
               section={resultSection}
               onSectionChange={onResultSectionChange}
@@ -3201,136 +3205,41 @@ export function Technique() {
                   ? biomechanicsSummary.timing.impact_frame
                   : null
               }
-              floatPill={!!uploadedVideoUrl && analysisJson?.status === 'completed'}
+              floatPill={false}
+              proReference={
+                uploadedVideoUrl ? (
+                  <ProReferenceCompare
+                    videoUri={uploadedVideoUrl}
+                    referenceImageUri={null}
+                    rows={proCompareRows}
+                    score={score}
+                    onSave={() => navigation.getParent()?.navigate('Progress' as never)}
+                  />
+                ) : null
+              }
               smartFocus={
             <>
-            {uploadedVideoUrl && analysisJson?.status === 'completed' ? (
-              <SmartFocusJointVideo
-                videoUri={uploadedVideoUrl}
-                videoKey={analysisId ?? 'technique-step3'}
-                width={winW}
-                bleed={STEP3_HORIZONTAL_PADDING}
-                poseFrames={step3PoseFrames}
-                totalVidFrames={step3TotalVidFrames}
-                qualitySession={{
-                  rating: typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null,
-                  score: score ?? null,
-                }}
-                contactFraction={smartFocusContact.fraction}
-                scrubSpanMs={smartFocusContact.scrubSpanMs}
-                onScrubbingChange={setSmartFocusScrubbing}
-              />
-            ) : null}
-            {score != null && (
-              <View style={styles.step3ScoreHero}>
-                <Text allowFontScaling={false} style={styles.step3AiCoachTitle}>
-                  AI Coach
-                </Text>
-                <View style={styles.step3ScoreHeroRow}>
-                  <View style={styles.step3ScoreTextCol}>
-                    <Text allowFontScaling={false} style={styles.step3ScoreLabel}>
-                      Overall Score
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.step3ScoreValue} testID={TEST_IDS.techniqueScore}>
-                      {score}
-                      <Text style={styles.step3ScoreOutOf}> /100</Text>
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.step3EncouragePrimary}>
-                      Good progress!
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.step3EncourageSecondary}>
-                      Keep it up.
-                    </Text>
-                  </View>
-                  <View style={styles.coachRingHitArea}>
-                  <View
-                    style={[
-                      styles.scoreCircleWrap,
-                      {
-                        width: scoreRingPx,
-                        height: scoreRingPx,
-                      },
-                    ]}
-                  >
-                  <Svg
-                    width={scoreRingPx}
-                    height={scoreRingPx}
-                    style={styles.scoreCircleSvg}
-                  >
-                    <Defs>
-                      {/*
-                        Angular-style stroke: linear gradient on a diagonal through the ring,
-                        with color stops at 22% (#00BBFF) and 50% (#0022FF), rotated for a sweep feel.
-                      */}
-                      <SvgLinearGradient
-                        id={scoreRingGradientId}
-                        x1={scoreRingPx}
-                        y1={0}
-                        x2={0}
-                        y2={scoreRingPx}
-                        gradientUnits="userSpaceOnUse"
-                        gradientTransform={`rotate(-35 ${SCORE_RADIUS + SCORE_STROKE} ${SCORE_RADIUS + SCORE_STROKE})`}
-                      >
-                        <Stop offset="0%" stopColor="#00BBFF" />
-                        <Stop offset="22%" stopColor="#00BBFF" />
-                        <Stop offset="50%" stopColor="#0022FF" />
-                        <Stop offset="100%" stopColor="#0022FF" />
-                      </SvgLinearGradient>
-                    </Defs>
-                    <G transform={`rotate(-90 ${SCORE_RADIUS + SCORE_STROKE} ${SCORE_RADIUS + SCORE_STROKE})`}>
-                      <Circle
-                        cx={SCORE_RADIUS + SCORE_STROKE}
-                        cy={SCORE_RADIUS + SCORE_STROKE}
-                        r={SCORE_RADIUS}
-                        stroke="rgba(255,255,255,0.08)"
-                        strokeWidth={SCORE_STROKE}
-                        fill="transparent"
-                      />
-                      <Circle
-                        cx={SCORE_RADIUS + SCORE_STROKE}
-                        cy={SCORE_RADIUS + SCORE_STROKE}
-                        r={SCORE_RADIUS}
-                        stroke={`url(#${scoreRingGradientId})`}
-                        strokeWidth={SCORE_STROKE}
-                        strokeLinecap="round"
-                        strokeDasharray={scoreCirc}
-                        strokeDashoffset={scoreCirc * (1 - scoreProgress)}
-                        fill="transparent"
-                      />
-                    </G>
-                  </Svg>
-                  <Pressable
-                    style={styles.scoreCircleCenter}
-                    onPress={openCoachChatWithWink}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('coachCharacter.needHelp')}
-                  >
-                    <CoachCharacterAvatar size={104} emotion={scoreMascotEmotion} />
-                  </Pressable>
-                </View>
-                  {!coachChatUsed ? (
-                    <Pressable
-                      style={styles.coachHelpPill}
-                      onPress={openCoachChatWithWink}
-                      hitSlop={6}
-                    >
-                      <Text allowFontScaling={false} style={styles.coachHelpPillText}>
-                        {t('coachCharacter.needHelp')}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {metrics && localeAnalysis && strengthsList.length > 0 ? (
+            <AnalysisOverview
+              videoUri={uploadedVideoUrl}
+              videoKey={analysisId ?? 'technique-step3'}
+              score={score}
+              rating={typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null}
+              summary={metricsBlurb}
+              metrics={physicalMetrics}
+              detail={resultsDetail}
+              onBiggestMistakes={() =>
+                setResultsDetail((current) => (current === 'mistakes' ? 'overview' : 'mistakes'))
+              }
+              onSmart3d={() => setResultsDetail('pose')}
+              onScrubbingChange={setSmartFocusScrubbing}
+            />
+            {resultsDetail === 'mistakes' && metrics && localeAnalysis && strengthsList.length > 0 ? (
               <View style={styles.step3EarlyFeedbackWrap}>
                 <CoachDoneWellSection strengths={strengthsList} />
               </View>
             ) : null}
 
-            {metrics && localeAnalysis && physicalMetrics ? (
+            {resultsDetail === 'mistakes' && metrics && localeAnalysis && physicalMetrics ? (
               <View style={styles.poseGaugeSectionWrap}>
                 <PhysicalMetricsSection
                   metrics={physicalMetrics}
@@ -3342,7 +3251,7 @@ export function Technique() {
               </View>
             ) : null}
 
-            {uploadedVideoUrl && analysisJson?.status === 'completed' ? (
+            {resultsDetail === 'pose' && uploadedVideoUrl && analysisJson?.status === 'completed' ? (
               <View style={styles.step3PosesSection}>
                 <View style={styles.step3PosesDivider} />
                 <View style={styles.step3PosesHeader}>
@@ -3372,7 +3281,7 @@ export function Technique() {
               </View>
             ) : null}
 
-            {score != null && (
+            {resultsDetail === 'mistakes' && score != null && (
               <LinearGradient
                 colors={[...STEP3_CARD_GRADIENT_COLORS]}
                 locations={[...STEP3_CARD_GRADIENT_LOCATIONS]}
@@ -3435,13 +3344,13 @@ export function Technique() {
               </LinearGradient>
             )}
 
-            {metrics && localeAnalysis ? (
+            {resultsDetail === 'mistakes' && metrics && localeAnalysis ? (
               <View style={styles.step3InsightBeforeChartWrap}>
                 <CoachStrengthFocusInsightCards content={coachInsightCards} />
               </View>
             ) : null}
 
-            {analysisError || analysisJson ? (
+            {resultsDetail === 'mistakes' && (analysisError || analysisJson) ? (
               <View style={styles.step3}>
                 <View style={styles.placeholderCard}>
                   {analysisError ? (
@@ -4674,6 +4583,17 @@ function getStyles(theme: any) {
       textAlign: 'center',
     },
     step2: { position: 'relative' as const, flexShrink: 0, gap: 20 },
+    analysisTitleRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 8,
+      marginBottom: -4,
+    },
+    analysisTitle: {
+      flex: 1,
+      color: '#FFFFFF',
+      fontSize: 22,
+    },
     /** Step 2: scroll region + pinned actions above tab bar */
     step2SplitRoot: {
       flex: 1,

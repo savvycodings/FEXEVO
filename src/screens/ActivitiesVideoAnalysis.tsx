@@ -23,7 +23,6 @@ import {
   storedAiConfidenceToPercent,
   storedAiScoreToPercent,
 } from '../lib/techniqueScoreDisplay'
-import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
 import { Video, ResizeMode } from 'expo-av'
 import {
   CoachAnalysisAccordions,
@@ -37,6 +36,8 @@ import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMe
 import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidenceSection'
 import { ResultSectionPill } from '../components/ResultSectionPill'
 import { stripCoachRichMarkers } from '../lib/coachRichText'
+import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
+import { Smart3DView } from './techniqueResults/Smart3DView'
 import { MetricsPage } from './techniqueResults/MetricsPage'
 import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
 import { useNavigation } from '@react-navigation/native'
@@ -630,7 +631,8 @@ export function ActivitiesVideoAnalysis({
   } | null>(null)
   const [correctionCompareW, setCorrectionCompareW] = useState(0)
 
-  const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'proReference'>('metrics')
+  const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'proReference'>('overview')
+  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose'>('overview')
 
   const styles = useMemo(() => getStyles(theme), [theme])
 
@@ -1017,6 +1019,14 @@ export function ActivitiesVideoAnalysis({
     return text || null
   }, [aiSections])
 
+  if (overviewDetail === 'pose') {
+    return (
+      <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
+        <Smart3DView onClose={() => setOverviewDetail('overview')} />
+      </View>
+    )
+  }
+
   return (
     <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
       <ScrollView
@@ -1049,16 +1059,17 @@ export function ActivitiesVideoAnalysis({
           </View>
         </View>
 
+        <View style={{ paddingHorizontal: SCREEN_GUTTER }}>
         <ResultSectionPill
           tabs={[
             { id: 'overview' as const, label: t('analysis.overview') },
-            { id: 'shotInfo' as const, label: t('analysis.shotInfo') },
             { id: 'metrics' as const, label: t('analysis.metrics') },
-            { id: 'proReference' as const, label: t('technique.resultSections.proReference') },
+            { id: 'proReference' as const, label: t('analysis.proReference') },
           ]}
           value={analysisTab}
           onChange={setAnalysisTab}
         />
+        </View>
 
         {analysisTab === 'metrics' ? (
           <MetricsPage
@@ -1114,6 +1125,26 @@ export function ActivitiesVideoAnalysis({
         ) : null}
 
         {analysisTab === 'overview' ? (
+        <>
+        <View style={{ paddingHorizontal: SCREEN_GUTTER, marginBottom: 16 }}>
+          <AnalysisOverview
+            videoUri={videoUri(session.videoPath)}
+            videoKey={session.analysisId}
+            score={
+              aiSnapshot?.scorePercent ??
+              (typeof session.score === 'number' ? Math.round(session.score) : null)
+            }
+            rating={aiSnapshot?.rating ?? session.rating ?? null}
+            summary={metricsSummary}
+            metrics={aiSnapshot?.physicalMetrics ?? null}
+            detail={overviewDetail}
+            onBiggestMistakes={() =>
+              setOverviewDetail((current) => (current === 'mistakes' ? 'overview' : 'mistakes'))
+            }
+            onSmart3d={() => setOverviewDetail('pose')}
+          />
+        </View>
+        {overviewDetail === 'mistakes' ? (
         <>
         <View style={styles.primaryMetricsCard}>
           <View style={styles.primaryHalf}>
@@ -1417,6 +1448,8 @@ export function ActivitiesVideoAnalysis({
         ) : null}
 
         {coachReviewStandalone}
+        </>
+        ) : null}
         </>
         ) : null}
       </ScrollView>

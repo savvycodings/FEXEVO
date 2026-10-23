@@ -24,6 +24,8 @@ import { getThumbnailAsync } from '../../lib/videoThumbnails'
 import { normalizeThumbnailImageUri } from '../../components/VideoFrameCarousel'
 
 const HERO = require('../../../assets/aicoach/home/new-user-hero.jpg')
+/** Matches the AI Coach scroll inset so the new-user hero can bleed edge to edge. */
+const PAGE_INSET = 14
 const GREETING_WASH = require('../../../assets/aicoach/home/greeting-card.jpg')
 const ICON_CAMERA = require('../../../assets/aicoach/home/icon-camera.svg')
 const ICON_ARROW = require('../../../assets/aicoach/home/icon-arrow-btn.svg')
@@ -147,27 +149,27 @@ export function CoachHome({
       const age = now - at
       return age > minDays * day && age <= maxDays * day
     })
-  const last7Items = inWindow(-1, 7)
-  const prior7Items = inWindow(7, 14)
+  const last30Items = inWindow(-1, 30)
+  const prior30Items = inWindow(30, 60)
   let delta: number | null = null
-  let deltaCaption = t('technique.home.vsLastWeek')
-  const last7Avg = average(last7Items.map((item) => item.score as number))
-  const prior7Avg = average(prior7Items.map((item) => item.score as number))
-  if (last7Avg != null && prior7Avg != null) {
-    delta = Math.round(last7Avg - prior7Avg)
-    deltaCaption = t('technique.home.vsLastWeek')
+  let deltaCaption = t('technique.home.vsLastMonth')
+  const last30Avg = average(last30Items.map((item) => item.score as number))
+  const prior30Avg = average(prior30Items.map((item) => item.score as number))
+  if (last30Avg != null && prior30Avg != null) {
+    delta = Math.round(last30Avg - prior30Avg)
+    deltaCaption = t('technique.home.vsLastMonth')
   } else if (scoredItems.length >= 2) {
     delta = Math.round((scoredItems[0].score as number) - (scoredItems[1].score as number))
     deltaCaption = t('technique.home.vsLastSession')
   }
-  const windowLabel = t('technique.home.last7')
-  const bars = last7Items
+  const windowLabel = t('technique.home.last30')
+  const bars = last30Items
     .slice()
     .reverse()
-    .slice(-7)
+    .slice(-12)
     .map((item) => item.score as number)
   const heroHeight = Math.round(Math.min(440, Math.max(220, winH * 0.4)))
-  const nameSize = winW < 360 ? 26 : 32
+  const nameSize = winW < 360 ? 28 : 34
   // New-user home must fit the viewport exactly: fixed sections keep their size and the
   // hero absorbs whatever space is left. 26 = ScrollView content padding (top 12 + bottom 14).
   const fitOneScreen = !hasHistory && typeof viewportHeight === 'number' && viewportHeight > 0
@@ -176,9 +178,8 @@ export function CoachHome({
     <View
       style={[
         styles.page,
-        // New-user: fill the viewport. Gap 0 so the hero owns every pixel between the
-        // greeting card and Analyze; no extra page padding stealing height from it.
-        fitOneScreen ? { height: viewportHeight - 26, gap: 0, paddingBottom: 0 } : null,
+        // New-user: fill the viewport. The hero takes the space between the greeting and Analyze.
+        fitOneScreen ? { height: viewportHeight - 26, gap: 12, paddingBottom: 0 } : null,
       ]}
     >
       <GreetingCard
@@ -207,25 +208,40 @@ export function CoachHome({
           onGallery={onGallery}
           onCloud={onCloud}
           fonts={theme}
+          showSources={false}
         />
       ) : null}
 
       {!hasHistory && ready ? (
-        <View style={[styles.heroSlot, fitOneScreen ? styles.heroFlex : { height: heroHeight }]}>
-          <Image source={HERO} contentFit="cover" style={StyleSheet.absoluteFill} />
+        <View
+          style={[
+            styles.heroSlot,
+            { marginHorizontal: -PAGE_INSET },
+            fitOneScreen ? styles.heroFlex : { height: heroHeight },
+          ]}
+        >
+          <Image
+            source={HERO}
+            contentFit="cover"
+            contentPosition="bottom"
+            style={styles.heroImage}
+          />
           <LinearGradient
             pointerEvents="none"
-            colors={['rgba(3,10,23,0)', 'rgba(3,10,23,0.85)']}
-            locations={[0.42, 1]}
+            colors={['rgba(3,10,23,0)', 'rgba(3,10,23,0.72)', '#030A17']}
+            locations={[0.28, 0.62, 1]}
             style={styles.heroScrim}
           />
           <View style={[styles.headline, styles.heroOverlay]}>
-            <Text allowFontScaling={false} style={[styles.headlineLine, { fontFamily: theme.semiBoldFont }]}>
+            <Text
+              allowFontScaling={false}
+              style={[styles.headlineLine, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
+            >
               {t('technique.home.headline1')}
             </Text>
             <Text
               allowFontScaling={false}
-              style={[styles.headlineLine, styles.headlineLineDeep, { fontFamily: theme.semiBoldFont }]}
+              style={[styles.headlineLine, styles.headlineLineDeep, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
             >
               {t('technique.home.headline2')}
             </Text>
@@ -249,6 +265,7 @@ export function CoachHome({
           onGallery={onGallery}
           onCloud={onCloud}
           fonts={theme}
+          showSources={false}
         />
       ) : null}
 
@@ -258,22 +275,22 @@ export function CoachHome({
           delta={delta}
           deltaCaption={deltaCaption}
           bars={bars}
-          metrics={newest?.physicalMetrics ?? null}
           windowLabel={windowLabel}
           fonts={theme}
         />
       ) : null}
-
-      {hasHistory && coach ? <View style={styles.coachSlot}>{coach}</View> : null}
 
       {hasHistory && latest ? (
         <LatestCard
           item={latest}
           locale={i18n.language}
           fonts={theme}
+          metrics={newest?.physicalMetrics ?? null}
           onPress={onViewActivities}
         />
       ) : null}
+
+      {hasHistory && coach ? <View style={styles.coachSlot}>{coach}</View> : null}
     </View>
   )
 }
@@ -302,7 +319,7 @@ function GreetingCard({
   ready: string
   sessions: string
   thisWeek: string
-  dateLabel: string | null
+  dateLabel?: string | null
   fonts: Fonts
 }) {
   return (
@@ -336,7 +353,7 @@ function GreetingCard({
             {ready}
           </Text>
         </View>
-        <View style={styles.greetingMeta}>
+        <View style={[styles.greetingMeta, dateLabel ? styles.greetingMetaSpread : null]}>
           {dateLabel ? (
             <Text allowFontScaling={false} style={[styles.greetingDate, { fontFamily: fonts.mediumFont }]}>
               {dateLabel}
@@ -344,15 +361,18 @@ function GreetingCard({
           ) : null}
           <View style={styles.sessionRow}>
             <View style={styles.sessionBars}>
-              <View style={[styles.sessionBar, { height: 10 }]} />
-              <View style={[styles.sessionBar, { height: 15 }]} />
-              <View style={[styles.sessionBar, { height: 21 }]} />
+              <View style={[styles.sessionBar, { height: 8 }]} />
+              <View style={[styles.sessionBar, { height: 13 }]} />
+              <View style={[styles.sessionBar, { height: 18 }]} />
             </View>
-            <Text allowFontScaling={false} style={[styles.sessionCount, { fontFamily: fonts.mediumFont }]}>
-              {sessions}
-              {'\n'}
-              {thisWeek}
-            </Text>
+            <View>
+              <Text allowFontScaling={false} style={[styles.sessionCount, { fontFamily: fonts.mediumFont }]}>
+                {sessions}
+              </Text>
+              <Text allowFontScaling={false} style={[styles.sessionWeek, { fontFamily: fonts.regularFont }]}>
+                {thisWeek}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -366,12 +386,15 @@ function AnalyzeBlock({
   onGallery,
   onCloud,
   fonts,
+  showSources = true,
 }: {
   onAnalyze: () => void
   onRecord: () => void
   onGallery: () => void
   onCloud: () => void
   fonts: Fonts
+  /** Both home layouts use the single analyze action. */
+  showSources?: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -406,7 +429,13 @@ function AnalyzeBlock({
               <Text allowFontScaling={false} style={[styles.analyzeTitle, { fontFamily: fonts.boldFont }]}>
                 {t('technique.home.analyzeTitle')}
               </Text>
-              <Text allowFontScaling={false} style={[styles.analyzeSub, { fontFamily: fonts.mediumFont }]}>
+              <Text
+                allowFontScaling={false}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={[styles.analyzeSub, { fontFamily: fonts.mediumFont }]}
+              >
                 {t('technique.home.analyzeSubtitle')}
               </Text>
             </View>
@@ -418,34 +447,36 @@ function AnalyzeBlock({
         </Pressable>
         </View>
       </View>
-      <View style={styles.sourceRow}>
-        <SourceButton
-          testID={TEST_IDS.techniqueRecord}
-          icon={ICON_RECORD}
-          iconWidth={15.164}
-          iconHeight={14}
-          label={t('technique.home.record')}
-          onPress={onRecord}
-          font={fonts.regularFont}
-        />
-        <SourceButton
-          testID={TEST_IDS.techniqueChooseFile}
-          icon={ICON_GALLERY}
-          iconWidth={14}
-          iconHeight={14}
-          label={t('technique.home.gallery')}
-          onPress={onGallery}
-          font={fonts.regularFont}
-        />
-        <SourceButton
-          icon={ICON_CLOUD}
-          iconWidth={17.833}
-          iconHeight={14}
-          label={t('technique.home.cloud')}
-          onPress={onCloud}
-          font={fonts.regularFont}
-        />
-      </View>
+      {showSources ? (
+        <View style={styles.sourceRow}>
+          <SourceButton
+            testID={TEST_IDS.techniqueRecord}
+            icon={ICON_RECORD}
+            iconWidth={15.164}
+            iconHeight={14}
+            label={t('technique.home.record')}
+            onPress={onRecord}
+            font={fonts.regularFont}
+          />
+          <SourceButton
+            testID={TEST_IDS.techniqueChooseFile}
+            icon={ICON_GALLERY}
+            iconWidth={14}
+            iconHeight={14}
+            label={t('technique.home.gallery')}
+            onPress={onGallery}
+            font={fonts.regularFont}
+          />
+          <SourceButton
+            icon={ICON_CLOUD}
+            iconWidth={17.833}
+            iconHeight={14}
+            label={t('technique.home.cloud')}
+            onPress={onCloud}
+            font={fonts.regularFont}
+          />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -607,12 +638,46 @@ function MetricIcon({ metric }: { metric: keyof PhysicalMetricsValues }) {
   return <Image source={ICON_METRIC_ACCELERATION} style={{ width: 24, height: 24 }} contentFit="contain" />
 }
 
+function MetricChips({
+  metrics,
+  fonts,
+}: {
+  metrics: PhysicalMetricsValues
+  fonts: Fonts
+}) {
+  const { t } = useTranslation()
+  const chips: { key: keyof PhysicalMetricsValues; label: string }[] = [
+    { key: 'stability', label: t('technique.physicalMetricStability') },
+    { key: 'power', label: t('technique.physicalMetricPower') },
+    { key: 'agility', label: t('technique.physicalMetricAgility') },
+    { key: 'reactions', label: t('technique.home.reaction') },
+    { key: 'acceleration', label: t('technique.physicalMetricAcceleration') },
+  ]
+  return (
+    <View style={styles.chipRow}>
+      {chips.map((chip) => (
+        <View key={chip.key} style={styles.chip}>
+          <MetricIcon metric={chip.key} />
+          <Text
+            allowFontScaling={false}
+            style={[styles.chipValue, { fontFamily: fonts.boldFont ?? fonts.semiBoldFont }]}
+          >
+            {metrics[chip.key]}
+          </Text>
+          <Text allowFontScaling={false} numberOfLines={1} style={[styles.chipLabel, { fontFamily: fonts.regularFont }]}>
+            {chip.label}
+          </Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
 function PerformanceCard({
   score,
   delta,
   deltaCaption,
   bars,
-  metrics,
   windowLabel,
   fonts,
 }: {
@@ -620,7 +685,6 @@ function PerformanceCard({
   delta: number | null
   deltaCaption: string
   bars: number[]
-  metrics: PhysicalMetricsValues | null
   windowLabel: string
   fonts: Fonts
 }) {
@@ -636,18 +700,10 @@ function PerformanceCard({
         : delta < 0
           ? t('technique.home.declining')
           : t('technique.home.steady')
-  const chips: { key: keyof PhysicalMetricsValues; label: string }[] = [
-    { key: 'stability', label: t('technique.physicalMetricStability') },
-    { key: 'power', label: t('technique.physicalMetricPower') },
-    { key: 'agility', label: t('technique.physicalMetricAgility') },
-    { key: 'reactions', label: t('technique.home.reaction') },
-    { key: 'acceleration', label: t('technique.physicalMetricAcceleration') },
-  ]
 
   return (
-    <View style={styles.performanceWrap}>
-      <View style={styles.performanceCard}>
-        <View style={styles.performanceHead}>
+    <View style={styles.performanceCard}>
+      <View style={styles.performanceHead}>
           <Text
             allowFontScaling={false}
             style={[styles.performanceTitle, { fontFamily: fonts.boldFont ?? fonts.semiBoldFont }]}
@@ -733,25 +789,6 @@ function PerformanceCard({
             })}
           </View>
         </View>
-      </View>
-      {metrics ? (
-        <View style={styles.chipRow}>
-          {chips.map((chip) => (
-            <View key={chip.key} style={styles.chip}>
-              <MetricIcon metric={chip.key} />
-              <Text
-                allowFontScaling={false}
-                style={[styles.chipValue, { fontFamily: fonts.boldFont ?? fonts.semiBoldFont }]}
-              >
-                {metrics[chip.key]}
-              </Text>
-              <Text allowFontScaling={false} numberOfLines={1} style={[styles.chipLabel, { fontFamily: fonts.regularFont }]}>
-                {chip.label}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
     </View>
   )
 }
@@ -856,11 +893,13 @@ function LatestCard({
   item,
   locale,
   fonts,
+  metrics,
   onPress,
 }: {
   item: ActivityItem
   locale: string
   fonts: Fonts
+  metrics: PhysicalMetricsValues | null
   onPress: () => void
 }) {
   const { t } = useTranslation()
@@ -913,6 +952,7 @@ function LatestCard({
           <Image source={ICON_VIEWALL} style={styles.viewAllArrow} contentFit="contain" />
         </Pressable>
       </View>
+      {metrics ? <MetricChips metrics={metrics} fonts={fonts} /> : null}
       <Pressable accessibilityRole="button" onPress={onPress} style={styles.latestCard}>
         {({ pressed }) => (
           <View style={[styles.latestCardInner, pressed && styles.pressed]}>
@@ -976,25 +1016,36 @@ const styles = StyleSheet.create({
     minHeight: 116,
   },
   greetingText: { flex: 1, minWidth: 0 },
-  greetingHello: { color: '#FFFFFF', fontSize: 12 },
-  greetingName: { color: '#00BBFF', marginTop: 2 },
-  greetingReady: { color: '#86A7D2', fontSize: 13, marginTop: 2 },
-  greetingMeta: { alignItems: 'flex-end', justifyContent: 'space-between' },
+  greetingHello: { color: '#FFFFFF', fontSize: 13, lineHeight: 16 },
+  greetingName: { color: '#00C2FF', marginTop: 1, letterSpacing: -0.3 },
+  greetingReady: { color: '#9BB4D6', fontSize: 13, marginTop: 2 },
+  greetingMeta: { alignItems: 'flex-end', justifyContent: 'center' },
+  greetingMetaSpread: { alignSelf: 'stretch', justifyContent: 'space-between' },
   greetingDate: { color: '#FFFFFF', fontSize: 12 },
-  sessionRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  sessionBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 21 },
-  sessionBar: { width: 4, borderRadius: 4, backgroundColor: '#00B8FF' },
-  sessionCount: { color: '#86A7D2', fontSize: 12, textAlign: 'left' },
+  sessionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sessionBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 18 },
+  sessionBar: { width: 3.5, borderRadius: 4, backgroundColor: '#00C2FF' },
+  sessionCount: { color: '#E7F2FF', fontSize: 13, lineHeight: 16 },
+  sessionWeek: { color: '#86A7D2', fontSize: 12, lineHeight: 15 },
   // Responsive hero: fills whatever height is left between the greeting card and the
   // Analyze section, full width. No fixed crop/zoom — cover adapts to the slot.
-  heroSlot: { width: '100%', overflow: 'hidden' },
+  heroSlot: { width: '100%', overflow: 'hidden', backgroundColor: '#030A17' },
+  // Pull the player up so the headline lands on the court, clear of the shoes.
+  heroImage: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    transform: [{ translateY: -72 }],
+  },
   heroFlex: { flex: 1, minHeight: 180, alignSelf: 'stretch' },
   headline: { gap: 2 },
-  headlineLine: { color: '#00BBFF', fontSize: 28, lineHeight: 32 },
-  headlineLineDeep: { color: '#3D6BFF' },
-  headlineSub: { color: '#86A7D2', fontSize: 11.5, marginTop: 6, lineHeight: 15, letterSpacing: -0.3 },
-  heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' },
-  heroOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 6, paddingBottom: 10 },
+  headlineLine: { color: '#00C2FF', fontSize: 30, lineHeight: 34, letterSpacing: -0.4 },
+  headlineLineDeep: { color: '#3B6DFF' },
+  headlineSub: { color: '#9BB0D0', fontSize: 12, marginTop: 8, lineHeight: 16 },
+  heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '58%' },
+  heroOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 28, paddingBottom: 18 },
   analyzeWrap: { gap: 20 },
   analyzeFrame: {
     overflow: 'visible',
@@ -1039,8 +1090,8 @@ const styles = StyleSheet.create({
   },
   cameraIcon: { width: 26.667, height: 22.667 },
   analyzeCopy: { flex: 1, minWidth: 0, gap: 2 },
-  analyzeTitle: { color: '#00B8FF', fontSize: 16 },
-  analyzeSub: { color: '#86A7D2', fontSize: 12, lineHeight: 16 },
+  analyzeTitle: { color: '#00C2FF', fontSize: 16, lineHeight: 20 },
+  analyzeSub: { color: '#9BB4D6', fontSize: 12, lineHeight: 16 },
   arrowBtn: {
     width: 48,
     height: 48,
@@ -1051,10 +1102,10 @@ const styles = StyleSheet.create({
   arrowArt: { position: 'absolute', width: 68, height: 68 },
   arrowGlyph: { width: 13.1385, height: 14.9946, transform: [{ rotate: '-90deg' }] },
   sourceRow: { flexDirection: 'row', gap: 5, width: '100%' },
-  sourceBtnWrap: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, height: 39 },
+  sourceBtnWrap: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, height: 44 },
   sourceBtn: {
     flex: 1,
-    height: 39,
+    height: 44,
     width: '100%',
     minWidth: 0,
     flexDirection: 'row',
@@ -1069,10 +1120,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     boxShadow: '0px 0px 3px 0px rgba(0, 75, 255, 0.3)',
   },
-  sourceLabel: { flex: 1, color: '#FFFFFF', fontSize: 9, lineHeight: 11, letterSpacing: -0.4 },
+  sourceLabel: { flex: 1, color: '#FFFFFF', fontSize: 11, lineHeight: 13, letterSpacing: -0.2 },
   pressed: { opacity: 0.82 },
   coachSlot: { width: '100%' },
-  performanceWrap: { gap: 20 },
   performanceCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -1096,7 +1146,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 25, 80, 0.5)',
     paddingHorizontal: 10,
   },
-  windowText: { color: '#FFFFFF', fontSize: 9 },
+  windowText: { color: '#FFFFFF', fontSize: 11 },
   performanceBody: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   deltaCol: { flex: 1, minWidth: 0, gap: 2 },
   deltaValue: { color: '#00FFA6', fontSize: 22 },
@@ -1106,13 +1156,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
-    gap: 6,
+    gap: 4,
     height: 108,
     paddingTop: 18,
     flexShrink: 1,
   },
   barTrack: {
-    width: 10,
+    width: 7,
     height: 89,
     borderRadius: 20,
     backgroundColor: '#0B285A',
@@ -1138,7 +1188,7 @@ const styles = StyleSheet.create({
     zIndex: 3,
   },
   barLabel: { color: '#FFFFFF', fontSize: 8 },
-  barStreak: { position: 'absolute', top: 18, left: 4.5, width: 1, height: 66.453, zIndex: 2 },
+  barStreak: { position: 'absolute', top: 18, left: 3, width: 1, height: 66.453, zIndex: 2 },
   glowDot: { position: 'absolute', width: 52, height: 52, zIndex: 3 },
   chipRow: { flexDirection: 'row', gap: 5 },
   chip: {
@@ -1162,7 +1212,7 @@ const styles = StyleSheet.create({
   ringCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   ringScore: { color: '#FFFFFF', fontSize: 18 },
   ringDenom: { color: '#86A7D2', fontSize: 10, marginTop: -2 },
-  latestWrap: { gap: 10 },
+  latestWrap: { gap: 12 },
   latestHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   latestTitle: { color: '#00B8FF', fontSize: 16 },
   viewAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
