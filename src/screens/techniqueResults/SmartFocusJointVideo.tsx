@@ -1,5 +1,6 @@
 import { useContext, useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../../context'
 import { TechniqueAnalysisVideoPanel } from '../../components/TechniqueAnalysisVideoPanel'
@@ -23,11 +24,21 @@ const RIGHT: { id: JointId; landmarks: string[] }[] = [
 type Props = {
   videoUri: string
   videoKey: string
+  /** Screen width. The clip bleeds through the results padding. */
   width: number
+  /** Horizontal padding of the results scroll, cancelled so the clip hits both edges. */
+  bleed: number
   poseFrames: PoseFrameRow[]
   totalVidFrames: number
   qualitySession?: { score?: number | null; rating?: string | null } | null
+  /** 0–1 time of the marked contact. The clip opens paused there. */
+  contactFraction?: number | null
+  /** Milliseconds a full-width sideways drag moves. */
+  scrubSpanMs?: number
+  onScrubbingChange?: (active: boolean) => void
 }
+
+const FOCUS_ZOOM = 1.34
 
 /**
  * Looping copy of the pose clip, with body-point buttons on the sides.
@@ -37,9 +48,13 @@ export function SmartFocusJointVideo({
   videoUri,
   videoKey,
   width,
+  bleed,
   poseFrames,
   totalVidFrames,
   qualitySession,
+  contactFraction = null,
+  scrubSpanMs = 2000,
+  onScrubbingChange,
 }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -72,7 +87,7 @@ export function SmartFocusJointVideo({
     })
 
   return (
-    <View style={[styles.stage, { width }]}>
+    <View style={[styles.stage, { width, marginHorizontal: -bleed }]}>
       <TechniqueAnalysisVideoPanel
         videoUri={videoUri}
         videoKey={`${videoKey}-focus`}
@@ -80,14 +95,26 @@ export function SmartFocusJointVideo({
         poseFrames={poseFrames}
         totalVidFrames={totalVidFrames}
         qualitySession={qualitySession}
-        isLooping
         showLegend={false}
         showDetailedPoseOverlay
         detailedChrome="none"
         showPlaybackControls={false}
         showJointAngles={false}
-        autoPlay
+        autoPlay={false}
+        isLooping={false}
+        coverScale={1.2}
+        interactiveScrub
+        startFraction={contactFraction}
+        scrubSpanMs={scrubSpanMs}
+        focusScale={selected ? FOCUS_ZOOM : 1}
+        onScrubbingChange={onScrubbingChange}
         highlightedLandmarks={highlightedLandmarks}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(0,0,0,0.72)', 'rgba(0,0,0,0.28)', 'rgba(0,0,0,0)']}
+        locations={[0, 0.42, 1]}
+        style={styles.topFade}
       />
       <View pointerEvents="box-none" style={styles.sides}>
         <View style={styles.column}>{renderSide(LEFT)}</View>
@@ -101,14 +128,24 @@ const styles = StyleSheet.create({
   stage: {
     alignSelf: 'center',
     position: 'relative',
-    marginBottom: 18,
+    marginBottom: 20,
+    overflow: 'visible',
+  },
+  topFade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 168,
+    zIndex: 1,
   },
   sides: {
     ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
+    zIndex: 2,
   },
   column: {
     gap: 8,

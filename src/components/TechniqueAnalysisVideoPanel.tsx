@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
+import { Animated, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Video, ResizeMode, type AVPlaybackStatus, type AVPlaybackStatusSuccess } from 'expo-av'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg'
@@ -70,9 +70,42 @@ function projectLmPx(
   boxW: number,
   boxH: number,
   naturalW: number | null,
-  naturalH: number | null
+  naturalH: number | null,
+  fit: 'fill' | 'cover' = 'fill'
 ): { x: number; y: number } | null {
+  if (fit === 'cover' && naturalW != null && naturalH != null && naturalW > 0 && naturalH > 0) {
+    const lm = landmarks[name]
+    if (!lm || typeof lm.x !== 'number' || typeof lm.y !== 'number') return null
+    const videoAR = naturalW / naturalH
+    const boxAR = boxW / boxH
+    const scale = videoAR > boxAR ? boxH / naturalH : boxW / naturalW
+    const offsetX = videoAR > boxAR ? (boxW - naturalW * scale) / 2 : 0
+    const offsetY = videoAR > boxAR ? 0 : (boxH - naturalH * scale) / 2
+    return { x: lm.x * naturalW * scale + offsetX, y: lm.y * naturalH * scale + offsetY }
+  }
   return projectLandmarkToOverlayPx(name, landmarks, boxW, boxH, naturalW, naturalH)
+}
+
+function coverNormRect(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  boxW: number,
+  boxH: number,
+  naturalW: number,
+  naturalH: number
+): { x: number; y: number; w: number; h: number } {
+  const videoAR = naturalW / naturalH
+  const boxAR = boxW / boxH
+  const scale = videoAR > boxAR ? boxH / naturalH : boxW / naturalW
+  const offsetX = videoAR > boxAR ? (boxW - naturalW * scale) / 2 : 0
+  const offsetY = videoAR > boxAR ? 0 : (boxH - naturalH * scale) / 2
+  const left = x1 * naturalW * scale + offsetX
+  const top = y1 * naturalH * scale + offsetY
+  const right = x2 * naturalW * scale + offsetX
+  const bottom = y2 * naturalH * scale + offsetY
+  return { x: left, y: top, w: right - left, h: bottom - top }
 }
 
 function PoseSkeletonOverlay({
@@ -88,6 +121,7 @@ function PoseSkeletonOverlay({
   showJointMetrics = false,
   jointAngles = [],
   highlightedLandmarks = [],
+  overlayFit = 'fill',
 }: {
   landmarks: Record<string, LandmarkPoint>
   boxW: number
@@ -101,6 +135,7 @@ function PoseSkeletonOverlay({
   showJointMetrics?: boolean
   jointAngles?: ComputedJointAngle[]
   highlightedLandmarks?: readonly string[]
+  overlayFit?: 'fill' | 'cover'
 }) {
   const arcR = Math.max(10, Math.min(22, boxW * 0.035))
   const labelDist = arcR + 10
@@ -109,8 +144,8 @@ function PoseSkeletonOverlay({
   return (
     <>
       {MEDIAPIPE_POSE_CONNECTIONS.map(([a, b]) => {
-        const p1 = projectLmPx(a, landmarks, boxW, boxH, naturalW, naturalH)
-        const p2 = projectLmPx(b, landmarks, boxW, boxH, naturalW, naturalH)
+        const p1 = projectLmPx(a, landmarks, boxW, boxH, naturalW, naturalH, overlayFit)
+        const p2 = projectLmPx(b, landmarks, boxW, boxH, naturalW, naturalH, overlayFit)
         if (!p1 || !p2) return null
         const stroke = uniformStrokeColor ?? poseSegmentColor(a, b, goodColor, wrongColor)
         return (
@@ -129,7 +164,7 @@ function PoseSkeletonOverlay({
 
       {showJointMetrics
         ? OVERLAY_JOINT_DOT_NAMES.map((name) => {
-            const pt = projectLmPx(name, landmarks, boxW, boxH, naturalW, naturalH)
+            const pt = projectLmPx(name, landmarks, boxW, boxH, naturalW, naturalH, overlayFit)
             if (!pt) return null
             const fill = JOINT_DOT_COLOR[name] ?? DETAILED_SKELETON
             return (
@@ -147,7 +182,7 @@ function PoseSkeletonOverlay({
         : null}
 
       {highlightedLandmarks.map((name) => {
-        const pt = projectLmPx(name, landmarks, boxW, boxH, naturalW, naturalH)
+        const pt = projectLmPx(name, landmarks, boxW, boxH, naturalW, naturalH, overlayFit)
         if (!pt) return null
         return (
           <React.Fragment key={`hi-${name}`}>
@@ -253,6 +288,24 @@ export type TechniqueAnalysisVideoPanelProps = {
   highlightedLandmarks?: readonly string[]
   /** Degree arcs on the skeleton. Defaults to `showDetailedPoseOverlay`. */
   showJointAngles?: boolean
+  /**
+   * Draw the frame this much taller than its aspect and cover-crop it.
+   * 1 keeps the existing contain/stretch fit used by the Poses player.
+   */
+  coverScale?: number
+  /**
+   * Smart Focus: stay paused, open on `startFraction`, and scrub time by dragging
+   * across the picture. A drag the width of the frame moves `scrubSpanMs`.
+   */
+  interactiveScrub?: boolean
+  /** 0–1 position to show first. Contact frame for Smart Focus. */
+  startFraction?: number | null
+  /** How much time one full-width drag covers, in milliseconds. */
+  scrubSpanMs?: number
+  /** Scale the frame toward `highlightedLandmarks`. 1 leaves the picture as it is. */
+  focusScale?: number
+  /** Parent scroll lock while a sideways drag is moving through the clip. */
+  onScrubbingChange?: (active: boolean) => void
 }
 
 /**
@@ -280,6 +333,12 @@ export function TechniqueAnalysisVideoPanel({
   autoPlay = false,
   highlightedLandmarks,
   showJointAngles,
+  coverScale = 1,
+  interactiveScrub = false,
+  startFraction = null,
+  scrubSpanMs = 2000,
+  focusScale = 1,
+  onScrubbingChange,
 }: TechniqueAnalysisVideoPanelProps) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -309,6 +368,27 @@ export function TechniqueAnalysisVideoPanel({
   const poseFramesRef = useRef(poseFrames)
   const totalFramesRef = useRef(totalVidFrames)
   const lastSnapFrameRef = useRef<number | null>(null)
+  const positionRef = useRef(0)
+  const durationRef = useRef(0)
+  const scrubbingRef = useRef(false)
+  const startAppliedRef = useRef(false)
+  const startFractionRef = useRef(startFraction)
+  const scrubSpanRef = useRef(scrubSpanMs)
+  const widthRef = useRef(width)
+  const onScrubbingChangeRef = useRef(onScrubbingChange)
+  const interactiveScrubRef = useRef(interactiveScrub)
+  const pendingSeekRef = useRef<number | null>(null)
+  const lastSeekAtRef = useRef(0)
+  const userMovedRef = useRef(false)
+  const scrubOriginRef = useRef(0)
+  const zoomScale = useRef(new Animated.Value(1)).current
+  const zoomX = useRef(new Animated.Value(0)).current
+  const zoomY = useRef(new Animated.Value(0)).current
+  startFractionRef.current = startFraction
+  scrubSpanRef.current = scrubSpanMs
+  widthRef.current = width
+  onScrubbingChangeRef.current = onScrubbingChange
+  interactiveScrubRef.current = interactiveScrub
 
   const techniqueQuality =
     techniqueQualityProp ?? sessionToTone(qualitySession ?? null)
@@ -332,11 +412,13 @@ export function TechniqueAnalysisVideoPanel({
 
   const videoH = useMemo(() => {
     // Full width × encoded buffer aspect (what CONTAIN paints). No orientation tall-box.
+    const scale = coverScale > 1 ? coverScale : 1
     if (paintSize.w > 0 && paintSize.h > 0) {
-      return Math.max(1, Math.ceil(width * (paintSize.h / paintSize.w)))
+      return Math.max(1, Math.ceil(width * (paintSize.h / paintSize.w) * scale))
     }
-    return Math.max(1, Math.ceil(width * (9 / 16)))
-  }, [width, paintSize])
+    return Math.max(1, Math.ceil(width * (9 / 16) * scale))
+  }, [width, paintSize, coverScale])
+  const overlayFit = coverScale > 1 ? 'cover' : 'fill'
 
   /** Landmarks / YOLO boxes live in OpenCV buffer space (= encoded). Never rotate for overlay. */
   const shouldRotateLandmarks = false
@@ -362,12 +444,19 @@ export function TechniqueAnalysisVideoPanel({
     setEncodedNatural(null)
     setNaturalSize(null)
     setVideoOrientation(null)
-    if (poseFrames.length) {
-      const first = nearestPoseByFrame(poseFrames, 0) ?? poseFrames[0]!
+    if (poseFrames.length && !userMovedRef.current) {
+      const startFrame =
+        startFraction != null && totalVidFrames > 0 ? startFraction * totalVidFrames : 0
+      const first = nearestPoseByFrame(poseFrames, startFrame) ?? poseFrames[0]!
       lastSnapFrameRef.current = first.frame
       setActivePose(first)
     }
-  }, [videoKey, poseFrames])
+  }, [videoKey, poseFrames, startFraction, totalVidFrames])
+
+  useEffect(() => {
+    startAppliedRef.current = false
+    userMovedRef.current = false
+  }, [videoKey])
 
   useEffect(() => {
     if (!videoUri) return
@@ -392,6 +481,26 @@ export function TechniqueAnalysisVideoPanel({
       applyExpoVideoNaturalSize(ext.naturalSize)
     }
     setPlayback(s as AVPlaybackStatusSuccess)
+    if (s.durationMillis && s.durationMillis > 0) durationRef.current = s.durationMillis
+    if (
+      interactiveScrubRef.current &&
+      !startAppliedRef.current &&
+      s.durationMillis &&
+      s.durationMillis > 0
+    ) {
+      startAppliedRef.current = true
+      const frac = startFractionRef.current
+      const ms =
+        frac == null
+          ? 0
+          : Math.min(s.durationMillis - 1, Math.max(0, frac * s.durationMillis))
+      positionRef.current = ms
+      void videoRef.current?.setPositionAsync(ms).catch(() => {})
+      void videoRef.current?.pauseAsync().catch(() => {})
+      return
+    }
+    if (scrubbingRef.current) return
+    positionRef.current = s.positionMillis ?? positionRef.current
     const frames = poseFramesRef.current
     const tf = totalFramesRef.current
     if (!frames.length || !s.durationMillis || s.durationMillis <= 0 || tf <= 0) return
@@ -404,7 +513,77 @@ export function TechniqueAnalysisVideoPanel({
     }
   }, [applyExpoVideoNaturalSize])
 
+  const [scrubbing, setScrubbing] = useState(false)
+
+  const pushScrub = useCallback((ms: number) => {
+    const dur = durationRef.current
+    if (dur <= 0) return
+    const clamped = Math.max(0, Math.min(Math.max(0, dur - 16), ms))
+    positionRef.current = clamped
+    const frames = poseFramesRef.current
+    const tf = totalFramesRef.current
+    if (frames.length && tf > 0) {
+      const nearest = nearestPoseByFrame(frames, (clamped / dur) * tf)
+      if (nearest && nearest.frame !== lastSnapFrameRef.current) {
+        lastSnapFrameRef.current = nearest.frame
+        setActivePose(nearest)
+      }
+    }
+    const now = Date.now()
+    if (now - lastSeekAtRef.current < 32) {
+      pendingSeekRef.current = clamped
+      return
+    }
+    lastSeekAtRef.current = now
+    pendingSeekRef.current = null
+    void videoRef.current?.setPositionAsync(clamped).catch(() => {})
+  }, [])
+
+  const flushScrub = useCallback(() => {
+    const pending = pendingSeekRef.current
+    pendingSeekRef.current = null
+    if (pending == null) return
+    lastSeekAtRef.current = Date.now()
+    void videoRef.current?.setPositionAsync(pending).catch(() => {})
+  }, [])
+
+  const scrubPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 1.15,
+      onPanResponderTerminationRequest: () => false,
+      onMoveShouldSetPanResponderCapture: (_, g) =>
+        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.2,
+      onPanResponderGrant: () => {
+        scrubOriginRef.current = positionRef.current
+        userMovedRef.current = true
+        scrubbingRef.current = true
+        setScrubbing(true)
+        onScrubbingChangeRef.current?.(true)
+        void videoRef.current?.pauseAsync().catch(() => {})
+      },
+      onPanResponderMove: (_, g) => {
+        const span = scrubSpanRef.current
+        const w = Math.max(1, widthRef.current)
+        pushScrub(scrubOriginRef.current + (g.dx / w) * span)
+      },
+      onPanResponderRelease: () => {
+        flushScrub()
+        scrubbingRef.current = false
+        setScrubbing(false)
+        onScrubbingChangeRef.current?.(false)
+      },
+      onPanResponderTerminate: () => {
+        flushScrub()
+        scrubbingRef.current = false
+        setScrubbing(false)
+        onScrubbingChangeRef.current?.(false)
+      },
+    })
+  ).current
+
   const estimatedVideoFrame = useMemo(() => {
+    if (scrubbing && activePose) return activePose.frame
     if (
       !playback?.isLoaded ||
       !playback.durationMillis ||
@@ -415,12 +594,59 @@ export function TechniqueAnalysisVideoPanel({
     }
     const pos = playback.positionMillis ?? 0
     return (pos / playback.durationMillis) * totalVidFrames
-  }, [playback, totalVidFrames, activePose?.frame])
+  }, [playback, totalVidFrames, activePose, scrubbing])
 
   const landmarksForPoseOverlay = useMemo(() => {
     if (!activePose?.landmarks) return null
     return activePose.landmarks
   }, [activePose])
+
+  const focusPoint = useMemo(() => {
+    if (focusScale <= 1 || !highlightedLandmarks?.length || !landmarksForPoseOverlay) return null
+    let sx = 0
+    let sy = 0
+    let n = 0
+    for (const name of highlightedLandmarks) {
+      const pt = projectLmPx(name, landmarksForPoseOverlay, width, videoH, paintSize.w, paintSize.h, overlayFit)
+      if (!pt) continue
+      sx += pt.x
+      sy += pt.y
+      n += 1
+    }
+    if (!n) return null
+    return { x: sx / n, y: sy / n }
+  }, [focusScale, highlightedLandmarks, landmarksForPoseOverlay, width, videoH, paintSize, overlayFit])
+
+  const focusKey = highlightedLandmarks?.join('|') ?? ''
+  const focusKeyRef = useRef(focusKey)
+  useEffect(() => {
+    if (!interactiveScrub) return
+    const selecting = focusKeyRef.current !== focusKey
+    focusKeyRef.current = focusKey
+    const scale = focusPoint ? focusScale : 1
+    // Pull the joint a little toward the middle while it grows, then spring back on deselect.
+    const pull = 0.32
+    const tx = focusPoint ? (focusPoint.x - width / 2) * (1 - pull - scale) : 0
+    const ty = focusPoint ? (focusPoint.y - videoH / 2) * (1 - pull - scale) : 0
+    const motion = selecting
+      ? { useNativeDriver: true as const, speed: 18, bounciness: 5 }
+      : null
+    if (motion) {
+      Animated.spring(zoomScale, { ...motion, toValue: scale }).start()
+      Animated.spring(zoomX, { ...motion, toValue: tx }).start()
+      Animated.spring(zoomY, { ...motion, toValue: ty }).start()
+      return
+    }
+    Animated.timing(zoomScale, { toValue: scale, duration: 80, useNativeDriver: true }).start()
+    Animated.timing(zoomX, { toValue: tx, duration: 80, useNativeDriver: true }).start()
+    Animated.timing(zoomY, { toValue: ty, duration: 80, useNativeDriver: true }).start()
+  }, [interactiveScrub, focusPoint, focusScale, focusKey, width, videoH, zoomScale, zoomX, zoomY])
+
+  useEffect(() => {
+    return () => {
+      if (scrubbingRef.current) onScrubbingChangeRef.current?.(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (!(showJointAngles ?? showDetailedPoseOverlay) || !landmarksForPoseOverlay) {
@@ -434,7 +660,8 @@ export function TechniqueAnalysisVideoPanel({
         width,
         videoH,
         paintSize.w,
-        paintSize.h
+        paintSize.h,
+        overlayFit
       )
     const raw = computeOverlayJointAngles(getPx, landmarksForPoseOverlay)
     const next = raw.map((j) => {
@@ -443,7 +670,7 @@ export function TechniqueAnalysisVideoPanel({
       return { ...j, deg: smoothed ?? j.deg }
     })
     setJointAngles(next)
-  }, [showDetailedPoseOverlay, showJointAngles, landmarksForPoseOverlay, width, videoH, paintSize])
+  }, [showDetailedPoseOverlay, showJointAngles, landmarksForPoseOverlay, width, videoH, paintSize, overlayFit])
 
   const racketOverlayBox = useMemo(() => {
     const est = estimatedVideoFrame
@@ -455,13 +682,26 @@ export function TechniqueAnalysisVideoPanel({
         ? activePose
         : null)
     const rb = withRacket?.racket_bbox as [number, number, number, number] | null | undefined
-    return projectBboxToOverlayRect(rb, {
+    const rect = projectBboxToOverlayRect(rb, {
       videoW: width,
       videoH,
       encodedNatural,
       naturalSize: paintSize,
       rotate: shouldRotateLandmarks,
     })
+    if (overlayFit !== 'cover' || !rb || paintSize.w <= 0 || paintSize.h <= 0) return rect
+    let [x1, y1, x2, y2] = rb
+    if (shouldRotateLandmarks) {
+      const rx1 = Math.min(y1, y2)
+      const rx2 = Math.max(y1, y2)
+      const ry1 = Math.min(1 - x1, 1 - x2)
+      const ry2 = Math.max(1 - x1, 1 - x2)
+      x1 = rx1
+      x2 = rx2
+      y1 = ry1
+      y2 = ry2
+    }
+    return coverNormRect(x1, y1, x2, y2, width, videoH, paintSize.w, paintSize.h)
   }, [
     estimatedVideoFrame,
     poseFrames,
@@ -471,6 +711,7 @@ export function TechniqueAnalysisVideoPanel({
     shouldRotateLandmarks,
     width,
     videoH,
+    overlayFit,
   ])
 
   const ballOverlayBox = useMemo(() => {
@@ -486,13 +727,26 @@ export function TechniqueAnalysisVideoPanel({
         : null
     const src = withBall ?? fallback
     const bb = src?.ball_bbox as [number, number, number, number] | undefined
-    return projectBboxToOverlayRect(bb, {
+    const rect = projectBboxToOverlayRect(bb, {
       videoW: width,
       videoH,
       encodedNatural,
       naturalSize: paintSize,
       rotate: shouldRotateLandmarks,
     })
+    if (overlayFit !== 'cover' || !bb || paintSize.w <= 0 || paintSize.h <= 0) return rect
+    let [x1, y1, x2, y2] = bb
+    if (shouldRotateLandmarks) {
+      const rx1 = Math.min(y1, y2)
+      const rx2 = Math.max(y1, y2)
+      const ry1 = Math.min(1 - x1, 1 - x2)
+      const ry2 = Math.max(1 - x1, 1 - x2)
+      x1 = rx1
+      x2 = rx2
+      y1 = ry1
+      y2 = ry2
+    }
+    return coverNormRect(x1, y1, x2, y2, width, videoH, paintSize.w, paintSize.h)
   }, [
     estimatedVideoFrame,
     poseFrames,
@@ -502,6 +756,7 @@ export function TechniqueAnalysisVideoPanel({
     shouldRotateLandmarks,
     width,
     videoH,
+    overlayFit,
   ])
 
   const scrubDots = useMemo(() => {
@@ -548,6 +803,7 @@ export function TechniqueAnalysisVideoPanel({
         },
         videoShell: { width: '100%', backgroundColor: '#000', alignItems: 'center' },
         videoBox: { position: 'relative', overflow: 'visible', zIndex: 1 },
+        scrubCatch: { ...StyleSheet.absoluteFillObject, zIndex: 4 },
         overlaySvg: {
           position: 'absolute',
           left: 0,
@@ -796,6 +1052,7 @@ export function TechniqueAnalysisVideoPanel({
       showJointMetrics={showDetailedPoseOverlay}
       jointAngles={jointAngles}
       highlightedLandmarks={highlightedLandmarks}
+      overlayFit={overlayFit}
     />
   ) : null
 
@@ -874,18 +1131,33 @@ export function TechniqueAnalysisVideoPanel({
     ) : null
 
   const videoPlayer = (
-    <View style={[styles.videoBox, { width, height: videoH }]}>
+    <View style={[styles.videoBox, { width, height: videoH, overflow: interactiveScrub ? 'hidden' : 'visible' }]}>
+      <Animated.View
+        style={
+          interactiveScrub
+            ? {
+                width,
+                height: videoH,
+                transform: [{ scale: zoomScale }, { translateX: zoomX }, { translateY: zoomY }],
+              }
+            : { width, height: videoH }
+        }
+      >
       <Video
         key={videoKey}
         ref={videoRef}
         source={{ uri: videoUri }}
         style={{ width, height: videoH }}
         resizeMode={
-          encodedNatural ? ResizeMode.STRETCH : ResizeMode.CONTAIN
+          overlayFit === 'cover'
+            ? ResizeMode.COVER
+            : encodedNatural
+              ? ResizeMode.STRETCH
+              : ResizeMode.CONTAIN
         }
         useNativeControls={false}
-        shouldPlay={autoPlay}
-        isMuted={autoPlay}
+        shouldPlay={autoPlay && !interactiveScrub}
+        isMuted={autoPlay || interactiveScrub}
         isLooping={isLooping}
         progressUpdateIntervalMillis={33}
         onLoad={(s) => {
@@ -913,11 +1185,13 @@ export function TechniqueAnalysisVideoPanel({
         {poseOverlaySvg}
         {detectionRects}
       </Svg>
+      </Animated.View>
+      {interactiveScrub ? <View style={styles.scrubCatch} {...scrubPan.panHandlers} /> : null}
     </View>
   )
 
   const framedVideo =
-    showDetailedPoseOverlay || stacked ? (
+    (showDetailedPoseOverlay || stacked) && overlayFit !== 'cover' ? (
       <ProLibraryGradientFrame
         borderRadius={proLibraryChrome.radii.frameOuter}
         innerBorderRadius={proLibraryChrome.radii.frameInner}

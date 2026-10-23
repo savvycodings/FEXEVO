@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { ThemeContext } from '../context'
 
 /** Which results section is on screen. Local UI state only — not a route. */
@@ -11,16 +11,17 @@ type PillProps<T extends string> = {
   tabs: Tab<T>[]
   value: T
   onChange: (id: T) => void
+  trackStyle?: StyleProp<ViewStyle>
 }
 
 /**
  * Segmented control for the AI Coach results step.
  * It only reports the selected id. Callers keep analysis data in the parent.
  */
-export function ResultSectionPill<T extends string>({ tabs, value, onChange }: PillProps<T>) {
+export function ResultSectionPill<T extends string>({ tabs, value, onChange, trackStyle }: PillProps<T>) {
   const { theme } = useContext(ThemeContext)
   return (
-    <View style={styles.track}>
+    <View style={[styles.track, trackStyle]}>
       {tabs.map((tab) => {
         const selected = tab.id === value
         return (

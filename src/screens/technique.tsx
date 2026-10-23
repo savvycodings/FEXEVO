@@ -524,6 +524,7 @@ export function Technique() {
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   /** Which results sub-page is showing. Does not reload analysis. */
   const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
+  const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
   const resultsScrollRef = useRef<ScrollView>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const coachAssistant = useCoachAssistant()
@@ -959,6 +960,36 @@ export function Technique() {
     }
     return resolveTotalFrames(metrics as Record<string, unknown> | null | undefined, step3PoseFrames)
   }, [overlayTotalFrames, metrics, step3PoseFrames])
+
+  /** Where Smart Focus opens: the contact the player marked, as a fraction of the clip. */
+  const smartFocusContact = useMemo(() => {
+    const m = metrics as Record<string, unknown> | null
+    const total = typeof m?.total_frames === 'number' ? m.total_frames : 0
+    const duration = typeof m?.video_duration_ms === 'number' ? m.video_duration_ms : 0
+    const impact = m?.impact_frame_resolved
+    const contact = m?.user_contact_ms
+    let fraction: number | null = null
+    if (typeof impact === 'number' && Number.isFinite(impact) && total > 1) {
+      fraction = Math.min(0.995, Math.max(0, impact / total))
+    } else if (typeof contact === 'number' && Number.isFinite(contact) && duration > 0) {
+      fraction = Math.min(0.995, Math.max(0, contact / duration))
+    }
+    const clip = Array.isArray(m?.user_clips) ? (m?.user_clips[0] as { startMs?: number; endMs?: number }) : null
+    if (
+      fraction == null &&
+      clip &&
+      duration > 0 &&
+      typeof clip.startMs === 'number' &&
+      typeof clip.endMs === 'number'
+    ) {
+      fraction = Math.min(0.995, Math.max(0, (clip.startMs + clip.endMs) / 2 / duration))
+    }
+    const clipSpan =
+      clip && typeof clip.endMs === 'number' && typeof clip.startMs === 'number'
+        ? clip.endMs - clip.startMs
+        : 2000
+    return { fraction, scrubSpanMs: Math.min(2400, Math.max(700, clipSpan)) }
+  }, [metrics])
 
   useEffect(() => {
     if (!analysisId || analysisJson?.status !== 'completed') {
@@ -2806,10 +2837,11 @@ export function Technique() {
                 : { paddingBottom: TAB_SCENE_SCROLL_BOTTOM_PAD },
             step === 1 && uploading && scrollBodyH > 0 ? { minHeight: scrollBodyH } : null,
           ]}
-          scrollEnabled={step !== 1 || showCoachHome}
+          scrollEnabled={(step !== 1 || showCoachHome) && !smartFocusScrubbing}
           bounces={step !== 1 || showCoachHome}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          directionalLockEnabled
         >
         {false && (
           <View style={styles.profileCard}>
@@ -2988,6 +3020,7 @@ export function Technique() {
         {step === 1 && showCoachHome ? (
           <CoachHome
             displayName={typeof session?.user?.name === 'string' ? session.user.name : ''}
+            userId={typeof session?.user?.id === 'string' ? session.user.id : null}
             onAnalyze={() => startHowToFlow('gallery')}
             onRecord={() => startHowToFlow('record')}
             onGallery={() => startHowToFlow('gallery')}
@@ -2995,6 +3028,7 @@ export function Technique() {
             onViewActivities={openActivitiesTab}
             onHasHistory={setHomeHasHistory}
             coach={homeHasHistory ? coachBanner : null}
+            viewportHeight={effectiveScrollBodyH}
           />
         ) : null}
 
@@ -3167,19 +3201,24 @@ export function Technique() {
                   ? biomechanicsSummary.timing.impact_frame
                   : null
               }
+              floatPill={!!uploadedVideoUrl && analysisJson?.status === 'completed'}
               smartFocus={
             <>
             {uploadedVideoUrl && analysisJson?.status === 'completed' ? (
               <SmartFocusJointVideo
                 videoUri={uploadedVideoUrl}
                 videoKey={analysisId ?? 'technique-step3'}
-                width={step3VideoWidth}
+                width={winW}
+                bleed={STEP3_HORIZONTAL_PADDING}
                 poseFrames={step3PoseFrames}
                 totalVidFrames={step3TotalVidFrames}
                 qualitySession={{
                   rating: typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null,
                   score: score ?? null,
                 }}
+                contactFraction={smartFocusContact.fraction}
+                scrubSpanMs={smartFocusContact.scrubSpanMs}
+                onScrubbingChange={setSmartFocusScrubbing}
               />
             ) : null}
             {score != null && (

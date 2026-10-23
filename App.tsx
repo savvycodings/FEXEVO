@@ -33,6 +33,7 @@ import {
 } from '@gorhom/bottom-sheet'
 import { StyleSheet, LogBox, View, Text } from 'react-native'
 import { authClient } from './src/lib/auth-client'
+import { prefetchCoachHome } from './src/screens/coachHome/coachHomeData'
 import { getDismissedSessionId, subscribeDismissedSession } from './src/lib/signOut'
 import { Onboarding } from './src/screens'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
@@ -219,6 +220,7 @@ function AuthGate(props: {
       return
     }
     setProfileChecked(false)
+    const homePromise = prefetchCoachHome(session.user.id)
     let isComplete = false
     for (let attempt = 0; attempt < 5; attempt++) {
       const res = await authClient.$fetch('/profile/me', { method: 'GET' }).catch(() => null)
@@ -231,6 +233,7 @@ function AuthGate(props: {
         await new Promise(resolve => setTimeout(resolve, 300))
       }
     }
+    if (isComplete) await homePromise
     setProfileComplete(isComplete)
     setProfileChecked(true)
   }, [session?.user?.id])

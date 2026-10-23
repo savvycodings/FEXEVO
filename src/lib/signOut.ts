@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { authClient } from "./auth-client";
 import { clearCachedProfile } from "./profile-cache";
+import { clearCoachHomeCache } from "../screens/coachHome/coachHomeData";
 
 const COOKIE_KEY = "xevo_cookie";
 const SESSION_CACHE_KEY = "xevo_session_data";
@@ -62,6 +63,7 @@ export async function signOutAndClearProfileCache(): Promise<void> {
     | undefined;
   rememberDismissedSession(current?.session?.id ?? null);
   clearClientSessionAtom();
+  clearCoachHomeCache();
   await clearCachedProfile();
   try {
     await authClient.signOut();
