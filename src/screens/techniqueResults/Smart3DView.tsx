@@ -1,11 +1,12 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { BackHandler, Image, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, BackHandler, Image, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import Svg, { Line } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
+import { useHologram } from '../../lib/hologramJob'
 
 type Layer = 'player' | 'pro' | 'overlay'
 type Camera = 'front' | 'side' | 'top' | 'rotate' | 'court'
@@ -20,6 +21,8 @@ type Joint =
   | 'rightFoot'
 
 type Props = {
+  /** Saved analysis whose ball-contact hologram replaces the stock front figure once it is built. */
+  analysisId?: string | null
   onClose: () => void
 }
 
@@ -50,10 +53,12 @@ function HoloBody({
   yaw,
   camera,
   ghost,
+  hologram,
 }: {
   yaw: number
   camera: Camera
   ghost: boolean
+  hologram?: string | null
 }) {
   const rad = (yaw * Math.PI) / 180
   const showSide = camera === 'side' || (camera === 'rotate' && Math.abs(Math.sin(rad)) > Math.abs(Math.cos(rad)))
@@ -71,7 +76,8 @@ function HoloBody({
       ]}
     >
       <Image
-        source={showSide ? SIDE : FRONT}
+        // The hologram is a single front view, so side angles keep the stock figure.
+        source={showSide ? SIDE : hologram ? { uri: hologram } : FRONT}
         resizeMode="contain"
         style={[styles.figureImg, showSide && flipSide && styles.figureFlip]}
       />
@@ -79,7 +85,7 @@ function HoloBody({
   )
 }
 
-export function Smart3DView({ onClose }: Props) {
+export function Smart3DView({ analysisId, onClose }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
@@ -87,6 +93,7 @@ export function Smart3DView({ onClose }: Props) {
   const [camera, setCamera] = useState<Camera>('rotate')
   const [highlight, setHighlight] = useState<Joint | null>(null)
   const [yaw, setYaw] = useState(0)
+  const hologram = useHologram(analysisId)
   const yawRef = useRef(yaw)
   yawRef.current = yaw
 
@@ -167,7 +174,15 @@ export function Smart3DView({ onClose }: Props) {
           ))}
         </Svg>
         {layer !== 'player' ? <HoloBody yaw={yaw} camera={camera} ghost /> : null}
-        {layer !== 'pro' ? <HoloBody yaw={yaw} camera={camera} ghost={false} /> : null}
+        {layer !== 'pro' ? <HoloBody yaw={yaw} camera={camera} ghost={false} hologram={hologram.image} /> : null}
+        {hologram.status === 'running' ? (
+          <View pointerEvents="none" style={styles.building}>
+            <ActivityIndicator size="small" color="#7AECFF" />
+            <Text allowFontScaling={false} style={[styles.buildingLabel, { fontFamily: theme.mediumFont }]}>
+              {t('analysis.smart3dHologramBuilding')}
+            </Text>
+          </View>
+        ) : null}
         <View pointerEvents="box-none" style={styles.callouts}>
           <View style={styles.calloutCol}>
             {LEFT_CALLOUTS.map((item) => (
@@ -318,6 +333,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.7,
     shadowRadius: 8,
   },
+  building: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  buildingLabel: { color: '#7AECFF', fontSize: 12 },
   calloutLabel: { color: '#FFFFFF', fontSize: 13, flexShrink: 1 },
   feetRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
   cameras: { flexDirection: 'row', gap: 8, marginTop: 12 },

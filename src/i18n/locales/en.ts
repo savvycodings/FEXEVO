@@ -500,6 +500,7 @@ export const en = {
     smart3dTop: "Top",
     smart3dRotate: "3D Rotate",
     smart3dCourt: "Court",
+    smart3dHologramBuilding: "Building your hologram…",
     fullscreen: "Fullscreen",
     shotScore: "Shot Score",
     confidence: "Confidence",

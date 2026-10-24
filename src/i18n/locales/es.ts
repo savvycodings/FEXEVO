@@ -500,6 +500,7 @@ export const es = {
     smart3dTop: "Arriba",
     smart3dRotate: "Rotar 3D",
     smart3dCourt: "Pista",
+    smart3dHologramBuilding: "Creando tu holograma…",
     fullscreen: "Pantalla completa",
     shotScore: "Puntuación del golpe",
     confidence: "Confianza",

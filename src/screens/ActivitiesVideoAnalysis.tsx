@@ -1025,7 +1025,7 @@ export function ActivitiesVideoAnalysis({
   if (overviewDetail === 'pose') {
     return (
       <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
-        <Smart3DView onClose={() => setOverviewDetail(poseReturn)} />
+        <Smart3DView analysisId={session.analysisId} onClose={() => setOverviewDetail(poseReturn)} />
       </View>
     )
   }

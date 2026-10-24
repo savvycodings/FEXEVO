@@ -81,6 +81,7 @@ import { type ResultSectionId } from '../components/ResultSectionPill'
 import { TechniqueResults } from './techniqueResults/TechniqueResults'
 import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
+import { startHologram } from '../lib/hologramJob'
 import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
@@ -1834,6 +1835,8 @@ export function Technique() {
       const id = analysisId
       setAnalysisId(id)
       setStep(2)
+      // The hologram only needs the contact frame, so it builds while the analysis runs.
+      if (contactMs != null) void startHologram(id, contactMs)
 
       const pollStart = Date.now()
       let done = false
@@ -2808,7 +2811,7 @@ export function Technique() {
             </View>
           </KeyboardAwareScrollView>
         ) : step === 3 && resultsDetail === 'pose' ? (
-          <Smart3DView onClose={() => setResultsDetail(poseReturn)} />
+          <Smart3DView analysisId={analysisId} onClose={() => setResultsDetail(poseReturn)} />
         ) : step === 3 && resultsDetail === 'compare' ? (
           <CompareWithPro
             videoUri={uploadedVideoUrl}
