@@ -23,6 +23,7 @@ type Props = {
   physicalMetrics: PhysicalMetricsValues | null
   poseFrames: PoseFrameRow[]
   impactFrame: number | null
+  onCompare?: () => void
   /** Pro Reference compare. The third tab stays this compare, not a separate angles view. */
   proReference?: ReactNode
   /** Smart Focus only: sit the pill on top of the video instead of above it. */
@@ -45,6 +46,7 @@ export function TechniqueResults({
   physicalMetrics,
   poseFrames,
   impactFrame,
+  onCompare,
   proReference,
   floatPill = false,
 }: Props) {
@@ -71,6 +73,7 @@ export function TechniqueResults({
         metrics={physicalMetrics}
         poseFrames={poseFrames}
         impactFrame={impactFrame}
+        onCompare={onCompare}
       />
       {section === 'proReference' ? (
         proReference ?? <ProReferencePage visible />

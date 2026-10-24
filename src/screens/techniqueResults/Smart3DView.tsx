@@ -1,18 +1,9 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { BackHandler, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
+import { BackHandler, Image, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import Svg, {
-  Circle,
-  Defs,
-  Ellipse,
-  G,
-  Line,
-  LinearGradient,
-  Path,
-  Stop,
-} from 'react-native-svg'
+import Svg, { Line } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
 
@@ -32,20 +23,8 @@ type Props = {
   onClose: () => void
 }
 
-const JOINTS: { id: Joint; cx: number; cy: number }[] = [
-  { id: 'shoulders', cx: 78, cy: 118 },
-  { id: 'shoulders', cx: 162, cy: 118 },
-  { id: 'elbow', cx: 48, cy: 196 },
-  { id: 'elbow', cx: 192, cy: 196 },
-  { id: 'wrist', cx: 36, cy: 268 },
-  { id: 'wrist', cx: 204, cy: 268 },
-  { id: 'torso', cx: 120, cy: 168 },
-  { id: 'knee', cx: 92, cy: 352 },
-  { id: 'knee', cx: 148, cy: 352 },
-  { id: 'leftFoot', cx: 74, cy: 458 },
-  { id: 'rightFoot', cx: 166, cy: 458 },
-  { id: 'racket', cx: 228, cy: 246 },
-]
+const FRONT = require('../../../assets/smart3d/front.png')
+const SIDE = require('../../../assets/smart3d/side.png')
 
 const LEFT_CALLOUTS: { id: Joint; icon: keyof typeof Ionicons.glyphMap; key: string }[] = [
   { id: 'shoulders', icon: 'body-outline', key: 'analysis.smart3dShoulders' },
@@ -67,86 +46,36 @@ const CAMERAS: { id: Camera; icon: keyof typeof Ionicons.glyphMap; key: string }
   { id: 'court', icon: 'grid-outline', key: 'analysis.smart3dCourt' },
 ]
 
-function BodyFigure({
+function HoloBody({
   yaw,
-  top,
-  court,
+  camera,
   ghost,
-  highlight,
 }: {
   yaw: number
-  top: boolean
-  court: boolean
+  camera: Camera
   ghost: boolean
-  highlight: Joint | null
 }) {
-  const turn = (yaw * Math.PI) / 180
-  const scaleX = top ? 1 : Math.max(0.28, Math.abs(Math.cos(turn)))
-  const scaleY = top ? 0.42 : court ? 0.82 : 1
-  const lift = court ? 36 : 0
-  const fill = ghost ? 'url(#bodyGhost)' : 'url(#bodyFill)'
-  const stroke = ghost ? 'rgba(120, 220, 255, 0.45)' : 'rgba(170, 235, 255, 0.9)'
+  const rad = (yaw * Math.PI) / 180
+  const showSide = camera === 'side' || (camera === 'rotate' && Math.abs(Math.sin(rad)) > Math.abs(Math.cos(rad)))
+  const flipSide = Math.sin(rad) < 0
+  const top = camera === 'top'
   return (
-    <G transform={`translate(120 ${250 + lift}) scale(${scaleX} ${scaleY}) translate(-120 -250)`} opacity={ghost ? 0.45 : 1}>
-      {top ? (
-        <>
-          <Ellipse cx="120" cy="250" rx="70" ry="28" fill={fill} stroke={stroke} strokeWidth="2" />
-          <Circle cx="120" cy="232" r="16" fill={fill} stroke={stroke} strokeWidth="2" />
-          <Circle cx="78" cy="250" r="8" fill="#FF9A1A" />
-          <Circle cx="162" cy="250" r="8" fill="#FF9A1A" />
-        </>
-      ) : (
-        <>
-          <Ellipse cx="120" cy="52" rx="22" ry="26" fill={fill} stroke={stroke} strokeWidth="1.5" />
-          <Path d="M108 74 h24 v14 h-24 z" fill={fill} />
-          <Path
-            d="M76 96 C68 150 74 210 86 236 C98 258 142 258 154 236 C166 210 172 150 164 96 C146 112 94 112 76 96 Z"
-            fill={fill}
-            stroke={stroke}
-            strokeWidth="1.5"
-          />
-          <Path
-            d="M80 108 C52 150 40 210 34 268"
-            stroke={fill}
-            strokeWidth="18"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <Path
-            d="M160 108 C190 146 206 200 214 246"
-            stroke={fill}
-            strokeWidth="18"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <Path
-            d="M102 236 C92 300 84 370 74 452"
-            stroke={fill}
-            strokeWidth="20"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <Path
-            d="M138 236 C150 300 158 370 168 452"
-            stroke={fill}
-            strokeWidth="20"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <Ellipse cx="228" cy="236" rx="16" ry="22" fill="none" stroke={stroke} strokeWidth="2" />
-          {JOINTS.map((joint) => {
-            const on = highlight === joint.id
-            return (
-              <G key={`${joint.id}-${joint.cx}`}>
-                {on ? <Circle cx={joint.cx} cy={joint.cy} r="16" fill="rgba(255, 154, 26, 0.35)" /> : null}
-                <Circle cx={joint.cx} cy={joint.cy} r={on ? 8 : 6} fill="#FF9A1A" />
-                <Circle cx={joint.cx} cy={joint.cy} r={on ? 3.5 : 2.5} fill="#FFE2A8" />
-              </G>
-            )
-          })}
-        </>
-      )}
-    </G>
+    <View
+      pointerEvents="none"
+      style={[
+        styles.figure,
+        ghost && styles.figureGhost,
+        top && styles.figureTop,
+        camera === 'court' && styles.figureCourt,
+        ghost && styles.figureShift,
+      ]}
+    >
+      <Image
+        source={showSide ? SIDE : FRONT}
+        resizeMode="contain"
+        style={[styles.figureImg, showSide && flipSide && styles.figureFlip]}
+      />
+    </View>
   )
 }
 
@@ -157,7 +86,7 @@ export function Smart3DView({ onClose }: Props) {
   const [layer, setLayer] = useState<Layer>('player')
   const [camera, setCamera] = useState<Camera>('rotate')
   const [highlight, setHighlight] = useState<Joint | null>(null)
-  const [yaw, setYaw] = useState(18)
+  const [yaw, setYaw] = useState(0)
   const yawRef = useRef(yaw)
   yawRef.current = yaw
 
@@ -198,50 +127,47 @@ export function Smart3DView({ onClose }: Props) {
 
   return (
     <View style={[styles.screen, { paddingBottom: 84 + insets.bottom }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('analysis.back')}
-        hitSlop={12}
-        onPress={onClose}
-        style={styles.back}
-      >
-        <Ionicons name="chevron-back" size={24} color="#86A7D2" />
-      </Pressable>
-      <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} />
+      <View style={styles.topRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('analysis.back')}
+          hitSlop={12}
+          onPress={onClose}
+          style={styles.back}
+        >
+          <Ionicons name="chevron-back" size={24} color="#86A7D2" />
+        </Pressable>
+        <View style={styles.pillWrap}>
+          <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} trackStyle={styles.pill} />
+        </View>
+      </View>
       <View style={styles.stage} {...pan.panHandlers}>
-        <Svg width="100%" height="100%" viewBox="0 0 240 520">
-          <Defs>
-            <LinearGradient id="bodyFill" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="#8DEBFF" />
-              <Stop offset="55%" stopColor="#2F7BFF" />
-              <Stop offset="100%" stopColor="#1236C8" />
-            </LinearGradient>
-            <LinearGradient id="bodyGhost" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="#D8F7FF" />
-              <Stop offset="100%" stopColor="#6EC8FF" />
-            </LinearGradient>
-          </Defs>
-          {Array.from({ length: 7 }, (_, index) => (
+        <Svg width="100%" height="100%" viewBox="0 0 240 520" style={StyleSheet.absoluteFill}>
+          {Array.from({ length: 8 }, (_, index) => (
             <Line
               key={`g-${index}`}
-              x1={20 + index * 34}
-              y1="500"
+              x1={8 + index * 32}
+              y1="518"
               x2="120"
-              y2="430"
-              stroke="rgba(40, 120, 220, 0.35)"
+              y2={camera === 'court' ? 300 : 390}
+              stroke={camera === 'court' ? 'rgba(70, 160, 255, 0.45)' : 'rgba(40, 120, 220, 0.32)'}
               strokeWidth="1"
             />
           ))}
-          {[450, 470, 490].map((y) => (
-            <Line key={`h-${y}`} x1="24" y1={y} x2="216" y2={y} stroke="rgba(40, 120, 220, 0.28)" strokeWidth="1" />
+          {(camera === 'court' ? [360, 400, 440, 480, 512] : [430, 460, 490, 514]).map((y) => (
+            <Line
+              key={`h-${y}`}
+              x1="16"
+              y1={y}
+              x2="224"
+              y2={y}
+              stroke={camera === 'court' ? 'rgba(70, 160, 255, 0.4)' : 'rgba(40, 120, 220, 0.26)'}
+              strokeWidth="1"
+            />
           ))}
-          {layer !== 'player' ? (
-            <BodyFigure yaw={yaw + 12} top={camera === 'top'} court={camera === 'court'} ghost highlight={highlight} />
-          ) : null}
-          {layer !== 'pro' ? (
-            <BodyFigure yaw={yaw} top={camera === 'top'} court={camera === 'court'} ghost={false} highlight={highlight} />
-          ) : null}
         </Svg>
+        {layer !== 'player' ? <HoloBody yaw={yaw} camera={camera} ghost /> : null}
+        {layer !== 'pro' ? <HoloBody yaw={yaw} camera={camera} ghost={false} /> : null}
         <View pointerEvents="box-none" style={styles.callouts}>
           <View style={styles.calloutCol}>
             {LEFT_CALLOUTS.map((item) => (
@@ -346,8 +272,26 @@ function Callout({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, paddingHorizontal: 16, paddingTop: 4 },
-  back: { alignSelf: 'flex-start', paddingVertical: 4, paddingRight: 12, marginBottom: 4 },
-  stage: { flex: 1, minHeight: 280, marginTop: 4 },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  back: { paddingVertical: 4, paddingRight: 4 },
+  pillWrap: { flex: 1 },
+  pill: { marginBottom: 0 },
+  stage: { flex: 1, minHeight: 280, marginTop: 8 },
+  figure: {
+    position: 'absolute',
+    left: '16%',
+    right: '16%',
+    top: 4,
+    bottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  figureGhost: { opacity: 0.42 },
+  figureTop: { transform: [{ scaleY: 0.42 }, { translateY: 40 }] },
+  figureCourt: { transform: [{ scale: 0.86 }, { translateY: 16 }] },
+  figureShift: { marginLeft: 28 },
+  figureImg: { width: '100%', height: '100%' },
+  figureFlip: { transform: [{ scaleX: -1 }] },
   callouts: {
     ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
@@ -391,6 +335,7 @@ const styles = StyleSheet.create({
   },
   cameraOn: {
     borderColor: '#3EC8FF',
+    borderWidth: 2,
     backgroundColor: '#0A2458',
     shadowColor: '#1C8FFF',
     shadowOffset: { width: 0, height: 0 },

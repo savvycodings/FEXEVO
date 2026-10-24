@@ -38,6 +38,8 @@ import { ResultSectionPill } from '../components/ResultSectionPill'
 import { stripCoachRichMarkers } from '../lib/coachRichText'
 import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
+import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
+import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { MetricsPage } from './techniqueResults/MetricsPage'
 import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
 import { useNavigation } from '@react-navigation/native'
@@ -632,7 +634,8 @@ export function ActivitiesVideoAnalysis({
   const [correctionCompareW, setCorrectionCompareW] = useState(0)
 
   const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'proReference'>('overview')
-  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose'>('overview')
+  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare'>('overview')
+  const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
 
   const styles = useMemo(() => getStyles(theme), [theme])
 
@@ -1022,7 +1025,55 @@ export function ActivitiesVideoAnalysis({
   if (overviewDetail === 'pose') {
     return (
       <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
-        <Smart3DView onClose={() => setOverviewDetail('overview')} />
+        <Smart3DView onClose={() => setOverviewDetail(poseReturn)} />
+      </View>
+    )
+  }
+
+  if (overviewDetail === 'compare') {
+    const angles = aiSnapshot?.biomechanicsSummary?.angles_deg_proxy
+    const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
+    const wrist = aiSnapshot?.biomechanicsSummary?.speeds_body?.wrist_peak_body_per_s
+    const referenceStill = correctionPairs[0]?.correctedImage
+    return (
+      <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
+        <CompareWithPro
+          videoUri={videoUri(session.videoPath)}
+          referenceImage={referenceStill ? { uri: referenceStill } : null}
+          referenceVideoUri={correctionVideo?.video ? toDisplayImageUri(correctionVideo.video) : null}
+          elbowDeg={typeof angles?.elbow_impact_deg === 'number' ? angles.elbow_impact_deg : null}
+          elbowDeltaDeg={typeof angles?.elbow_delta_deg === 'number' ? angles.elbow_delta_deg : null}
+          torsoDeg={typeof torso === 'number' ? torso : null}
+          wristBodyPerS={typeof wrist === 'number' ? wrist : null}
+          power={typeof aiSnapshot?.physicalMetrics?.power === 'number' ? aiSnapshot.physicalMetrics.power : null}
+          errors={aiSections?.technicalErrors ?? []}
+          onClose={() => setOverviewDetail('overview')}
+          onSmart3d={() => {
+            setPoseReturn('compare')
+            setOverviewDetail('pose')
+          }}
+        />
+      </View>
+    )
+  }
+
+  if (overviewDetail === 'mistakes') {
+    const angles = aiSnapshot?.biomechanicsSummary?.angles_deg_proxy
+    const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
+    return (
+      <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
+        <BiggestMistakesView
+          videoUri={videoUri(session.videoPath)}
+          videoKey={session.analysisId}
+          errors={aiSections?.technicalErrors ?? []}
+          elbowDeg={typeof angles?.elbow_impact_deg === 'number' ? angles.elbow_impact_deg : null}
+          torsoDeg={typeof torso === 'number' ? torso : null}
+          onClose={() => setOverviewDetail('overview')}
+          onSmart3d={() => {
+            setPoseReturn('mistakes')
+            setOverviewDetail('pose')
+          }}
+        />
       </View>
     )
   }
@@ -1088,6 +1139,7 @@ export function ActivitiesVideoAnalysis({
                 ? aiSnapshot.biomechanicsSummary.timing.impact_frame
                 : null
             }
+            onCompare={() => setOverviewDetail('compare')}
           />
         ) : null}
 
@@ -1138,10 +1190,11 @@ export function ActivitiesVideoAnalysis({
             summary={metricsSummary}
             metrics={aiSnapshot?.physicalMetrics ?? null}
             detail={overviewDetail}
-            onBiggestMistakes={() =>
-              setOverviewDetail((current) => (current === 'mistakes' ? 'overview' : 'mistakes'))
-            }
-            onSmart3d={() => setOverviewDetail('pose')}
+            onBiggestMistakes={() => setOverviewDetail('mistakes')}
+            onSmart3d={() => {
+              setPoseReturn('overview')
+              setOverviewDetail('pose')
+            }}
           />
         </View>
         {overviewDetail === 'mistakes' ? (

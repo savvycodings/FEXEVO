@@ -81,6 +81,8 @@ import { type ResultSectionId } from '../components/ResultSectionPill'
 import { TechniqueResults } from './techniqueResults/TechniqueResults'
 import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
+import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
+import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
 import { CoachHome } from './coachHome/CoachHome'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
@@ -523,7 +525,8 @@ export function Technique() {
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   /** Which results sub-page is showing. Does not reload analysis. */
   const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
-  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose'>('overview')
+  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare'>('overview')
+  const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
   const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
   const resultsScrollRef = useRef<ScrollView>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
@@ -2805,7 +2808,69 @@ export function Technique() {
             </View>
           </KeyboardAwareScrollView>
         ) : step === 3 && resultsDetail === 'pose' ? (
-          <Smart3DView onClose={() => setResultsDetail('overview')} />
+          <Smart3DView onClose={() => setResultsDetail(poseReturn)} />
+        ) : step === 3 && resultsDetail === 'compare' ? (
+          <CompareWithPro
+            videoUri={uploadedVideoUrl}
+            referenceImage={
+              typeof correctionImages[0]?.correctedImage === 'string'
+                ? { uri: correctionImages[0].correctedImage }
+                : correctionImages[0]?.correctedImage ?? null
+            }
+            referenceVideoUri={correctionVideo?.video ?? null}
+            elbowDeg={
+              typeof biomechanicsSummary?.angles_deg_proxy?.elbow_impact_deg === 'number'
+                ? biomechanicsSummary.angles_deg_proxy.elbow_impact_deg
+                : null
+            }
+            elbowDeltaDeg={
+              typeof biomechanicsSummary?.angles_deg_proxy?.elbow_delta_deg === 'number'
+                ? biomechanicsSummary.angles_deg_proxy.elbow_delta_deg
+                : null
+            }
+            torsoDeg={
+              typeof biomechanicsSummary?.angles_deg_proxy?.torso_sep_delta_deg === 'number'
+                ? biomechanicsSummary.angles_deg_proxy.torso_sep_delta_deg
+                : typeof biomechanicsSummary?.angles_deg_proxy?.shoulder_hip_sep_impact_deg === 'number'
+                  ? biomechanicsSummary.angles_deg_proxy.shoulder_hip_sep_impact_deg
+                  : null
+            }
+            wristBodyPerS={
+              typeof biomechanicsSummary?.speeds_body?.wrist_peak_body_per_s === 'number'
+                ? biomechanicsSummary.speeds_body.wrist_peak_body_per_s
+                : null
+            }
+            power={typeof physicalMetrics?.power === 'number' ? physicalMetrics.power : null}
+            errors={technicalErrorsList}
+            onClose={() => setResultsDetail('overview')}
+            onSmart3d={() => {
+              setPoseReturn('compare')
+              setResultsDetail('pose')
+            }}
+          />
+        ) : step === 3 && resultsDetail === 'mistakes' ? (
+          <BiggestMistakesView
+            videoUri={uploadedVideoUrl}
+            videoKey={analysisId ?? 'technique-step3'}
+            errors={technicalErrorsList}
+            elbowDeg={
+              typeof biomechanicsSummary?.angles_deg_proxy?.elbow_impact_deg === 'number'
+                ? biomechanicsSummary.angles_deg_proxy.elbow_impact_deg
+                : null
+            }
+            torsoDeg={
+              typeof biomechanicsSummary?.angles_deg_proxy?.torso_sep_delta_deg === 'number'
+                ? biomechanicsSummary.angles_deg_proxy.torso_sep_delta_deg
+                : typeof biomechanicsSummary?.angles_deg_proxy?.shoulder_hip_sep_impact_deg === 'number'
+                  ? biomechanicsSummary.angles_deg_proxy.shoulder_hip_sep_impact_deg
+                  : null
+            }
+            onClose={() => setResultsDetail('overview')}
+            onSmart3d={() => {
+              setPoseReturn('mistakes')
+              setResultsDetail('pose')
+            }}
+          />
         ) : (
         <ScrollView
           ref={resultsScrollRef}
@@ -3205,6 +3270,7 @@ export function Technique() {
                   ? biomechanicsSummary.timing.impact_frame
                   : null
               }
+              onCompare={() => setResultsDetail('compare')}
               floatPill={false}
               proReference={
                 uploadedVideoUrl ? (
@@ -3227,10 +3293,11 @@ export function Technique() {
               summary={metricsBlurb}
               metrics={physicalMetrics}
               detail={resultsDetail}
-              onBiggestMistakes={() =>
-                setResultsDetail((current) => (current === 'mistakes' ? 'overview' : 'mistakes'))
-              }
-              onSmart3d={() => setResultsDetail('pose')}
+              onBiggestMistakes={() => setResultsDetail('mistakes')}
+              onSmart3d={() => {
+                setPoseReturn('overview')
+                setResultsDetail('pose')
+              }}
               onScrubbingChange={setSmartFocusScrubbing}
             />
             {resultsDetail === 'mistakes' && metrics && localeAnalysis && strengthsList.length > 0 ? (
