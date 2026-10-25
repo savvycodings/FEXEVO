@@ -53,12 +53,10 @@ function HoloBody({
   yaw,
   camera,
   ghost,
-  hologram,
 }: {
   yaw: number
   camera: Camera
   ghost: boolean
-  hologram?: string | null
 }) {
   const rad = (yaw * Math.PI) / 180
   const showSide = camera === 'side' || (camera === 'rotate' && Math.abs(Math.sin(rad)) > Math.abs(Math.cos(rad)))
@@ -76,8 +74,7 @@ function HoloBody({
       ]}
     >
       <Image
-        // The hologram is a single front view, so side angles keep the stock figure.
-        source={showSide ? SIDE : hologram ? { uri: hologram } : FRONT}
+        source={showSide ? SIDE : FRONT}
         resizeMode="contain"
         style={[styles.figureImg, showSide && flipSide && styles.figureFlip]}
       />
@@ -94,6 +91,8 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   const [highlight, setHighlight] = useState<Joint | null>(null)
   const [yaw, setYaw] = useState(0)
   const hologram = useHologram(analysisId)
+  /** The player's ball-contact hologram fills the stage, in place of the stock figure and grid. */
+  const holoImage = layer !== 'pro' ? hologram.image : null
   const yawRef = useRef(yaw)
   yawRef.current = yaw
 
@@ -148,33 +147,38 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} trackStyle={styles.pill} />
         </View>
       </View>
-      <View style={styles.stage} {...pan.panHandlers}>
-        <Svg width="100%" height="100%" viewBox="0 0 240 520" style={StyleSheet.absoluteFill}>
-          {Array.from({ length: 8 }, (_, index) => (
-            <Line
-              key={`g-${index}`}
-              x1={8 + index * 32}
-              y1="518"
-              x2="120"
-              y2={camera === 'court' ? 300 : 390}
-              stroke={camera === 'court' ? 'rgba(70, 160, 255, 0.45)' : 'rgba(40, 120, 220, 0.32)'}
-              strokeWidth="1"
-            />
-          ))}
-          {(camera === 'court' ? [360, 400, 440, 480, 512] : [430, 460, 490, 514]).map((y) => (
-            <Line
-              key={`h-${y}`}
-              x1="16"
-              y1={y}
-              x2="224"
-              y2={y}
-              stroke={camera === 'court' ? 'rgba(70, 160, 255, 0.4)' : 'rgba(40, 120, 220, 0.26)'}
-              strokeWidth="1"
-            />
-          ))}
-        </Svg>
+      <View style={[styles.stage, holoImage ? styles.stageCard : null]} {...pan.panHandlers}>
+        {holoImage ? (
+          <Image source={{ uri: holoImage }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+        ) : null}
+        {holoImage ? null : (
+          <Svg width="100%" height="100%" viewBox="0 0 240 520" style={StyleSheet.absoluteFill}>
+            {Array.from({ length: 8 }, (_, index) => (
+              <Line
+                key={`g-${index}`}
+                x1={8 + index * 32}
+                y1="518"
+                x2="120"
+                y2={camera === 'court' ? 300 : 390}
+                stroke={camera === 'court' ? 'rgba(70, 160, 255, 0.45)' : 'rgba(40, 120, 220, 0.32)'}
+                strokeWidth="1"
+              />
+            ))}
+            {(camera === 'court' ? [360, 400, 440, 480, 512] : [430, 460, 490, 514]).map((y) => (
+              <Line
+                key={`h-${y}`}
+                x1="16"
+                y1={y}
+                x2="224"
+                y2={y}
+                stroke={camera === 'court' ? 'rgba(70, 160, 255, 0.4)' : 'rgba(40, 120, 220, 0.26)'}
+                strokeWidth="1"
+              />
+            ))}
+          </Svg>
+        )}
         {layer !== 'player' ? <HoloBody yaw={yaw} camera={camera} ghost /> : null}
-        {layer !== 'pro' ? <HoloBody yaw={yaw} camera={camera} ghost={false} hologram={hologram.image} /> : null}
+        {layer !== 'pro' && !holoImage ? <HoloBody yaw={yaw} camera={camera} ghost={false} /> : null}
         {hologram.status === 'running' ? (
           <View pointerEvents="none" style={styles.building}>
             <ActivityIndicator size="small" color="#7AECFF" />
@@ -292,6 +296,14 @@ const styles = StyleSheet.create({
   pillWrap: { flex: 1 },
   pill: { marginBottom: 0 },
   stage: { flex: 1, minHeight: 280, marginTop: 8 },
+  stageCard: {
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(46, 130, 230, 0.75)',
+    backgroundColor: '#000814',
+    overflow: 'hidden',
+    padding: 12,
+  },
   figure: {
     position: 'absolute',
     left: '16%',
