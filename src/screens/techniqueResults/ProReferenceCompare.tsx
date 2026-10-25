@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Video, ResizeMode } from 'expo-av'
 import { ThemeContext } from '../../context'
+import { useHologram } from '../../lib/hologramJob'
 
 export type ProCompareRow = {
   label: string
@@ -15,6 +16,8 @@ type Segment = 'before' | 'after' | 'progress'
 
 type Props = {
   videoUri: string
+  /** Shows the red pro hologram for this shot when it has been rendered. */
+  analysisId?: string | null
   referenceImageUri: string | null
   rows: ProCompareRow[]
   score: number | null
@@ -23,12 +26,15 @@ type Props = {
 
 export function ProReferenceCompare({
   videoUri,
+  analysisId,
   referenceImageUri,
   rows,
   score,
   onSave,
 }: Props) {
   const { t } = useTranslation()
+  const hologram = useHologram(analysisId)
+  const proImage = hologram.proImage ?? referenceImageUri
   const { theme } = useContext(ThemeContext)
   const [segment, setSegment] = useState<Segment>('before')
   const segments: { id: Segment; label: string }[] = [
@@ -95,8 +101,8 @@ export function ProReferenceCompare({
                 {t('analysis.proReference')}
               </Text>
               <View style={[styles.mediaFrame, styles.mediaFramePro]}>
-                {referenceImageUri ? (
-                  <Image source={{ uri: referenceImageUri }} style={styles.media} resizeMode="cover" />
+                {proImage ? (
+                  <Image source={{ uri: proImage }} style={styles.media} resizeMode="cover" />
                 ) : (
                   <View style={styles.proEmpty}>
                     <Ionicons name="body" size={36} color="#3D9DFF" />
