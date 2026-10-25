@@ -35,6 +35,7 @@ const DETAIL_JOINT: Partial<Record<Joint, ContactJoint>> = {
   wrist: 'wrist',
   torso: 'torso',
   knee: 'knee',
+  racket: 'wrist',
 }
 
 /** Glowing markers drawn on the hologram, as in the Smart 3D design, and the callout each belongs to. */
@@ -164,8 +165,13 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   const contactJoints = useContactJoints(analysisId)
   const [detail, setDetail] = useState<ContactJoint | null>(null)
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 })
-  /** The player's ball-contact hologram fills the stage, in place of the stock figure and grid. */
-  const holoImage = layer !== 'pro' ? hologram.image : null
+  /** Player hologram is blue; the pro reference is the red render of the matched library clip. */
+  const holoImage = layer === 'pro' ? hologram.proImage : hologram.image
+  const holoKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
+  const building =
+    layer === 'pro'
+      ? hologram.proStatus === 'running'
+      : hologram.status === 'running' || (layer === 'overlay' && hologram.proStatus === 'running')
   const yawRef = useRef(yaw)
   yawRef.current = yaw
 
@@ -218,14 +224,16 @@ export function Smart3DView({ analysisId, onClose }: Props) {
         shotLabel={contactJoints?.shotLabel ?? null}
         side={contactJoints?.side ?? 'RIGHT'}
         hologramImage={hologram.image}
+        proHologramImage={hologram.proImage}
         keypoints={hologram.keypoints}
+        proKeypoints={hologram.proKeypoints}
         onClose={() => setDetail(null)}
       />
     )
   }
 
   return (
-    <View style={[styles.screen, { paddingBottom: 84 + insets.bottom }]}>
+    <View style={[styles.screen, { paddingBottom: 8 + insets.bottom }]}>
       <View style={styles.topRow}>
         <Pressable
           accessibilityRole="button"
@@ -248,8 +256,11 @@ export function Smart3DView({ analysisId, onClose }: Props) {
         {holoImage ? (
           <Image source={{ uri: holoImage }} resizeMode="cover" style={StyleSheet.absoluteFill} />
         ) : null}
-        {holoImage && hologram.keypoints && stageSize.w ? (
-          <JointMarkers keypoints={hologram.keypoints} w={stageSize.w} h={stageSize.h} highlight={highlight} />
+        {layer === 'overlay' && hologram.proImage ? (
+          <Image source={{ uri: hologram.proImage }} resizeMode="cover" style={[StyleSheet.absoluteFill, { opacity: 0.72 }]} />
+        ) : null}
+        {holoImage && holoKeys && stageSize.w ? (
+          <JointMarkers keypoints={holoKeys} w={stageSize.w} h={stageSize.h} highlight={highlight} />
         ) : null}
         {holoImage ? null : (
           <Svg width="100%" height="100%" viewBox="0 0 240 520" style={StyleSheet.absoluteFill}>
@@ -279,7 +290,7 @@ export function Smart3DView({ analysisId, onClose }: Props) {
         )}
         {layer !== 'player' ? <HoloBody yaw={yaw} camera={camera} ghost /> : null}
         {layer !== 'pro' && !holoImage ? <HoloBody yaw={yaw} camera={camera} ghost={false} /> : null}
-        {hologram.status === 'running' ? (
+        {building ? (
           <View pointerEvents="none" style={styles.building}>
             <ActivityIndicator size="small" color="#7AECFF" />
             <Text allowFontScaling={false} style={[styles.buildingLabel, { fontFamily: theme.mediumFont }]}>
@@ -395,14 +406,14 @@ const styles = StyleSheet.create({
   back: { paddingVertical: 4, paddingRight: 4 },
   pillWrap: { flex: 1 },
   pill: { marginBottom: 0 },
-  stage: { flex: 1, minHeight: 280, marginTop: 8 },
+  stage: { flex: 1, minHeight: 420, marginTop: 8 },
   stageCard: {
     borderRadius: 24,
     borderWidth: 1.5,
     borderColor: 'rgba(46, 130, 230, 0.75)',
     backgroundColor: '#000814',
     overflow: 'hidden',
-    padding: 12,
+    padding: 0,
   },
   figure: {
     position: 'absolute',
@@ -423,9 +434,11 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 8,
+    paddingTop: 18,
+    paddingBottom: 18,
+    paddingHorizontal: 10,
   },
-  calloutCol: { width: 118, gap: 10 },
+  calloutCol: { width: 112, gap: 12 },
   callout: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -458,10 +471,10 @@ const styles = StyleSheet.create({
   buildingLabel: { color: '#7AECFF', fontSize: 12 },
   calloutLabel: { color: '#FFFFFF', fontSize: 13, flexShrink: 1 },
   feetRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  cameras: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  cameras: { flexDirection: 'row', gap: 8, marginTop: 8 },
   camera: {
     flex: 1,
-    minHeight: 72,
+    minHeight: 56,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(46, 130, 230, 0.45)',

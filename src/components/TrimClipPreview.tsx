@@ -331,15 +331,6 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
             <Ionicons name="play-skip-forward" size={22} color={CONTROL_ICON} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.previewClipBtn}
-            onPress={() => void playSelectionLoop(selectionLo, selectionHi)}
-            activeOpacity={0.85}
-          >
-            <Text allowFontScaling={false} style={styles.previewClipBtnText}>
-              {t('technique.setClipScreen.previewClip')}
-            </Text>
-          </TouchableOpacity>
         </View>
 
       </View>

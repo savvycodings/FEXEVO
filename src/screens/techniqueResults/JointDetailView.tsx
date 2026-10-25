@@ -17,7 +17,10 @@ type Props = {
   shotLabel: string | null
   side: 'LEFT' | 'RIGHT'
   hologramImage: string | null
+  /** Red pro hologram, drawn on top when the overlay tab is open. */
+  proHologramImage?: string | null
   keypoints: HologramKeypoints | null
+  proKeypoints?: HologramKeypoints | null
   /** Back to the full-body Smart 3D stage. */
   onClose: () => void
 }
@@ -86,8 +89,9 @@ function JointCloseUp({
   reading,
   side,
   hologramImage,
+  proHologramImage,
   keypoints,
-}: Pick<Props, 'joint' | 'reading' | 'side' | 'hologramImage' | 'keypoints'>) {
+}: Pick<Props, 'joint' | 'reading' | 'side' | 'hologramImage' | 'proHologramImage' | 'keypoints'>) {
   const [box, setBox] = useState({ w: 0, h: 0 })
   const geo = keypoints ? jointGeometry(joint, keypoints, side === 'LEFT' ? 'left' : 'right') : null
   const b = geo?.b
@@ -116,6 +120,12 @@ function JointCloseUp({
     <View style={styles.closeUp} onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
       {hologramImage && box.w ? (
         <Image source={{ uri: hologramImage }} style={{ position: 'absolute', left, top, width: D, height: D }} />
+      ) : null}
+      {proHologramImage && box.w ? (
+        <Image
+          source={{ uri: proHologramImage }}
+          style={{ position: 'absolute', left, top, width: D, height: D, opacity: 0.72 }}
+        />
       ) : null}
       {B && box.w ? (
         <Svg width={box.w} height={box.h} style={StyleSheet.absoluteFill}>
@@ -161,7 +171,17 @@ function JointCloseUp({
   )
 }
 
-export function JointDetailView({ joint, reading, shotLabel, side, hologramImage, keypoints, onClose }: Props) {
+export function JointDetailView({
+  joint,
+  reading,
+  shotLabel,
+  side,
+  hologramImage,
+  proHologramImage,
+  keypoints,
+  proKeypoints,
+  onClose,
+}: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
@@ -240,7 +260,14 @@ export function JointDetailView({ joint, reading, shotLabel, side, hologramImage
         </View>
       </View>
 
-      <JointCloseUp joint={joint} reading={reading} side={side} hologramImage={hologramImage} keypoints={keypoints} />
+      <JointCloseUp
+        joint={joint}
+        reading={reading}
+        side={side}
+        hologramImage={layer === 'pro' ? (proHologramImage ?? null) : hologramImage}
+        proHologramImage={layer === 'overlay' ? proHologramImage : null}
+        keypoints={layer === 'pro' ? (proKeypoints ?? keypoints) : keypoints}
+      />
 
       <View style={styles.metricCard}>
         <View style={styles.badgeSmall}>

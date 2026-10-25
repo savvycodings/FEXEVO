@@ -15,6 +15,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { DOMAIN } from '../../constants'
+import { proLibraryVideoUrl } from '../lib/mediaUrl'
 import { authClient } from '../lib/auth-client'
 import { normalizePoseData, type PoseFrameRow, resolveTotalFrames } from '../lib/techniquePose'
 import type { ActivitySession } from '../lib/activitySession'
@@ -586,6 +587,7 @@ export function ActivitiesVideoAnalysis({
   const videoW = useMemo(() => Math.max(160, Math.floor(winW - 2 * SCREEN_GUTTER)), [winW])
 
   const [poseFrames, setPoseFrames] = useState<PoseFrameRow[]>([])
+  const [proVideoUrl, setProVideoUrl] = useState<string | null>(null)
   const [totalVidFrames, setTotalVidFrames] = useState(1)
   /** From `metrics.ai_analysis` after fetch — aligns pose colors with written feedback. */
   const [aiSnapshot, setAiSnapshot] = useState<{
@@ -642,6 +644,7 @@ export function ActivitiesVideoAnalysis({
   useEffect(() => {
     let cancelled = false
     setPoseFrames([])
+    setProVideoUrl(null)
     setAiSnapshot(null)
     setFullFeedbackText(null)
     setAiSections(null)
@@ -686,6 +689,7 @@ export function ActivitiesVideoAnalysis({
           rows
         )
         if (cancelled) return
+        setProVideoUrl(proLibraryVideoUrl(retrievalBlock))
         setFullFeedbackText(
           typeof body?.feedbackText === 'string' && body.feedbackText.trim().length > 0
             ? body.feedbackText.trim()
@@ -1040,7 +1044,7 @@ export function ActivitiesVideoAnalysis({
         <CompareWithPro
           videoUri={videoUri(session.videoPath)}
           referenceImage={referenceStill ? { uri: referenceStill } : null}
-          referenceVideoUri={correctionVideo?.video ? toDisplayImageUri(correctionVideo.video) : null}
+          referenceVideoUri={proVideoUrl}
           elbowDeg={typeof angles?.elbow_impact_deg === 'number' ? angles.elbow_impact_deg : null}
           elbowDeltaDeg={typeof angles?.elbow_delta_deg === 'number' ? angles.elbow_delta_deg : null}
           torsoDeg={typeof torso === 'number' ? torso : null}
@@ -1065,6 +1069,8 @@ export function ActivitiesVideoAnalysis({
         <BiggestMistakesView
           videoUri={videoUri(session.videoPath)}
           videoKey={session.analysisId}
+          poseFrames={poseFrames}
+          totalFrames={totalVidFrames}
           errors={aiSections?.technicalErrors ?? []}
           elbowDeg={typeof angles?.elbow_impact_deg === 'number' ? angles.elbow_impact_deg : null}
           torsoDeg={typeof torso === 'number' ? torso : null}
@@ -1182,6 +1188,8 @@ export function ActivitiesVideoAnalysis({
           <AnalysisOverview
             videoUri={videoUri(session.videoPath)}
             videoKey={session.analysisId}
+            poseFrames={poseFrames}
+            totalFrames={totalVidFrames}
             score={
               aiSnapshot?.scorePercent ??
               (typeof session.score === 'number' ? Math.round(session.score) : null)

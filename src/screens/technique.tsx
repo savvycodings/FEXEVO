@@ -82,6 +82,7 @@ import { TechniqueResults } from './techniqueResults/TechniqueResults'
 import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
 import { startHologram } from '../lib/hologramJob'
+import { proLibraryVideoUrl } from '../lib/mediaUrl'
 import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
@@ -573,6 +574,8 @@ export function Technique() {
   const [processFailedOverlayW, setProcessFailedOverlayW] = useState(0)
   const [sentToSupportVisible, setSentToSupportVisible] = useState(false)
   const trimPreviewRef = useRef<TrimClipPreviewHandle | null>(null)
+  /** Frame index of the contact cell, measured with the same fps as the thumbnails. */
+  const contactFrameRef = useRef<number | null>(null)
   /** Pixel dimensions from the trim preview `Video` — box height = f(width, aspect) so overlays stay aligned with decode geometry. */
   const [trimPreviewNaturalSize, setTrimPreviewNaturalSize] = useState<{ w: number; h: number } | null>(
     null
@@ -1779,7 +1782,11 @@ export function Technique() {
           body: JSON.stringify({
             techniqueVideoId: videoId,
             ...(currentTrimClip
-              ? { clips: [currentTrimClip], ...(contactMs != null ? { contactMs } : {}) }
+              ? {
+                  clips: [currentTrimClip],
+                  ...(contactMs != null ? { contactMs } : {}),
+                  ...(contactFrameRef.current != null ? { contactFrame: contactFrameRef.current } : {}),
+                }
               : clips.length > 0
                 ? {
                     clips: clips.map((c) => {
@@ -1836,7 +1843,7 @@ export function Technique() {
       setAnalysisId(id)
       setStep(2)
       // The hologram only needs the contact frame, so it builds while the analysis runs.
-      if (contactMs != null) void startHologram(id, contactMs)
+      if (contactMs != null) void startHologram(id, contactMs, contactFrameRef.current)
 
       const pollStart = Date.now()
       let done = false
@@ -1928,6 +1935,7 @@ export function Technique() {
         } else {
           setAnalysisGameBanner(null)
         }
+        if (contactMs != null) void startHologram(id, contactMs, contactFrameRef.current)
         if (options.navigateOnDone ?? true) {
           setStep(3)
         }
@@ -2700,6 +2708,9 @@ export function Technique() {
                         setMarkerProgressStable(p)
                         void applyTrimVideoSeek(p)
                       }}
+                      onChangeContactFrame={(frame) => {
+                        contactFrameRef.current = frame
+                      }}
                     />
                   ) : null}
 
@@ -2820,7 +2831,7 @@ export function Technique() {
                 ? { uri: correctionImages[0].correctedImage }
                 : correctionImages[0]?.correctedImage ?? null
             }
-            referenceVideoUri={correctionVideo?.video ?? null}
+            referenceVideoUri={proLibraryVideoUrl(retrieval)}
             elbowDeg={
               typeof biomechanicsSummary?.angles_deg_proxy?.elbow_impact_deg === 'number'
                 ? biomechanicsSummary.angles_deg_proxy.elbow_impact_deg
@@ -2855,6 +2866,8 @@ export function Technique() {
           <BiggestMistakesView
             videoUri={uploadedVideoUrl}
             videoKey={analysisId ?? 'technique-step3'}
+            poseFrames={step3PoseFrames}
+            totalFrames={overlayTotalFrames}
             errors={technicalErrorsList}
             elbowDeg={
               typeof biomechanicsSummary?.angles_deg_proxy?.elbow_impact_deg === 'number'
@@ -3291,6 +3304,8 @@ export function Technique() {
             <AnalysisOverview
               videoUri={uploadedVideoUrl}
               videoKey={analysisId ?? 'technique-step3'}
+              poseFrames={step3PoseFrames}
+              totalFrames={overlayTotalFrames}
               score={score}
               rating={typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null}
               summary={metricsBlurb}

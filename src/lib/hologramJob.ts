@@ -15,6 +15,10 @@ export type HologramState = {
   /** Contact skeleton in the image's framing; null for holograms built before keypoints existed. */
   keypoints: HologramKeypoints | null
   error: string | null
+  /** Red hologram of the matched pro-library clip. */
+  proStatus: HologramStatus
+  proImage: string | null
+  proKeypoints: HologramKeypoints | null
 }
 
 function parseKeypoints(raw: unknown): HologramKeypoints | null {
@@ -34,11 +38,16 @@ function toState(raw: unknown): HologramState | null {
   if (!body || typeof body !== 'object') return null
   const status = body.status
   if (status !== 'idle' && status !== 'running' && status !== 'done' && status !== 'failed') return null
+  const proStatus = body.proStatus
   return {
     status,
     image: resolveUploadUrl(typeof body.image === 'string' ? body.image : null),
     keypoints: parseKeypoints(body.keypoints),
     error: typeof body.error === 'string' ? body.error : null,
+    proStatus:
+      proStatus === 'running' || proStatus === 'done' || proStatus === 'failed' ? proStatus : 'idle',
+    proImage: resolveUploadUrl(typeof body.proImage === 'string' ? body.proImage : null),
+    proKeypoints: parseKeypoints(body.proKeypoints),
   }
 }
 
@@ -46,12 +55,20 @@ function toState(raw: unknown): HologramState | null {
  * Kicks off the hologram of the player at ball contact. Fire-and-forget: the server runs it
  * detached and the Smart 3D view polls for the result.
  */
-export async function startHologram(analysisId: string, contactMs?: number | null): Promise<HologramState | null> {
+export async function startHologram(
+  analysisId: string,
+  contactMs?: number | null,
+  contactFrame?: number | null
+): Promise<HologramState | null> {
   const res = await authClient
     .$fetch('/technique/hologram', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ analysisId, ...(contactMs != null ? { contactMs } : {}) }),
+      body: JSON.stringify({
+        analysisId,
+        ...(contactMs != null ? { contactMs } : {}),
+        ...(contactFrame != null ? { contactFrame } : {}),
+      }),
     })
     .catch(() => null)
   return res ? toState(res) : null
@@ -77,6 +94,9 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
     image: null,
     keypoints: null,
     error: null,
+    proStatus: 'idle',
+    proImage: null,
+    proKeypoints: null,
   })
 
   useEffect(() => {
@@ -94,7 +114,7 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
         if (cancelled) return
       }
       if (next) setState(next)
-      if (!next || next.status === 'running') timer = setTimeout(tick, POLL_MS)
+      if (!next || next.status === 'running' || next.proStatus === 'running') timer = setTimeout(tick, POLL_MS)
     }
     void tick()
     return () => {

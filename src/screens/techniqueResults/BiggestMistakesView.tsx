@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg'
 import { ThemeContext } from '../../context'
+import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
 
 type MistakeId = 'elbow' | 'racket' | 'torso' | 'foot'
 
@@ -67,11 +68,34 @@ const MISTAKES: Mistake[] = [
 type Props = {
   videoUri: string | null
   videoKey: string
+  poseFrames?: PoseFrameRow[]
+  totalFrames?: number | null
   errors: string[]
   elbowDeg: number | null
   torsoDeg: number | null
   onClose: () => void
   onSmart3d: () => void
+}
+
+function coverPx(nx: number, ny: number, boxW: number, boxH: number, natW: number, natH: number) {
+  const videoAR = natW / natH
+  const boxAR = boxW / boxH
+  const scale = videoAR > boxAR ? boxH / natH : boxW / natW
+  const ox = videoAR > boxAR ? (boxW - natW * scale) / 2 : 0
+  const oy = videoAR > boxAR ? 0 : (boxH - natH * scale) / 2
+  return { x: nx * natW * scale + ox, y: ny * natH * scale + oy }
+}
+
+function normBox(b: number[] | null | undefined): [number, number, number, number] | null {
+  if (!b || b.length !== 4) return null
+  const max = Math.max(b[0] ?? 0, b[1] ?? 0, b[2] ?? 0, b[3] ?? 0)
+  const scale = max > 1.5 ? 10000 : 1
+  const x1 = (b[0] ?? 0) / scale
+  const y1 = (b[1] ?? 0) / scale
+  const x2 = (b[2] ?? 0) / scale
+  const y2 = (b[3] ?? 0) / scale
+  if (![x1, y1, x2, y2].every((n) => Number.isFinite(n)) || x2 <= x1 || y2 <= y1) return null
+  return [x1, y1, x2, y2]
 }
 
 function clock(ms: number) {
@@ -93,6 +117,8 @@ function rangeDiff(value: number, low: number, high: number) {
 export function BiggestMistakesView({
   videoUri,
   videoKey,
+  poseFrames,
+  totalFrames,
   errors,
   elbowDeg,
   torsoDeg,
@@ -108,10 +134,56 @@ export function BiggestMistakesView({
   const [playing, setPlaying] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
   const mistake = MISTAKES.find((item) => item.id === selected) ?? MISTAKES[0]!
   const matched = matchError(errors, mistake.words)
   const frameH = frameW > 0 ? Math.round(frameW * (9 / 16)) : 180
   const playProgress = duration > 0 ? Math.max(0, Math.min(1, position / duration)) : 0
+  const markers = useMemo(() => {
+    if (!poseFrames?.length || !natural || frameW <= 0 || duration <= 0) return null
+    const last = poseFrames.reduce((max, row) => Math.max(max, row.frame), 0)
+    const total = totalFrames && totalFrames > 1 ? totalFrames : last + 1
+    const pose = nearestPoseByFrame(poseFrames, Math.round((position / duration) * Math.max(0, total - 1)))
+    if (!pose) return null
+    const lm = (name: string) => {
+      const p = pose.landmarks[name]
+      if (!p || (p.visibility ?? 1) < 0.3) return null
+      return coverPx(p.x, p.y, frameW, frameH, natural.w, natural.h)
+    }
+    const box = normBox(pose.racket_bbox)
+    let side: 'LEFT' | 'RIGHT' = pose.racket_hand === 'left' ? 'LEFT' : 'RIGHT'
+    if (pose.racket_hand !== 'left' && pose.racket_hand !== 'right' && box) {
+      const cx = (box[0] + box[2]) / 2
+      const lw = pose.landmarks.LEFT_WRIST
+      const rw = pose.landmarks.RIGHT_WRIST
+      if (lw && rw) side = Math.abs(lw.x - cx) <= Math.abs(rw.x - cx) ? 'LEFT' : 'RIGHT'
+    }
+    const mid = (names: string[]) => {
+      const pts = names.map(lm).filter((p): p is { x: number; y: number } => p != null)
+      if (!pts.length) return null
+      return {
+        x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+        y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+      }
+    }
+    const racket = box
+      ? (() => {
+          const a = coverPx(box[0], box[1], frameW, frameH, natural.w, natural.h)
+          const b = coverPx(box[2], box[3], frameW, frameH, natural.w, natural.h)
+          return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+        })()
+      : lm(`${side}_WRIST`)
+    const leftFoot = lm('LEFT_ANKLE')
+    const rightFoot = lm('RIGHT_ANKLE')
+    const foot =
+      leftFoot && rightFoot ? (leftFoot.y >= rightFoot.y ? leftFoot : rightFoot) : (leftFoot ?? rightFoot)
+    return {
+      elbow: lm(`${side}_ELBOW`),
+      racket,
+      torso: mid([`${side}_SHOULDER`, `${side}_HIP`, 'LEFT_SHOULDER', 'RIGHT_SHOULDER', 'LEFT_HIP', 'RIGHT_HIP']),
+      foot,
+    }
+  }, [poseFrames, totalFrames, position, duration, natural, frameW, frameH])
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -187,15 +259,25 @@ export function BiggestMistakesView({
                 style={{ width: frameW, height: frameH }}
                 resizeMode={ResizeMode.COVER}
                 onPlaybackStatusUpdate={onStatus}
+                onReadyForDisplay={(event) => {
+                  const n = event.naturalSize
+                  if (n?.width > 0 && n?.height > 0) setNatural({ w: n.width, h: n.height })
+                }}
               />
             ) : (
               <View style={{ width: '100%', height: frameH, backgroundColor: '#000' }} />
             )}
-            {MISTAKES.map((item) => (
+            {MISTAKES.map((item) => {
+              const spot = markers?.[item.id]
+              return (
               <Pressable
                 key={item.id}
                 onPress={() => setSelected(item.id)}
-                style={[styles.marker, item.marker, selected === item.id && styles.markerOn]}
+                style={[
+                  styles.marker,
+                  spot ? { left: spot.x - 13, top: spot.y - 13 } : item.marker,
+                  selected === item.id && styles.markerOn,
+                ]}
               >
                 <View style={[styles.markerDot, { backgroundColor: item.color }]}>
                   <Text allowFontScaling={false} style={styles.markerNum}>
@@ -203,7 +285,8 @@ export function BiggestMistakesView({
                   </Text>
                 </View>
               </Pressable>
-            ))}
+              )
+            })}
             <Pressable
               style={styles.fullscreen}
               onPress={() => void videoRef.current?.presentFullscreenPlayer()}

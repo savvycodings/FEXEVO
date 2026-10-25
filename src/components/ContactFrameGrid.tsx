@@ -25,6 +25,8 @@ type Props = {
   clipStartMs: number
   clipEndMs: number
   onChangeContactMs: (ms: number) => void
+  /** File frame index of the cell the player is on, once fps is known. */
+  onChangeContactFrame?: (frame: number) => void
 }
 
 /** Frame that is on screen at `ms`; 1 ms of slack absorbs player position rounding. */
@@ -41,7 +43,15 @@ function frameStartMs(index: number, frameMs: number) {
  * Real frames around the marked contact, one per captured frame, so the player can tap the exact
  * frame where the ball meets the racket instead of guessing on the timeline.
  */
-export function ContactFrameGrid({ videoUri, durationMs, contactMs, clipStartMs, clipEndMs, onChangeContactMs }: Props) {
+export function ContactFrameGrid({
+  videoUri,
+  durationMs,
+  contactMs,
+  clipStartMs,
+  clipEndMs,
+  onChangeContactMs,
+  onChangeContactFrame,
+}: Props) {
   const { t } = useTranslation()
   const ctx = useContext(ThemeContext)?.theme
   const theme = ctx?.backgroundColor != null ? ctx : defaultTheme
@@ -52,6 +62,8 @@ export function ContactFrameGrid({ videoUri, durationMs, contactMs, clipStartMs,
   const [aspect, setAspect] = useState(16 / 9)
   const [gridW, setGridW] = useState(0)
   const grabberRef = useRef<FrameGrabber | null>(null)
+  const onFrameRef = useRef(onChangeContactFrame)
+  onFrameRef.current = onChangeContactFrame
   /** Decoded frames survive recentering so stepping only decodes the new edge. */
   const cacheRef = useRef(new Map<number, string>())
 
@@ -133,11 +145,17 @@ export function ContactFrameGrid({ videoUri, durationMs, contactMs, clipStartMs,
     }
   }, [windowFrames, contactFrame, frameMs])
 
+  useEffect(() => {
+    if (contactFrame == null || !fpsMeasured) return
+    onFrameRef.current?.(contactFrame)
+  }, [contactFrame, fpsMeasured])
+
   if (contactFrame == null) return null
 
   const cellW = gridW > 0 ? (gridW - GAP * (COLS - 1)) / COLS : 0
   const cellH = cellW / aspect
-  const pick = (index: number) => onChangeContactMs(frameStartMs(index, frameMs))
+  // Same instant the thumbnail was decoded at, so the stored contact is that picture.
+  const pick = (index: number) => onChangeContactMs(Math.round((index + 0.25) * frameMs))
   const contactSec = (frameStartMs(contactFrame, frameMs) / 1000).toFixed(3)
 
   return (
@@ -146,9 +164,6 @@ export function ContactFrameGrid({ videoUri, durationMs, contactMs, clipStartMs,
         <View style={styles.headerText}>
           <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.semiBoldFont }]}>
             {t('technique.setClipScreen.contactFrameTitle')}
-          </Text>
-          <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: theme.regularFont }]}>
-            {t('technique.setClipScreen.contactFrameHint')}
           </Text>
         </View>
         <View style={styles.stepper}>

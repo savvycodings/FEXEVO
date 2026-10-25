@@ -345,6 +345,7 @@ export function PaddlePongGame({ paused = false }: Props) {
   const innerRadius = Math.max(12, FRAME_OUTER_RADIUS - FRAME_STROKE)
 
   const [layoutW, setLayoutW] = useState(0)
+  const [layoutH, setLayoutH] = useState(0)
   const [playerScore, setPlayerScore] = useState(0)
   const [opponentScore, setOpponentScore] = useState(0)
   const [missVisible, setMissVisible] = useState(false)
@@ -679,10 +680,18 @@ export function PaddlePongGame({ paused = false }: Props) {
     }
   }, [resetBall])
 
-  const courtWidth = layoutW > 0 ? Math.min(layoutW, 340) : undefined
+  const scoreBlock = 78
+  const fitW = layoutH > scoreBlock ? (layoutH - scoreBlock) * COURT_ASPECT : layoutW
+  const courtWidth = layoutW > 0 ? Math.max(160, Math.min(layoutW, fitW)) : undefined
 
   return (
-    <View style={styles.root} onLayout={(e) => setLayoutW(e.nativeEvent.layout.width)}>
+    <View
+      style={styles.root}
+      onLayout={(e) => {
+        setLayoutW(e.nativeEvent.layout.width)
+        setLayoutH(e.nativeEvent.layout.height)
+      }}
+    >
       <View
         style={[
           styles.scoreRow,
