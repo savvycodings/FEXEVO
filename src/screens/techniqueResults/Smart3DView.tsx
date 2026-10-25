@@ -1,12 +1,14 @@
-import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, BackHandler, Image, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import Svg, { Line } from 'react-native-svg'
+import Svg, { Circle, Line } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
-import { useHologram } from '../../lib/hologramJob'
+import { useHologram, type HologramKeypoints } from '../../lib/hologramJob'
+import { useContactJoints, type ContactJoint } from '../../lib/jointsApi'
+import { JointDetailView } from './JointDetailView'
 
 type Layer = 'player' | 'pro' | 'overlay'
 type Camera = 'front' | 'side' | 'top' | 'rotate' | 'court'
@@ -24,6 +26,74 @@ type Props = {
   /** Saved analysis whose ball-contact hologram replaces the stock front figure once it is built. */
   analysisId?: string | null
   onClose: () => void
+}
+
+/** Callouts that open a joint close-up, and the joint they measure. */
+const DETAIL_JOINT: Partial<Record<Joint, ContactJoint>> = {
+  shoulders: 'shoulder',
+  elbow: 'elbow',
+  wrist: 'wrist',
+  torso: 'torso',
+  knee: 'knee',
+}
+
+/** Glowing markers drawn on the hologram, as in the Smart 3D design, and the callout each belongs to. */
+const MARKERS: { name: string; joint: Joint }[] = [
+  { name: 'left_shoulder', joint: 'shoulders' },
+  { name: 'right_shoulder', joint: 'shoulders' },
+  { name: 'left_elbow', joint: 'elbow' },
+  { name: 'right_elbow', joint: 'elbow' },
+  { name: 'left_wrist', joint: 'wrist' },
+  { name: 'right_wrist', joint: 'wrist' },
+  { name: 'left_knee', joint: 'knee' },
+  { name: 'right_knee', joint: 'knee' },
+]
+const LIMBS: [string, string][] = [
+  ['left_shoulder', 'left_elbow'],
+  ['left_elbow', 'left_wrist'],
+  ['right_shoulder', 'right_elbow'],
+  ['right_elbow', 'right_wrist'],
+]
+
+/** Joint markers over a square hologram drawn with resizeMode="cover" in a w x h stage. */
+function JointMarkers({
+  keypoints,
+  w,
+  h,
+  highlight,
+}: {
+  keypoints: HologramKeypoints
+  w: number
+  h: number
+  highlight: Joint | null
+}) {
+  const d = Math.max(w, h)
+  const at = (name: string) => {
+    const p = keypoints[name]
+    return p ? { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d } : null
+  }
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
+      {LIMBS.map(([a, b]) => {
+        const A = at(a)
+        const B = at(b)
+        return A && B ? (
+          <Line key={`${a}-${b}`} x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke="#FFA53D" strokeWidth={3} strokeOpacity={0.8} />
+        ) : null
+      })}
+      {MARKERS.map(({ name, joint }) => {
+        const P = at(name)
+        if (!P) return null
+        const on = highlight === joint
+        return (
+          <Fragment key={name}>
+            <Circle cx={P.x} cy={P.y} r={on ? 18 : 12} fill="#FF8A3D" fillOpacity={on ? 0.4 : 0.28} />
+            <Circle cx={P.x} cy={P.y} r={on ? 9 : 6} fill="#FFC23D" stroke="#FFF4D6" strokeWidth={2} />
+          </Fragment>
+        )
+      })}
+    </Svg>
+  )
 }
 
 const FRONT = require('../../../assets/smart3d/front.png')
@@ -91,6 +161,9 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   const [highlight, setHighlight] = useState<Joint | null>(null)
   const [yaw, setYaw] = useState(0)
   const hologram = useHologram(analysisId)
+  const contactJoints = useContactJoints(analysisId)
+  const [detail, setDetail] = useState<ContactJoint | null>(null)
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 })
   /** The player's ball-contact hologram fills the stage, in place of the stock figure and grid. */
   const holoImage = layer !== 'pro' ? hologram.image : null
   const yawRef = useRef(yaw)
@@ -131,6 +204,26 @@ export function Smart3DView({ analysisId, onClose }: Props) {
     { id: 'overlay' as const, label: t('analysis.smart3dOverlay') },
   ]
 
+  function pressJoint(joint: Joint) {
+    setHighlight(joint)
+    const contact = DETAIL_JOINT[joint]
+    if (contact) setDetail(contact)
+  }
+
+  if (detail) {
+    return (
+      <JointDetailView
+        joint={detail}
+        reading={contactJoints?.joints[detail] ?? null}
+        shotLabel={contactJoints?.shotLabel ?? null}
+        side={contactJoints?.side ?? 'RIGHT'}
+        hologramImage={hologram.image}
+        keypoints={hologram.keypoints}
+        onClose={() => setDetail(null)}
+      />
+    )
+  }
+
   return (
     <View style={[styles.screen, { paddingBottom: 84 + insets.bottom }]}>
       <View style={styles.topRow}>
@@ -147,9 +240,16 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} trackStyle={styles.pill} />
         </View>
       </View>
-      <View style={[styles.stage, holoImage ? styles.stageCard : null]} {...pan.panHandlers}>
+      <View
+        style={[styles.stage, holoImage ? styles.stageCard : null]}
+        onLayout={(e) => setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+        {...pan.panHandlers}
+      >
         {holoImage ? (
           <Image source={{ uri: holoImage }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+        ) : null}
+        {holoImage && hologram.keypoints && stageSize.w ? (
+          <JointMarkers keypoints={hologram.keypoints} w={stageSize.w} h={stageSize.h} highlight={highlight} />
         ) : null}
         {holoImage ? null : (
           <Svg width="100%" height="100%" viewBox="0 0 240 520" style={StyleSheet.absoluteFill}>
@@ -196,7 +296,7 @@ export function Smart3DView({ analysisId, onClose }: Props) {
                 label={t(item.key)}
                 selected={highlight === item.id}
                 font={theme.mediumFont}
-                onPress={() => setHighlight(item.id)}
+                onPress={() => pressJoint(item.id)}
               />
             ))}
           </View>
@@ -208,7 +308,7 @@ export function Smart3DView({ analysisId, onClose }: Props) {
                 label={t(item.key)}
                 selected={highlight === item.id}
                 font={theme.mediumFont}
-                onPress={() => setHighlight(item.id)}
+                onPress={() => pressJoint(item.id)}
               />
             ))}
           </View>
