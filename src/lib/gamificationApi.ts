@@ -12,6 +12,8 @@ export type GamificationQuestRow = {
   periodKey?: string
 }
 
+export type AchievementProgressRow = { key: string; current: number; goal: number }
+
 export type GamificationState = {
   totalXp: number
   level: number
@@ -21,6 +23,8 @@ export type GamificationState = {
   loginStreak: number
   achievements: { key: string; unlockedAt: string; claimedAt: string }[]
   claimableAchievements: { key: string; earnedAt: string }[]
+  /** Added after older backends shipped; absent means no progress info. */
+  achievementProgress?: AchievementProgressRow[]
   dailyQuests: GamificationQuestRow[]
   weeklyQuests: GamificationQuestRow[]
   seasonQuests: GamificationQuestRow[]

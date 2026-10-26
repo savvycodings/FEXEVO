@@ -1,6 +1,5 @@
-import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import {
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +17,10 @@ import type { AnalysisCoreGroup, UserShotDeclaration } from '../navigation/types
 import { ANALYSIS_CORE_CATEGORIES, ANALYSIS_CORE_SHOTS, type CoachUploadShotItem } from '../lib/coachStudentUploadShots'
 import { CAMERA_ANGLES, type CameraAngleId } from '../lib/cameraAngles'
 import { CameraAngleExampleModal } from './CameraAngleExampleModal'
+import { FlowBackButton } from './shotFlow/FlowBackButton'
+import { ShotStepper } from './shotFlow/ShotStepper'
+import { ShotTile } from './shotFlow/ShotTile'
+import { PG, glow } from '../screens/progress/progressTheme'
 import { TEST_IDS } from '../lib/testIds'
 
 const HORIZONTAL_PAD = 24
@@ -25,113 +28,91 @@ const GRID_GAP = 12
 const ANGLE_COLS = 3
 const ANGLE_GAP = 10
 const ANGLE_TILE_ASPECT = 155 / 117
-/** Gap kept above a section when a tab scrolls to it. */
-const SCROLL_OFFSET = 12
-/** Space left below the Continue button after scrolling down to it. */
-const CONTINUE_SCROLL_MARGIN = 24
-const THUMB_SIZE = 96
+/** Near-square tiles like the mockup, capped so tablets don't get huge boxes. */
+const TILE_ASPECT = 0.95
+const TILE_MAX_H = 180
 
-const ACCENT = '#2A88F4'
-const ACCENT_MUTED = '#1848BA'
-const PILL_BG = '#0A1E5C'
-const PILL_SELECTED_BG = '#0034A6'
-const PILL_SELECTED_STROKE = '#00B8FF'
-const BACK_MUTED = '#86A7D2'
-
-type Tab = 'shot' | 'type' | 'camera'
+export type ShotPickerStep = 'shot' | 'type' | 'camera'
 
 export type ShotDetailsPickerProps = {
-  /** Uploaded clip, shown as the thumbnail in the corner. */
+  /** Uploaded clip, shown as the thumbnail beside the stepper. */
   videoUri: string | null
+  /** Leaves the flow (Back on the first step). */
   onBack: () => void
   onDone: (shot: UserShotDeclaration) => void
+  /** Reopening from Set Clip: restore these choices. */
+  initialShot?: UserShotDeclaration | null
+  initialStep?: ShotPickerStep
+}
+
+/** Finds the analysis group + shot item for a declaration made earlier. */
+function restoreChoice(shot: UserShotDeclaration | null | undefined): {
+  coreGroup: AnalysisCoreGroup | null
+  item: CoachUploadShotItem | null
+} {
+  if (!shot) return { coreGroup: null, item: null }
+  for (const c of ANALYSIS_CORE_CATEGORIES) {
+    if (c.category !== shot.category) continue
+    const item = ANALYSIS_CORE_SHOTS[c.coreGroup].find((s) => s.presetId === shot.strokePreset)
+    if (item) return { coreGroup: c.coreGroup, item }
+  }
+  return { coreGroup: null, item: null }
 }
 
 /**
- * After upload/record: one page to declare the shot (category → type → camera angle) before
- * Set Clip. Uses the analysis-supported shot list, so every pick is one the analyser scores.
+ * After upload/record: declare the shot one step per page (category → type → camera angle)
+ * before Set Clip. Uses the analysis-supported shot list, so every pick is one the analyser scores.
  */
-export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPickerProps) {
+export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initialStep }: ShotDetailsPickerProps) {
   const { t } = useTranslation()
   const { theme: ctx } = useContext(ThemeContext)
   const theme = ctx?.backgroundColor != null ? ctx : defaultTheme
   const { width: winW } = useWindowDimensions()
 
-  const [coreGroup, setCoreGroup] = useState<AnalysisCoreGroup | null>(null)
-  const [shot, setShot] = useState<CoachUploadShotItem | null>(null)
-  const [viewId, setViewId] = useState<CameraAngleId | null>(null)
+  const restored = useMemo(() => restoreChoice(initialShot), [initialShot])
+  const [coreGroup, setCoreGroup] = useState<AnalysisCoreGroup | null>(restored.coreGroup)
+  const [shot, setShot] = useState<CoachUploadShotItem | null>(restored.item)
+  const [viewId, setViewId] = useState<CameraAngleId | null>(
+    restored.item ? ((initialShot?.viewId as CameraAngleId | undefined) ?? null) : null
+  )
+  const [step, setStep] = useState<ShotPickerStep>(restored.item ? initialStep ?? 'shot' : 'shot')
   const [exampleAngleId, setExampleAngleId] = useState<CameraAngleId | null>(null)
 
-  const scrollRef = useRef<ScrollView>(null)
-  const sectionY = useRef<Record<Tab, number>>({ shot: 0, type: 0, camera: 0 })
-  /** Tab shown as current: follows taps and the scroll position. */
-  const [viewTab, setViewTab] = useState<Tab>('shot')
-  /** Ignore scroll events from our own animated scroll so the highlight doesn't flicker through tabs. */
-  const programmaticUntil = useRef(0)
-  const [viewportH, setViewportH] = useState(0)
-  const [lastSectionY, setLastSectionY] = useState(0)
-  const [contentEndY, setContentEndY] = useState(0)
-  /** Bottom edge of the Continue button, and whether picking an angle still owes a scroll down to it. */
-  const continueBottom = useRef<number | null>(null)
-  const scrollToContinuePending = useRef(false)
-
   const contentW = Math.min(winW, 640) - HORIZONTAL_PAD * 2
-  const pillW = (contentW - GRID_GAP) / 2
+  const tileW = (contentW - GRID_GAP) / 2
+  const tileH = Math.min(TILE_MAX_H, Math.round(tileW * TILE_ASPECT))
   const angleW = Math.floor((contentW - ANGLE_GAP * (ANGLE_COLS - 1)) / ANGLE_COLS) - 1
 
   const group = ANALYSIS_CORE_CATEGORIES.find((c) => c.coreGroup === coreGroup) ?? null
   const shots = coreGroup ? ANALYSIS_CORE_SHOTS[coreGroup] : []
-  const lastTab: Tab = !coreGroup ? 'shot' : !shot ? 'type' : 'camera'
-  // Room below the last section so any section can scroll up to the top.
-  const bottomSpacer = Math.max(40, viewportH - (contentEndY - lastSectionY) - SCROLL_OFFSET)
-  useEffect(() => setLastSectionY(sectionY.current[lastTab]), [lastTab])
   const canContinue = group != null && shot != null && viewId != null
-  useEffect(() => {
-    if (!canContinue) continueBottom.current = null
-  }, [canContinue])
 
   const fonts = useMemo(
     () => ({ regular: theme.regularFont, medium: theme.mediumFont, semiBold: theme.semiBoldFont }),
     [theme.regularFont, theme.mediumFont, theme.semiBoldFont]
   )
 
-  const scrollTo = (tab: Tab) => {
-    setViewTab(tab)
-    programmaticUntil.current = Date.now() + 600
-    scrollRef.current?.scrollTo({ y: Math.max(0, sectionY.current[tab] - SCROLL_OFFSET), animated: true })
-  }
+  const stepEnabled = (key: ShotPickerStep) =>
+    key === 'shot' || (key === 'type' && coreGroup != null) || (key === 'camera' && shot != null)
 
-  const scrollToContinue = () => {
-    if (continueBottom.current == null || viewportH === 0) return
-    scrollToContinuePending.current = false
-    setViewTab('camera')
-    programmaticUntil.current = Date.now() + 600
-    scrollRef.current?.scrollTo({ y: Math.max(0, continueBottom.current + CONTINUE_SCROLL_MARGIN - viewportH), animated: true })
-  }
-
-  const onScroll = (y: number) => {
-    if (Date.now() < programmaticUntil.current) return
-    const order: Tab[] = ['shot', 'type', 'camera']
-    const reachable = order.slice(0, order.indexOf(lastTab) + 1)
-    let current: Tab = 'shot'
-    for (const tab of reachable) if (sectionY.current[tab] - SCROLL_OFFSET <= y + 24) current = tab
-    setViewTab(current)
-  }
-
-  const onSectionLayout = (tab: Tab, y: number) => {
-    sectionY.current[tab] = y
-    if (tab === lastTab) setLastSectionY(y)
+  const goBack = () => {
+    if (step === 'camera') setStep('type')
+    else if (step === 'type') setStep('shot')
+    else onBack()
   }
 
   const pickGroup = (next: AnalysisCoreGroup) => {
-    if (next !== coreGroup) setShot(null)
+    if (next !== coreGroup) {
+      setShot(null)
+      setViewId(null)
+    }
     setCoreGroup(next)
-    setTimeout(() => scrollTo('type'), 50)
+    setStep('type')
   }
 
   const pickShot = (next: CoachUploadShotItem) => {
     setShot(next)
-    setTimeout(() => scrollTo('camera'), 50)
+    setStep('camera')
   }
 
   const finish = () => {
@@ -145,78 +126,34 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPicke
     })
   }
 
-  const tabs: { id: Tab; n: number; label: string }[] = [
-    { id: 'shot', n: 1, label: t('technique.shotPicker.tabShot') },
-    { id: 'type', n: 2, label: t('technique.shotPicker.tabType') },
-    { id: 'camera', n: 3, label: t('technique.shotPicker.tabCamera') },
-  ]
-  const tabEnabled = (id: Tab) => id === 'shot' || (id === 'type' && coreGroup != null) || (id === 'camera' && shot != null)
+  const shotLabel = (s: CoachUploadShotItem) =>
+    s.labelLine2Key ? `${t(s.labelKey)} ${t(s.labelLine2Key)}` : t(s.labelKey)
 
-  const renderPill = (key: string, label: string, selected: boolean, onPress: () => void, testID: string) => (
-    <TouchableOpacity
-      key={key}
-      activeOpacity={0.82}
-      onPress={onPress}
-      testID={testID}
-      style={[styles.pill, { width: pillW }, selected && styles.pillSelected]}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-    >
-      <Text allowFontScaling={false} style={[styles.pillText, { fontFamily: fonts.medium }, selected && styles.pillTextSelected]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
-  )
+  /** Two columns; an odd last tile spans the full width (Serve in the mockup). */
+  const tileWidth = (index: number, count: number) =>
+    count % 2 === 1 && index === count - 1 ? contentW : tileW
 
   return (
     <View style={styles.root}>
-      {/* Pinned: back, step tabs and clip thumbnail stay visible while the options scroll. */}
-      <View style={styles.header}>
-        <View style={styles.topRow}>
-          <View style={styles.topLeft}>
-            <TouchableOpacity
-              onPress={onBack}
-              activeOpacity={0.85}
-              style={styles.backRow}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityRole="button"
-              accessibilityLabel={t('studentProfile.backToUploads')}
-              testID={TEST_IDS.shotPickerBack}
-            >
-              <Ionicons name="chevron-back" size={30} color={BACK_MUTED} />
-              <Text allowFontScaling={false} style={[styles.backLabel, { fontFamily: fonts.regular }]}>
-                {t('studentProfile.backToUploads')}
-              </Text>
-            </TouchableOpacity>
-            <View style={styles.tabsRow}>
-              {tabs.map((tab) => {
-                const active = tab.id === viewTab
-                return (
-                  <TouchableOpacity
-                    key={tab.id}
-                    style={styles.tab}
-                    disabled={!tabEnabled(tab.id)}
-                    onPress={() => scrollTo(tab.id)}
-                    activeOpacity={0.8}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text
-                      allowFontScaling={false}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      style={[styles.tabText, { fontFamily: fonts.regular }, active && styles.tabTextActive]}
-                    >
-                      <Text style={{ fontFamily: fonts.semiBold }}>{tab.n}</Text> {tab.label}
-                    </Text>
-                    <View style={[styles.tabBar, active && styles.tabBarActive]} />
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </View>
-          <View style={styles.thumb}>
-            {videoUri ? (
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <FlowBackButton
+          onPress={goBack}
+          fontFamily={fonts.regular}
+          testID={TEST_IDS.shotPickerBack}
+          style={styles.back}
+        />
+        <ShotStepper
+          steps={[
+            { key: 'shot', label: t('technique.shotPicker.tabShot') },
+            { key: 'type', label: t('technique.shotPicker.tabType') },
+            { key: 'camera', label: t('technique.shotPicker.tabCamera') },
+          ]}
+          current={step}
+          enabled={stepEnabled}
+          onPress={setStep}
+          fontFamily={fonts.regular}
+          thumbnail={
+            videoUri ? (
               <Video
                 source={{ uri: videoUri }}
                 style={StyleSheet.absoluteFill}
@@ -225,53 +162,66 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPicke
                 shouldPlay={false}
                 isMuted
               />
-            ) : null}
-          </View>
-        </View>
-      </View>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        scrollEventThrottle={32}
-        onScroll={(e) => onScroll(e.nativeEvent.contentOffset.y)}
-        onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
-      >
-        <View onLayout={(e) => onSectionLayout('shot', e.nativeEvent.layout.y)}>
-          <Text allowFontScaling={false} style={[styles.sectionTitle, { fontFamily: fonts.medium }]}>
-            {t('studentProfile.shotCategoryTitle')}
-          </Text>
-          <View style={styles.grid}>
-            {ANALYSIS_CORE_CATEGORIES.map((c) =>
-              renderPill(c.coreGroup, t(c.labelKey), c.coreGroup === coreGroup, () => pickGroup(c.coreGroup), TEST_IDS.shotCategory(c.coreGroup))
-            )}
-          </View>
-        </View>
+            ) : (
+              <View />
+            )
+          }
+        />
 
-        {coreGroup ? (
-          <View onLayout={(e) => onSectionLayout('type', e.nativeEvent.layout.y)}>
-            <Text allowFontScaling={false} style={[styles.sectionTitle, { fontFamily: fonts.medium }]}>
-              {t('technique.shotPicker.shotType')}
+        {step === 'shot' ? (
+          <View style={styles.section}>
+            <Text allowFontScaling={false} style={[styles.title, { fontFamily: fonts.medium }]}>
+              {t('studentProfile.shotCategoryTitle')}
+            </Text>
+            <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: fonts.regular }]}>
+              {t('technique.shotPicker.categorySubtitle')}
             </Text>
             <View style={styles.grid}>
-              {shots.map((s) =>
-                renderPill(
-                  s.presetId + s.labelKey,
-                  s.labelLine2Key ? `${t(s.labelKey)} ${t(s.labelLine2Key)}` : t(s.labelKey),
-                  shot?.labelKey === s.labelKey,
-                  () => pickShot(s),
-                  TEST_IDS.shotOption(s.presetId)
-                )
-              )}
+              {ANALYSIS_CORE_CATEGORIES.map((c, i) => (
+                <ShotTile
+                  key={c.coreGroup}
+                  label={t(c.labelKey)}
+                  selected={c.coreGroup === coreGroup}
+                  width={tileWidth(i, ANALYSIS_CORE_CATEGORIES.length)}
+                  height={tileH}
+                  onPress={() => pickGroup(c.coreGroup)}
+                  fontFamily={fonts.medium}
+                  testID={TEST_IDS.shotCategory(c.coreGroup)}
+                />
+              ))}
             </View>
           </View>
         ) : null}
 
-        {shot ? (
-          <View onLayout={(e) => onSectionLayout('camera', e.nativeEvent.layout.y)}>
-            <View style={styles.sectionHeaderRow}>
-              <Text allowFontScaling={false} style={[styles.sectionTitle, styles.sectionTitleInRow, { fontFamily: fonts.medium }]}>
+        {step === 'type' ? (
+          <View style={styles.section}>
+            <Text allowFontScaling={false} style={[styles.title, { fontFamily: fonts.medium }]}>
+              {t('technique.shotPicker.shotType')}
+            </Text>
+            <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: fonts.regular }]}>
+              {t('technique.shotPicker.typeSubtitle')}
+            </Text>
+            <View style={styles.grid}>
+              {shots.map((s, i) => (
+                <ShotTile
+                  key={s.presetId + s.labelKey}
+                  label={shotLabel(s)}
+                  selected={shot?.labelKey === s.labelKey}
+                  width={tileWidth(i, shots.length)}
+                  height={tileH}
+                  onPress={() => pickShot(s)}
+                  fontFamily={fonts.medium}
+                  testID={TEST_IDS.shotOption(s.presetId)}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {step === 'camera' ? (
+          <View style={styles.section}>
+            <View style={styles.titleRow}>
+              <Text allowFontScaling={false} style={[styles.title, styles.titleInRow, { fontFamily: fonts.medium }]}>
                 {t('technique.shotPicker.cameraAngle')}
               </Text>
               <TouchableOpacity
@@ -280,51 +230,48 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPicke
                 accessibilityRole="button"
                 accessibilityLabel={t('technique.shotPicker.cameraAngle')}
               >
-                <Ionicons name="information-circle-outline" size={28} color={BACK_MUTED} />
+                <Ionicons name="information-circle-outline" size={28} color={PG.labelBlue} />
               </TouchableOpacity>
             </View>
+            <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: fonts.regular }]}>
+              {t('technique.shotPicker.cameraSubtitle')}
+            </Text>
             <View style={styles.angleGrid}>
-              {CAMERA_ANGLES.map((angle) => {
-                const active = viewId === angle.id
-                return (
-                  <TouchableOpacity
-                    key={angle.id}
-                    activeOpacity={0.82}
-                    onPress={() => setExampleAngleId(angle.id)}
-                    testID={TEST_IDS.viewAngle(angle.id)}
-                    style={[styles.angleTile, { width: angleW, height: Math.round(angleW * ANGLE_TILE_ASPECT) }, active && styles.angleTileActive]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                    accessibilityLabel={t(angle.labelKey)}
-                  >
-                    <Image source={angle.tile} style={styles.angleImage} resizeMode="contain" />
-                  </TouchableOpacity>
-                )
-              })}
+              {CAMERA_ANGLES.map((angle) => (
+                <ShotTile
+                  key={angle.id}
+                  image={angle.tile}
+                  selected={viewId === angle.id}
+                  width={angleW}
+                  height={Math.round(angleW * ANGLE_TILE_ASPECT)}
+                  onPress={() => setExampleAngleId(angle.id)}
+                  testID={TEST_IDS.viewAngle(angle.id)}
+                  accessibilityLabel={t(angle.labelKey)}
+                />
+              ))}
             </View>
+            {canContinue ? (
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={finish}
+                testID={TEST_IDS.setClipContinue}
+                style={[styles.continueOuter, glow(16, 0.6)]}
+                accessibilityRole="button"
+              >
+                <LinearGradient
+                  colors={['#5BC0FF', '#0A2BFF']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.continueGradient}
+                >
+                  <Text allowFontScaling={false} style={[styles.continueText, { fontFamily: fonts.medium }]}>
+                    {t('studentProfile.continueToSetClip')}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
-
-        {canContinue ? (
-          <TouchableOpacity
-            activeOpacity={0.88}
-            onPress={finish}
-            testID={TEST_IDS.setClipContinue}
-            style={styles.continueOuter}
-            accessibilityRole="button"
-            onLayout={(e) => {
-              continueBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height
-              if (scrollToContinuePending.current) scrollToContinue()
-            }}
-          >
-            <LinearGradient colors={['#00B8FF', '#1848BA']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.continueGradient}>
-              <Text allowFontScaling={false} style={[styles.continueText, { fontFamily: fonts.medium }]}>
-                {t('studentProfile.continueToSetClip')}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        ) : null}
-        <View onLayout={(e) => setContentEndY(e.nativeEvent.layout.y)} style={{ height: bottomSpacer }} />
       </ScrollView>
 
       <CameraAngleExampleModal
@@ -334,11 +281,6 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone }: ShotDetailsPicke
         onSelect={(id) => {
           setViewId(id)
           setExampleAngleId(null)
-          // First pick: the button's onLayout runs the scroll. Re-pick: the button is already laid out.
-          scrollToContinuePending.current = true
-          setTimeout(() => {
-            if (scrollToContinuePending.current) scrollToContinue()
-          }, 50)
         }}
         onClose={() => setExampleAngleId(null)}
       />
@@ -354,60 +296,18 @@ const styles = StyleSheet.create({
     maxWidth: 640,
     alignSelf: 'center',
     paddingHorizontal: HORIZONTAL_PAD,
-    paddingTop: 20,
+    paddingTop: 16,
     paddingBottom: 40,
   },
-  header: {
-    width: '100%',
-    maxWidth: 640,
-    alignSelf: 'center',
-    paddingHorizontal: HORIZONTAL_PAD,
-    paddingTop: 20,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(42,136,244,0.15)',
-  },
-  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  topLeft: { flex: 1, minWidth: 0 },
-  backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 22, alignSelf: 'flex-start' },
-  backLabel: { color: BACK_MUTED, fontSize: 12, lineHeight: 16 },
-  tabsRow: { flexDirection: 'row', gap: 8 },
-  tab: { flex: 1, alignItems: 'center', gap: 10 },
-  tabText: { color: ACCENT_MUTED, fontSize: 15 },
-  tabTextActive: { color: ACCENT },
-  tabBar: { alignSelf: 'stretch', height: 3, borderRadius: 2, backgroundColor: ACCENT_MUTED, opacity: 0.6 },
-  tabBarActive: { backgroundColor: ACCENT, opacity: 1 },
-  thumb: {
-    width: THUMB_SIZE,
-    height: THUMB_SIZE,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: ACCENT,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-  },
-  sectionTitle: { color: '#FFFFFF', fontSize: 24, lineHeight: 30, marginBottom: 18 },
-  sectionTitleInRow: { marginBottom: 0 },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP, marginBottom: 40 },
-  pill: {
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: PILL_BG,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-  },
-  pillSelected: { backgroundColor: PILL_SELECTED_BG, borderColor: PILL_SELECTED_STROKE },
-  pillText: { color: ACCENT, fontSize: 17, textAlign: 'center' },
-  pillTextSelected: { color: '#FFFFFF' },
-  angleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: ANGLE_GAP, marginBottom: 32 },
-  angleTile: { borderRadius: 14, overflow: 'hidden', backgroundColor: '#01194D', borderWidth: 2, borderColor: 'transparent' },
-  angleTileActive: { borderColor: PILL_SELECTED_STROKE },
-  angleImage: { width: '100%', height: '100%' },
-  continueOuter: { borderRadius: 16, overflow: 'hidden' },
-  continueGradient: { height: 58, alignItems: 'center', justifyContent: 'center' },
+  back: { marginBottom: 18 },
+  section: { marginTop: 24 },
+  title: { color: '#FFFFFF', fontSize: 28, lineHeight: 34 },
+  titleInRow: { flexShrink: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  subtitle: { color: '#8FA8D6', fontSize: 16, lineHeight: 22, marginTop: 8, marginBottom: 20 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
+  angleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: ANGLE_GAP, marginBottom: 28 },
+  continueOuter: { borderRadius: 20 },
+  continueGradient: { height: 58, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   continueText: { color: '#FFFFFF', fontSize: 18 },
 })

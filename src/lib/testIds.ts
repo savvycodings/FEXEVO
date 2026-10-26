@@ -21,6 +21,8 @@ export const TEST_IDS = {
   signinPassword: 'signin-password',
   signinSubmit: 'signin-submit',
   signinForgot: 'signin-forgot',
+  signinRestart: 'signin-restart',
+  signinToSignup: 'signin-to-signup',
   otpDigit: (i: number) => `otp-digit-${i}`,
   verifySubmit: 'verify-submit',
   accountCreatedDone: 'account-created-done',
@@ -80,4 +82,6 @@ export const TEST_IDS = {
   viewAngle: (id: string) => `view-angle-${id}`,
   viewAngleConfirm: 'view-angle-confirm',
   setClipContinue: 'set-clip-continue',
+  setClipBack: 'set-clip-back',
+  coachHomeAnalyze: 'coach-home-analyze',
 } as const

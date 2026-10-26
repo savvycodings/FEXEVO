@@ -33,10 +33,17 @@ const IMG = {
 
 export type AchievementKind = 'unlocked' | 'claimable' | 'locked'
 
+export type AchievementCategory = 'technique' | 'play' | 'consistency' | 'special'
+
+export const ACHIEVEMENT_CATEGORIES: AchievementCategory[] = ['technique', 'play', 'consistency', 'special']
+
 export type AchievementDef = {
   key: string
   kind: AchievementKind
   unlockedImage: number
+  category: AchievementCategory
+  /** Ionicons glyph drawn inside the hexagon on Progress → Achievements cards. */
+  icon: string
   /** Short label (≤3 words) — grid / list. */
   labelKey: string
   /** Full requirement — achievement detail screen. */
@@ -44,8 +51,65 @@ export type AchievementDef = {
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
+  // Progress → Achievements opens on these (mockup order).
+  {
+    key: 'first-match',
+    category: 'play',
+    icon: 'trophy-outline',
+    kind: 'locked',
+    unlockedImage: IMG.firstUpload,
+    labelKey: 'progress.badgeFirstMatch',
+    descriptionKey: 'progress.badgeFirstMatchDesc',
+  },
+  {
+    key: 'matches-10',
+    category: 'play',
+    icon: 'stats-chart-outline',
+    kind: 'locked',
+    unlockedImage: IMG.upload10,
+    labelKey: 'progress.badgeMatches10',
+    descriptionKey: 'progress.badgeMatches10Desc',
+  },
+  {
+    key: 'win-streak-3',
+    category: 'play',
+    icon: 'flame-outline',
+    kind: 'locked',
+    unlockedImage: IMG.improveShot,
+    labelKey: 'progress.badgeWinStreak3',
+    descriptionKey: 'progress.badgeWinStreak3Desc',
+  },
+  {
+    key: 'shot-analyzer',
+    category: 'technique',
+    icon: 'checkmark-done-outline',
+    kind: 'locked',
+    unlockedImage: IMG.firstAi,
+    labelKey: 'progress.badgeShotAnalyzer',
+    descriptionKey: 'progress.badgeShotAnalyzerDesc',
+  },
+  {
+    key: 'weekly-consistency',
+    category: 'consistency',
+    icon: 'calendar-outline',
+    kind: 'locked',
+    unlockedImage: IMG.uploadFullWeek,
+    labelKey: 'progress.badgeWeeklyConsistency',
+    descriptionKey: 'progress.badgeWeeklyConsistencyDesc',
+  },
+  {
+    key: 'technique-improver',
+    category: 'technique',
+    icon: 'trending-up-outline',
+    kind: 'locked',
+    unlockedImage: IMG.threeTechniques90,
+    labelKey: 'progress.badgeTechniqueImprover',
+    descriptionKey: 'progress.badgeTechniqueImproverDesc',
+  },
   {
     key: 'streak-3',
+    category: 'consistency',
+    icon: 'calendar-number-outline',
     kind: 'locked',
     unlockedImage: IMG.streak3,
     labelKey: 'progress.badge3DayStreak',
@@ -53,6 +117,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'first-upload',
+    category: 'play',
+    icon: 'cloud-upload-outline',
     kind: 'locked',
     unlockedImage: IMG.firstUpload,
     labelKey: 'progress.badgeFirstUpload',
@@ -60,6 +126,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'streak-7',
+    category: 'consistency',
+    icon: 'today-outline',
     kind: 'locked',
     unlockedImage: IMG.streak7,
     labelKey: 'progress.badge7DayStreak',
@@ -67,6 +135,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'streak-30',
+    category: 'consistency',
+    icon: 'calendar-clear-outline',
     kind: 'locked',
     unlockedImage: IMG.streak30,
     labelKey: 'progress.badge30DayStreak',
@@ -74,6 +144,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'above-50',
+    category: 'technique',
+    icon: 'speedometer-outline',
     kind: 'locked',
     unlockedImage: IMG.above50,
     labelKey: 'progress.badgeAbove50',
@@ -81,6 +153,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'above-60-defence',
+    category: 'technique',
+    icon: 'shield-outline',
     kind: 'locked',
     unlockedImage: IMG.above60Defence,
     labelKey: 'progress.badgeAbove60Defence',
@@ -88,6 +162,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'above-80',
+    category: 'technique',
+    icon: 'ribbon-outline',
     kind: 'locked',
     unlockedImage: IMG.above80,
     labelKey: 'progress.badgeAbove80',
@@ -95,6 +171,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'above-90',
+    category: 'technique',
+    icon: 'medal-outline',
     kind: 'locked',
     unlockedImage: IMG.above90,
     labelKey: 'progress.badgeAbove90',
@@ -102,6 +180,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'net-play-60',
+    category: 'technique',
+    icon: 'git-network-outline',
     kind: 'locked',
     unlockedImage: IMG.netPlay60,
     labelKey: 'progress.badgeNetPlay60',
@@ -109,6 +189,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'smash-60',
+    category: 'technique',
+    icon: 'flash-outline',
     kind: 'locked',
     unlockedImage: IMG.smash60,
     labelKey: 'progress.badgeSmash60',
@@ -116,6 +198,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'three-techniques-90',
+    category: 'technique',
+    icon: 'star-outline',
     kind: 'locked',
     unlockedImage: IMG.threeTechniques90,
     labelKey: 'progress.badgeThreeTechniques90',
@@ -123,6 +207,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'the-goat',
+    category: 'special',
+    icon: 'diamond-outline',
     kind: 'locked',
     unlockedImage: IMG.theGoat,
     labelKey: 'progress.badgeTheGoat',
@@ -130,6 +216,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'coach-rate-100',
+    category: 'special',
+    icon: 'thumbs-up-outline',
     kind: 'locked',
     unlockedImage: IMG.coachRate100,
     labelKey: 'progress.badgeCoachRate100',
@@ -137,6 +225,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'first-ai',
+    category: 'technique',
+    icon: 'sparkles-outline',
     kind: 'locked',
     unlockedImage: IMG.firstAi,
     labelKey: 'progress.badgeFirstAi',
@@ -144,6 +234,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'first-coach-review',
+    category: 'special',
+    icon: 'school-outline',
     kind: 'locked',
     unlockedImage: IMG.firstCoachReview,
     labelKey: 'progress.badgeFirstCoachReview',
@@ -151,6 +243,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'improve-shot',
+    category: 'technique',
+    icon: 'arrow-up-circle-outline',
     kind: 'locked',
     unlockedImage: IMG.improveShot,
     labelKey: 'progress.badgeImproveShot',
@@ -158,6 +252,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'add-friend',
+    category: 'special',
+    icon: 'person-add-outline',
     kind: 'locked',
     unlockedImage: IMG.addFriend,
     labelKey: 'progress.badgeAddFriend',
@@ -165,6 +261,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'upload-10',
+    category: 'play',
+    icon: 'albums-outline',
     kind: 'locked',
     unlockedImage: IMG.upload10,
     labelKey: 'progress.badgeUpload10',
@@ -172,6 +270,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'upload-20',
+    category: 'play',
+    icon: 'layers-outline',
     kind: 'locked',
     unlockedImage: IMG.upload20,
     labelKey: 'progress.badgeUpload20',
@@ -179,6 +279,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'upload-40',
+    category: 'play',
+    icon: 'library-outline',
     kind: 'locked',
     unlockedImage: IMG.upload40,
     labelKey: 'progress.badgeUpload40',
@@ -186,6 +288,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'upload-full-week',
+    category: 'consistency',
+    icon: 'time-outline',
     kind: 'locked',
     unlockedImage: IMG.uploadFullWeek,
     labelKey: 'progress.badgeUploadFullWeek',
@@ -193,6 +297,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'monthly-year',
+    category: 'consistency',
+    icon: 'hourglass-outline',
     kind: 'locked',
     unlockedImage: IMG.monthlyYear,
     labelKey: 'progress.badgeMonthlyYear',
@@ -200,6 +306,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     key: 'secret',
+    category: 'special',
+    icon: 'lock-closed-outline',
     kind: 'locked',
     unlockedImage: IMG.secret,
     labelKey: 'progress.badgeSecret',
@@ -246,57 +354,65 @@ export function getAchievementGridImage(achievement: AchievementDef): number {
   return achievement.kind === 'unlocked' ? achievement.unlockedImage : LOCKED_BADGE_GRID
 }
 
-/** Progress tab preview row — small locked hexagon. */
-export function getAchievementDisplayImage(achievement: AchievementDef): number {
-  return getAchievementDetailImage(achievement)
-}
-
 export function countUnlockedAchievements(unlockedKeys?: ReadonlySet<string> | string[]): number {
   if (unlockedKeys) return countUnlockedFromKeys(unlockedKeys)
   return ACHIEVEMENTS.filter((a) => a.kind === 'unlocked').length
 }
 
-export const ACHIEVEMENT_PREVIEW_LOCKED_KEY_PREFIX = 'preview-locked-'
-
-export type ClaimedAchievementRecord = {
-  key: string
-  unlockedAt?: string
-  claimedAt?: string
+/**
+ * Goals used only when the backend sends no `achievementProgress` (older server).
+ * Mirrors `progressFor` in BEXevo `src/gamification/achievements.ts`.
+ */
+const FALLBACK_GOALS: Record<string, number> = {
+  'streak-3': 3,
+  'streak-7': 7,
+  'streak-30': 30,
+  'upload-10': 10,
+  'upload-20': 20,
+  'upload-40': 40,
+  'upload-full-week': 7,
+  'monthly-year': 12,
+  'above-50': 50,
+  'above-80': 80,
+  'above-90': 90,
+  'the-goat': 95,
+  'above-60-defence': 60,
+  'net-play-60': 60,
+  'smash-60': 60,
+  'three-techniques-90': 3,
+  secret: 5,
+  'matches-10': 10,
+  'win-streak-3': 3,
+  'shot-analyzer': 10,
+  'weekly-consistency': 3,
+  'technique-improver': 10,
 }
 
-/** Progress tab preview — most recently claimed badges, padded with generic locked slots. */
-export function buildAchievementPreviewBadges(
-  claimed: ReadonlyArray<ClaimedAchievementRecord>,
+export type AchievementCard = AchievementDef & { current: number; goal: number }
+
+export type AchievementFilter = 'all' | AchievementCategory
+
+const KIND_ORDER: Record<AchievementKind, number> = { claimable: 0, unlocked: 1, locked: 2 }
+
+/**
+ * Cards for Progress → Achievements: catalog + server state + progress, filtered by category.
+ * Claimable first, then claimed, then locked; catalog order within each group.
+ */
+export function buildAchievementCards(
+  progress: ReadonlyMap<string, { current: number; goal: number }>,
   claimedKeys: ReadonlySet<string> | string[],
-  claimableKeys: ReadonlySet<string> | string[] = [],
-  previewCount = 4
-): AchievementDef[] {
-  const keyed = withAchievementState(claimedKeys, claimableKeys)
-  const byKey = new Map(keyed.map((a) => [a.key, a]))
-
-  const recentClaimed = [...claimed]
-    .sort((a, b) => {
-      const ta = Date.parse(a.claimedAt || a.unlockedAt || '') || 0
-      const tb = Date.parse(b.claimedAt || b.unlockedAt || '') || 0
-      return tb - ta
+  claimableKeys: ReadonlySet<string> | string[],
+  filter: AchievementFilter = 'all'
+): AchievementCard[] {
+  return withAchievementState(claimedKeys, claimableKeys)
+    .map((a, index) => {
+      const p = progress.get(a.key)
+      const goal = Math.max(1, p?.goal ?? FALLBACK_GOALS[a.key] ?? 1)
+      const earned = a.kind !== 'locked'
+      const current = earned ? goal : Math.max(0, Math.min(goal, p?.current ?? 0))
+      return { card: { ...a, current, goal }, index }
     })
-    .slice(0, previewCount)
-    .map((row) => byKey.get(row.key))
-    .filter((a): a is AchievementDef => a != null && a.kind === 'unlocked')
-
-  const result: AchievementDef[] = [...recentClaimed]
-  while (result.length < previewCount) {
-    result.push({
-      key: `${ACHIEVEMENT_PREVIEW_LOCKED_KEY_PREFIX}${result.length}`,
-      kind: 'locked',
-      unlockedImage: LOCKED_BADGE_DETAIL,
-      labelKey: 'progress.badgeLockedSlot',
-      descriptionKey: 'progress.badgeLockedSlot',
-    })
-  }
-  return result
-}
-
-export function isAchievementPreviewPlaceholder(key: string): boolean {
-  return key.startsWith(ACHIEVEMENT_PREVIEW_LOCKED_KEY_PREFIX)
+    .filter(({ card }) => filter === 'all' || card.category === filter)
+    .sort((x, y) => KIND_ORDER[x.card.kind] - KIND_ORDER[y.card.kind] || x.index - y.index)
+    .map(({ card }) => card)
 }

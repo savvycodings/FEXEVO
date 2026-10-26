@@ -31,7 +31,15 @@ import { TEST_IDS } from '../lib/testIds'
 
 const APP_LOGO = require("../../assets/logo.png");
 
-export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) {
+type SignInProps = {
+  onForgotPassword?: () => void;
+  /** Opens sign up from the bottom card. */
+  onSignUp?: () => void;
+  /** Returns to the welcome slides. */
+  onRestart?: () => void;
+};
+
+export function SignIn({ onForgotPassword, onSignUp, onRestart }: SignInProps) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { theme } = useContext(ThemeContext);
@@ -138,7 +146,18 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#signInRadialBg)" />
       </Svg>
-      <View style={styles.content}>
+      <View style={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
+        {onRestart ? (
+          <TouchableOpacity
+            style={styles.restartTouch}
+            onPress={onRestart}
+            testID={TEST_IDS.signinRestart}
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text allowFontScaling={false} style={styles.restartText}>{t("auth.restart")}</Text>
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.logoWrap}>
           <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
         </View>
@@ -154,6 +173,7 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
           autoComplete="email"
           editable={!loading}
           fieldStyle={styles.inputSpacing}
+          leftIcon="mail-outline"
         />
         <AuthPasswordField
           theme={theme}
@@ -164,6 +184,7 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
           autoComplete="password"
           editable={!loading && !socialLoading}
           wrapStyle={styles.inputSpacing}
+          leftIcon="lock-closed-outline"
         />
 
         <TouchableOpacity
@@ -181,7 +202,10 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
             {loading ? (
               <ActivityIndicator color={theme.tintTextColor} />
             ) : (
-              <Text allowFontScaling={false} style={styles.buttonText}>{t("auth.signIn")}</Text>
+              <View style={styles.buttonRow}>
+                <Text allowFontScaling={false} style={styles.buttonText}>{t("auth.signIn")}</Text>
+                <Ionicons name="arrow-forward" size={20} color={theme.tintTextColor} />
+              </View>
             )}
           </LinearGradient>
         </TouchableOpacity>
@@ -201,7 +225,7 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
           <>
             <View style={styles.socialDividerRow}>
               <View style={styles.socialDividerLine} />
-              <Text allowFontScaling={false} style={styles.socialDividerText}>{t("auth.orSignInWith")}</Text>
+              <Text allowFontScaling={false} style={styles.socialDividerText}>{t("auth.orLogInWith")}</Text>
               <View style={styles.socialDividerLine} />
             </View>
 
@@ -238,6 +262,34 @@ export function SignIn({ onForgotPassword }: { onForgotPassword?: () => void }) 
           </>
         ) : null}
         <LanguageToggle />
+
+        {onSignUp ? (
+          <View style={styles.signUpCard}>
+            <View style={styles.signUpCardIcon}>
+              <Ionicons name="person-add-outline" size={22} color="#3D8BFF" />
+            </View>
+            <Text allowFontScaling={false} style={styles.signUpCardText} numberOfLines={2}>
+              {t("auth.noAccount")}
+            </Text>
+            <TouchableOpacity
+              style={styles.signUpCardBtnOuter}
+              onPress={onSignUp}
+              testID={TEST_IDS.signinToSignup}
+              activeOpacity={0.9}
+              accessibilityRole="button"
+              disabled={loading || !!socialLoading}
+            >
+              <LinearGradient
+                colors={["#0022FF", "#00BBFF"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.signUpCardBtn}
+              >
+                <Text allowFontScaling={false} style={styles.signUpCardBtnText}>{t("auth.signUp")}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
     </KeyboardAwareScrollView>
   );
@@ -258,6 +310,15 @@ function getStyles(theme: any) {
       justifyContent: "center",
       paddingHorizontal: 24,
       paddingTop: 0,
+    },
+    restartTouch: {
+      alignSelf: "flex-end",
+      marginBottom: 8,
+    },
+    restartText: {
+      color: "rgba(165,196,235,0.92)",
+      fontSize: 15,
+      fontFamily: theme.mediumFont,
     },
     logoWrap: {
       alignItems: "center",
@@ -280,6 +341,11 @@ function getStyles(theme: any) {
       paddingVertical: 14,
       alignItems: "center",
       justifyContent: "center",
+    },
+    buttonRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
     },
     buttonDisabled: {
       opacity: 0.7,
@@ -330,6 +396,47 @@ function getStyles(theme: any) {
       backgroundColor: "#0B1F57",
       alignItems: "center",
       justifyContent: "center",
+    },
+    signUpCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginTop: 28,
+      padding: 14,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: "rgba(21, 102, 196, 0.45)",
+      backgroundColor: "#06143D",
+    },
+    signUpCardIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 14,
+      backgroundColor: "#0B1F57",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    signUpCardText: {
+      flex: 1,
+      minWidth: 0,
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontFamily: theme.mediumFont,
+    },
+    signUpCardBtnOuter: {
+      borderRadius: 14,
+      overflow: "hidden",
+    },
+    signUpCardBtn: {
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    signUpCardBtnText: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontFamily: theme.semiBoldFont,
     },
     socialButtonDisabled: {
       opacity: 0.55,

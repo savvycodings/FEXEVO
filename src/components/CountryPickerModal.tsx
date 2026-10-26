@@ -16,15 +16,24 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTranslation } from "react-i18next";
 import { ThemeContext } from "../context";
 import { TEST_IDS } from '../lib/testIds'
+import { glow } from "../screens/progress/progressTheme";
 import {
   getCountriesForPicker,
   countryMatchesSearchQuery,
   type Country,
 } from "../lib/countries";
 
-const MODAL_FIELD_BG = "#0B1F57";
 const MODAL_FIELD_BORDER = "rgba(21, 102, 196, 0.45)";
 const LABEL_COLOR = "rgba(134, 167, 210, 0.85)";
+/** Fixed row pitch (height + gap) so the A–Z index can jump with getItemLayout. */
+const ROW_H = 52;
+const ROW_GAP = 4;
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+/** First letter of a country name, accents removed (Åland → A). */
+function initialOf(name: string): string {
+  return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").charAt(0).toUpperCase();
+}
 
 type CountryPickerModalProps = {
   visible: boolean;
@@ -44,6 +53,8 @@ export function CountryPickerModal({
   const { height: winH } = useWindowDimensions();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const [search, setSearch] = React.useState("");
+  const [listH, setListH] = React.useState(0);
+  const listRef = React.useRef<FlatList<Country>>(null);
 
   const results = useMemo(() => {
     const list = getCountriesForPicker();
@@ -51,6 +62,18 @@ export function CountryPickerModal({
     if (!q) return [...list];
     return [...list].filter((c) => countryMatchesSearchQuery(c, q));
   }, [search]);
+
+  const firstIndexByLetter = useMemo(() => {
+    const map = new Map<string, number>();
+    results.forEach((c, i) => {
+      const letter = initialOf(c.name);
+      if (!map.has(letter)) map.set(letter, i);
+    });
+    return map;
+  }, [results]);
+
+  // Shrink the letters on short screens so all 26 fit beside the list.
+  const letterH = listH > 0 ? Math.min(18, (listH - 8) / LETTERS.length) : 14;
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
@@ -79,8 +102,12 @@ export function CountryPickerModal({
               returnKeyType="search"
             />
           </View>
+          <View style={styles.listArea} onLayout={(e) => setListH(e.nativeEvent.layout.height)}>
           <FlatList
+            ref={listRef}
             data={results}
+            getItemLayout={(_, index) => ({ length: ROW_H, offset: ROW_H * index, index })}
+            contentContainerStyle={styles.listContent}
             keyExtractor={(item) => item.code}
             keyboardShouldPersistTaps="handled"
             initialNumToRender={20}
@@ -95,7 +122,7 @@ export function CountryPickerModal({
               const isSelected = selected?.code === item.code;
               return (
                 <TouchableOpacity
-                  style={[styles.row, isSelected && styles.rowActive]}
+                  style={[styles.row, isSelected && styles.rowActive, isSelected && glow(10, 0.6)]}
                   testID={TEST_IDS.countryOption(item.code)}
                   onPress={() => {
                     onSelect(item);
@@ -112,11 +139,43 @@ export function CountryPickerModal({
                   >
                     {item.name}
                   </Text>
-                  {isSelected ? <Ionicons name="checkmark" size={18} color="#18C0FF" /> : null}
+                  {isSelected ? <Ionicons name="checkmark-circle" size={22} color="#18C0FF" /> : null}
                 </TouchableOpacity>
               );
             }}
           />
+          <View style={styles.index} pointerEvents="box-none">
+            {LETTERS.map((letter) => {
+              const target = firstIndexByLetter.get(letter);
+              const enabled = target != null;
+              return (
+                <TouchableOpacity
+                  key={letter}
+                  disabled={!enabled}
+                  onPress={() => {
+                    if (target != null) listRef.current?.scrollToIndex({ index: target, animated: false });
+                  }}
+                  style={[styles.indexItem, { height: letterH }]}
+                  testID={`country-index-${letter}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={letter}
+                  accessibilityState={{ disabled: !enabled }}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.indexText,
+                      { fontSize: Math.min(12, letterH - 2) },
+                      !enabled && styles.indexTextOff,
+                    ]}
+                  >
+                    {letter}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          </View>
         </View>
       </View>
     </Modal>
@@ -132,8 +191,8 @@ function getStyles(theme: { regularFont: string; semiBoldFont: string }) {
       paddingHorizontal: 18,
     },
     card: {
-      backgroundColor: MODAL_FIELD_BG,
-      borderRadius: 16,
+      backgroundColor: "#06143D",
+      borderRadius: 24,
       borderWidth: 1,
       borderColor: MODAL_FIELD_BORDER,
       paddingTop: 12,
@@ -171,15 +230,48 @@ function getStyles(theme: { regularFont: string; semiBoldFont: string }) {
       fontSize: 17,
       paddingVertical: Platform.OS === "ios" ? 12 : 10,
     },
+    listArea: {
+      flexShrink: 1,
+      minHeight: 0,
+    },
+    listContent: {
+      paddingLeft: 12,
+      paddingRight: 34,
+      paddingBottom: 8,
+    },
     row: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      paddingVertical: 12,
+      height: ROW_H - ROW_GAP,
+      marginBottom: ROW_GAP,
       paddingHorizontal: 12,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: "transparent",
     },
     rowActive: {
-      backgroundColor: "rgba(0, 184, 255, 0.08)",
+      backgroundColor: "#0B2A6B",
+      borderColor: "#3D8BFF",
+    },
+    index: {
+      position: "absolute",
+      top: 4,
+      right: 6,
+      width: 22,
+      alignItems: "center",
+    },
+    indexItem: {
+      width: 22,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    indexText: {
+      color: "#18C0FF",
+      fontFamily: theme.semiBoldFont,
+    },
+    indexTextOff: {
+      color: "rgba(134, 167, 210, 0.3)",
     },
     rowFlag: {
       width: 28,

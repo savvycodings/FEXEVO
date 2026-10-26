@@ -17,6 +17,8 @@ export const T = {
   signinEmail: 'signin-email',
   signinPassword: 'signin-password',
   signinSubmit: 'signin-submit',
+  signinRestart: 'signin-restart',
+  signinToSignup: 'signin-to-signup',
   signinForgot: 'signin-forgot',
   otpDigit: (i: number) => `otp-digit-${i}`,
   verifySubmit: 'verify-submit',
@@ -69,6 +71,8 @@ export const T = {
   viewAngle: (id: string) => `view-angle-${id}`,
   viewAngleConfirm: 'view-angle-confirm',
   setClipContinue: 'set-clip-continue',
+  setClipBack: 'set-clip-back',
+  coachHomeAnalyze: 'coach-home-analyze',
 }
 
 /** Open the app signed in (storage state) and wait until navigation is ready. */
@@ -161,8 +165,9 @@ export async function openScreen(page: Page, name: string, params: object | unde
 /** From the AI Coach home: Choose File → how-to → upload the fixture clip → Net Play / Forehand volley / Front → analyse. */
 export async function uploadAndAnalyze(page: Page, fixturePath: string): Promise<string> {
   await nav(page, 'Main', { screen: 'AICoach', params: { screen: 'AICoachMain' } })
-  await page.getByTestId(T.techniqueChooseFile).click()
-  // Accepting the how-to opens the file picker directly; the shot is declared after upload.
+  // The AI Coach home's "Analyze a New Shot" opens the how-to; accepting it opens the file picker.
+  // The shot is declared after upload.
+  await page.getByTestId(T.coachHomeAnalyze).click()
   const chooser = page.waitForEvent('filechooser')
   await page.getByTestId(T.howToAccept).click()
   await (await chooser).setFiles(fixturePath)

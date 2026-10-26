@@ -17,23 +17,12 @@ import { WELCOME_SEEN_KEY } from "./WelcomeIntro";
 const Stack = createNativeStackNavigator();
 
 function SignInScreen({ navigation }: { navigation: any }) {
-  const { t } = useTranslation();
-  const { theme } = useContext(ThemeContext);
-  const insets = useSafeAreaInsets();
-  const styles = getStyles(theme);
   return (
-    <View style={styles.screenContainer}>
-      <SignIn onForgotPassword={() => navigation.navigate("ForgotPassword")} />
-      <TouchableOpacity
-        style={[styles.switchLink, { paddingBottom: insets.bottom + 20 }]}
-        onPress={() => navigation.navigate("SignUp")}
-      >
-        <Text style={styles.switchText}>
-          {t("auth.noAccount")}{" "}
-          <Text style={styles.switchTextBold}>{t("auth.signUp")}</Text>
-        </Text>
-      </TouchableOpacity>
-    </View>
+    <SignIn
+      onForgotPassword={() => navigation.navigate("ForgotPassword")}
+      onSignUp={() => navigation.navigate("SignUp")}
+      onRestart={() => navigation.replace("WelcomeIntro")}
+    />
   );
 }
 

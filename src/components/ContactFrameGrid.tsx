@@ -2,6 +2,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
+import { PG, glow } from '../screens/progress/progressTheme'
 import { ThemeContext } from '../context'
 import { vercel as defaultTheme } from '../theme'
 import { createFrameGrabber, type FrameGrabber } from '../lib/videoFrameGrab'
@@ -175,7 +176,7 @@ export function ContactFrameGrid({
             accessibilityLabel={t('technique.setClipScreen.previousFrame')}
             testID="contact-frame-prev"
           >
-            <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+            <Ionicons name="chevron-back" size={20} color={PG.labelBlue} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.stepBtn}
@@ -185,7 +186,7 @@ export function ContactFrameGrid({
             accessibilityLabel={t('technique.setClipScreen.nextFrame')}
             testID="contact-frame-next"
           >
-            <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+            <Ionicons name="chevron-forward" size={20} color={PG.labelBlue} />
           </TouchableOpacity>
         </View>
       </View>
@@ -232,25 +233,33 @@ export function ContactFrameGrid({
 }
 
 const styles = StyleSheet.create({
-  root: { marginTop: 16, gap: 12 },
+  root: {
+    marginTop: 16,
+    gap: 12,
+    backgroundColor: PG.cardPlain,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: PG.borderSoft,
+    padding: 14,
+  },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerText: { flex: 1, gap: 2 },
-  title: { fontSize: 17, color: '#FFFFFF' },
+  title: { fontSize: 16, color: '#FFFFFF' },
   subtitle: { fontSize: 14, lineHeight: 19, color: '#A9B8D6' },
   stepper: { flexDirection: 'row', gap: 8 },
   stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: CELL_BG,
-    borderWidth: 1,
-    borderColor: '#1848BA',
+    borderWidth: 1.5,
+    borderColor: PG.border,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   cell: {
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: CELL_BG,
     alignItems: 'center',
@@ -258,7 +267,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  cellActive: { borderColor: ACCENT },
+  cellActive: { borderColor: '#3D8BFF', ...glow(10, 0.7) },
   badge: {
     position: 'absolute',
     left: 6,
@@ -270,5 +279,5 @@ const styles = StyleSheet.create({
   },
   badgeActive: { backgroundColor: ACCENT },
   badgeText: { fontSize: 12, color: '#FFFFFF' },
-  footer: { fontSize: 13, color: '#A9B8D6' },
+  footer: { fontSize: 13, color: PG.muted },
 })

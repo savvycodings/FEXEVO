@@ -30,7 +30,16 @@ import { displayTrainShotTitle } from '../lib/trainShotDisplay'
 import { getMainStackNavigation } from '../lib/mainStackNavigation'
 import { fetchCoachSubmissions, type CoachSubmission } from '../lib/coachSubmissionsApi'
 import { ActivitiesVideoAnalysis } from './ActivitiesVideoAnalysis'
-import { ProLibraryGradientProgressBar } from '../components'
+import { SegmentedPills } from './progress/SegmentedPills'
+import { ShotsTitleRow } from './activities/shots/ShotsTitleRow'
+import { ShotCard } from './activities/shots/ShotCard'
+import { ShotsFilterSheet } from './activities/shots/ShotsFilterSheet'
+import {
+  filterAndSortShots,
+  shotCounts,
+  type ShotsCategoryFilter,
+  type ShotsSort,
+} from './activities/shots/shotsFilter'
 import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { useTranslation } from 'react-i18next'
@@ -48,7 +57,6 @@ const HERO_HORIZONTAL_PAD = 20
 const SHOTS_BAR_CYAN = '#00B8FF'
 /** Bar + score when overall score is 70 or below. */
 const SHOTS_BAR_AMBER = '#F5A623'
-const SHOTS_CARD_BG = '#001435'
 const SHOTS_TRACK_BG = '#061428'
 const SHOTS_TEXT_DIM = '#86A7D2'
 
@@ -602,6 +610,9 @@ export function ActivitiesCalendarFlow({
   const [analysisSession, setAnalysisSession] = useState<ActivitySession | null>(null)
   const [shotsTab, setShotsTab] = useState<'all' | 'favorites'>('all')
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
+  const [shotsCategory, setShotsCategory] = useState<ShotsCategoryFilter>(null)
+  const [shotsSort, setShotsSort] = useState<ShotsSort>('newest')
+  const [shotsFilterOpen, setShotsFilterOpen] = useState(false)
   const [coachSubmissions, setCoachSubmissions] = useState<CoachSubmission[]>([])
 
   /** Re-pressing the Activities tab closes an open shot/day detail (back to main page). */
@@ -768,10 +779,20 @@ export function ActivitiesCalendarFlow({
     }
   }, [openAnalysisId, layout, shotsSessionsAll])
 
-  const shotsSessionsFiltered = useMemo(() => {
-    if (shotsTab === 'all') return shotsSessionsAll
-    return shotsSessionsAll.filter((s) => favoriteIds.has(s.analysisId))
-  }, [shotsSessionsAll, shotsTab, favoriteIds])
+  const shotsSessionsFiltered = useMemo(
+    () =>
+      filterAndSortShots(shotsSessionsAll, {
+        category: shotsCategory,
+        sort: shotsSort,
+        favoritesOnly: shotsTab === 'favorites',
+        favoriteIds,
+      }),
+    [shotsSessionsAll, shotsTab, favoriteIds, shotsCategory, shotsSort]
+  )
+  const shotsCountsByTab = useMemo(
+    () => shotCounts(shotsSessionsAll, shotsCategory, favoriteIds),
+    [shotsSessionsAll, shotsCategory, favoriteIds]
+  )
 
   const calendarCells = useMemo(() => getCalendarCells(viewMonth), [viewMonth])
   const monthPillLines = useMemo(
@@ -925,39 +946,25 @@ export function ActivitiesCalendarFlow({
           }}
           showsVerticalScrollIndicator={false}
         >
-          <Text allowFontScaling={false} style={shotsStyles.shotsPageTitle}>
-            {t('activities.shots')}
-          </Text>
+          <ShotsTitleRow
+            theme={theme}
+            onFilterPress={() => setShotsFilterOpen(true)}
+            filterActive={shotsCategory != null || shotsSort !== 'newest'}
+          />
 
-          <View style={shotsStyles.segmentWrap}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setShotsTab('all')}
-              style={[shotsStyles.segmentPill, shotsTab === 'all' && shotsStyles.segmentPillActive]}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[shotsStyles.segmentLabel, shotsTab === 'all' && shotsStyles.segmentLabelActive]}
-              >
-                {t('activities.allShots')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setShotsTab('favorites')}
-              style={[shotsStyles.segmentPill, shotsTab === 'favorites' && shotsStyles.segmentPillActive]}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[
-                  shotsStyles.segmentLabel,
-                  shotsTab === 'favorites' && shotsStyles.segmentLabelActive,
-                ]}
-              >
-                {t('activities.favorites')}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <SegmentedPills
+            options={[
+              { key: 'all', label: t('activities.allShots'), badge: shotsCountsByTab.all },
+              { key: 'favorites', label: t('activities.favorites'), badge: shotsCountsByTab.favorites },
+            ]}
+            value={shotsTab}
+            onChange={setShotsTab}
+            // Narrow phones: "Todos los golpes" + badge doesn't fit the large pill.
+            size={winW < 380 ? 'md' : 'lg'}
+            fontFamily={theme.mediumFont}
+            activeFontFamily={theme.semiBoldFont}
+            style={{ marginBottom: 18 }}
+          />
 
           {error ? (
             <Text allowFontScaling={false} style={shotsStyles.errorInline}>
@@ -966,7 +973,11 @@ export function ActivitiesCalendarFlow({
           ) : loading ? (
             <ActivityIndicator color={SHOTS_BAR_CYAN} style={{ marginTop: 36 }} />
           ) : shotsSessionsFiltered.length === 0 ? (
-            shotsTab === 'favorites' ? (
+            shotsCategory != null && shotsSessionsAll.length > 0 ? (
+              <Text allowFontScaling={false} style={shotsStyles.emptyShots}>
+                {t('activities.noFilterMatches')}
+              </Text>
+            ) : shotsTab === 'favorites' ? (
               <Text allowFontScaling={false} style={shotsStyles.emptyShots}>
                 {t('activities.noFavorites')}
               </Text>
@@ -976,72 +987,27 @@ export function ActivitiesCalendarFlow({
               />
             )
           ) : (
-            shotsSessionsFiltered.map((s) => {
-              const shotTitle = displayTrainShotTitle({
-                strokeLabel: s.shotLabel,
-                strokeName: s.shotLabel,
-              })
-              const score =
-                typeof s.score === 'number' ? displayScoreWhole(s.score) : null
-              const pct = score != null ? Math.max(0, Math.min(100, score)) : 0
-              const isAmberZone = score != null && score <= 70
-              const barColor = isAmberZone ? SHOTS_BAR_AMBER : SHOTS_BAR_CYAN
-              const scoreColor = isAmberZone ? SHOTS_BAR_AMBER : '#FFFFFF'
-              return (
-                <View key={s.analysisId} style={shotsStyles.shotCard}>
-                  <Pressable
-                    style={shotsStyles.shotCardPressable}
-                    onPress={() => setAnalysisSession(s)}
-                    android_ripple={{ color: 'rgba(255,255,255,0.06)' }}
-                  >
-                    <View style={shotsStyles.thumbBox} collapsable={false}>
-                      <Video
-                        source={{ uri: videoUri(s.videoPath) }}
-                        style={shotsStyles.thumbVideo}
-                        resizeMode={ResizeMode.COVER}
-                        useNativeControls={false}
-                        isLooping={false}
-                        shouldPlay={false}
-                      />
-                    </View>
-                    <View style={shotsStyles.shotCardBody}>
-                      <View style={shotsStyles.shotTitleRow}>
-                        <Text allowFontScaling={false} numberOfLines={1} style={shotsStyles.shotName}>
-                          {shotTitle}
-                        </Text>
-                        
-                      </View>
-                      <View style={shotsStyles.progressRow}>
-                        <ProLibraryGradientProgressBar
-                          progress={pct}
-                          flat
-                          fillColor={barColor}
-                          trackColor="#07256D"
-                          height={8}
-                          outerBorderRadius={6}
-                          innerBorderRadius={4}
-                          fillBorderRadius={3}
-                          style={shotsStyles.shotsBarGradient}
-                        />
-                        <View style={shotsStyles.scoreCluster}>
-                          <Text
-                            allowFontScaling={false}
-                            style={[shotsStyles.scoreNum, { color: scoreColor }]}
-                          >
-                            {score != null ? String(score) : '—'}
-                          </Text>
-                          <Text allowFontScaling={false} style={shotsStyles.scoreOutOf}>
-                            /100
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </Pressable>
-                </View>
-              )
-            })
+            shotsSessionsFiltered.map((s) => (
+              <ShotCard
+                key={s.analysisId}
+                session={s}
+                videoUrl={videoUri(s.videoPath)}
+                theme={theme}
+                compact={winW < 380}
+                onPress={() => setAnalysisSession(s)}
+              />
+            ))
           )}
         </ScrollView>
+        <ShotsFilterSheet
+          visible={shotsFilterOpen}
+          onClose={() => setShotsFilterOpen(false)}
+          category={shotsCategory}
+          onCategoryChange={setShotsCategory}
+          sort={shotsSort}
+          onSortChange={setShotsSort}
+          theme={theme}
+        />
       </View>
     )
   }
@@ -1411,46 +1377,7 @@ function getStyles(theme: any, _winW: number) {
 }
 
 function getShotsStyles(theme: any, winW: number) {
-  const pad = Math.max(16, Math.min(24, winW * 0.05))
-  const contentW = winW - pad * 2
-  const thumbW = Math.max(96, Math.round(contentW * 0.28))
-  const cardMinH = 100
-
   return StyleSheet.create({
-    shotsPageTitle: {
-      fontFamily: theme.boldFont ?? theme.semiBoldFont,
-      fontSize: 32,
-      lineHeight: 38,
-      color: '#FFFFFF',
-      letterSpacing: -0.5,
-      marginBottom: 16,
-    },
-    segmentWrap: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: '#041641',
-      borderRadius: 28,
-      padding: 4,
-      marginBottom: 18,
-    },
-    segmentPill: {
-      flex: 1,
-      paddingVertical: 10,
-      borderRadius: 999,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    segmentPillActive: {
-      backgroundColor: '#006EFF',
-    },
-    segmentLabel: {
-      fontFamily: theme.mediumFont,
-      fontSize: 12,
-      color: '#336AB3',
-    },
-    segmentLabelActive: {
-      color: '#FFFFFF',
-    },
     errorInline: {
       fontFamily: theme.regularFont,
       fontSize: 14,
@@ -1484,88 +1411,6 @@ function getShotsStyles(theme: any, winW: number) {
     emptyShotsAccent: {
       color: '#00B8FF',
       fontFamily: theme.semiBoldFont,
-    },
-    shotCard: {
-      backgroundColor: SHOTS_CARD_BG,
-      borderRadius: 18,
-      marginBottom: 12,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: 'rgba(0, 110, 255, 0.12)',
-    },
-    shotCardPressable: {
-      flexDirection: 'row',
-      alignItems: 'stretch',
-      minHeight: cardMinH,
-      overflow: 'hidden',
-      borderRadius: 17,
-    },
-    thumbBox: {
-      width: thumbW,
-      minHeight: cardMinH,
-      backgroundColor: '#000',
-      borderTopLeftRadius: 17,
-      borderBottomLeftRadius: 17,
-      overflow: 'hidden',
-    },
-    thumbVideo: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: '#000',
-      borderTopLeftRadius: 17,
-      borderBottomLeftRadius: 17,
-    },
-    shotCardBody: {
-      flex: 1,
-      paddingVertical: 14,
-      paddingHorizontal: 14,
-      paddingRight: 8,
-      justifyContent: 'center',
-      minWidth: 0,
-    },
-    shotTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      marginBottom: 10,
-    },
-    shotName: {
-      flex: 1,
-      fontFamily: theme.semiBoldFont,
-      fontSize: 17,
-      color: '#FFFFFF',
-      minWidth: 0,
-      transform: [{ translateY: 12 }],
-    },
-    progressRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      minHeight: 34,
-    },
-    scoreCluster: {
-      alignItems: 'flex-end',
-      justifyContent: 'center',
-      flexShrink: 0,
-      marginTop: -29,
-    },
-    scoreNum: {
-      fontFamily: theme.boldFont ?? theme.semiBoldFont,
-      fontSize: 26,
-      lineHeight: 30,
-      letterSpacing: -0.5,
-      textAlign: 'right',
-    },
-    scoreOutOf: {
-      fontFamily: theme.mediumFont,
-      fontSize: 16,
-      color: SHOTS_TEXT_DIM,
-      lineHeight: 18,
-      textAlign: 'right',
-      marginTop: 0,
-    },
-    shotsBarGradient: {
-      flex: 1,
-      minWidth: 0,
-      alignSelf: 'center',
     },
   })
 }

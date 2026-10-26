@@ -28,7 +28,7 @@ import { LanguageToggle } from "../components/LanguageToggle";
 import { CountryPickerModal } from "../components/CountryPickerModal";
 import { AuthFormField } from "../components/AuthFormField";
 import { AuthPasswordField } from "../components/AuthPasswordField";
-import { AUTH_INPUT_FOCUS_BORDER, AUTH_INPUT_FOCUS_BORDER_WIDTH, AUTH_INPUT_ERROR_BORDER_WIDTH, createAuthFormStyles } from "../components/authFormStyles";
+import { AUTH_INPUT_FOCUS_BORDER, AUTH_INPUT_FOCUS_BORDER_WIDTH, AUTH_INPUT_ERROR_BORDER_WIDTH, AUTH_ICON_COLOR, createAuthFormStyles } from "../components/authFormStyles";
 import { findCountry, type Country } from "../lib/countries";
 import { TEST_IDS } from '../lib/testIds'
 
@@ -178,7 +178,8 @@ export function SignUp(props?: SignUpProps) {
         </View>
         <View style={styles.header}>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.heroTitleTechniqueWeb}>
-            {t("auth.signUpHeroTitle")}
+            {t("auth.signUpHeroTitleLead")}
+            <Text style={styles.heroTitleAccent}>{t("auth.signUpHeroTitleAccent")}</Text>
           </Text>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.subtitle}>
             {t("auth.signUpHeroSubtitle")}
@@ -197,6 +198,7 @@ export function SignUp(props?: SignUpProps) {
           }}
           autoComplete="name"
           editable={!loading && !socialLoading}
+          leftIcon="person-outline"
         />
         {errors.name ? <Text style={fieldStyles.errorText}>{errors.name}</Text> : null}
         <AuthFormField
@@ -213,6 +215,7 @@ export function SignUp(props?: SignUpProps) {
           keyboardType="email-address"
           autoComplete="email"
           editable={!loading && !socialLoading}
+          leftIcon="mail-outline"
         />
         {errors.email ? <Text style={fieldStyles.errorText}>{errors.email}</Text> : null}
         <AuthPasswordField
@@ -227,6 +230,7 @@ export function SignUp(props?: SignUpProps) {
           }}
           autoComplete="password-new"
           editable={!loading && !socialLoading}
+          leftIcon="lock-closed-outline"
         />
         {errors.password ? <Text style={fieldStyles.errorText}>{errors.password}</Text> : null}
         <AuthPasswordField
@@ -241,6 +245,8 @@ export function SignUp(props?: SignUpProps) {
           }}
           autoComplete="password-new"
           editable={!loading && !socialLoading}
+          leftIcon="lock-closed-outline"
+          toggleIcon="eye"
         />
         {errors.confirmPassword ? <Text style={fieldStyles.errorText}>{errors.confirmPassword}</Text> : null}
 
@@ -265,9 +271,12 @@ export function SignUp(props?: SignUpProps) {
               </Text>
             </>
           ) : (
-            <Text allowFontScaling={false} style={styles.countryTriggerPlaceholder} numberOfLines={1}>
-              {t("auth.selectYourCountry")}
-            </Text>
+            <>
+              <Ionicons name="globe-outline" size={20} color={AUTH_ICON_COLOR} />
+              <Text allowFontScaling={false} style={styles.countryTriggerPlaceholder} numberOfLines={1}>
+                {t("auth.selectYourCountry")}
+              </Text>
+            </>
           )}
           <Ionicons name="chevron-down" size={18} color="rgba(200, 220, 255, 0.85)" />
         </TouchableOpacity>
@@ -326,14 +335,6 @@ export function SignUp(props?: SignUpProps) {
 
         <View style={styles.actionRow}>
           <TouchableOpacity
-            style={styles.backButton}
-            onPress={props?.onBack}
-            activeOpacity={0.85}
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="chevron-back" size={22} color="#00BBFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
             style={[styles.buttonOuter, { flex: 1 }, (loading || socialLoading) && styles.buttonDisabled]}
             onPress={handleContinue}
             testID={TEST_IDS.signupSubmit}
@@ -348,7 +349,10 @@ export function SignUp(props?: SignUpProps) {
               {loading ? (
                 <ActivityIndicator color={theme.tintTextColor} />
               ) : (
-                <Text allowFontScaling={false} style={styles.buttonText}>{t("auth.signUp")}</Text>
+                <View style={styles.buttonRow}>
+                  <Text allowFontScaling={false} style={styles.buttonText}>{t("auth.signUp")}</Text>
+                  <Ionicons name="arrow-forward" size={20} color={theme.tintTextColor} />
+                </View>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -393,6 +397,14 @@ function getStyles(theme: any) {
       textAlign: "center",
       marginBottom: 8,
       color: "#FFFFFF",
+    },
+    heroTitleAccent: {
+      color: "#18C0FF",
+    },
+    buttonRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
     },
     subtitle: {
       fontSize: 12,
@@ -464,14 +476,6 @@ function getStyles(theme: any) {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-    },
-    backButton: {
-      width: 54,
-      height: 54,
-      borderRadius: 16,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: "rgba(6, 26, 86, 0.9)",
     },
     socialDividerRow: {
       flexDirection: "row",

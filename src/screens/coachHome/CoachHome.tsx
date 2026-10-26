@@ -405,6 +405,7 @@ function AnalyzeBlock({
         <Pressable
           accessibilityRole="button"
           onPress={onAnalyze}
+          testID={TEST_IDS.coachHomeAnalyze}
           style={({ pressed }) => [styles.analyzeCard, pressed && styles.pressed]}
         >
           <AnalyzeFill />

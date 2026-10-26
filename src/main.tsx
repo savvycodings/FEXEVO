@@ -56,6 +56,7 @@ import { authClient } from './lib/auth-client'
 import { DOMAIN } from '../constants'
 import { registerCorrectionNotificationDeepLink } from './lib/correctionImageNotifications'
 import { watchPendingMagicShots } from './lib/magicShotJob'
+import { useAiCoachFlowActive } from './lib/aiCoachFlowHeader'
 import { getCachedProfile, setCachedProfile } from './lib/profile-cache'
 import { SessionDataProvider, useSessionData } from './context/SessionDataContext'
 import { CoachAssistantProvider, useCoachAssistant } from './context/CoachAssistantContext'
@@ -403,9 +404,11 @@ function MainTabsLayoutInner({
 
   useEffect(() => watchPendingMagicShots(), [])
 
-  const headerSearchLeft =
-    activeTabName === 'Progress' || activeTabName === 'You' || activeTabName === 'Activities'
-  const coachHomeHeader = !viewerIsCoach && (activeTabName == null || activeTabName === 'AICoach')
+  const headerSearchLeft = activeTabName === 'You'
+  const aiCoachFlowActive = useAiCoachFlowActive()
+  // Logo only on the AI Coach home; the upload flow (picker → Set Clip → results) shows the profile header.
+  const coachHomeHeader =
+    !viewerIsCoach && (activeTabName == null || activeTabName === 'AICoach') && !aiCoachFlowActive
 
   const { width: winW } = useWindowDimensions()
   /** Padding inside tab bar above home indicator — must fit inside explicit height below */

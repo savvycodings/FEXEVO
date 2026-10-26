@@ -23,14 +23,15 @@ import { useTranslation } from 'react-i18next'
 const CONTROL_BG = '#0A1E5C'
 const CONTROL_ICON = '#2A88F4'
 
-const PLAYBACK_RATE = 0.5
+/** "Preview Clip (0.5x)" speed; the play button uses normal speed. */
+const PREVIEW_RATE = 0.5
 const STEP_MS = 100
 const LOOP_END_TOLERANCE_MS = 80
 
 export type TrimClipPreviewHandle = {
   seekMs: (ms: number) => Promise<void>
   pause: () => Promise<void>
-  playSelectionLoop: (startMs: number, endMs: number) => Promise<void>
+  playSelectionLoop: (startMs: number, endMs: number, rate?: number) => Promise<void>
 }
 
 export type TrimClipPreviewProps = {
@@ -65,11 +66,13 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
     const videoRef = useRef<Video | null>(null)
     const loopRangeRef = useRef({ startMs: 0, endMs: 0 })
     const loopActiveRef = useRef(false)
+    const rateRef = useRef(1)
     const positionEmitRafRef = useRef<number | null>(null)
     const lastEmittedPosRef = useRef(-1)
 
     const [isReady, setIsReady] = useState(false)
     const [isPlaying, setIsPlaying] = useState(false)
+    const [playingRate, setPlayingRate] = useState(1)
     const [positionMs, setPositionMs] = useState(0)
 
     const selectionLo = Math.min(selectionStartMs, selectionEndMs)
@@ -147,18 +150,20 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
     }, [])
 
     const playSelectionLoop = useCallback(
-      async (startMs: number, endMs: number) => {
+      async (startMs: number, endMs: number, rate = 1) => {
         const ref = videoRef.current
         if (!ref || !isReady) return
         const lo = Math.min(startMs, endMs)
         const hi = Math.max(startMs, endMs)
         loopRangeRef.current = { startMs: lo, endMs: hi }
         loopActiveRef.current = true
+        rateRef.current = rate
+        setPlayingRate(rate)
         try {
           await ref.setStatusAsync({
             positionMillis: lo,
             shouldPlay: true,
-            rate: PLAYBACK_RATE,
+            rate,
             isMuted: true,
           })
           setPositionMs(lo)
@@ -225,7 +230,7 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
               await videoRef.current?.setStatusAsync({
                 positionMillis: startMs,
                 shouldPlay: true,
-                rate: PLAYBACK_RATE,
+                rate: rateRef.current,
               })
               setPositionMs(startMs)
               emitPosition(startMs)
@@ -239,13 +244,19 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
       [onDurationMs, onNaturalSize, scheduleEmitPosition, emitPosition]
     )
 
-    const togglePlayPause = useCallback(async () => {
-      if (isPlaying) {
-        await pause()
-        return
-      }
-      await playSelectionLoop(selectionLo, selectionHi)
-    }, [isPlaying, pause, playSelectionLoop, selectionLo, selectionHi])
+    /** Same control pauses when its own speed is playing; otherwise (re)starts the loop at that speed. */
+    const togglePlayAt = useCallback(
+      async (rate: number) => {
+        if (isPlaying && playingRate === rate) {
+          await pause()
+          return
+        }
+        await playSelectionLoop(selectionLo, selectionHi, rate)
+      },
+      [isPlaying, playingRate, pause, playSelectionLoop, selectionLo, selectionHi]
+    )
+    const playingNormal = isPlaying && playingRate === 1
+    const playingPreview = isPlaying && playingRate === PREVIEW_RATE
 
     const stepBy = useCallback(
       async (deltaMs: number) => {
@@ -313,13 +324,12 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
 
           <TouchableOpacity
             style={styles.iconBtn}
-            onPress={() => void togglePlayPause()}
+            onPress={() => void togglePlayAt(1)}
             hitSlop={10}
-            accessibilityLabel={
-              isPlaying ? t('techniqueExtra.pausePreview') : t('techniqueExtra.previewClip')
-            }
+            accessibilityLabel={playingNormal ? t('techniqueExtra.pausePreview') : t('techniqueExtra.playClip')}
+            testID="trim-play"
           >
-            <Ionicons name={isPlaying ? 'pause' : 'play'} size={30} color={CONTROL_ICON} />
+            <Ionicons name={playingNormal ? 'pause' : 'play'} size={30} color={CONTROL_ICON} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -329,6 +339,22 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
             accessibilityLabel={t('techniqueExtra.stepForward')}
           >
             <Ionicons name="play-skip-forward" size={22} color={CONTROL_ICON} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.previewClipBtn}
+            onPress={() => void togglePlayAt(PREVIEW_RATE)}
+            accessibilityRole="button"
+            accessibilityLabel={playingPreview ? t('techniqueExtra.pausePreview') : t('techniqueExtra.previewClip')}
+            testID="trim-preview-half"
+          >
+            {playingPreview ? (
+              <Ionicons name="pause" size={22} color={CONTROL_ICON} />
+            ) : (
+              <Text allowFontScaling={false} numberOfLines={1} style={styles.previewClipBtnText}>
+                {t('technique.setClipScreen.previewClip')}
+              </Text>
+            )}
           </TouchableOpacity>
 
         </View>
@@ -378,7 +404,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconBtn: {
-    width: 52,
+    width: 48,
     height: 52,
     borderRadius: 18,
     backgroundColor: CONTROL_BG,
@@ -387,17 +413,17 @@ const styles = StyleSheet.create({
   },
   previewClipBtn: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 4,
     height: 52,
     borderRadius: 18,
     backgroundColor: CONTROL_BG,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 6,
   },
   previewClipBtnText: {
     color: CONTROL_ICON,
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '500',
   },
 })

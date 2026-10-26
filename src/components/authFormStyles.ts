@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native'
 export const AUTH_INPUT_FOCUS_BORDER = 'rgba(0, 184, 255, 0.25)'
 export const AUTH_INPUT_FOCUS_BORDER_WIDTH = 2
 export const AUTH_INPUT_ERROR_BORDER_WIDTH = 1.5
+export const AUTH_ICON_COLOR = '#3D8BFF'
 
 export function createAuthFormStyles(theme: {
   regularFont: string
@@ -50,6 +51,28 @@ export function createAuthFormStyles(theme: {
       paddingVertical: 12,
       paddingLeft: 16,
       paddingRight: 8,
+      minHeight: 48,
+      fontSize: 15,
+      fontFamily: theme.regularFont,
+      color: theme.textColor,
+    },
+    iconField: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 0,
+      paddingLeft: 14,
+      paddingRight: 0,
+    },
+    leftIcon: {
+      marginRight: 10,
+    },
+    iconInput: {
+      flex: 1,
+      minWidth: 0,
+      borderWidth: 0,
+      backgroundColor: 'transparent',
+      paddingVertical: 12,
+      paddingRight: 16,
       minHeight: 48,
       fontSize: 15,
       fontFamily: theme.regularFont,

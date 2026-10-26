@@ -30,6 +30,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
 import { PAGE_TOP_EXTRA_PADDING } from "../../constants";
 import { TEST_IDS } from '../lib/testIds'
+import { glow } from "./progress/progressTheme";
 
 const APP_LOGO = require("../../assets/logo.png");
 const COURT_IMAGE = require("../../assets/court.png");
@@ -406,9 +407,21 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                   </Text>
                 </TouchableOpacity>
               ) : null}
-              <View style={styles.logoWrap}>
-                <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
-              </View>
+              {step === 1 ? (
+                <View style={styles.detailsHead}>
+                  <Text allowFontScaling={false} style={styles.detailsTitle}>
+                    {t("profileSetup.playerDetailsLead")}
+                    <Text style={styles.detailsTitleAccent}>{t("profileSetup.playerDetailsAccent")}</Text>
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.detailsSubtitle}>
+                    {t("profileSetup.playerDetailsSubtitle")}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.logoWrap}>
+                  <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
+                </View>
+              )}
             </View>
           </View>
         </SafeAreaView>
@@ -514,6 +527,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               onPress={() => selectDominantHand("left")}
               testID={TEST_IDS.setupHand("left")}
               styles={styles}
+              glowing={!isEditMode}
             />
             <ChoicePill
               label={t("profileSetup.rightHand")}
@@ -521,6 +535,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               onPress={() => selectDominantHand("right")}
               testID={TEST_IDS.setupHand("right")}
               styles={styles}
+              glowing={!isEditMode}
             />
           </View>
           </View>
@@ -540,6 +555,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               onPress={() => setCourtSide("left")}
               testID={TEST_IDS.setupCourt("left")}
               styles={styles}
+              glowing={!isEditMode}
             />
             <ChoicePill
               label={t("common.right")}
@@ -547,52 +563,100 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               onPress={() => setCourtSide("right")}
               testID={TEST_IDS.setupCourt("right")}
               styles={styles}
+              glowing={!isEditMode}
             />
           </View>
           <CourtSideGraphic courtSide={courtSide} />
           </View>
 
           <View style={styles.selectionBox}>
-            <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.boxTitle}>
-              {t("profileSetup.heightTitle")}
-            </Text>
-            <View style={styles.anthroRow}>
-              <TextInput
-                allowFontScaling={false}
-                value={heightCmInput}
-                onChangeText={(v) => setHeightCmInput(v.replace(/[^0-9.]/g, ""))}
-                keyboardType="decimal-pad"
-                placeholder={t("profileSetup.heightPlaceholder")}
-                testID={TEST_IDS.setupHeight}
-                placeholderTextColor="rgba(255,255,255,0.35)"
-                style={styles.anthroInput}
-              />
-              <Text allowFontScaling={false} style={styles.anthroUnit}>
-                {t("profileSetup.cm")}
+            {isEditMode ? (
+              <>
+              <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.boxTitle}>
+                {t("profileSetup.heightTitle")}
               </Text>
-            </View>
-            <Text
-              allowFontScaling={false}
-              maxFontSizeMultiplier={1.05}
-              style={[styles.boxTitle, { marginTop: 16 }]}
-            >
-              {t("profileSetup.weightTitle")}
-            </Text>
-            <View style={styles.anthroRow}>
-              <TextInput
+              <View style={styles.anthroRow}>
+                <TextInput
+                  allowFontScaling={false}
+                  value={heightCmInput}
+                  onChangeText={(v) => setHeightCmInput(v.replace(/[^0-9.]/g, ""))}
+                  keyboardType="decimal-pad"
+                  placeholder={t("profileSetup.heightPlaceholder")}
+                  testID={TEST_IDS.setupHeight}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  style={styles.anthroInput}
+                />
+                <Text allowFontScaling={false} style={styles.anthroUnit}>
+                  {t("profileSetup.cm")}
+                </Text>
+              </View>
+              <Text
                 allowFontScaling={false}
-                value={weightKgInput}
-                onChangeText={(v) => setWeightKgInput(v.replace(/[^0-9.]/g, ""))}
-                keyboardType="decimal-pad"
-                placeholder={t("profileSetup.weightPlaceholder")}
-                testID={TEST_IDS.setupWeight}
-                placeholderTextColor="rgba(255,255,255,0.35)"
-                style={styles.anthroInput}
-              />
-              <Text allowFontScaling={false} style={styles.anthroUnit}>
-                {t("profileSetup.kg")}
+                maxFontSizeMultiplier={1.05}
+                style={[styles.boxTitle, { marginTop: 16 }]}
+              >
+                {t("profileSetup.weightTitle")}
               </Text>
-            </View>
+              <View style={styles.anthroRow}>
+                <TextInput
+                  allowFontScaling={false}
+                  value={weightKgInput}
+                  onChangeText={(v) => setWeightKgInput(v.replace(/[^0-9.]/g, ""))}
+                  keyboardType="decimal-pad"
+                  placeholder={t("profileSetup.weightPlaceholder")}
+                  testID={TEST_IDS.setupWeight}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  style={styles.anthroInput}
+                />
+                <Text allowFontScaling={false} style={styles.anthroUnit}>
+                  {t("profileSetup.kg")}
+                </Text>
+              </View>
+              </>
+            ) : (
+              <View style={styles.anthroPair}>
+                <View style={styles.anthroCol}>
+                  <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.anthroColTitle}>
+                    {t("profileSetup.heightTitle")}
+                  </Text>
+                  <View style={styles.anthroField}>
+                    <TextInput
+                      allowFontScaling={false}
+                      value={heightCmInput}
+                      onChangeText={(v) => setHeightCmInput(v.replace(/[^0-9.]/g, ""))}
+                      keyboardType="decimal-pad"
+                      placeholder={t("profileSetup.heightPlaceholder")}
+                      testID={TEST_IDS.setupHeight}
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      style={styles.anthroFieldInput}
+                    />
+                    <Text allowFontScaling={false} style={styles.anthroFieldUnit}>
+                      {t("profileSetup.cm")}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.anthroCol}>
+                  <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.anthroColTitle}>
+                    {t("profileSetup.weightTitle")}
+                  </Text>
+                  <View style={styles.anthroField}>
+                    <TextInput
+                      allowFontScaling={false}
+                      value={weightKgInput}
+                      onChangeText={(v) => setWeightKgInput(v.replace(/[^0-9.]/g, ""))}
+                      keyboardType="decimal-pad"
+                      placeholder={t("profileSetup.weightPlaceholder")}
+                      testID={TEST_IDS.setupWeight}
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      style={styles.anthroFieldInput}
+                    />
+                    <Text allowFontScaling={false} style={styles.anthroFieldUnit}>
+                      {t("profileSetup.kg")}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
 
           <View style={styles.actionRow}>
@@ -617,7 +681,10 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 end={{ x: 1, y: 1 }}
                 style={styles.primaryInner}
               >
-                <Text allowFontScaling={false} style={styles.primaryText}>{t("profileSetup.setYourRankingBtn")}</Text>
+                <View style={styles.primaryRow}>
+                  <Text allowFontScaling={false} style={styles.primaryText}>{t("profileSetup.setYourRankingBtn")}</Text>
+                  <Ionicons name="arrow-forward" size={20} color="#fff" />
+                </View>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -955,21 +1022,34 @@ function ChoicePill({
   onPress,
   styles,
   testID,
+  glowing = false,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
   styles: any;
   testID?: string;
+  /** Onboarding style: the selected pill gets a bright border and glow instead of a white fill. */
+  glowing?: boolean;
 }) {
   return (
     <TouchableOpacity
       testID={testID}
-      style={[styles.choicePill, active && styles.choicePillActive]}
+      style={
+        glowing
+          ? [styles.choicePill, styles.choicePillGlowOff, active && styles.choicePillGlowOn, active && glow(12, 0.7)]
+          : [styles.choicePill, active && styles.choicePillActive]
+      }
       onPress={onPress}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      aria-selected={active}
     >
-      <Text allowFontScaling={false} style={[styles.choiceText, active && styles.choiceTextActive]}>
+      <Text
+        allowFontScaling={false}
+        style={[styles.choiceText, active && (glowing ? styles.choiceTextGlowOn : styles.choiceTextActive)]}
+      >
         {label}
       </Text>
     </TouchableOpacity>
@@ -1073,6 +1153,26 @@ function getStyles(theme: any) {
     logoWrap: {
       alignItems: "center",
       paddingTop: 10,
+    },
+    detailsHead: {
+      alignItems: "center",
+      paddingTop: 40,
+      gap: 8,
+    },
+    detailsTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 32,
+      color: "#FFFFFF",
+      textAlign: "center",
+    },
+    detailsTitleAccent: {
+      color: "#18C0FF",
+    },
+    detailsSubtitle: {
+      fontFamily: theme.regularFont,
+      fontSize: 15,
+      color: "rgba(165,196,235,0.92)",
+      textAlign: "center",
     },
     logoImage: {
       width: 172,
@@ -1183,6 +1283,46 @@ function getStyles(theme: any) {
       paddingHorizontal: 14,
       textAlign: "center",
     },
+    anthroPair: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    anthroCol: {
+      flex: 1,
+      minWidth: 0,
+      gap: 10,
+    },
+    anthroColTitle: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 16,
+      color: "#fff",
+      textAlign: "center",
+    },
+    anthroField: {
+      flexDirection: "row",
+      alignItems: "center",
+      minHeight: 48,
+      borderRadius: 14,
+      backgroundColor: "#07256D",
+      borderWidth: 1,
+      borderColor: "rgba(0, 184, 255, 0.35)",
+      paddingHorizontal: 12,
+    },
+    anthroFieldInput: {
+      flex: 1,
+      minWidth: 0,
+      color: "#FFFFFF",
+      fontFamily: theme.semiBoldFont,
+      fontSize: 18,
+      paddingVertical: 10,
+      textAlign: "center",
+    },
+    anthroFieldUnit: {
+      fontFamily: theme.mediumFont,
+      fontSize: 15,
+      color: "#00B8FF",
+      marginLeft: 4,
+    },
     anthroUnit: {
       fontFamily: theme.mediumFont,
       fontSize: 16,
@@ -1209,6 +1349,9 @@ function getStyles(theme: any) {
       paddingVertical: 6,
     },
     choicePillActive: { backgroundColor: "#FFFFFF" },
+    choicePillGlowOff: { minHeight: 46, borderWidth: 1.5, borderColor: "#0B2160", backgroundColor: "#06143D" },
+    choicePillGlowOn: { borderWidth: 2, borderColor: "#3D8BFF", backgroundColor: "#0B2A6B" },
+    choiceTextGlowOn: { color: "#FFFFFF" },
     choiceText: { fontFamily: theme.mediumFont, fontSize: 16, lineHeight: 20, color: "#00B8FF" },
     choiceTextActive: { color: "#062063" },
     levelList: {
@@ -1342,6 +1485,7 @@ function getStyles(theme: any) {
     primaryOuter: { borderRadius: 16, overflow: "hidden" },
     primaryInner: { minHeight: 54, alignItems: "center", justifyContent: "center", borderRadius: 16 },
     primaryText: { fontFamily: theme.semiBoldFont, fontSize: 17, color: "#fff" },
+    primaryRow: { flexDirection: "row", alignItems: "center", gap: 8 },
     actionRow: {
       marginTop: 8,
       flexDirection: "row",

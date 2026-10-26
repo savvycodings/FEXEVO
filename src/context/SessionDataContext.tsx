@@ -13,6 +13,7 @@ import { getCachedProfile, setCachedProfile } from '../lib/profile-cache'
 import { TAB_REFETCH_COOLDOWN_MS } from '../lib/tab-refetch-cooldown'
 import {
   fetchGamificationState,
+  type AchievementProgressRow,
   type GamificationQuestRow,
   type GamificationState,
 } from '../lib/gamificationApi'
@@ -78,6 +79,8 @@ type SessionDataContextValue = {
   claimedAchievementKeys: Set<string>
   claimedAchievements: { key: string; unlockedAt: string; claimedAt: string }[]
   claimableAchievementKeys: Set<string>
+  /** Server progress per achievement key; empty until the backend sends `achievementProgress`. */
+  achievementProgress: Map<string, AchievementProgressRow>
   dailyQuests: GamificationQuestRow[]
   weeklyQuests: GamificationQuestRow[]
   seasonQuests: GamificationQuestRow[]
@@ -134,6 +137,9 @@ export function SessionDataProvider({
   >([])
   const [claimableAchievementKeys, setClaimableAchievementKeys] = useState<Set<string>>(
     () => new Set()
+  )
+  const [achievementProgress, setAchievementProgress] = useState<Map<string, AchievementProgressRow>>(
+    () => new Map()
   )
   const [dailyQuests, setDailyQuests] = useState<GamificationQuestRow[]>([])
   const [weeklyQuests, setWeeklyQuests] = useState<GamificationQuestRow[]>([])
@@ -238,6 +244,7 @@ export function SessionDataProvider({
     setClaimableAchievementKeys(
       new Set((state.claimableAchievements ?? []).map((a) => a.key))
     )
+    setAchievementProgress(new Map((state.achievementProgress ?? []).map((p) => [p.key, p])))
     setDailyQuests(state.dailyQuests ?? [])
     setWeeklyQuests(state.weeklyQuests ?? [])
     setSeasonQuests(state.seasonQuests ?? [])
@@ -427,6 +434,7 @@ export function SessionDataProvider({
       claimedAchievementKeys,
       claimedAchievements,
       claimableAchievementKeys,
+      achievementProgress,
       dailyQuests,
       weeklyQuests,
       seasonQuests,
@@ -460,6 +468,7 @@ export function SessionDataProvider({
       claimedAchievementKeys,
       claimedAchievements,
       claimableAchievementKeys,
+      achievementProgress,
       dailyQuests,
       weeklyQuests,
       seasonQuests,

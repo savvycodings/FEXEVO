@@ -65,10 +65,12 @@ import type {
   UserShotDeclaration,
 } from '../navigation/types'
 import { takeSelfAnalyzeShot } from '../lib/pendingSelfAnalyzeShot'
+import { setAiCoachFlowActive } from '../lib/aiCoachFlowHeader'
 import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import InCardRecorder from '../components/InCardRecorder'
 import { ShotDetailsPicker } from '../components/ShotDetailsPicker'
+import { FlowBackButton } from '../components/shotFlow/FlowBackButton'
 import { LOADING_OVERLAY_SCRIM } from '../constants/loadingVideoFullscreen'
 import {
   AICoachCoachReviewBanner,
@@ -510,6 +512,8 @@ export function Technique() {
   const [homeHasHistory, setHomeHasHistory] = useState<boolean | null>(null)
   /** After upload: declare shot category / type / camera angle before Set Clip. */
   const [shotPickerOpen, setShotPickerOpen] = useState(false)
+  /** Set Clip's Back reopens the picker on Camera with the declared shot restored. */
+  const [shotPickerStart, setShotPickerStart] = useState<'shot' | 'camera'>('shot')
   const [sendVideoToCoach, setSendVideoToCoach] = useState(false)
   const [userShot, setUserShot] = useState<UserShotDeclaration | null>(null)
   const pickVideoRef = useRef<(() => Promise<void>) | null>(null)
@@ -1721,6 +1725,7 @@ export function Technique() {
       setCompareSplit(0.5)
       setCorrectionViewMode('drag')
       setUserShot(null)
+      setShotPickerStart('shot')
       setShotPickerOpen(true)
       setStep(2)
     } catch (err) {
@@ -2292,6 +2297,11 @@ export function Technique() {
   }
 
   const showCoachHome = step === 1 && !uploading && !inCardRecording
+  const aiCoachFlowActive = !showCoachHome || shotPickerOpen
+  useEffect(() => {
+    setAiCoachFlowActive(aiCoachFlowActive)
+  }, [aiCoachFlowActive])
+  useEffect(() => () => setAiCoachFlowActive(false), [])
   const coachBanner =
     coachBannerLoaded && assignedCoach ? (
       <AICoachCoachReviewBanner
@@ -2539,6 +2549,8 @@ export function Technique() {
         {shotPickerOpen ? (
           <ShotDetailsPicker
             videoUri={localVideoUri ?? uploadedVideoUrl}
+            initialShot={shotPickerStart === 'camera' ? userShot : null}
+            initialStep={shotPickerStart}
             onBack={() => {
               setShotPickerOpen(false)
               resetToNewVideo()
@@ -2566,6 +2578,20 @@ export function Technique() {
             bottomOffset={insets.bottom + 12}
           >
             <View style={styles.step2}>
+                <View style={styles.step2TitleRow}>
+                  <FlowBackButton
+                    onPress={() => {
+                      void trimPreviewRef.current?.pause()
+                      setShotPickerStart('camera')
+                      setShotPickerOpen(true)
+                    }}
+                    fontFamily={theme.regularFont}
+                    testID={TEST_IDS.setClipBack}
+                  />
+                  <Text allowFontScaling={false} style={[styles.step2Title, { fontFamily: theme.mediumFont }]} numberOfLines={1}>
+                    {t('technique.setClipScreen.yourAnalysis')}
+                  </Text>
+                </View>
                 <View style={styles.step2VideoSummaryCard}>
                   <Text allowFontScaling={false} style={styles.step2HintText}>
                     {t('technique.setClipScreen.impactHint')}
@@ -2695,6 +2721,22 @@ export function Technique() {
                     )
                   ) : null}
 
+                  {uploadedVideoUrl != null && videoDurationSeconds != null && videoDurationSeconds > 0 ? (
+                    <Text allowFontScaling={false} style={styles.step2AnalysisRange} testID="set-clip-analysis-range">
+                      {(() => {
+                        const r = currentTrimClip ?? trimRange
+                        const lenMs = Math.max(0, r.endMs - r.startMs)
+                        return t('technique.setClipScreen.analysisRange', {
+                          start: formatTimeFromMs(r.startMs),
+                          // Round the end up so a sub-second clip doesn't read "0:00 - 0:00".
+                          end: formatTimeFromMs(Math.ceil(r.endMs / 1000) * 1000),
+                          sec: (lenMs / 1000).toFixed(1),
+                          max: MAX_ANALYZE_CLIP_MS / 1000,
+                        })
+                      })()}
+                    </Text>
+                  ) : null}
+
                   {uploadedVideoUrl != null && videoDurationSeconds != null && videoDurationSeconds > 0 && currentTrimClip ? (
                     <ContactFrameGrid
                       videoUri={localVideoUri ?? uploadedVideoUrl}
@@ -2772,7 +2814,7 @@ export function Technique() {
                     accessibilityLabel={t('techniqueExtra.tryNewVideo')}
                   >
                     <Text style={styles.step2TryNewVideoText} numberOfLines={2}>
-                      Try a new video
+                      {t('techniqueExtra.tryNewVideo')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -4669,6 +4711,8 @@ function getStyles(theme: any) {
       textAlign: 'center',
     },
     step2: { position: 'relative' as const, flexShrink: 0, gap: 20 },
+    step2TitleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 20 },
+    step2Title: { flexShrink: 1, color: '#FFFFFF', fontSize: 26, lineHeight: 32 },
     analysisTitleRow: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
@@ -4866,6 +4910,14 @@ function getStyles(theme: any) {
       gap: 10,
       marginBottom: 8,
     },
+    step2AnalysisRange: {
+      color: '#8FA8D6',
+      fontSize: 12,
+      lineHeight: 16,
+      textAlign: 'right' as const,
+      marginTop: 8,
+      fontFamily: theme.regularFont,
+    },
     step2CarouselLoadingText: {
       fontFamily: theme.regularFont,
       fontSize: 13,
@@ -4895,7 +4947,8 @@ function getStyles(theme: any) {
     },
     step2TryNewVideoBtn: {
       borderRadius: 24,
-      borderWidth: 0,
+      borderWidth: 1,
+      borderColor: 'rgba(0, 102, 255, 0.28)',
       backgroundColor: '#0A1E5C',
       paddingVertical: 15,
       paddingHorizontal: 12,
