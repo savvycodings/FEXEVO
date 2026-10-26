@@ -123,6 +123,16 @@ export function buildCoachTraceSteps(
         status: 'pending',
       })
     }
+    const errors = a.technicalErrors ?? []
+    if (errors.length) {
+      steps.push({
+        id: 'errors',
+        icon: 'alert-circle-outline',
+        label: t('coachCharacter.trace.errors'),
+        content: { type: 'list', items: errors },
+        status: 'pending',
+      })
+    }
     if (a.corrections.length || a.focusArea) {
       steps.push({
         id: 'fixes',
@@ -130,6 +140,43 @@ export function buildCoachTraceSteps(
         label: t('coachCharacter.trace.fixes'),
         detail: a.focusArea ? t('coachCharacter.trace.focus', { area: humanize(a.focusArea) }) : undefined,
         content: a.corrections.length ? { type: 'list', items: a.corrections } : undefined,
+        status: 'pending',
+      })
+    }
+    const motion = a.measuredMotion ?? []
+    if (motion.length) {
+      steps.push({
+        id: 'motion',
+        icon: 'body-outline',
+        label: t('coachCharacter.trace.measuredMotion'),
+        content: { type: 'list', items: motion },
+        status: 'pending',
+      })
+    } else if (a.citeOk === false) {
+      steps.push({
+        id: 'motion',
+        icon: 'body-outline',
+        label: t('coachCharacter.trace.measuredMotionLimited'),
+        status: 'pending',
+      })
+    }
+    if (a.proReference?.label) {
+      const skill = a.proReference.skillLevel ? ` · ${a.proReference.skillLevel}` : ''
+      steps.push({
+        id: 'proRef',
+        icon: 'trophy-outline',
+        label: t('coachCharacter.trace.proReference'),
+        detail: `${a.proReference.label}${skill}`,
+        status: 'pending',
+      })
+    }
+    const vsPro = a.vsProJoints ?? []
+    if (vsPro.length) {
+      steps.push({
+        id: 'vsPro',
+        icon: 'git-compare-outline',
+        label: t('coachCharacter.trace.vsProJoints'),
+        content: { type: 'list', items: vsPro },
         status: 'pending',
       })
     }
@@ -155,6 +202,115 @@ export function buildCoachTraceSteps(
       },
       status: 'pending',
     })
+  }
+  const hist = ctx.history
+  if (hist && ctx.kind === 'history') {
+    steps.push({
+      id: 'history-search',
+      icon: 'library-outline',
+      label: t('coachCharacter.trace.historySearch', {
+        window: hist.windowLabel,
+        shot: hist.shotQuery ? humanize(hist.shotQuery) : t('coachCharacter.trace.historyAllShots'),
+      }),
+      detail: hist.theme ? t('coachCharacter.trace.historyTheme', { theme: humanize(hist.theme) }) : undefined,
+      status: 'pending',
+    })
+    if (hist.sessions.length) {
+      steps.push({
+        id: 'history-sessions',
+        icon: 'list-outline',
+        label: t('coachCharacter.trace.historySessions', { count: hist.sessions.length }),
+        content: {
+          type: 'sessions',
+          items: hist.sessions.slice(0, 8).map((s) => ({
+            time: shortDate(s.createdAt, locale),
+            score: s.score != null ? `${s.score}` : '-',
+            area: s.shotName,
+          })),
+        },
+        status: 'pending',
+      })
+    }
+    if (hist.notes.length) {
+      steps.push({
+        id: 'history-notes',
+        icon: 'bulb-outline',
+        label: t('coachCharacter.trace.historyNotes'),
+        content: { type: 'list', items: hist.notes.slice(0, 5) },
+        status: 'pending',
+      })
+    }
+  }
+  const cmp = ctx.compare
+  if (cmp && ctx.kind === 'compare') {
+    steps.push({
+      id: 'compare-search',
+      icon: 'search-outline',
+      label: t('coachCharacter.trace.compareSearch', { shot: humanize(cmp.shotQuery) }),
+      detail: t('coachCharacter.trace.comparePriorTarget', { when: cmp.priorLabel }),
+      status: 'pending',
+    })
+    const cur = cmp.current
+    if (cur) {
+      const clip = resolveCoachVideoUrl(cur.videoUrl)
+      steps.push({
+        id: 'compare-current',
+        icon: 'film-outline',
+        label: t('coachCharacter.trace.compareCurrent', {
+          shot: cur.shotName ?? humanize(cmp.shotQuery),
+          date: shortDate(cur.createdAt, locale),
+        }),
+        detail: cur.score != null ? `${cur.score}/100` : undefined,
+        content: clip ? { type: 'video', uri: clip } : undefined,
+        status: 'pending',
+      })
+    }
+    const prior = cmp.prior
+    if (prior) {
+      const clip = resolveCoachVideoUrl(prior.videoUrl)
+      steps.push({
+        id: 'compare-prior',
+        icon: 'time-outline',
+        label: t('coachCharacter.trace.comparePrior', {
+          shot: prior.shotName ?? humanize(cmp.shotQuery),
+          date: shortDate(prior.createdAt, locale),
+        }),
+        detail: prior.score != null ? `${prior.score}/100` : undefined,
+        content: clip ? { type: 'video', uri: clip } : undefined,
+        status: 'pending',
+      })
+    }
+    if (cmp.missing === 'both' || cmp.missing === 'current' || cmp.missing === 'prior') {
+      steps.push({
+        id: 'compare-missing',
+        icon: 'alert-circle-outline',
+        label: t(`coachCharacter.trace.compareMissing.${cmp.missing}`, {
+          shot: humanize(cmp.shotQuery),
+          when: cmp.priorLabel,
+        }),
+        status: 'pending',
+      })
+    } else if (cur && prior && cur.score != null && prior.score != null) {
+      const delta = cur.score - prior.score
+      steps.push({
+        id: 'compare-delta',
+        icon: 'swap-vertical-outline',
+        label: t('coachCharacter.trace.compareDelta'),
+        content: {
+          type: 'chips',
+          items: [
+            {
+              label: t('coachCharacter.trace.compareChange'),
+              value: `${delta > 0 ? '+' : ''}${delta}`,
+              highlight: true,
+            },
+            { label: t('coachCharacter.trace.comparePriorScore'), value: `${prior.score}` },
+            { label: t('coachCharacter.trace.compareCurrentScore'), value: `${cur.score}` },
+          ],
+        },
+        status: 'pending',
+      })
+    }
   }
   steps.push({ id: 'answer', icon: 'create-outline', label: t('coachCharacter.trace.answer'), status: 'pending' })
   return steps

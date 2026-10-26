@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Audio } from 'expo-av'
+import { Platform } from 'react-native'
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useTranslation } from 'react-i18next'
 import {
@@ -39,6 +40,32 @@ const IDLE_PLAYBACK: CoachPlayback = { id: null, playing: false, positionMs: 0, 
 let messageSeq = 0
 const nextId = () => `m${++messageSeq}`
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+/** Speaker playback — Android defaults to earpiece without playThroughEarpieceAndroid: false. */
+async function setPlaybackAudioMode() {
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: false,
+    playsInSilentModeIOS: true,
+    staysActiveInBackground: false,
+    shouldDuckAndroid: true,
+    playThroughEarpieceAndroid: false,
+    interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+    interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+  })
+}
+
+async function setRecordingAudioMode() {
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: true,
+    playsInSilentModeIOS: true,
+    staysActiveInBackground: false,
+    shouldDuckAndroid: true,
+    // Recording uses the mic route; reset to speaker again in setPlaybackAudioMode after.
+    playThroughEarpieceAndroid: Platform.OS === 'android',
+    interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+    interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+  })
+}
 
 type Options = {
   analysisId: string | null
@@ -96,8 +123,11 @@ export function useCoachChat({ analysisId, videoUri, active, onFirstMessage }: O
     soundRef.current = null
     if (prev) await prev.sound.unloadAsync().catch(() => {})
     try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true }).catch(() => {})
-      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: false, progressUpdateIntervalMillis: 200 })
+      await setPlaybackAudioMode().catch(() => {})
+      const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: false, volume: 1, progressUpdateIntervalMillis: 200 }
+      )
       if (!mountedRef.current || !activeRef.current) {
         await sound.unloadAsync().catch(() => {})
         return
@@ -119,6 +149,7 @@ export function useCoachChat({ analysisId, videoUri, active, onFirstMessage }: O
           durationMs: status.durationMillis ?? 0,
         })
       })
+      await sound.setVolumeAsync(1).catch(() => {})
       await sound.playAsync()
     } catch (e) {
       console.warn('[CoachAssistant] playback failed', e)
@@ -182,7 +213,7 @@ export function useCoachChat({ analysisId, videoUri, active, onFirstMessage }: O
     } catch {
       /* already stopped */
     }
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true }).catch(() => {})
+    await setPlaybackAudioMode().catch(() => {})
     return rec.getURI()
   }, [])
 
@@ -309,7 +340,7 @@ export function useCoachChat({ analysisId, videoUri, active, onFirstMessage }: O
       }
       if (!holdingRef.current) return
       await stopPlayback()
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true })
+      await setRecordingAudioMode()
       const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY)
       recordingRef.current = recording
       if (!holdingRef.current) {

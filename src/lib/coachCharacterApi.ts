@@ -11,7 +11,7 @@ export type CoachChatTurn = { role: 'user' | 'assistant'; content: string }
 
 export type CoachAnalysisFacts = {
   analysisId: string
-  source: 'selected' | 'latest'
+  source: 'selected' | 'latest' | 'compare_current' | 'compare_prior'
   shotName: string | null
   /** Server-relative (`/technique/video/:id`) or absolute; resolve with `resolveCoachVideoUrl`. */
   videoUrl: string | null
@@ -21,6 +21,18 @@ export type CoachAnalysisFacts = {
   focusArea: string | null
   strengths: string[]
   corrections: string[]
+  technicalErrors?: string[]
+  observations?: string[]
+  diagnosis?: string | null
+  measuredMotion?: string[]
+  citeOk?: boolean
+  proReference?: {
+    label: string
+    skillLevel: string | null
+    distance: number | null
+    trainSampleId: string | null
+  } | null
+  vsProJoints?: string[]
   createdAt: string
 }
 
@@ -31,15 +43,39 @@ export type CoachDayFacts = {
   sessions: Array<{ analysisId: string; score: number | null; focusArea: string | null; createdAt: string }>
 }
 
+export type CoachCompareFacts = {
+  shotQuery: string
+  priorLabel: string
+  current: CoachAnalysisFacts | null
+  prior: CoachAnalysisFacts | null
+  missing: 'none' | 'current' | 'prior' | 'both'
+}
+
+export type CoachHistoryFacts = {
+  intent: string
+  windowLabel: string
+  shotQuery: string | null
+  theme: string | null
+  sessions: Array<{
+    analysisId: string
+    shotName: string | null
+    score: number | null
+    createdAt: string
+  }>
+  notes: string[]
+}
+
 export type CoachContext = {
-  kind: 'analysis' | 'day' | 'none'
+  kind: 'analysis' | 'day' | 'compare' | 'history' | 'none'
   analysis: CoachAnalysisFacts | null
   day: CoachDayFacts | null
+  compare?: CoachCompareFacts | null
+  history?: CoachHistoryFacts | null
 }
 
 type FetchResult<T> = { data?: T | null; error?: { status?: number; message?: string } | null }
 
-const CONTEXT_TIMEOUT_MS = 10_000
+const CONTEXT_TIMEOUT_MS = 25_000
 const CHAT_TIMEOUT_MS = 75_000
 
 async function post<T>(path: string, body: unknown, timeoutMs?: number): Promise<T> {
@@ -59,19 +95,41 @@ async function post<T>(path: string, body: unknown, timeoutMs?: number): Promise
   return res.data
 }
 
+function normalizeCoachContext(raw: CoachContext | null | undefined): CoachContext {
+  if (!raw || typeof raw !== 'object') {
+    return { kind: 'none', analysis: null, day: null, compare: null, history: null }
+  }
+  const kind =
+    raw.kind === 'analysis' ||
+    raw.kind === 'day' ||
+    raw.kind === 'compare' ||
+    raw.kind === 'history' ||
+    raw.kind === 'none'
+      ? raw.kind
+      : 'none'
+  return {
+    kind,
+    analysis: raw.analysis ?? null,
+    day: raw.day ?? null,
+    compare: raw.compare ?? null,
+    history: raw.history ?? null,
+  }
+}
+
 export async function fetchCoachContext(
   message: string,
   analysisId: string | null | undefined,
   locale: string
 ): Promise<CoachContext> {
   try {
-    return await post<CoachContext>('/coach-character/context', {
+    const data = await post<CoachContext>('/coach-character/context', {
       message,
       analysisId: analysisId ?? undefined,
       locale,
     }, CONTEXT_TIMEOUT_MS)
+    return normalizeCoachContext(data)
   } catch {
-    return { kind: 'none', analysis: null, day: null }
+    return { kind: 'none', analysis: null, day: null, compare: null, history: null }
   }
 }
 
@@ -98,9 +156,13 @@ export async function fetchCoachSpeech(
       text,
       locale: locale || undefined,
     })
-    if (!data.audioBase64) return null
+    if (!data.audioBase64) {
+      console.warn('[CoachAssistant] speech response missing audioBase64')
+      return null
+    }
     return { audioBase64: data.audioBase64, mimeType: data.mimeType || 'audio/wav' }
-  } catch {
+  } catch (e) {
+    console.warn('[CoachAssistant] speech request failed (voice offline or network)', e)
     return null
   }
 }
