@@ -1172,6 +1172,7 @@ export function ActivitiesVideoAnalysis({
         {analysisTab === 'proReference' ? (
           <ProReferenceCompare
             videoUri={videoUri(session.videoPath)}
+            analysisId={session.analysisId}
             referenceImageUri={correctionPairs[0]?.correctedImage ?? null}
             rows={proCompareRows}
             score={

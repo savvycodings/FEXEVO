@@ -3292,6 +3292,7 @@ export function Technique() {
                 uploadedVideoUrl ? (
                   <ProReferenceCompare
                     videoUri={uploadedVideoUrl}
+                    analysisId={analysisId}
                     referenceImageUri={null}
                     rows={proCompareRows}
                     score={score}
