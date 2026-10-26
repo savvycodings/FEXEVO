@@ -11,7 +11,7 @@ export type CoachChatTurn = { role: 'user' | 'assistant'; content: string }
 
 export type CoachAnalysisFacts = {
   analysisId: string
-  source: 'selected' | 'latest' | 'compare_current' | 'compare_prior'
+  source: 'selected' | 'latest' | 'compare_current' | 'compare_prior' | 'best_in_window' | 'worst_in_window' | 'matching_shot'
   shotName: string | null
   /** Server-relative (`/technique/video/:id`) or absolute; resolve with `resolveCoachVideoUrl`. */
   videoUrl: string | null
@@ -65,12 +65,26 @@ export type CoachHistoryFacts = {
   notes: string[]
 }
 
+export type CoachFocus = {
+  showVideo: boolean
+  showScore: boolean
+  showBreakdown: boolean
+  showMotion: boolean
+  windowLabel: string | null
+  windowCount: number | null
+  windowAverage: number | null
+  windowBest: number | null
+  theme: string | null
+  analysis: CoachAnalysisFacts | null
+}
+
 export type CoachContext = {
   kind: 'analysis' | 'day' | 'compare' | 'history' | 'none'
   analysis: CoachAnalysisFacts | null
   day: CoachDayFacts | null
   compare?: CoachCompareFacts | null
   history?: CoachHistoryFacts | null
+  focus?: CoachFocus | null
 }
 
 type FetchResult<T> = { data?: T | null; error?: { status?: number; message?: string } | null }
@@ -97,7 +111,7 @@ async function post<T>(path: string, body: unknown, timeoutMs?: number): Promise
 
 function normalizeCoachContext(raw: CoachContext | null | undefined): CoachContext {
   if (!raw || typeof raw !== 'object') {
-    return { kind: 'none', analysis: null, day: null, compare: null, history: null }
+    return { kind: 'none', analysis: null, day: null, compare: null, history: null, focus: null }
   }
   const kind =
     raw.kind === 'analysis' ||
@@ -113,6 +127,7 @@ function normalizeCoachContext(raw: CoachContext | null | undefined): CoachConte
     day: raw.day ?? null,
     compare: raw.compare ?? null,
     history: raw.history ?? null,
+    focus: raw.focus ?? null,
   }
 }
 
@@ -129,7 +144,7 @@ export async function fetchCoachContext(
     }, CONTEXT_TIMEOUT_MS)
     return normalizeCoachContext(data)
   } catch {
-    return { kind: 'none', analysis: null, day: null, compare: null, history: null }
+    return { kind: 'none', analysis: null, day: null, compare: null, history: null, focus: null }
   }
 }
 

@@ -315,6 +315,7 @@ export function useCoachChat({ analysisId, videoUri, active, onFirstMessage }: O
             durationMs: Date.now() - startedAt,
           },
         })
+        // Every answer is spoken, including plans and trends that do not attach a clip.
         void loadSpeech(coachId, result.reply)
       } catch (e) {
         console.warn('[CoachAssistant] send failed', e)

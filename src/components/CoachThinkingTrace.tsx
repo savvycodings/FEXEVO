@@ -4,7 +4,7 @@ import * as VideoThumbnails from 'expo-video-thumbnails'
 import { ResizeMode, Video, type AVPlaybackStatus } from 'expo-av'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import type { TFunction } from 'i18next'
-import { resolveCoachVideoUrl, type CoachContext } from '../lib/coachCharacterApi'
+import { resolveCoachVideoUrl, type CoachContext, type CoachFocus } from '../lib/coachCharacterApi'
 import { CoachEyes } from './CoachCharacterAvatar'
 
 const ACCENT = '#00B8FF'
@@ -57,6 +57,163 @@ function clock(iso: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+function orderedMotion(lines: string[], theme: string | null): string[] {
+  if (!theme) return lines
+  const key = theme.toLowerCase().split(' ')[0] ?? theme.toLowerCase()
+  const hit = lines.filter((line) => line.toLowerCase().includes(key))
+  const rest = lines.filter((line) => !hit.includes(line))
+  return [...hit, ...rest]
+}
+
+function focusVideoLabel(t: TFunction, focus: CoachFocus, locale: string): string {
+  const a = focus.analysis
+  if (!a) return t('coachCharacter.trace.video')
+  const date = shortDate(a.createdAt, locale)
+  const shot = a.shotName ? humanize(a.shotName) : t('coachCharacter.trace.shotFallback')
+  const window = focus.windowLabel ?? ''
+  if (a.source === 'best_in_window') return t('coachCharacter.trace.bestInWindow', { shot, window, date })
+  if (a.source === 'worst_in_window') return t('coachCharacter.trace.worstInWindow', { shot, window, date })
+  if (a.source === 'matching_shot') return t('coachCharacter.trace.matchingShot', { shot, date })
+  if (a.source === 'selected') return t('coachCharacter.trace.selectedShot', { shot, date })
+  if (focus.showMotion && !focus.showScore) return t('coachCharacter.trace.measuringShot', { shot, date })
+  return t('coachCharacter.trace.lastShot', { date })
+}
+
+/** Video, score, and motion follow the question. A period summary is not the newest upload. */
+function pushFocusSteps(
+  steps: TraceStep[],
+  t: TFunction,
+  focus: CoachFocus,
+  videoUri: string | null,
+  locale: string
+) {
+  if (focus.windowLabel && focus.windowCount != null) {
+    steps.push({
+      id: 'window',
+      icon: 'calendar-outline',
+      label: t('coachCharacter.trace.windowSummary', {
+        count: focus.windowCount,
+        window: focus.windowLabel,
+        avg: focus.windowAverage ?? '-',
+        best: focus.windowBest ?? '-',
+      }),
+      status: 'pending',
+    })
+  }
+  if (!focus.showVideo && focus.windowLabel) {
+    steps.push({
+      id: 'no-clip',
+      icon: 'chatbubbles-outline',
+      label: t('coachCharacter.trace.noClip'),
+      status: 'pending',
+    })
+  }
+  const a = focus.analysis
+  if (!a) return
+  const clip = (a.source === 'selected' ? videoUri : null) ?? resolveCoachVideoUrl(a.videoUrl)
+  if (focus.showVideo && clip) {
+    steps.push({
+      id: 'video',
+      icon: 'film-outline',
+      label: focusVideoLabel(t, focus, locale),
+      detail: a.shotName ? humanize(a.shotName) : undefined,
+      content: { type: 'video', uri: clip },
+      status: 'pending',
+    })
+  }
+  if (focus.showScore && a.score != null) {
+    const rating = ratingLabel(t, a.rating)
+    steps.push({
+      id: 'score',
+      icon: 'speedometer-outline',
+      label: t('coachCharacter.trace.score'),
+      content: {
+        type: 'chips',
+        items: [
+          { label: t('coachCharacter.trace.overall'), value: `${a.score}/100`, highlight: true },
+          ...(rating ? [{ label: rating }] : []),
+        ],
+      },
+      status: 'pending',
+    })
+  }
+  if (focus.showBreakdown) {
+    const b = a.breakdown
+    const parts = [
+      b.technique != null ? { label: t('coachCharacter.trace.technique'), value: String(b.technique) } : null,
+      b.outcome != null ? { label: t('coachCharacter.trace.outcome'), value: String(b.outcome) } : null,
+      b.tactics != null ? { label: t('coachCharacter.trace.tactics'), value: String(b.tactics) } : null,
+    ].filter((x): x is { label: string; value: string } => x != null)
+    if (parts.length) {
+      steps.push({
+        id: 'breakdown',
+        icon: 'stats-chart-outline',
+        label: t('coachCharacter.trace.breakdown'),
+        content: { type: 'chips', items: parts },
+        status: 'pending',
+      })
+    }
+    if (a.strengths.length) {
+      steps.push({
+        id: 'strengths',
+        icon: 'checkmark-done-outline',
+        label: t('coachCharacter.trace.strengths'),
+        content: { type: 'list', items: a.strengths },
+        status: 'pending',
+      })
+    }
+    const errors = a.technicalErrors ?? []
+    if (errors.length) {
+      steps.push({
+        id: 'errors',
+        icon: 'alert-circle-outline',
+        label: t('coachCharacter.trace.errors'),
+        content: { type: 'list', items: errors },
+        status: 'pending',
+      })
+    }
+  }
+  if (focus.showMotion) {
+    const motion = orderedMotion(a.measuredMotion ?? [], focus.theme)
+    if (motion.length) {
+      steps.push({
+        id: 'motion',
+        icon: 'body-outline',
+        label: t('coachCharacter.trace.measuredMotion'),
+        content: { type: 'list', items: motion },
+        status: 'pending',
+      })
+    } else if (a.citeOk === false) {
+      steps.push({
+        id: 'motion',
+        icon: 'body-outline',
+        label: t('coachCharacter.trace.measuredMotionLimited'),
+        status: 'pending',
+      })
+    }
+    if (a.proReference?.label) {
+      const skill = a.proReference.skillLevel ? ` · ${a.proReference.skillLevel}` : ''
+      steps.push({
+        id: 'proRef',
+        icon: 'trophy-outline',
+        label: t('coachCharacter.trace.proReference'),
+        detail: `${a.proReference.label}${skill}`,
+        status: 'pending',
+      })
+    }
+    const vsPro = a.vsProJoints ?? []
+    if (vsPro.length) {
+      steps.push({
+        id: 'vsPro',
+        icon: 'git-compare-outline',
+        label: t('coachCharacter.trace.vsProJoints'),
+        content: { type: 'list', items: vsPro },
+        status: 'pending',
+      })
+    }
+  }
+}
+
 /** Steps the coach "walks through" before answering; all content comes from real analysis data. */
 export function buildCoachTraceSteps(
   t: TFunction,
@@ -67,8 +224,9 @@ export function buildCoachTraceSteps(
   const steps: TraceStep[] = [
     { id: 'question', icon: 'chatbubble-ellipses-outline', label: t('coachCharacter.trace.question'), status: 'pending' },
   ]
+  if (ctx.focus) pushFocusSteps(steps, t, ctx.focus, videoUri, locale)
   const a = ctx.analysis
-  if (a && ctx.kind === 'analysis') {
+  if (a && ctx.kind === 'analysis' && !ctx.focus) {
     const clip = (a.source === 'selected' ? videoUri : null) ?? resolveCoachVideoUrl(a.videoUrl)
     if (clip) {
       steps.push({
