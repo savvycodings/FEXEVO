@@ -525,6 +525,7 @@ export const en = {
     smart3dFeet: "Feet",
     smart3dRacket: "Racket",
     smart3dHologramBuilding: "Building your hologram…",
+    smart3dProMissing: "No pro reference for this shot yet.",
     jointAngleTitle: "{{joint}} Angle",
     contactPhase: "Contact Phase",
     view3d: "3D View",

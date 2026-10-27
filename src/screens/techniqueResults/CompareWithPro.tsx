@@ -167,7 +167,7 @@ export function CompareWithPro({
           icon="ribbon"
           accent="#3EC8FF"
           videoUri={referenceVideoUri}
-          image={referenceVideoUri ? null : referenceImage}
+          image={referenceImage}
           emptyLabel={t('analysis.compareProEmpty')}
         />
       </View>
@@ -238,6 +238,9 @@ function ClipCard({
   const [playing, setPlaying] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
+  // A clip that can't load (e.g. its file is gone) falls back to the image or the empty state.
+  const [failedUri, setFailedUri] = useState<string | null>(null)
+  const playable = videoUri && videoUri !== failedUri ? videoUri : null
 
   function onStatus(status: AVPlaybackStatus) {
     if (!status.isLoaded) return
@@ -248,14 +251,15 @@ function ClipCard({
 
   return (
     <View style={[styles.clip, { borderColor: accent }]}>
-      {videoUri ? (
+      {playable ? (
         <Video
           ref={videoRef}
-          source={{ uri: videoUri }}
+          source={{ uri: playable }}
           style={styles.clipMedia}
           resizeMode={ResizeMode.COVER}
           isMuted
           onPlaybackStatusUpdate={onStatus}
+          onError={() => setFailedUri(playable)}
         />
       ) : image ? (
         <Image source={image} style={styles.clipMedia} resizeMode="cover" />
@@ -275,7 +279,7 @@ function ClipCard({
           {label}
         </Text>
       </View>
-      {videoUri ? (
+      {playable ? (
         <View style={styles.clipControls}>
           <Pressable
             style={styles.play}
