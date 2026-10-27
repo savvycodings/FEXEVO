@@ -75,6 +75,8 @@ type Props = {
   torsoDeg: number | null
   onClose: () => void
   onSmart3d: () => void
+  /** Opens the Magic Shot of this shot done right; without it the button replays the clip. */
+  onSeeCorrect?: () => void
 }
 
 function coverPx(nx: number, ny: number, boxW: number, boxH: number, natW: number, natH: number) {
@@ -124,6 +126,7 @@ export function BiggestMistakesView({
   torsoDeg,
   onClose,
   onSmart3d,
+  onSeeCorrect,
 }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -417,8 +420,9 @@ export function BiggestMistakesView({
 
       <Pressable
         accessibilityRole="button"
-        onPress={() => void videoRef.current?.playAsync()}
+        onPress={onSeeCorrect ?? (() => void videoRef.current?.replayAsync())}
         style={styles.correctGlow}
+        testID="see-correct-movement"
       >
         <LinearGradient colors={['#3EC8FF', '#2454FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.correctBtn}>
           <Ionicons name="play" size={16} color="#FFFFFF" />

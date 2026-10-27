@@ -511,6 +511,8 @@ export const es = {
     mistakeFootBody: "Los pies están demasiado juntos para el punto de contacto.",
     mistakeFootWhy: "Una base estrecha hace más difícil mantener el equilibrio en el golpe.",
     seeCorrectMovement: "Ver el movimiento correcto",
+    correctMovementTitle: "Movimiento correcto",
+    correctMovementSubtitle: "Tu golpe, bien hecho por la IA",
     smart3d: "Vista 3D inteligente",
     smart3dPlayer: "Jugador",
     smart3dOverlay: "Superponer",

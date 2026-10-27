@@ -401,7 +401,12 @@ export function AnalysisOverview({
         })}
       </View>
 
-      <Pressable onPress={onBiggestMistakes} accessibilityRole="button" style={styles.primaryGlow}>
+      <Pressable
+        onPress={onBiggestMistakes}
+        accessibilityRole="button"
+        style={styles.primaryGlow}
+        testID="overview-biggest-mistakes"
+      >
         <LinearGradient
           colors={detail === 'mistakes' ? ['#1A8CFF', '#1236C8'] : ['#3EC8FF', '#2454FF']}
           start={{ x: 0, y: 0 }}
