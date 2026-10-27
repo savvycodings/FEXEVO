@@ -1,12 +1,13 @@
-import { Fragment, useContext, useEffect, useState } from 'react'
-import { ActivityIndicator, BackHandler, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Fragment, useContext, useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, BackHandler, Image, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ResizeMode, Video } from 'expo-av'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import Svg, { Circle, Line } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
-import { useHologram, type HologramKeypoints } from '../../lib/hologramJob'
+import { useHologram, type HologramKeypoints, type HologramOrbitFrame } from '../../lib/hologramJob'
 import { useContactJoints, type ContactJoint } from '../../lib/jointsApi'
 import { JointDetailView } from './JointDetailView'
 
@@ -81,12 +82,46 @@ function partKeypoints(part: BodyPart, side: 'LEFT' | 'RIGHT'): string[] {
   }
 }
 
-/** Joint markers over a square hologram drawn with resizeMode="cover" in a w x h stage. */
-function JointMarkers({ keypoints, w, h, lit }: { keypoints: HologramKeypoints; w: number; h: number; lit: string[] }) {
-  const d = Math.max(w, h)
+/** MediaPipe frame closest to the scrub position. */
+function orbitKeypointsAt(frames: HologramOrbitFrame[] | null, index: number): HologramKeypoints | null {
+  if (!frames?.length) return null
+  let best = frames[0]
+  let dist = Math.abs(best.frame - index)
+  for (const row of frames) {
+    const d = Math.abs(row.frame - index)
+    if (d < dist) {
+      best = row
+      dist = d
+    }
+  }
+  return best.keypoints
+}
+
+/** Joint markers. The still is a square cover; the orbit clip is contained in the stage. */
+function JointMarkers({
+  keypoints,
+  w,
+  h,
+  lit,
+  video,
+}: {
+  keypoints: HologramKeypoints
+  w: number
+  h: number
+  lit: string[]
+  video: { width: number; height: number } | null
+}) {
   const at = (name: string) => {
     const p = keypoints[name]
-    return p ? { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d } : null
+    if (!p) return null
+    if (!video) {
+      const d = Math.max(w, h)
+      return { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d }
+    }
+    const videoAspect = video.width / video.height
+    const dw = w / h > videoAspect ? h * videoAspect : w
+    const dh = w / h > videoAspect ? h : w / videoAspect
+    return { x: (w - dw) / 2 + p.x * dw, y: (h - dh) / 2 + p.y * dh }
   }
   const names = [...BASE_MARKERS, ...lit.filter((name) => !BASE_MARKERS.includes(name))]
   return (
@@ -126,14 +161,54 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   const contactJoints = useContactJoints(analysisId)
   const [detail, setDetail] = useState<ContactJoint | null>(null)
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 })
+  const videoRef = useRef<Video>(null)
+  const [orbitIndex, setOrbitIndex] = useState(0)
+  const orbitIndexRef = useRef(0)
+  const grantIndex = useRef(0)
+  const stageHRef = useRef(1)
+  const frameCountRef = useRef(2)
+  const durationRef = useRef(4000)
+  const showOrbit = layer === 'player' && Boolean(hologram.orbitVideo)
+  frameCountRef.current = Math.max(2, hologram.orbitFrameCount ?? 2)
+  durationRef.current = hologram.orbitDurationMs && hologram.orbitDurationMs > 0 ? hologram.orbitDurationMs : 4000
+
+  function seekOrbit(index: number) {
+    const last = frameCountRef.current - 1
+    const clamped = Math.min(last, Math.max(0, index))
+    orbitIndexRef.current = clamped
+    setOrbitIndex(clamped)
+    const positionMillis = (clamped / last) * durationRef.current
+    void videoRef.current?.setStatusAsync({ shouldPlay: false, positionMillis })
+  }
+
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 10 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderGrant: () => {
+        grantIndex.current = orbitIndexRef.current
+      },
+      onPanResponderMove: (_, g) => {
+        const last = frameCountRef.current - 1
+        const delta = (-g.dy / Math.max(stageHRef.current, 1)) * last
+        seekOrbit(grantIndex.current + delta)
+      },
+    })
+  ).current
   /** Player hologram is blue; the pro reference is the red render of the matched library clip. */
   const holoImage = layer === 'pro' ? hologram.proImage : hologram.image
   const holoKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
   const building =
     layer === 'pro'
       ? hologram.proStatus === 'running'
-      : hologram.status === 'running' || (layer === 'overlay' && hologram.proStatus === 'running')
+      : hologram.status === 'running' ||
+        (layer === 'player' && hologram.orbitStatus === 'running') ||
+        (layer === 'overlay' && hologram.proStatus === 'running')
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
+  const markerKeys = showOrbit ? orbitKeypointsAt(hologram.orbitFrames, orbitIndex) : holoKeys
+  const markerVideo =
+    showOrbit && hologram.orbitWidth && hologram.orbitHeight
+      ? { width: hologram.orbitWidth, height: hologram.orbitHeight }
+      : null
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -190,9 +265,22 @@ export function Smart3DView({ analysisId, onClose }: Props) {
       <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} trackStyle={styles.pill} />
       <View
         style={styles.stage}
-        onLayout={(e) => setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+        onLayout={(e) => {
+          stageHRef.current = e.nativeEvent.layout.height
+          setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
+        }}
+        {...(showOrbit ? pan.panHandlers : {})}
       >
-        {holoImage ? (
+        {showOrbit ? (
+          <Video
+            ref={videoRef}
+            source={{ uri: hologram.orbitVideo! }}
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay={false}
+            isMuted
+            style={StyleSheet.absoluteFill}
+          />
+        ) : holoImage ? (
           <Image source={{ uri: holoImage }} resizeMode="cover" style={StyleSheet.absoluteFill} />
         ) : (
           <Image
@@ -204,20 +292,20 @@ export function Smart3DView({ analysisId, onClose }: Props) {
         {layer === 'overlay' && hologram.proImage ? (
           <Image source={{ uri: hologram.proImage }} resizeMode="cover" style={[StyleSheet.absoluteFill, { opacity: 0.72 }]} />
         ) : null}
-        {holoImage && holoKeys && stageSize.w ? (
-          <JointMarkers keypoints={holoKeys} w={stageSize.w} h={stageSize.h} lit={lit} />
+        {markerKeys && stageSize.w ? (
+          <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={markerVideo} />
         ) : null}
         {building ? (
           <View pointerEvents="none" style={styles.building}>
             <ActivityIndicator size="small" color="#7AECFF" />
             <Text allowFontScaling={false} style={[styles.buildingLabel, { fontFamily: theme.mediumFont }]}>
-              {t('analysis.smart3dHologramBuilding')}
+              {t(hologram.status === 'done' ? 'analysis.smart3dOrbitBuilding' : 'analysis.smart3dHologramBuilding')}
             </Text>
           </View>
         ) : null}
       </View>
       <Text allowFontScaling={false} style={[styles.prompt, { fontFamily: theme.mediumFont }]}>
-        {t('analysis.smart3dSelectPart')}
+        {t(showOrbit ? 'analysis.smart3dOrbitHint' : 'analysis.smart3dSelectPart')}
       </Text>
       <View style={styles.parts}>
         {PART_ROWS.map((row, index) => (

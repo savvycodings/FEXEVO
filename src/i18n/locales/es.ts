@@ -538,6 +538,8 @@ export const es = {
     smart3dFeet: "Pies",
     smart3dRacket: "Raqueta",
     smart3dHologramBuilding: "Creando tu holograma…",
+    smart3dOrbitBuilding: "Creando el giro…",
+    smart3dOrbitHint: "Desliza hacia arriba para girar adelante y hacia abajo para volver",
     jointAngleTitle: "Ángulo de {{joint}}",
     contactPhase: "Fase de contacto",
     view3d: "Vista 3D",
