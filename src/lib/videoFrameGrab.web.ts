@@ -2,8 +2,8 @@ import { snapFps, type FrameGrabber, type GrabbedFrame } from './videoFrameGrabS
 
 export type { FrameGrabber, GrabbedFrame } from './videoFrameGrabShared'
 
-/** Longest side of a grabbed frame; big enough to see the ball, small enough to keep data URIs light. */
-const MAX_SIDE = 480
+/** Longest side of a grabbed frame; sharp enough to see the ball at 3x zoom, still light as a data URI. */
+const MAX_SIDE = 1280
 
 /**
  * Web frame grabber: one hidden <video> that is seeked frame by frame and drawn to a canvas.

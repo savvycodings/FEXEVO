@@ -87,7 +87,8 @@ import { startHologram } from '../lib/hologramJob'
 import { proLibraryVideoUrl } from '../lib/mediaUrl'
 import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
-import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
+import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
+import { buildCompareMetrics } from './techniqueResults/shotHistory'
 import { CoachHome } from './coachHome/CoachHome'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientProgressBar } from '../components'
@@ -864,19 +865,10 @@ export function Technique() {
     () => parseBiomechanicsSummary(metrics as Record<string, unknown> | null | undefined),
     [metrics]
   )
-  const proCompareRows = useMemo(() => {
-    const rows: ProCompareRow[] = []
-    const angles = biomechanicsSummary?.angles_deg_proxy
-    const elbow = angles?.elbow_impact_deg
-    if (typeof elbow === 'number' && Number.isFinite(elbow)) {
-      rows.push({ label: t('analysis.elbowAngle'), you: `${Math.round(elbow)}°` })
-    }
-    const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
-    if (typeof torso === 'number' && Number.isFinite(torso)) {
-      rows.push({ label: t('analysis.torsoRotation'), you: `${Math.round(torso)}°` })
-    }
-    return rows
-  }, [biomechanicsSummary, t])
+  const proCompareMetrics = useMemo(
+    () => buildCompareMetrics(metrics as Record<string, unknown> | null | undefined, t),
+    [metrics, t]
+  )
 
   const proReferenceShot = useMemo(() => {
     const label = retrieval?.shot_hypothesis?.stroke_label
@@ -3336,7 +3328,7 @@ export function Technique() {
                     videoUri={uploadedVideoUrl}
                     analysisId={analysisId}
                     referenceImageUri={null}
-                    rows={proCompareRows}
+                    metrics={proCompareMetrics}
                     score={score}
                     onSave={() => navigation.getParent()?.navigate('Progress' as never)}
                   />

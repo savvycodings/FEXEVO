@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useId, useRef, useState } from 'react'
 import {
   Animated,
   Easing,
@@ -9,7 +9,7 @@ import {
 } from 'react-native'
 import { Image } from 'expo-image'
 import MaskedView from '@react-native-masked-view/masked-view'
-import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg'
+import Svg, { Circle, Defs, Ellipse, LinearGradient as SvgLinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg'
 import {
   COACH_EYES_IMAGE,
   COACH_ORB_ASPECT,
@@ -206,24 +206,90 @@ export function CoachCharacterAvatar({
 }
 
 /** Tab-bar orb at its design size (36px ball, per Figma); still image only (no GIF faces). */
-export function CoachTabOrb({ ballSize = TAB_ORB_BALL.d }: { ballSize?: number }) {
-  const k = ballSize / TAB_ORB_BALL.d
+/** Tab-bar ring around the orb: ball diameter, ring stroke and how far it rises above the other icons. */
+const TAB_ORB_RING = { ballD: 40, stroke: 2.5, gap: 1, lift: 6 } as const
+
+export function CoachTabOrb({
+  ballSize,
+  ring = false,
+}: {
+  ballSize?: number
+  /** Multicolor glowing ring + under-glow, used by the bottom tab bars. */
+  ring?: boolean
+}) {
+  const d = ballSize ?? (ring ? TAB_ORB_RING.ballD : TAB_ORB_BALL.d)
+  const k = d / TAB_ORB_BALL.d
   const w = TAB_ORB_CANVAS.w * k
   const h = TAB_ORB_CANVAS.h * k
   const ballCenterY = (TAB_ORB_BALL.y + TAB_ORB_BALL.d / 2) * k
+  const ballCenterX = (TAB_ORB_BALL.x + TAB_ORB_BALL.d / 2) * k
+  const lift = ring ? TAB_ORB_RING.lift : 0
+  const cy = TAB_ICON_SLOT.height / 2 - lift
+  const ringR = d / 2 + TAB_ORB_RING.gap + TAB_ORB_RING.stroke / 2
+  const box = (ringR + TAB_ORB_RING.stroke) * 2 + 16
+  // Per-instance ids: on web, SVG ids are document-wide, and the copy in a hidden tab bar would win.
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const ids = { under: `tabOrbUnderGlow${uid}`, halo: `tabOrbHalo${uid}`, ring: `tabOrbRing${uid}` }
   return (
     <View style={{ width: TAB_ICON_SLOT.width, height: TAB_ICON_SLOT.height, overflow: 'visible' }}>
+      {ring ? (
+        <Svg
+          pointerEvents="none"
+          width={box}
+          height={box}
+          style={{ position: 'absolute', left: TAB_ICON_SLOT.width / 2 - box / 2, top: cy - box / 2 }}
+        >
+          <Defs>
+            <RadialGradient id={ids.under} cx="50%" cy="50%" rx="50%" ry="50%">
+              <Stop offset="0" stopColor="#1F6BFF" stopOpacity="0.75" />
+              <Stop offset="1" stopColor="#1F6BFF" stopOpacity="0" />
+            </RadialGradient>
+            <RadialGradient id={ids.halo} cx="50%" cy="50%" rx="50%" ry="50%">
+              <Stop offset="0.7" stopColor="#3D8BFF" stopOpacity="0.45" />
+              <Stop offset="1" stopColor="#3D8BFF" stopOpacity="0" />
+            </RadialGradient>
+          </Defs>
+          <Circle cx={box / 2} cy={box / 2} r={box / 2} fill={`url(#${ids.halo})`} />
+          <Ellipse cx={box / 2} cy={box / 2 + ringR} rx={ringR * 0.9} ry={5} fill={`url(#${ids.under})`} />
+        </Svg>
+      ) : null}
       <Animated.Image
         source={COACH_ORB_IMAGES.tab}
         style={{
           position: 'absolute',
           width: w,
           height: h,
-          left: (TAB_ICON_SLOT.width - w) / 2,
-          top: TAB_ICON_SLOT.height / 2 - ballCenterY,
+          left: TAB_ICON_SLOT.width / 2 - ballCenterX,
+          top: cy - ballCenterY,
         }}
         resizeMode="contain"
       />
+      {ring ? (
+        <Svg
+          pointerEvents="none"
+          width={box}
+          height={box}
+          style={{ position: 'absolute', left: TAB_ICON_SLOT.width / 2 - box / 2, top: cy - box / 2 }}
+        >
+          <Defs>
+            <SvgLinearGradient id={ids.ring} x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor="#3DE0FF" />
+              <Stop offset="0.3" stopColor="#FFFFFF" />
+              <Stop offset="0.5" stopColor="#FFE45C" />
+              <Stop offset="0.75" stopColor="#FF6FD8" />
+              <Stop offset="1" stopColor="#7A5CFF" />
+            </SvgLinearGradient>
+          </Defs>
+          <Circle
+            cx={box / 2}
+            cy={box / 2}
+            r={ringR}
+            stroke={`url(#${ids.ring})`}
+            strokeWidth={TAB_ORB_RING.stroke}
+            fill="none"
+          />
+        </Svg>
+      ) : null}
     </View>
   )
 }
