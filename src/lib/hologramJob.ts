@@ -114,9 +114,10 @@ export async function startHologram(
 
 async function fetchHologram(analysisId: string): Promise<HologramState | null> {
   const res = await authClient
-    .$fetch(`/technique/analysis/${analysisId}/hologram`, {
+    .$fetch(`/technique/analysis/${analysisId}/hologram?t=${Date.now()}`, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+      cache: 'no-store',
     })
     .catch(() => null)
   return res ? toState(res) : null
@@ -147,27 +148,41 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
   useEffect(() => {
     if (!analysisId) return
     let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
     let started = false
+    let timer: ReturnType<typeof setInterval> | null = null
+
+    const stop = () => {
+      if (timer) clearInterval(timer)
+      timer = null
+    }
 
     const tick = async () => {
       let next = await fetchHologram(analysisId)
       if (cancelled) return
-      const needsOrbit = next?.status === 'done' && next.orbitStatus === 'idle'
+      const needsOrbit = next?.status === 'done' && next.orbitStatus === 'idle' && !next.orbitVideo
       if ((next?.status === 'idle' || needsOrbit) && !started) {
         started = true
         next = (await startHologram(analysisId)) ?? next
         if (cancelled) return
       }
       if (next) setState(next)
-      if (!next || next.status === 'running' || next.proStatus === 'running' || next.orbitStatus === 'running') {
-        timer = setTimeout(tick, POLL_MS)
-      }
+      const pending =
+        !next ||
+        next.status === 'idle' ||
+        next.status === 'running' ||
+        next.proStatus === 'running' ||
+        next.orbitStatus === 'running' ||
+        (next.status === 'done' && !next.orbitVideo && next.orbitStatus !== 'failed' && !started)
+      if (!pending) stop()
     }
+
     void tick()
+    timer = setInterval(() => {
+      void tick()
+    }, POLL_MS)
     return () => {
       cancelled = true
-      if (timer) clearTimeout(timer)
+      stop()
     }
   }, [analysisId])
 

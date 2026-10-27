@@ -539,7 +539,7 @@ export const en = {
     smart3dRacket: "Racket",
     smart3dHologramBuilding: "Building your hologram…",
     smart3dOrbitBuilding: "Building the turn…",
-    smart3dOrbitHint: "Slide up to turn forward, down to turn back",
+    smart3dOrbitHint: "Slide right to turn forward, left to turn back",
     jointAngleTitle: "{{joint}} Angle",
     contactPhase: "Contact Phase",
     view3d: "3D View",

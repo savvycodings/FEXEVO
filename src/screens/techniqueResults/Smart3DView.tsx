@@ -1,5 +1,16 @@
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, BackHandler, Image, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  BackHandler,
+  Image,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import { ResizeMode, Video } from 'expo-av'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
@@ -97,7 +108,7 @@ function orbitKeypointsAt(frames: HologramOrbitFrame[] | null, index: number): H
   return best.keypoints
 }
 
-/** Joint markers. The still is a square cover; the orbit clip is contained in the stage. */
+/** Joint markers. The stage matches the picture, so 0..1 maps across the whole box. */
 function JointMarkers({
   keypoints,
   w,
@@ -119,8 +130,8 @@ function JointMarkers({
       return { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d }
     }
     const videoAspect = video.width / video.height
-    const dw = w / h > videoAspect ? h * videoAspect : w
-    const dh = w / h > videoAspect ? h : w / videoAspect
+    const dw = w / h > videoAspect ? w : h * videoAspect
+    const dh = w / h > videoAspect ? w / videoAspect : h
     return { x: (w - dw) / 2 + p.x * dw, y: (h - dh) / 2 + p.y * dh }
   }
   const names = [...BASE_MARKERS, ...lit.filter((name) => !BASE_MARKERS.includes(name))]
@@ -160,17 +171,33 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   const hologram = useHologram(analysisId)
   const contactJoints = useContactJoints(analysisId)
   const [detail, setDetail] = useState<ContactJoint | null>(null)
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 })
   const videoRef = useRef<Video>(null)
   const [orbitIndex, setOrbitIndex] = useState(0)
+  const [videoReady, setVideoReady] = useState(false)
   const orbitIndexRef = useRef(0)
   const grantIndex = useRef(0)
-  const stageHRef = useRef(1)
+  const stageWRef = useRef(1)
   const frameCountRef = useRef(2)
   const durationRef = useRef(4000)
   const showOrbit = layer === 'player' && Boolean(hologram.orbitVideo)
   frameCountRef.current = Math.max(2, hologram.orbitFrameCount ?? 2)
   durationRef.current = hologram.orbitDurationMs && hologram.orbitDurationMs > 0 ? hologram.orbitDurationMs : 4000
+  const pictureAspect =
+    showOrbit && hologram.orbitWidth && hologram.orbitHeight
+      ? hologram.orbitWidth / hologram.orbitHeight
+      : 1
+  const stageWidth = Math.max(1, windowWidth - 32)
+  const naturalHeight = stageWidth / pictureAspect
+  const maxHeight = Math.max(280, windowHeight - (380 + insets.bottom))
+  const stageHeight = Math.min(naturalHeight, maxHeight)
+
+  useEffect(() => {
+    setVideoReady(false)
+    setOrbitIndex(0)
+    orbitIndexRef.current = 0
+  }, [hologram.orbitVideo])
 
   function seekOrbit(index: number) {
     const last = frameCountRef.current - 1
@@ -183,15 +210,17 @@ export function Smart3DView({ analysisId, onClose }: Props) {
 
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 10 && Math.abs(g.dy) > Math.abs(g.dx),
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6,
       onPanResponderGrant: () => {
         grantIndex.current = orbitIndexRef.current
       },
       onPanResponderMove: (_, g) => {
         const last = frameCountRef.current - 1
-        const delta = (-g.dy / Math.max(stageHRef.current, 1)) * last
+        const delta = (g.dx / Math.max(stageWRef.current, 1)) * last
         seekOrbit(grantIndex.current + delta)
       },
+      onPanResponderTerminationRequest: () => false,
     })
   ).current
   /** Player hologram is blue; the pro reference is the red render of the matched library clip. */
@@ -247,7 +276,10 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   }
 
   return (
-    <View style={[styles.screen, { paddingBottom: 8 + insets.bottom }]}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={{ paddingBottom: 8 + insets.bottom }}
+    >
       <View style={styles.titleRow}>
         <Pressable
           accessibilityRole="button"
@@ -264,24 +296,31 @@ export function Smart3DView({ analysisId, onClose }: Props) {
       </View>
       <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} trackStyle={styles.pill} />
       <View
-        style={styles.stage}
+        style={[styles.stage, { height: stageHeight }]}
         onLayout={(e) => {
-          stageHRef.current = e.nativeEvent.layout.height
+          stageWRef.current = e.nativeEvent.layout.width
           setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
         }}
-        {...(showOrbit ? pan.panHandlers : {})}
       >
         {showOrbit ? (
           <Video
             ref={videoRef}
+            pointerEvents="none"
             source={{ uri: hologram.orbitVideo! }}
-            resizeMode={ResizeMode.CONTAIN}
+            resizeMode={ResizeMode.COVER}
             shouldPlay={false}
             isMuted
+            onLoad={() => seekOrbit(0)}
+            onReadyForDisplay={() => setVideoReady(true)}
+            style={[StyleSheet.absoluteFill, { opacity: videoReady ? 1 : 0 }]}
+          />
+        ) : null}
+        {showOrbit && videoReady ? null : holoImage ? (
+          <Image
+            source={{ uri: holoImage }}
+            resizeMode={showOrbit ? 'contain' : 'cover'}
             style={StyleSheet.absoluteFill}
           />
-        ) : holoImage ? (
-          <Image source={{ uri: holoImage }} resizeMode="cover" style={StyleSheet.absoluteFill} />
         ) : (
           <Image
             source={BODY}
@@ -295,6 +334,7 @@ export function Smart3DView({ analysisId, onClose }: Props) {
         {markerKeys && stageSize.w ? (
           <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={markerVideo} />
         ) : null}
+        {showOrbit ? <View style={StyleSheet.absoluteFill} {...pan.panHandlers} /> : null}
         {building ? (
           <View pointerEvents="none" style={styles.building}>
             <ActivityIndicator size="small" color="#7AECFF" />
@@ -333,7 +373,7 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           </View>
         ))}
       </View>
-    </View>
+    </ScrollView>
   )
 }
 
@@ -344,8 +384,7 @@ const styles = StyleSheet.create({
   title: { color: '#FFFFFF', fontSize: 24 },
   pill: { marginBottom: 12 },
   stage: {
-    flex: 1,
-    minHeight: 260,
+    width: '100%',
     borderRadius: 24,
     backgroundColor: '#020A1C',
     overflow: 'hidden',
