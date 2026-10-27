@@ -39,15 +39,7 @@ import { AchievementDetailScreen } from './screens/AchievementDetailScreen'
 import { Header } from './components'
 import { MainTabBarBackground } from './components/MainTabBarBackground'
 import { screenEntranceLayout } from './components/PageEntrance'
-import {
-  NavIconAICoach,
-  NavIconActivities,
-  NavIconMyCoach,
-  NavIconMyStudents,
-  NavIconProgress,
-  NavIconPlaylist,
-  NavIconYou,
-} from './components/NavTabIcons'
+import { TAB_ACTIVE, TAB_INACTIVE, renderTabIcon, tabLabelGlow } from './components/tabBarStyle'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ThemeContext } from './context'
@@ -60,7 +52,7 @@ import { useAiCoachFlowActive } from './lib/aiCoachFlowHeader'
 import { getCachedProfile, setCachedProfile } from './lib/profile-cache'
 import { SessionDataProvider, useSessionData } from './context/SessionDataContext'
 import { CoachAssistantProvider, useCoachAssistant } from './context/CoachAssistantContext'
-import { CoachTabOrb, TAB_ICON_SLOT } from './components/CoachCharacterAvatar'
+import { TAB_ICON_SLOT } from './components/CoachCharacterAvatar'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import type {
@@ -91,8 +83,6 @@ export type {
   CoachStudentChatParams,
 } from './navigation/types'
 
-const TAB_BAR_ACTIVE = '#FFFFFF'
-const TAB_BAR_INACTIVE = '#5B9DFF'
 
 const Tab = createBottomTabNavigator<MainTabParamList>()
 const Stack = createNativeStackNavigator<MainStackParamList>()
@@ -427,9 +417,10 @@ function MainTabsLayoutInner({
 
   const tabBg = theme.backgroundColor ?? '#030A17'
 
-  const renderCoachTabLabel = useCallback(
+  /** Tab label; the active one gets a soft glow. */
+  const renderTabLabel = useCallback(
     (label: string) =>
-      ({ color }: { color: string }) => (
+      ({ color, focused }: { color: string; focused: boolean }) => (
         <Text
           allowFontScaling={false}
           numberOfLines={1}
@@ -444,6 +435,7 @@ function MainTabsLayoutInner({
             marginTop: 0,
             marginBottom: 0,
             ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
+            ...(focused ? tabLabelGlow : null),
           }}
         >
           {label}
@@ -459,8 +451,8 @@ function MainTabsLayoutInner({
         tabBarHideOnKeyboard: true,
         tabBarShowLabel: true,
         tabBarLabelPosition: 'below-icon' as const,
-        tabBarActiveTintColor: TAB_BAR_ACTIVE,
-        tabBarInactiveTintColor: TAB_BAR_INACTIVE,
+        tabBarActiveTintColor: TAB_ACTIVE,
+        tabBarInactiveTintColor: TAB_INACTIVE,
         tabBarBackground: () => <MainTabBarBackground />,
         /** Opaque — transparent scenes let the native stack default (often white) show through. */
         sceneStyle: {
@@ -524,12 +516,7 @@ function MainTabsLayoutInner({
         screenOptions={({ route }) => ({
           ...tabScreenOptions,
           tabBarButtonTestID: TEST_IDS.tab(route.name),
-          tabBarLabel:
-            route.name === 'MyCoach' && viewerIsCoach
-              ? renderCoachTabLabel(tabLabels.MyCoach)
-              : route.name === 'Activities' && viewerIsCoach
-                ? renderCoachTabLabel(tabLabels.Activities)
-                : tabLabels[route.name as keyof MainTabParamList],
+          tabBarLabel: renderTabLabel(tabLabels[route.name as keyof MainTabParamList]),
           ...(route.name === 'AICoach' && viewerIsCoach
             ? {
                 tabBarButton: () => null,
@@ -583,32 +570,8 @@ function MainTabsLayoutInner({
             marginBottom: 0,
             ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
           },
-          tabBarIcon: ({ focused }) => {
-            const c = focused ? TAB_BAR_ACTIVE : TAB_BAR_INACTIVE
-            const s = tabMetrics.iconSize
-            switch (route.name) {
-              case 'AICoach':
-                return <NavIconAICoach color={c} size={s} />
-              case 'Playlist':
-                return <NavIconPlaylist color={c} size={s} />
-              case 'MyCoach':
-                return viewerIsCoach ? (
-                  <NavIconMyStudents color={c} size={s} />
-                ) : (
-                  <NavIconMyCoach color={c} size={s} />
-                )
-              case 'Activities':
-                return <NavIconActivities color={c} size={s} />
-              case 'Assistant':
-                return <CoachTabOrb />
-              case 'Progress':
-                return <NavIconProgress color={c} size={s} />
-              case 'You':
-                return <NavIconYou color={c} size={s} />
-              default:
-                return null
-            }
-          },
+          tabBarIcon: ({ focused }) =>
+            renderTabIcon(route.name as keyof MainTabParamList, focused, tabMetrics.iconSize, viewerIsCoach),
         })}
         screenListeners={({ route }) => ({
           tabPress: () => {

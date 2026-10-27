@@ -12,23 +12,12 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ThemeContext } from "../context";
 import { MainTabBarBackground } from "./MainTabBarBackground";
-import {
-  NavIconAICoach,
-  NavIconActivities,
-  NavIconMyCoach,
-  NavIconMyStudents,
-  NavIconProgress,
-  NavIconPlaylist,
-  NavIconYou,
-} from "./NavTabIcons";
 import { useTranslation } from "react-i18next";
 import { useSessionData } from "../context/SessionDataContext";
 import type { MainStackParamList, MainTabParamList } from "../navigation/types";
 import { useCoachAssistant } from "../context/CoachAssistantContext";
-import { CoachTabOrb, TAB_ICON_SLOT } from "./CoachCharacterAvatar";
-
-const TAB_BAR_ACTIVE = "#FFFFFF";
-const TAB_BAR_INACTIVE = "#5B9DFF";
+import { TAB_ICON_SLOT } from "./CoachCharacterAvatar";
+import { TAB_ACTIVE, TAB_INACTIVE, renderTabIcon, tabLabelGlow } from "./tabBarStyle";
 
 const TAB_ORDER: (keyof MainTabParamList)[] = [
   "AICoach",
@@ -103,10 +92,11 @@ export function MainTabBarChrome({ activeTab }: Props) {
           ...(Platform.OS === "android" ? { includeFontPadding: false } : null),
         },
         labelActive: {
-          color: TAB_BAR_ACTIVE,
+          color: TAB_ACTIVE,
+          ...tabLabelGlow,
         },
         labelInactive: {
-          color: TAB_BAR_INACTIVE,
+          color: TAB_INACTIVE,
         },
       }),
     [tabBarBottomPad, tabBarHeight, tabMetrics.labelFontSize, theme.mediumFont]
@@ -162,28 +152,7 @@ export function MainTabBarChrome({ activeTab }: Props) {
       <MainTabBarBackground />
       {visibleTabs.map((tab) => {
         const focused = activeTab === tab;
-        const color = focused ? TAB_BAR_ACTIVE : TAB_BAR_INACTIVE;
-        const iconSize = tabMetrics.iconSize;
-        const icon =
-          tab === "AICoach" ? (
-            <NavIconAICoach color={color} size={iconSize} />
-          ) : tab === "Playlist" ? (
-            <NavIconPlaylist color={color} size={iconSize} />
-          ) : tab === "MyCoach" ? (
-            viewerIsCoach ? (
-              <NavIconMyStudents color={color} size={iconSize} />
-            ) : (
-              <NavIconMyCoach color={color} size={iconSize} />
-            )
-          ) : tab === "Activities" ? (
-            <NavIconActivities color={color} size={iconSize} />
-          ) : tab === "Assistant" ? (
-            <CoachTabOrb />
-          ) : tab === "Progress" ? (
-            <NavIconProgress color={color} size={iconSize} />
-          ) : (
-            <NavIconYou color={color} size={iconSize} />
-          );
+        const icon = renderTabIcon(tab, focused, tabMetrics.iconSize, viewerIsCoach);
 
         return (
           <TouchableOpacity

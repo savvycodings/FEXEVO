@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { Image } from 'expo-image'
 import { useFocusEffect } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
@@ -16,6 +16,7 @@ import Svg, {
   Stop,
 } from 'react-native-svg'
 import { ThemeContext } from '../../context'
+import { glow } from '../progress/progressTheme'
 import { TEST_IDS } from '../../lib/testIds'
 import type { PhysicalHistoryItem, PhysicalMetricsValues } from '../../lib/physicalMetrics'
 import { peekCoachHome, prefetchCoachHome, type ActivityItem } from './coachHomeData'
@@ -400,7 +401,7 @@ function AnalyzeBlock({
   return (
     <View style={styles.analyzeWrap}>
       <View style={styles.analyzeFrame}>
-        <AnalyzeRim />
+        <AnalyzeLiveGlow />
         <View style={styles.analyzeShell}>
         <Pressable
           accessibilityRole="button"
@@ -409,10 +410,10 @@ function AnalyzeBlock({
           style={({ pressed }) => [styles.analyzeCard, pressed && styles.pressed]}
         >
           <AnalyzeFill />
+          <AnalyzeShine />
           <View style={styles.analyzeRow}>
             <LinearGradient
-              colors={['#00BBFF', '#0B285A']}
-              locations={[0.14, 0.61]}
+              colors={['#5BB0FF', '#2D6BFF']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.cameraTile}
@@ -425,6 +426,7 @@ function AnalyzeBlock({
                 style={StyleSheet.absoluteFill}
               />
               <Image source={ICON_CAMERA} style={styles.cameraIcon} contentFit="contain" />
+              <View style={styles.recordDot} />
             </LinearGradient>
             <View style={styles.analyzeCopy}>
               <Text allowFontScaling={false} style={[styles.analyzeTitle, { fontFamily: fonts.boldFont }]}>
@@ -482,6 +484,102 @@ function AnalyzeBlock({
   )
 }
 
+const LIVE_NATIVE_DRIVER = Platform.OS !== 'web'
+/** One breath of the Analyze glow (in + out). */
+const LIVE_PULSE_MS = 2600
+/** Shine sweep across the card, then a pause before the next one. */
+const LIVE_SHINE_MS = 1100
+const LIVE_SHINE_PAUSE_MS = 2600
+
+/** True when the OS asks for reduced motion; the live effects then hold still. */
+function useReduceMotion() {
+  const [reduce, setReduce] = useState(false)
+  useEffect(() => {
+    let alive = true
+    void AccessibilityInfo.isReduceMotionEnabled().then((v) => alive && setReduce(v)).catch(() => {})
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce)
+    return () => {
+      alive = false
+      sub.remove()
+    }
+  }, [])
+  return reduce
+}
+
+/** Breathing outer glow + halo so the Analyze card reads as live. */
+function AnalyzeLiveGlow() {
+  const reduce = useReduceMotion()
+  const t = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    if (reduce) {
+      t.setValue(1)
+      return
+    }
+    const half = LIVE_PULSE_MS / 2
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(t, { toValue: 0, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: LIVE_NATIVE_DRIVER }),
+        Animated.timing(t, { toValue: 1, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: LIVE_NATIVE_DRIVER }),
+      ])
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [reduce, t])
+  const glowOpacity = t.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] })
+  const haloOpacity = t.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] })
+  return (
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.analyzeGlow, { opacity: glowOpacity }]}
+      />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: haloOpacity }]}>
+        <AnalyzeRim />
+      </Animated.View>
+    </>
+  )
+}
+
+/** Diagonal light that sweeps across the card every few seconds. */
+function AnalyzeShine() {
+  const reduce = useReduceMotion()
+  const [w, setW] = useState(0)
+  const x = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    if (reduce || w === 0) return
+    x.setValue(0)
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(x, { toValue: 1, duration: LIVE_SHINE_MS, easing: Easing.inOut(Easing.quad), useNativeDriver: LIVE_NATIVE_DRIVER }),
+        Animated.delay(LIVE_SHINE_PAUSE_MS),
+      ])
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [reduce, w, x])
+  const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-SHINE_W * 1.5, w + SHINE_W * 0.5] })
+  return (
+    <View
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+    >
+      {reduce || w === 0 ? null : (
+        <Animated.View style={[styles.shine, { transform: [{ translateX }, { skewX: '-20deg' }] }]}>
+          <LinearGradient
+            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+      )}
+    </View>
+  )
+}
+
+const SHINE_W = 90
+
 function AnalyzeFill() {
   const [box, setBox] = useState({ w: 0, h: 0 })
   return (
@@ -496,18 +594,18 @@ function AnalyzeFill() {
       {box.w > 0 ? (
         <Svg width={box.w} height={box.h}>
           <Defs>
-            <RadialGradient id="analyzeFill" cx="50%" cy="54%" rx="58%" ry="90%">
-              <Stop offset="0" stopColor="#0A39A7" />
-              <Stop offset="0.62" stopColor="#041641" />
-            </RadialGradient>
+            <SvgLinearGradient id="analyzeFill" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor="#1D4FE6" />
+              <Stop offset="0.55" stopColor="#2C6BFF" />
+              <Stop offset="1" stopColor="#5BB8FF" />
+            </SvgLinearGradient>
             <SvgLinearGradient id="analyzeRim" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0.216" stopColor="#00B8FF" />
+              <Stop offset="0" stopColor="#9FDBFF" />
               <Stop offset="0.5" stopColor="#FFFFFF" />
-              <Stop offset="0.788" stopColor="#00B8FF" />
-              <Stop offset="1" stopColor="#87DDFF" />
+              <Stop offset="1" stopColor="#C8ECFF" />
             </SvgLinearGradient>
           </Defs>
-          <Rect x="0" y="0" width={box.w} height={box.h} rx={20} ry={20} fill="url(#analyzeFill)" opacity={0.7} />
+          <Rect x="0" y="0" width={box.w} height={box.h} rx={20} ry={20} fill="url(#analyzeFill)" />
           <Rect
             x={0.75}
             y={0.75}
@@ -516,6 +614,7 @@ function AnalyzeFill() {
             rx={19.25}
             ry={19.25}
             stroke="url(#analyzeRim)"
+            strokeOpacity={0.8}
             strokeWidth={1.25}
             fill="none"
           />
@@ -542,7 +641,7 @@ function AnalyzeRim() {
         <Svg width={box.w} height={box.h} style={StyleSheet.absoluteFill}>
           <Defs>
             <RadialGradient id="analyzeBloom" cx="50%" cy="50%" rx="50%" ry="50%">
-              <Stop offset="0" stopColor="#00B8FF" stopOpacity="0.8" />
+              <Stop offset="0" stopColor="#00B8FF" stopOpacity="1" />
               <Stop offset="1" stopColor="#00B8FF" stopOpacity="0" />
             </RadialGradient>
           </Defs>
@@ -1050,11 +1149,21 @@ const styles = StyleSheet.create({
   analyzeWrap: { gap: 20 },
   analyzeFrame: {
     overflow: 'visible',
+    borderRadius: 20,
+    backgroundColor: '#1D4FE6',
   },
+  /** Pulsing outer glow behind the card (see AnalyzeLiveGlow). */
+  analyzeGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+    backgroundColor: '#1D4FE6',
+    ...glow(26, 0.95),
+  },
+  shine: { position: 'absolute', top: -10, bottom: -10, left: 0, width: SHINE_W },
   analyzeShell: {
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: '#041641',
+    backgroundColor: '#1D4FE6',
   },
   analyzeRim: {
     position: 'absolute',
@@ -1087,12 +1196,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(0, 184, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
   },
   cameraIcon: { width: 26.667, height: 22.667 },
+  /** Red "record" dot on the camera, as in the mockup. */
+  recordDot: {
+    position: 'absolute',
+    top: 21,
+    left: 35,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FF3B47',
+  },
   analyzeCopy: { flex: 1, minWidth: 0, gap: 2 },
-  analyzeTitle: { color: '#00C2FF', fontSize: 16, lineHeight: 20 },
-  analyzeSub: { color: '#9BB4D6', fontSize: 12, lineHeight: 16 },
+  analyzeTitle: { color: '#FFFFFF', fontSize: 16, lineHeight: 20 },
+  analyzeSub: { color: 'rgba(255, 255, 255, 0.62)', fontSize: 12, lineHeight: 16 },
   arrowBtn: {
     width: 48,
     height: 48,
