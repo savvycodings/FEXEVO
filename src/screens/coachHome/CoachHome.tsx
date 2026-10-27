@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { Image } from 'expo-image'
 import { useFocusEffect } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
@@ -401,7 +401,7 @@ function AnalyzeBlock({
   return (
     <View style={styles.analyzeWrap}>
       <View style={styles.analyzeFrame}>
-        <AnalyzeRim />
+        <AnalyzeLiveGlow />
         <View style={styles.analyzeShell}>
         <Pressable
           accessibilityRole="button"
@@ -410,6 +410,7 @@ function AnalyzeBlock({
           style={({ pressed }) => [styles.analyzeCard, pressed && styles.pressed]}
         >
           <AnalyzeFill />
+          <AnalyzeShine />
           <View style={styles.analyzeRow}>
             <LinearGradient
               colors={['#5BB0FF', '#2D6BFF']}
@@ -482,6 +483,102 @@ function AnalyzeBlock({
     </View>
   )
 }
+
+const LIVE_NATIVE_DRIVER = Platform.OS !== 'web'
+/** One breath of the Analyze glow (in + out). */
+const LIVE_PULSE_MS = 2600
+/** Shine sweep across the card, then a pause before the next one. */
+const LIVE_SHINE_MS = 1100
+const LIVE_SHINE_PAUSE_MS = 2600
+
+/** True when the OS asks for reduced motion; the live effects then hold still. */
+function useReduceMotion() {
+  const [reduce, setReduce] = useState(false)
+  useEffect(() => {
+    let alive = true
+    void AccessibilityInfo.isReduceMotionEnabled().then((v) => alive && setReduce(v)).catch(() => {})
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce)
+    return () => {
+      alive = false
+      sub.remove()
+    }
+  }, [])
+  return reduce
+}
+
+/** Breathing outer glow + halo so the Analyze card reads as live. */
+function AnalyzeLiveGlow() {
+  const reduce = useReduceMotion()
+  const t = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    if (reduce) {
+      t.setValue(1)
+      return
+    }
+    const half = LIVE_PULSE_MS / 2
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(t, { toValue: 0, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: LIVE_NATIVE_DRIVER }),
+        Animated.timing(t, { toValue: 1, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: LIVE_NATIVE_DRIVER }),
+      ])
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [reduce, t])
+  const glowOpacity = t.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] })
+  const haloOpacity = t.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] })
+  return (
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.analyzeGlow, { opacity: glowOpacity }]}
+      />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: haloOpacity }]}>
+        <AnalyzeRim />
+      </Animated.View>
+    </>
+  )
+}
+
+/** Diagonal light that sweeps across the card every few seconds. */
+function AnalyzeShine() {
+  const reduce = useReduceMotion()
+  const [w, setW] = useState(0)
+  const x = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    if (reduce || w === 0) return
+    x.setValue(0)
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(x, { toValue: 1, duration: LIVE_SHINE_MS, easing: Easing.inOut(Easing.quad), useNativeDriver: LIVE_NATIVE_DRIVER }),
+        Animated.delay(LIVE_SHINE_PAUSE_MS),
+      ])
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [reduce, w, x])
+  const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-SHINE_W * 1.5, w + SHINE_W * 0.5] })
+  return (
+    <View
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+    >
+      {reduce || w === 0 ? null : (
+        <Animated.View style={[styles.shine, { transform: [{ translateX }, { skewX: '-20deg' }] }]}>
+          <LinearGradient
+            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+      )}
+    </View>
+  )
+}
+
+const SHINE_W = 90
 
 function AnalyzeFill() {
   const [box, setBox] = useState({ w: 0, h: 0 })
@@ -1054,8 +1151,15 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     borderRadius: 20,
     backgroundColor: '#1D4FE6',
-    ...glow(18, 0.75),
   },
+  /** Pulsing outer glow behind the card (see AnalyzeLiveGlow). */
+  analyzeGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+    backgroundColor: '#1D4FE6',
+    ...glow(26, 0.95),
+  },
+  shine: { position: 'absolute', top: -10, bottom: -10, left: 0, width: SHINE_W },
   analyzeShell: {
     borderRadius: 20,
     overflow: 'hidden',
