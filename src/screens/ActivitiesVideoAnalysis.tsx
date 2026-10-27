@@ -45,6 +45,7 @@ import { MetricsPage } from './techniqueResults/MetricsPage'
 import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
 import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { useNavigation } from '@react-navigation/native'
+import { useFavoriteIds } from '../lib/activitiesFavorites'
 import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
 import {
   parseBiomechanicsSummary,
@@ -581,6 +582,8 @@ export function ActivitiesVideoAnalysis({
   onBack: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const { favoriteIds, toggleFavorite } = useFavoriteIds()
+  const isFavorite = favoriteIds.has(session.analysisId)
   const navigation = useNavigation()
   const { theme } = useContext(ThemeContext)
   const { width: winW } = useWindowDimensions()
@@ -1106,6 +1109,18 @@ export function ActivitiesVideoAnalysis({
               {t('analysis.yourAnalysis')}
             </Text>
           </View>
+          <TouchableOpacity
+            style={styles.titleNavBack}
+            onPress={() => toggleFavorite(session.analysisId)}
+            activeOpacity={0.85}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isFavorite }}
+            accessibilityLabel={t(isFavorite ? 'activities.favoriteRemove' : 'activities.favoriteAdd')}
+            testID="analysis-favorite"
+          >
+            <Ionicons name={isFavorite ? 'star' : 'star-outline'} size={24} color={isFavorite ? '#FFC93C' : NAV_ICON_TINT} />
+          </TouchableOpacity>
         </View>
 
         <View style={{ paddingHorizontal: SCREEN_GUTTER }}>

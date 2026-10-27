@@ -17,6 +17,8 @@ type Props = {
   onPress: () => void
   /** Narrow phones: smaller thumbnail and metric text. */
   compact?: boolean
+  favorite?: boolean
+  onToggleFavorite?: () => void
 }
 
 const METRICS = [
@@ -25,7 +27,15 @@ const METRICS = [
   { key: 'agility', labelKey: 'activities.metricAgility' },
 ] as const
 
-export function ShotCard({ session: s, videoUrl, theme, onPress, compact = false }: Props) {
+export function ShotCard({
+  session: s,
+  videoUrl,
+  theme,
+  onPress,
+  compact = false,
+  favorite = false,
+  onToggleFavorite,
+}: Props) {
   const { t, i18n } = useTranslation()
   const [thumbFailed, setThumbFailed] = useState(false)
 
@@ -115,7 +125,20 @@ export function ShotCard({ session: s, videoUrl, theme, onPress, compact = false
               </Text>
               <Text style={[styles.outOf, { fontFamily: theme.regularFont }]}> /100</Text>
             </Text>
-            <Ionicons name="chevron-forward" size={18} color={PG.labelBlue} />
+            {onToggleFavorite ? (
+              <Pressable
+                onPress={onToggleFavorite}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityState={{ selected: favorite }}
+                accessibilityLabel={t(favorite ? 'activities.favoriteRemove' : 'activities.favoriteAdd')}
+                testID={`shot-favorite-${s.analysisId}`}
+              >
+                <Ionicons name={favorite ? 'star' : 'star-outline'} size={20} color={favorite ? '#FFC93C' : PG.labelBlue} />
+              </Pressable>
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color={PG.labelBlue} />
+            )}
           </View>
         </View>
 
