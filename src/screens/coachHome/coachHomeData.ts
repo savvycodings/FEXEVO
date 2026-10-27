@@ -35,7 +35,7 @@ export function clearCoachHomeCache(): void {
   inflight = null
 }
 
-function listFromFetch<T>(res: unknown): T[] | null {
+export function listFromFetch<T>(res: unknown): T[] | null {
   if (!res || typeof res !== 'object') return null
   const wrapped = res as { data?: unknown; error?: unknown }
   if (wrapped.error) return null
