@@ -42,7 +42,8 @@ import { Smart3DView } from './techniqueResults/Smart3DView'
 import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { MetricsPage } from './techniqueResults/MetricsPage'
-import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
+import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
+import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { CorrectMovementView } from './techniqueResults/CorrectMovementView'
 import { useNavigation } from '@react-navigation/native'
 import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
@@ -901,16 +902,7 @@ export function ActivitiesVideoAnalysis({
   const correctionPairs =
     correctionGemini.length > 0 ? correctionGemini : correctionFal
 
-  const proCompareRows: ProCompareRow[] = []
-  const angleProxy = aiSnapshot?.biomechanicsSummary?.angles_deg_proxy
-  const elbow = angleProxy?.elbow_impact_deg
-  if (typeof elbow === 'number' && Number.isFinite(elbow)) {
-    proCompareRows.push({ label: t('analysis.elbowAngle'), you: `${Math.round(elbow)}°` })
-  }
-  const torso = angleProxy?.torso_sep_delta_deg ?? angleProxy?.shoulder_hip_sep_impact_deg
-  if (typeof torso === 'number' && Number.isFinite(torso)) {
-    proCompareRows.push({ label: t('analysis.torsoRotation'), you: `${Math.round(torso)}°` })
-  }
+  const proCompareMetrics = compareMetricsFromSummary(aiSnapshot?.biomechanicsSummary, t)
 
   const proReferenceShot = aiSections?.strokeLabel
     ? stripTrainClipIndexSuffix(aiSections.strokeLabel)
@@ -1188,7 +1180,7 @@ export function ActivitiesVideoAnalysis({
             videoUri={videoUri(session.videoPath)}
             analysisId={session.analysisId}
             referenceImageUri={correctionPairs[0]?.correctedImage ?? null}
-            rows={proCompareRows}
+            metrics={proCompareMetrics}
             score={
               aiSnapshot?.scorePercent ??
               (typeof session.score === 'number' ? Math.round(session.score) : null)

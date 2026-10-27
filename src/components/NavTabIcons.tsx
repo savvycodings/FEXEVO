@@ -90,6 +90,25 @@ export function NavIconMyCoach({ color, size = 24 }: NavIconProps) {
   )
 }
 
+/** Padel racket (design team's `menu_icons`): same path is stroked when inactive and filled when active. */
+const RACKET_PATH =
+  'M8.49467 4.86558C11.8335 1.50988 17.0011 0.952292 20.0218 3.98836C23.0423 7.02473 22.4876 12.2194 19.1491 15.5756C17.8725 16.8588 16.3272 17.7303 14.7381 18.151C14.7041 18.1632 14.6693 18.1756 14.6328 18.183C14.6062 18.1883 14.5791 18.1922 14.5527 18.1975C14.2834 18.2627 14.0131 18.3158 13.7427 18.3547C10.7754 18.9292 9.34967 19.1107 6.80035 20.345L4.6378 22.5914L4.63007 22.6001C4.13248 23.1004 3.34498 23.1311 2.81121 22.6933L2.70791 22.6001L1.39783 21.2833C0.867632 20.7499 0.867148 19.8847 1.39783 19.3513L3.56328 17.102C4.82951 14.4746 5.14918 13.14 5.75576 10.1231C5.79089 9.90806 5.83463 9.69294 5.88609 9.47873C5.89094 9.45446 5.89568 9.42946 5.90057 9.40498L5.92664 9.31474C6.34347 7.71187 7.21389 6.15301 8.49467 4.86558ZM11.9461 12.0754C11.6163 11.7446 11.0817 11.7447 10.7518 12.0754L10.7422 12.0852C10.4125 12.4159 10.4124 12.9518 10.7422 13.2826C11.072 13.6131 11.6066 13.6132 11.9364 13.2826L11.9461 13.2729C12.2758 12.9422 12.2756 12.4063 11.9461 12.0754ZM16.1688 12.0754C15.839 11.7447 15.3044 11.7447 14.9746 12.0754L14.9649 12.0852C14.6352 12.4159 14.6352 12.9518 14.9649 13.2826C15.2947 13.6132 15.8294 13.6132 16.1592 13.2826L16.1688 13.2729C16.4986 12.9422 16.4984 12.4063 16.1688 12.0754ZM11.9567 7.83007C11.6276 7.49877 11.0929 7.49719 10.7625 7.82716L10.7528 7.83686C10.4224 8.16696 10.4218 8.70383 10.7509 9.03527C11.08 9.3664 11.6147 9.36711 11.9451 9.03721L11.9548 9.02751C12.2852 8.69741 12.2858 8.16152 11.9567 7.83007ZM16.1795 7.81745C15.8503 7.48663 15.3155 7.48562 14.9852 7.81551L14.9756 7.82522C14.6452 8.15534 14.6445 8.69221 14.9736 9.02363C15.3028 9.35483 15.8375 9.35559 16.1679 9.02557L16.1775 9.01586C16.508 8.68575 16.5086 8.14891 16.1795 7.81745Z'
+
+/** Home tab: padel racket. Active = filled (holes cut out by even-odd); inactive = outline. */
+export function NavIconHome({ color, size = 24, filled = false }: NavIconProps & { filled?: boolean }) {
+  return (
+    <View {...androidNoCollapse}>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        {filled ? (
+          <Path d={RACKET_PATH} fill={color} fillRule="evenodd" clipRule="evenodd" />
+        ) : (
+          <Path d={RACKET_PATH} stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+        )}
+      </Svg>
+    </View>
+  )
+}
+
 /** Bottom nav: active = white, inactive = blue — stroke follows `color` */
 export function NavIconAICoach({ color, size = 24 }: NavIconProps) {
   return (
@@ -112,10 +131,24 @@ export function NavIconAICoach({ color, size = 24 }: NavIconProps) {
   )
 }
 
-export function NavIconActivities({ color, size = 24 }: NavIconProps) {
+/** Active = filled glyph (design team's `menu_icons`), inactive = outline. */
+export function NavIconActivities({ color, size = 24, filled = false }: NavIconProps & { filled?: boolean }) {
   return (
     <View {...androidNoCollapse}>
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {filled ? (
+        <>
+      <Path
+        d="M21 12V14C21 17.7712 20.9997 19.6566 19.8281 20.8281C18.6566 21.9997 16.7712 22 13 22H11C7.22878 22 5.34346 21.9997 4.17188 20.8281C3.00031 19.6566 3 17.7712 3 14V12C3 11.5581 3.00007 11.142 3.00195 10.75H20.998C20.9999 11.142 21 11.5581 21 12Z"
+        fill={color}
+      />
+      <Path
+        d="M13 4C13.8391 4 14.5847 4.00172 15.25 4.01465V6C15.25 6.41421 15.5858 6.75 16 6.75C16.4142 6.75 16.75 6.41421 16.75 6V4.08105C18.1891 4.19641 19.134 4.47772 19.8281 5.17188C20.6717 6.01541 20.9065 7.22887 20.9727 9.25H3.02734C3.09348 7.22885 3.32834 6.01541 4.17188 5.17188C4.86604 4.47772 5.81089 4.19641 7.25 4.08105V6C7.25 6.41421 7.58579 6.75 8 6.75C8.41421 6.75 8.75 6.41421 8.75 6V4.01465C9.41526 4.00172 10.1609 4 11 4H13Z"
+        fill={color}
+      />
+        </>
+      ) : (
+        <>
       <Path
         d="M16 2V6M8 2V6"
         stroke={color}
@@ -137,15 +170,27 @@ export function NavIconActivities({ color, size = 24 }: NavIconProps) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+        </>
+      )}
     </Svg>
     </View>
   )
 }
 
-export function NavIconProgress({ color, size = 24 }: NavIconProps) {
+/** Active = filled glyph (design team's `menu_icons`), inactive = outline. */
+export function NavIconProgress({ color, size = 24, filled = false }: NavIconProps & { filled?: boolean }) {
   return (
     <View {...androidNoCollapse}>
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {filled ? (
+        <>
+      <Path
+        d="M10.5 2C16.3548 4.50284 12.2336 10.7723 15.4258 11.4404C17.4 11.8532 17.5 9 17.5 9C19.5 11.5 19.5 13.5 19.5 14.5C19.5 18.6421 16.1421 22 12 22C7.85786 22 4.5 18.6421 4.5 14.5C4.5 8.5 10.5 7 10.5 2ZM11 11C9.55426 11.5532 8.5 13.8256 8.5 15C8.5 17.4853 10.067 19.001 12 19.001C13.933 19.001 15.5 16.9863 15.5 14.501C12.3 15.701 11.1667 12.9379 11 11Z"
+        fill={color}
+      />
+        </>
+      ) : (
+        <>
       <Path
         d="M12 22C16.1421 22 19.5 18.6421 19.5 14.5C19.5 13.5 19.5 11.5 17.5 9C17.5 9 17.4004 11.8536 15.4262 11.4408C12.2331 10.7732 16.3551 4.50296 10.5 2C10.5 7 4.5 8.5 4.5 14.5C4.5 18.6421 7.85786 22 12 22Z"
         stroke={color}
@@ -158,15 +203,29 @@ export function NavIconProgress({ color, size = 24 }: NavIconProps) {
         strokeWidth={1.5}
         strokeLinejoin="round"
       />
+        </>
+      )}
     </Svg>
     </View>
   )
 }
 
-export function NavIconYou({ color, size = 24 }: NavIconProps) {
+/** Active = filled glyph (design team's `menu_icons`), inactive = outline. */
+export function NavIconYou({ color, size = 24, filled = false }: NavIconProps & { filled?: boolean }) {
   return (
     <View {...androidNoCollapse}>
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {filled ? (
+        <>
+      <Path
+        d="M12 2C17.5228 2 22 6.47715 22 12C22 15.3049 20.3959 18.234 17.9248 20.0547C17.4714 17.1902 14.992 15 12 15C9.00794 15 6.52758 17.1901 6.07422 20.0547C3.6035 18.234 2 15.3046 2 12C2 6.47715 6.47715 2 12 2ZM12 7C10.067 7 8.5 8.567 8.5 10.5C8.5 12.433 10.067 14 12 14C13.933 14 15.5 12.433 15.5 10.5C15.5 8.567 13.933 7 12 7Z"
+        fill={color}
+        fillRule="evenodd"
+        clipRule="evenodd"
+      />
+        </>
+      ) : (
+        <>
       <Path
         d="M15.5 10.5C15.5 8.567 13.933 7 12 7C10.067 7 8.5 8.567 8.5 10.5C8.5 12.433 10.067 14 12 14C13.933 14 15.5 12.433 15.5 10.5Z"
         stroke={color}
@@ -188,6 +247,8 @@ export function NavIconYou({ color, size = 24 }: NavIconProps) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+        </>
+      )}
     </Svg>
     </View>
   )
