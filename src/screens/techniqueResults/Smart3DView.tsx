@@ -108,7 +108,26 @@ function orbitKeypointsAt(frames: HologramOrbitFrame[] | null, index: number): H
   return best.keypoints
 }
 
-/** Joint markers. The stage matches the picture, so 0..1 maps across the whole box. */
+/**
+ * The orbit file is the square hologram still with black bars above and below.
+ * Draw the full frame so those bars fall outside the stage and the still fills it.
+ */
+function orbitPlacement(stageW: number, stageH: number, videoW: number, videoH: number) {
+  const side = Math.min(videoW, videoH)
+  const scale = Math.max(stageW / side, stageH / side)
+  const w = videoW * scale
+  const h = videoH * scale
+  const contentX = ((videoW - side) / 2) * scale
+  const contentY = ((videoH - side) / 2) * scale
+  return {
+    x: (stageW - side * scale) / 2 - contentX,
+    y: (stageH - side * scale) / 2 - contentY,
+    w,
+    h,
+  }
+}
+
+/** Joint markers. 0..1 follows the orbit frame, including the part that hangs outside the card. */
 function JointMarkers({
   keypoints,
   w,
@@ -120,7 +139,7 @@ function JointMarkers({
   w: number
   h: number
   lit: string[]
-  video: { width: number; height: number } | null
+  video: { x: number; y: number; w: number; h: number } | null
 }) {
   const at = (name: string) => {
     const p = keypoints[name]
@@ -129,10 +148,7 @@ function JointMarkers({
       const d = Math.max(w, h)
       return { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d }
     }
-    const videoAspect = video.width / video.height
-    const dw = w / h > videoAspect ? w : h * videoAspect
-    const dh = w / h > videoAspect ? w / videoAspect : h
-    return { x: (w - dw) / 2 + p.x * dw, y: (h - dh) / 2 + p.y * dh }
+    return { x: video.x + p.x * video.w, y: video.y + p.y * video.h }
   }
   const names = [...BASE_MARKERS, ...lit.filter((name) => !BASE_MARKERS.includes(name))]
   return (
@@ -181,16 +197,15 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   const stageWRef = useRef(1)
   const frameCountRef = useRef(2)
   const durationRef = useRef(4000)
+  const seekGen = useRef(0)
+  const seekQueue = useRef<{ ms: number | null; running: boolean }>({ ms: null, running: false })
   const showOrbit = layer === 'player' && Boolean(hologram.orbitVideo)
   frameCountRef.current = Math.max(2, hologram.orbitFrameCount ?? 2)
   durationRef.current = hologram.orbitDurationMs && hologram.orbitDurationMs > 0 ? hologram.orbitDurationMs : 4000
-  const pictureAspect =
-    showOrbit && hologram.orbitWidth && hologram.orbitHeight
-      ? hologram.orbitWidth / hologram.orbitHeight
-      : 1
   const stageWidth = Math.max(1, windowWidth - 32)
-  const naturalHeight = stageWidth / pictureAspect
-  const maxHeight = Math.max(280, windowHeight - (380 + insets.bottom))
+  // The visible picture is the square still. The 9:16 file's black bars are cropped off.
+  const naturalHeight = stageWidth
+  const maxHeight = Math.max(280, windowHeight - (300 + insets.bottom))
   const stageHeight = Math.min(naturalHeight, maxHeight)
 
   useEffect(() => {
@@ -204,8 +219,24 @@ export function Smart3DView({ analysisId, onClose }: Props) {
     const clamped = Math.min(last, Math.max(0, index))
     orbitIndexRef.current = clamped
     setOrbitIndex(clamped)
-    const positionMillis = (clamped / last) * durationRef.current
-    void videoRef.current?.setStatusAsync({ shouldPlay: false, positionMillis })
+    const q = seekQueue.current
+    q.ms = (clamped / last) * durationRef.current
+    if (q.running) return
+    q.running = true
+    const pump = async () => {
+      while (q.ms != null) {
+        const next = q.ms
+        q.ms = null
+        seekGen.current += 1
+        try {
+          await videoRef.current?.setPositionAsync(next)
+        } catch {
+          /* the next drag sends a fresh position */
+        }
+      }
+      q.running = false
+    }
+    void pump()
   }
 
   const pan = useRef(
@@ -230,13 +261,13 @@ export function Smart3DView({ analysisId, onClose }: Props) {
     layer === 'pro'
       ? hologram.proStatus === 'running'
       : hologram.status === 'running' ||
-        (layer === 'player' && hologram.orbitStatus === 'running') ||
+        (layer === 'player' && hologram.orbitStatus === 'running' && !hologram.orbitVideo) ||
         (layer === 'overlay' && hologram.proStatus === 'running')
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
   const markerKeys = showOrbit ? orbitKeypointsAt(hologram.orbitFrames, orbitIndex) : holoKeys
-  const markerVideo =
+  const placed =
     showOrbit && hologram.orbitWidth && hologram.orbitHeight
-      ? { width: hologram.orbitWidth, height: hologram.orbitHeight }
+      ? orbitPlacement(stageSize.w || stageWidth, stageSize.h || stageHeight, hologram.orbitWidth, hologram.orbitHeight)
       : null
 
   useEffect(() => {
@@ -310,29 +341,50 @@ export function Smart3DView({ analysisId, onClose }: Props) {
             resizeMode={ResizeMode.COVER}
             shouldPlay={false}
             isMuted
-            onLoad={() => seekOrbit(0)}
+            onLoad={() => {
+              const player = videoRef.current
+              const reveal = () => setVideoReady(true)
+              const timer = setTimeout(reveal, 1500)
+              if (!player) return reveal()
+              const gen = seekGen.current
+              const at =
+                orbitIndexRef.current === 0
+                  ? 0
+                  : (orbitIndexRef.current / Math.max(frameCountRef.current - 1, 1)) * durationRef.current
+              void player
+                .playAsync()
+                .then(() => player.pauseAsync())
+                .then(() => {
+                  if (seekGen.current !== gen) return
+                  return player.setPositionAsync(at)
+                })
+                .finally(() => {
+                  clearTimeout(timer)
+                  reveal()
+                })
+            }}
             onReadyForDisplay={() => setVideoReady(true)}
-            style={[StyleSheet.absoluteFill, { opacity: videoReady ? 1 : 0 }]}
+            style={StyleSheet.absoluteFill}
           />
         ) : null}
-        {showOrbit && videoReady ? null : holoImage ? (
+        {(!showOrbit || !videoReady) && holoImage ? (
           <Image
             source={{ uri: holoImage }}
             resizeMode={showOrbit ? 'contain' : 'cover'}
             style={StyleSheet.absoluteFill}
           />
-        ) : (
+        ) : !showOrbit ? (
           <Image
             source={BODY}
             resizeMode="cover"
             style={[StyleSheet.absoluteFill, layer === 'pro' && styles.bodyGhost]}
           />
-        )}
+        ) : null}
         {layer === 'overlay' && hologram.proImage ? (
           <Image source={{ uri: hologram.proImage }} resizeMode="cover" style={[StyleSheet.absoluteFill, { opacity: 0.72 }]} />
         ) : null}
         {markerKeys && stageSize.w ? (
-          <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={markerVideo} />
+          <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
         ) : null}
         {showOrbit ? <View style={StyleSheet.absoluteFill} {...pan.panHandlers} /> : null}
         {building ? (
@@ -344,10 +396,12 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           </View>
         ) : null}
       </View>
-      <Text allowFontScaling={false} style={[styles.prompt, { fontFamily: theme.mediumFont }]}>
-        {t(showOrbit ? 'analysis.smart3dOrbitHint' : 'analysis.smart3dSelectPart')}
-      </Text>
-      <View style={styles.parts}>
+      {showOrbit ? null : (
+        <Text allowFontScaling={false} style={[styles.prompt, { fontFamily: theme.mediumFont }]}>
+          {t('analysis.smart3dSelectPart')}
+        </Text>
+      )}
+      <View style={[styles.parts, showOrbit && styles.partsAfterOrbit]}>
         {PART_ROWS.map((row, index) => (
           <View key={index} style={styles.partRow}>
             {row.map((item) => {
@@ -403,6 +457,7 @@ const styles = StyleSheet.create({
   buildingLabel: { color: '#7AECFF', fontSize: 12 },
   prompt: { color: '#5E8FD0', fontSize: 18, textAlign: 'center', marginTop: 14, marginBottom: 12 },
   parts: { gap: 10 },
+  partsAfterOrbit: { marginTop: 14 },
   partRow: { flexDirection: 'row', gap: 10 },
   part: {
     flex: 1,
