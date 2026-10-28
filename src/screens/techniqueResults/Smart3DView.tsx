@@ -263,6 +263,8 @@ export function Smart3DView({ analysisId, onClose }: Props) {
       : hologram.status === 'running' ||
         (layer === 'player' && hologram.orbitStatus === 'running' && !hologram.orbitVideo) ||
         (layer === 'overlay' && hologram.proStatus === 'running')
+  /** Pro tab with nothing to draw: no matched pro clip, or its render failed or never started. */
+  const proMissing = layer === 'pro' && !hologram.proImage && hologram.proStatus !== 'running'
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
   const markerKeys = showOrbit ? orbitKeypointsAt(hologram.orbitFrames, orbitIndex) : holoKeys
   const placed =
@@ -387,6 +389,14 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
         ) : null}
         {showOrbit ? <View style={StyleSheet.absoluteFill} {...pan.panHandlers} /> : null}
+        {proMissing ? (
+          <View pointerEvents="none" style={styles.proMissing} testID="smart3d-pro-missing">
+            <Ionicons name="ribbon-outline" size={28} color="#7AECFF" />
+            <Text allowFontScaling={false} style={[styles.proMissingLabel, { fontFamily: theme.mediumFont }]}>
+              {t('analysis.smart3dProMissing')}
+            </Text>
+          </View>
+        ) : null}
         {building ? (
           <View pointerEvents="none" style={styles.building}>
             <ActivityIndicator size="small" color="#7AECFF" />
@@ -455,6 +465,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   buildingLabel: { color: '#7AECFF', fontSize: 12 },
+  proMissing: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 32,
+  },
+  proMissingLabel: { color: '#BFE6FF', fontSize: 15, lineHeight: 21, textAlign: 'center' },
   prompt: { color: '#5E8FD0', fontSize: 18, textAlign: 'center', marginTop: 14, marginBottom: 12 },
   parts: { gap: 10 },
   partsAfterOrbit: { marginTop: 14 },

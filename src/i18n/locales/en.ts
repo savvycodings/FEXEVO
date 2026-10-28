@@ -542,6 +542,7 @@ export const en = {
     smart3dHologramBuilding: "Building your hologram…",
     smart3dOrbitBuilding: "Building the turn…",
     smart3dOrbitHint: "Slide right to turn forward, left to turn back",
+    smart3dProMissing: "No pro reference for this shot yet.",
     jointAngleTitle: "{{joint}} Angle",
     contactPhase: "Contact Phase",
     view3d: "3D View",

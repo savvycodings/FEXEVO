@@ -542,6 +542,7 @@ export const es = {
     smart3dHologramBuilding: "Creando tu holograma…",
     smart3dOrbitBuilding: "Creando el giro…",
     smart3dOrbitHint: "Desliza a la derecha para girar adelante y a la izquierda para volver",
+    smart3dProMissing: "Aún no hay referencia pro para este golpe.",
     jointAngleTitle: "Ángulo de {{joint}}",
     contactPhase: "Fase de contacto",
     view3d: "Vista 3D",
