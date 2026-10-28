@@ -1,7 +1,7 @@
 import path from 'path'
 import { expect, request, test } from '@playwright/test'
 import { API_URL, FIXTURE_VIDEO, authStatePath } from './env'
-import { T, openApp, uploadAndAnalyze } from './helpers'
+import { T, openApp, uploadAndAnalyze, openMagicShot } from './helpers'
 
 test.use({ storageState: authStatePath('player') })
 
@@ -11,6 +11,7 @@ test('upload → analysis results → Magic Shot → Activities', async ({ page 
   const analysisId = await uploadAndAnalyze(page, path.resolve(FIXTURE_VIDEO))
 
   // Magic Shot: start the correction-video job and wait for it to finish
+  await openMagicShot(page)
   await page.getByTestId(T.magicShotGenerate).click()
   const api = await request.newContext({ baseURL: API_URL, storageState: authStatePath('player') })
   await expect(async () => {

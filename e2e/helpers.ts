@@ -49,6 +49,8 @@ export const T = {
   techniqueScore: 'technique-score',
   magicShotGenerate: 'magic-shot-generate',
   magicShotResult: 'magic-shot-result',
+  overviewBiggestMistakes: 'overview-biggest-mistakes',
+  seeCorrectMovement: 'see-correct-movement',
   // Profile settings
   settingsSection: (key: string) => `settings-section-${key}`,
   settingsFirstName: 'settings-first-name',
@@ -183,4 +185,10 @@ export async function uploadAndAnalyze(page: Page, fixturePath: string): Promise
   const { analysisId } = (await res.json()) as { analysisId: string }
   await expect(page.getByTestId(T.techniqueScore)).toHaveText(/\d+/, { timeout: 30_000 })
   return analysisId
+}
+
+/** From the analysis results to the Magic Shot: biggest mistakes → "See the correct movement". */
+export async function openMagicShot(page: Page) {
+  await page.getByTestId(T.overviewBiggestMistakes).click()
+  await page.getByTestId(T.seeCorrectMovement).click()
 }

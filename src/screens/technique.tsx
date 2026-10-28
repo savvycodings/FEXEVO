@@ -89,6 +89,7 @@ import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
 import { buildCompareMetrics } from './techniqueResults/shotHistory'
+import { CorrectMovementView } from './techniqueResults/CorrectMovementView'
 import { CoachHome } from './coachHome/CoachHome'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientProgressBar } from '../components'
@@ -532,7 +533,7 @@ export function Technique() {
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   /** Which results sub-page is showing. Does not reload analysis. */
   const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
-  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare'>('overview')
+  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'correct'>('overview')
   const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
   const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
   const resultsScrollRef = useRef<ScrollView>(null)
@@ -2896,6 +2897,18 @@ export function Technique() {
               setResultsDetail('pose')
             }}
           />
+        ) : step === 3 && resultsDetail === 'correct' ? (
+          <CorrectMovementView
+            analysisId={analysisId}
+            originalUri={uploadedVideoUrl}
+            originalAspect={
+              trimPreviewNaturalSize && trimPreviewNaturalSize.w > 0
+                ? trimPreviewNaturalSize.h / trimPreviewNaturalSize.w
+                : null
+            }
+            onProfileChanged={invalidateSessionData}
+            onClose={() => setResultsDetail('mistakes')}
+          />
         ) : step === 3 && resultsDetail === 'mistakes' ? (
           <BiggestMistakesView
             videoUri={uploadedVideoUrl}
@@ -2920,6 +2933,7 @@ export function Technique() {
               setPoseReturn('mistakes')
               setResultsDetail('pose')
             }}
+            onSeeCorrect={SHOW_COMFY_CORRECTIONS ? () => setResultsDetail('correct') : undefined}
           />
         ) : (
         <ScrollView

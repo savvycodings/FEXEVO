@@ -44,6 +44,7 @@ import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { MetricsPage } from './techniqueResults/MetricsPage'
 import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
 import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
+import { CorrectMovementView } from './techniqueResults/CorrectMovementView'
 import { useNavigation } from '@react-navigation/native'
 import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
 import {
@@ -637,7 +638,7 @@ export function ActivitiesVideoAnalysis({
   const [correctionCompareW, setCorrectionCompareW] = useState(0)
 
   const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'proReference'>('overview')
-  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare'>('overview')
+  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'correct'>('overview')
   const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
 
   const styles = useMemo(() => getStyles(theme), [theme])
@@ -1053,6 +1054,18 @@ export function ActivitiesVideoAnalysis({
     )
   }
 
+  if (overviewDetail === 'correct') {
+    return (
+      <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
+        <CorrectMovementView
+          analysisId={session.analysisId}
+          originalUri={videoUri(session.videoPath)}
+          onClose={() => setOverviewDetail('mistakes')}
+        />
+      </View>
+    )
+  }
+
   if (overviewDetail === 'mistakes') {
     const angles = aiSnapshot?.biomechanicsSummary?.angles_deg_proxy
     const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
@@ -1071,6 +1084,7 @@ export function ActivitiesVideoAnalysis({
             setPoseReturn('mistakes')
             setOverviewDetail('pose')
           }}
+          onSeeCorrect={SHOW_COMFY_CORRECTIONS ? () => setOverviewDetail('correct') : undefined}
         />
       </View>
     )

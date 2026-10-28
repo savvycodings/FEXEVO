@@ -524,6 +524,8 @@ export const en = {
     mistakeFootBody: "The feet are set too narrow for the contact point.",
     mistakeFootWhy: "A narrow base makes it harder to stay balanced through the shot.",
     seeCorrectMovement: "See the Correct Movement",
+    correctMovementTitle: "Correct movement",
+    correctMovementSubtitle: "Your shot, done right by AI",
     smart3d: "Smart 3D View",
     smart3dPlayer: "Player",
     smart3dOverlay: "Overlay",
