@@ -18,13 +18,12 @@ import {
 import { Video, ResizeMode } from 'expo-av'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import { authClient } from '../lib/auth-client'
 import { storedAiScoreToPercent } from '../lib/techniqueScoreDisplay'
 import { DOMAIN } from '../../constants'
-import { ACTIVITIES_FAVORITES_STORAGE_KEY } from '../constants/activitiesFavorites'
+import { useFavoriteIds } from '../lib/activitiesFavorites'
 import type { ActivitySession } from '../lib/activitySession'
 import { displayTrainShotTitle } from '../lib/trainShotDisplay'
 import { getMainStackNavigation } from '../lib/mainStackNavigation'
@@ -609,7 +608,7 @@ export function ActivitiesCalendarFlow({
   const [detailDateKey, setDetailDateKey] = useState<string | null>(null)
   const [analysisSession, setAnalysisSession] = useState<ActivitySession | null>(null)
   const [shotsTab, setShotsTab] = useState<'all' | 'favorites'>('all')
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
+  const { favoriteIds, toggleFavorite } = useFavoriteIds()
   const [shotsCategory, setShotsCategory] = useState<ShotsCategoryFilter>(null)
   const [shotsSort, setShotsSort] = useState<ShotsSort>('newest')
   const [shotsFilterOpen, setShotsFilterOpen] = useState(false)
@@ -625,26 +624,6 @@ export function ActivitiesCalendarFlow({
     setAnalysisSession(null)
     setDetailDateKey(null)
   }, [resetSignal])
-
-  /** Load favorites on mount and when returning from shot detail (star toggled there). */
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const raw = await AsyncStorage.getItem(ACTIVITIES_FAVORITES_STORAGE_KEY)
-        if (cancelled) return
-        const parsed = raw ? JSON.parse(raw) : []
-        if (Array.isArray(parsed)) {
-          setFavoriteIds(new Set(parsed.filter((x): x is string => typeof x === 'string')))
-        }
-      } catch {
-        /* ignore corrupt storage */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [analysisSession])
 
   const datesWithActivity = useMemo(() => {
     const set = new Set<string>()
@@ -994,6 +973,8 @@ export function ActivitiesCalendarFlow({
                 videoUrl={videoUri(s.videoPath)}
                 theme={theme}
                 compact={winW < 380}
+                favorite={favoriteIds.has(s.analysisId)}
+                onToggleFavorite={() => toggleFavorite(s.analysisId)}
                 onPress={() => setAnalysisSession(s)}
               />
             ))
