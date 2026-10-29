@@ -2826,7 +2826,17 @@ export function Technique() {
             </View>
           </KeyboardAwareScrollView>
         ) : step === 3 && resultsDetail === 'pose' ? (
-          <Smart3DView analysisId={analysisId} onClose={() => setResultsDetail(poseReturn)} />
+          <Smart3DView
+            analysisId={analysisId}
+            poseFrames={step3PoseFrames}
+            impactFrame={
+              typeof biomechanicsSummary?.timing?.impact_frame === 'number'
+                ? biomechanicsSummary.timing.impact_frame
+                : null
+            }
+            fps={biomechanicsSummary?.timing?.fps ?? null}
+            onClose={() => setResultsDetail(poseReturn)}
+          />
         ) : step === 3 && resultsDetail === 'drills' ? (
           <DrillsView
             videoUri={uploadedVideoUrl}

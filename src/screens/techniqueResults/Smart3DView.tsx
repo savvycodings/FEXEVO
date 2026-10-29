@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useRef, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   BackHandler,
@@ -17,19 +17,30 @@ import { File, Paths } from 'expo-file-system'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import Svg, { Circle, Line } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
 import { useHologram, type HologramKeypoints, type HologramOrbitFrame } from '../../lib/hologramJob'
-import { useContactJoints, type ContactJoint } from '../../lib/jointsApi'
+import { useContactJoints, type ContactJoint, type JointReading } from '../../lib/jointsApi'
+import { SELECTED_GLOW, UI } from '../../components/ui'
+import { kineticChainTiming } from '../../lib/kineticChain'
+import { poseAngle } from '../../lib/poseJointAngles'
+import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
 import { JointDetailView } from './JointDetailView'
+import { JOINT_ICON, type BodyPartId } from './jointIcons'
+import { dominantSide } from './movementTimeline'
 
 type Layer = 'player' | 'pro' | 'overlay'
-type BodyPart = 'head' | 'shoulder' | 'elbow' | 'wrist' | 'torso' | 'knee' | 'feet' | 'racket'
+type BodyPart = BodyPartId
 
 type Props = {
   /** Saved analysis whose ball-contact hologram replaces the stock figure once it is built. */
   analysisId?: string | null
+  /** The player's pose, contact frame and fps, for the kinetic chain timing. */
+  poseFrames?: PoseFrameRow[]
+  impactFrame?: number | null
+  fps?: number | null
   onClose: () => void
 }
 
@@ -180,7 +191,7 @@ function JointMarkers({
 /** Stock figure shown until the shot's own hologram is built. */
 const BODY = require('../../../assets/smart3d/body.webp')
 
-export function Smart3DView({ analysisId, onClose }: Props) {
+export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = null, onClose }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
@@ -189,6 +200,10 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   const hologram = useHologram(analysisId)
   const contactJoints = useContactJoints(analysisId)
   const [detail, setDetail] = useState<ContactJoint | null>(null)
+  const timing = useMemo(
+    () => (poseFrames?.length ? kineticChainTiming(poseFrames, impactFrame, fps, dominantSide(poseFrames)) : null),
+    [poseFrames, impactFrame, fps]
+  )
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 })
   const videoRef = useRef<Video>(null)
@@ -328,16 +343,26 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   }
 
   if (detail) {
+    const served = contactJoints?.joints[detail] ?? null
+    // No server reading for this shot: measure the angle from the pose at contact, without a pro.
+    let reading: JointReading | null = served
+    if (served?.you == null && poseFrames?.length && impactFrame != null) {
+      const you = poseAngle(nearestPoseByFrame(poseFrames, impactFrame), detail, dominantSide(poseFrames))
+      if (you != null) {
+        reading = {
+          ...(served ?? { pro: null, idealMin: null, idealMax: null, deltaDeg: null, status: null, direction: null, messageKey: null }),
+          you: Math.round(you),
+        }
+      }
+    }
     return (
       <JointDetailView
         joint={detail}
-        reading={contactJoints?.joints[detail] ?? null}
+        reading={reading}
         shotLabel={contactJoints?.shotLabel ?? null}
-        side={contactJoints?.side ?? 'RIGHT'}
         hologramImage={hologram.image}
         proHologramImage={hologram.proImage}
-        keypoints={hologram.keypoints}
-        proKeypoints={hologram.proKeypoints}
+        timing={timing}
         onClose={() => setDetail(null)}
       />
     )
@@ -355,11 +380,17 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           onPress={onClose}
           style={styles.back}
         >
-          <Ionicons name="chevron-back" size={24} color="#86A7D2" />
+          <Ionicons name="chevron-back" size={28} color="#86A7D2" />
         </Pressable>
-        <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.semiBoldFont }]}>
-          {t('analysis.smart3dTitle')}
-        </Text>
+        <View style={styles.titleCopy}>
+          <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}>
+            {t('analysis.smart3dTitle')}
+          </Text>
+          <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: theme.regularFont }]}>
+            {t('analysis.smart3dSubtitle')}
+          </Text>
+        </View>
+        <View style={styles.back} />
       </View>
       <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} trackStyle={styles.pill} />
       <View
@@ -420,7 +451,8 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           <Image
             source={BODY}
             resizeMode="cover"
-            style={[StyleSheet.absoluteFill, layer === 'pro' && styles.bodyGhost]}
+            // absoluteFill alone leaves a bundled image at its natural size on web.
+            style={[styles.fill, layer === 'pro' && styles.bodyGhost]}
           />
         ) : null}
         {layer === 'overlay' && hologram.proImage ? (
@@ -430,14 +462,6 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
         ) : null}
         {showOrbit ? <View style={StyleSheet.absoluteFill} {...pan.panHandlers} /> : null}
-        {proMissing ? (
-          <View pointerEvents="none" style={styles.proMissing} testID="smart3d-pro-missing">
-            <Ionicons name="ribbon-outline" size={28} color="#7AECFF" />
-            <Text allowFontScaling={false} style={[styles.proMissingLabel, { fontFamily: theme.mediumFont }]}>
-              {t('analysis.smart3dProMissing')}
-            </Text>
-          </View>
-        ) : null}
         {proMissing ? (
           <View pointerEvents="none" style={styles.proMissing} testID="smart3d-pro-missing">
             <Ionicons name="ribbon-outline" size={28} color="#7AECFF" />
@@ -469,15 +493,19 @@ export function Smart3DView({ analysisId, onClose }: Props) {
               return (
                 <Pressable
                   key={item.id}
+                  testID={`smart3d-part-${item.id}`}
                   accessibilityRole="button"
                   accessibilityState={{ selected: on }}
                   onPress={() => pressPart(item.id)}
-                  style={[styles.part, on && styles.partOn]}
+                  style={[styles.part, on && [styles.partOn, SELECTED_GLOW]]}
                 >
+                  <View style={styles.partBadge}>
+                    <MaterialCommunityIcons name={JOINT_ICON[item.id]} size={18} color={UI.text} />
+                  </View>
                   <Text
                     allowFontScaling={false}
                     numberOfLines={1}
-                    style={[styles.partLabel, { fontFamily: on ? theme.semiBoldFont : theme.mediumFont }]}
+                    style={[styles.partLabel, { fontFamily: theme.regularFont }]}
                   >
                     {t(item.key)}
                   </Text>
@@ -494,19 +522,24 @@ export function Smart3DView({ analysisId, onClose }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, paddingHorizontal: 16, paddingTop: 4 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 14 },
-  back: { paddingVertical: 4, paddingRight: 4 },
-  title: { color: '#FFFFFF', fontSize: 24 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  back: { width: 32 },
+  titleCopy: { flex: 1, alignItems: 'center' },
+  title: { color: UI.text, fontSize: 24, textAlign: 'center' },
+  subtitle: { color: UI.accent, fontSize: 14, textAlign: 'center' },
   pill: { marginBottom: 12 },
   stage: {
     width: '100%',
-    borderRadius: 24,
+    borderRadius: UI.radiusCard,
+    borderWidth: 2,
+    borderColor: '#5B6CFF',
     backgroundColor: '#020A1C',
     overflow: 'hidden',
   },
   // overflow:hidden on the parent keeps AVPlayerLayer from drawing on iOS.
   stageIos: { overflow: 'visible' },
   partsScroll: { flex: 1 },
+  fill: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   bodyGhost: { opacity: 0.42 },
   building: {
     position: 'absolute',
@@ -527,30 +560,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   proMissingLabel: { color: '#BFE6FF', fontSize: 15, lineHeight: 21, textAlign: 'center' },
-  prompt: { color: '#5E8FD0', fontSize: 18, textAlign: 'center', marginTop: 14, marginBottom: 12 },
+  prompt: { color: UI.text, fontSize: 20, marginTop: 14, marginBottom: 12 },
   parts: { gap: 10 },
   partsAfterOrbit: { marginTop: 14 },
   partRow: { flexDirection: 'row', gap: 10 },
   part: {
     flex: 1,
-    height: 60,
+    height: 54,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: 'rgba(30, 80, 170, 0.55)',
-    backgroundColor: '#030B22',
+    borderColor: 'rgba(47, 107, 255, 0.45)',
+    backgroundColor: '#0A1550',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+  },
+  partOn: { borderColor: UI.text, borderWidth: 2, backgroundColor: '#1B2AA8' },
+  partBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: UI.text,
+    backgroundColor: UI.accentStrong,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
   },
-  partOn: {
-    borderColor: '#3D9DFF',
-    borderWidth: 2,
-    backgroundColor: '#0A1C4E',
-    shadowColor: '#1C8FFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  partLabel: { color: '#FFFFFF', fontSize: 16 },
+  partLabel: { color: UI.text, fontSize: 13, flexShrink: 1, flexGrow: 1, textAlign: 'center', letterSpacing: -0.2 },
 })

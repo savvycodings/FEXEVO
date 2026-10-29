@@ -1025,7 +1025,17 @@ export function ActivitiesVideoAnalysis({
   if (overviewDetail === 'pose') {
     return (
       <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
-        <Smart3DView analysisId={session.analysisId} onClose={() => setOverviewDetail(poseReturn)} />
+        <Smart3DView
+          analysisId={session.analysisId}
+          poseFrames={poseFrames}
+          impactFrame={
+            typeof aiSnapshot?.biomechanicsSummary?.timing?.impact_frame === 'number'
+              ? aiSnapshot.biomechanicsSummary.timing.impact_frame
+              : null
+          }
+          fps={aiSnapshot?.biomechanicsSummary?.timing?.fps ?? null}
+          onClose={() => setOverviewDetail(poseReturn)}
+        />
       </View>
     )
   }

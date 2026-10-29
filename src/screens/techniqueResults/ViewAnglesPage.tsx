@@ -14,6 +14,7 @@ import { landmarkVisOk, poseAngle, RACKET_ANGLE_ID, TORSO_ANGLE_ID, type PoseAng
 import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
 import { getThumbnailAsync } from '../../lib/videoThumbnails'
 import { dominantSide } from './movementTimeline'
+import { JOINT_ICON } from './jointIcons'
 
 type Mode = 'angles' | 'motion'
 type PhaseId = 'preparation' | 'swing' | 'impact' | 'followThrough'
@@ -55,16 +56,6 @@ const BUTTON_GAP = 5
 const GOOD = '#34C759'
 const OFF = '#FF7A6B'
 
-const JOINT_ICON: Record<ViewJoint, React.ComponentProps<typeof MaterialCommunityIcons>['name']> = {
-  head: 'head-outline',
-  shoulder: 'arm-flex-outline',
-  elbow: 'arm-flex',
-  wrist: 'hand-back-right-outline',
-  torso: 'human',
-  knee: 'human-handsdown',
-  feet: 'shoe-sneaker',
-  racket: 'tennis',
-}
 
 function JointBadge({ joint, size }: { joint: ViewJoint; size: number }) {
   return (
