@@ -1,6 +1,8 @@
 /** Extended UI strings — merged into main `es` locale in i18n/index.ts */
 export const esExtended = {
   common: {
+    viewAll: "Ver todo",
+    previous: "Anterior",
     cancel: "Cancelar",
     save: "Guardar",
     dismiss: "Cerrar",
@@ -225,6 +227,8 @@ export const esExtended = {
     lastWeek: "Semana pasada",
   },
   you: {
+    overallRating: "Valoración general",
+    overallRatingHint: "Basada en todos tus golpes analizados (volea, saque, bandeja, remate, etc.)",
     aiInsightTitle: "INSIGHT IA",
     insightGained:
       "Tu {{pillar}} subió <highlight>{{highlight}}</highlight> esta semana",
@@ -444,6 +448,21 @@ export const esExtended = {
     focus: "Enfoque",
   },
   profileSettingsUi: {
+    profileEditSubtitle: "Gestiona tu perfil y ajustes",
+    personalDataSub: "Edita tu información personal",
+    accountSub: "Seguridad, email y contraseña",
+    locationSub: "Gestiona tu ubicación",
+    gameSettingsSub: "Preferencias de pista y análisis",
+    about: "Acerca de",
+    aboutSub: "Versión, términos y privacidad",
+    appVersion: "Versión {{version}}",
+    adminSub: "Herramientas de administración",
+    dateOfBirth: "Fecha de nacimiento",
+    country: "País",
+    city: "Ciudad",
+    cityPlaceholder: "Tu ciudad",
+    language: "Idioma",
+    repeatYourPassword: "Repite tu contraseña",
     profileEdit: "Editar perfil",
     personalData: "Datos personales",
     account: "Cuenta",

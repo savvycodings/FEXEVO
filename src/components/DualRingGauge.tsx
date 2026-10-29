@@ -28,6 +28,8 @@ type DualRingGaugeProps = {
   size: number
   /** When true, only the outer ring and a single centered score are shown. */
   single?: boolean
+  /** Score look (You tab): thicker rings, white score over "/100" instead of last week's value. */
+  outOf?: boolean
 }
 
 export function DualRingGauge({
@@ -36,15 +38,16 @@ export function DualRingGauge({
   theme,
   size,
   single = false,
+  outOf = false,
 }: DualRingGaugeProps) {
   const cx = size / 2
   const cy = size / 2
-  const rOuter = size * 0.34
-  const rInner = size * 0.282
-  const strokeOuter = Math.max(2.6, size * 0.048)
-  const strokeInner = Math.max(2.2, size * 0.038)
-  const scoreMainSize = size >= 72 ? 12 : size >= 62 ? 11 : 10
-  const scoreLastSize = size >= 72 ? 10 : 9
+  const rOuter = size * (outOf ? 0.42 : 0.34)
+  const rInner = size * (outOf ? 0.335 : 0.282)
+  const strokeOuter = Math.max(2.6, size * (outOf ? 0.075 : 0.048))
+  const strokeInner = Math.max(2.2, size * (outOf ? 0.045 : 0.038))
+  const scoreMainSize = outOf ? Math.round(size * 0.26) : size >= 72 ? 12 : size >= 62 ? 11 : 10
+  const scoreLastSize = outOf ? Math.max(9, Math.round(size * 0.13)) : size >= 72 ? 10 : 9
 
   const cOuter = 2 * Math.PI * rOuter
   const cInner = 2 * Math.PI * rInner
@@ -103,12 +106,23 @@ export function DualRingGauge({
           allowFontScaling={false}
           style={[
             styles.scoreThis,
+            outOf && styles.scoreThisOutOf,
             { fontFamily: theme.semiBoldFont, fontSize: scoreMainSize, lineHeight: scoreMainSize + 2 },
           ]}
         >
           {formatScore(thisWeek)}
         </Text>
-        {!single ? (
+        {outOf ? (
+          <Text
+            allowFontScaling={false}
+            style={[
+              styles.outOf,
+              { fontFamily: theme.mediumFont, fontSize: scoreLastSize, lineHeight: scoreLastSize + 2 },
+            ]}
+          >
+            /100
+          </Text>
+        ) : !single ? (
           <Text
             allowFontScaling={false}
             style={[
@@ -137,6 +151,12 @@ const styles = StyleSheet.create({
   },
   scoreThis: {
     color: RING_THIS_WEEK,
+  },
+  scoreThisOutOf: {
+    color: '#FFFFFF',
+  },
+  outOf: {
+    color: 'rgba(134, 167, 210, 0.8)',
   },
   scoreLast: {
     color: RING_LAST_WEEK,

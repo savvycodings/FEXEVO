@@ -1,6 +1,8 @@
 /** Extended UI strings — merged into main `en` locale in i18n/index.ts */
 export const enExtended = {
   common: {
+    viewAll: "View All",
+    previous: "Previous",
     cancel: "Cancel",
     save: "Save",
     dismiss: "Dismiss",
@@ -225,6 +227,8 @@ export const enExtended = {
     lastWeek: "Last week",
   },
   you: {
+    overallRating: "Overall Player Rating",
+    overallRatingHint: "Based on all your analyzed shots (volley, serve, bandeja, smash, etc.)",
     aiInsightTitle: "AI INSIGHT",
     insightGained:
       "Your {{pillar}} gained <highlight>{{highlight}}</highlight> this week",
@@ -443,6 +447,21 @@ export const enExtended = {
     focus: "Focus",
   },
   profileSettingsUi: {
+    profileEditSubtitle: "Manage your profile and settings",
+    personalDataSub: "Edit your personal information",
+    accountSub: "Security, email and password",
+    locationSub: "Manage your location settings",
+    gameSettingsSub: "Court preferences and analysis",
+    about: "About",
+    aboutSub: "Version, terms and privacy",
+    appVersion: "Version {{version}}",
+    adminSub: "Admin hub tools",
+    dateOfBirth: "Date of Birth",
+    country: "Country",
+    city: "City",
+    cityPlaceholder: "Your city",
+    language: "Language",
+    repeatYourPassword: "Repeat your password",
     profileEdit: "Profile Edit",
     personalData: "Personal Data",
     account: "Account",

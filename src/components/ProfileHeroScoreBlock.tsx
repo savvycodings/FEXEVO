@@ -12,6 +12,8 @@ import { useSessionData } from '../context/SessionDataContext'
 import { ShieldProportionalFrame, fitShieldInBox } from './ShieldProportionalFrame'
 import { LocalSvgAsset } from './LocalSvgAsset'
 import { useTranslation } from 'react-i18next'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import { DualRingGauge } from './DualRingGauge'
 
 const SCORE_BG = require('../../assets/aicoach/scorepng.png')
 const SMALL_SHIELD_CAP_REF_WIN_W = 430
@@ -95,7 +97,7 @@ export function ProfileHeroScoreBlock({
     const refApproxColW = (refHeroRowInnerW - HERO_GAP) / 2
     const reference = Math.min(refApproxColW, SMALL_SHIELD_CAP_REF_WIN_W * 0.44)
     if (youPageLayout) {
-      return Math.min(contentW * 0.46, winW * 0.44, reference)
+      return Math.min(contentW * 0.4, winW * 0.4, reference)
     }
     const current = Math.min(colW, winW * 0.44)
     return Math.min(current, reference)
@@ -235,15 +237,69 @@ export function ProfileHeroScoreBlock({
           </View>
         </View>
         {showScoreCard && youPageLayout ? (
-          <View style={styles.scoreCenterLane}>
-            <View style={scoreNudgeX !== 0 ? { transform: [{ translateX: scoreNudgeX }] } : undefined}>
-              {scoreCard}
+          <View style={styles.youCol}>
+            <View style={styles.youNameRow}>
+              <View style={styles.youNameCol}>
+                <Text
+                  allowFontScaling={false}
+                  numberOfLines={1}
+                  style={[styles.youName, { fontFamily: theme.semiBoldFont }]}
+                >
+                  {displayName}
+                </Text>
+                <Text allowFontScaling={false} style={[styles.youPremium, { fontFamily: theme.mediumFont }]}>
+                  {t('common.premium')}
+                </Text>
+              </View>
+              {showShare ? (
+                <TouchableOpacity
+                  onPress={onSharePress}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={shareAccessibilityLabel}
+                >
+                  <LocalSvgAsset assetModule={shareIconModule} width={shareIconSize} height={shareIconSize} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <View style={styles.youScoreRow}>
+              <DualRingGauge size={84} thisWeek={displayScore} lastWeek={0} single outOf theme={theme} />
+              <View style={styles.youScoreTextCol}>
+                <View style={styles.youScoreTitleRow}>
+                  <Text allowFontScaling={false} style={[styles.youScoreTitle, { fontFamily: theme.semiBoldFont }]}>
+                    {t('you.overallRating')}
+                  </Text>
+                  <Ionicons name="information-circle-outline" size={13} color="#86A7D2" />
+                </View>
+                <Text allowFontScaling={false} style={[styles.youScoreHint, { fontFamily: theme.regularFont }]}>
+                  {t('you.overallRatingHint')}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.youFollowRow}>
+              <View style={styles.youFollowCol}>
+                <Text allowFontScaling={false} style={[styles.youFollowNum, { fontFamily: theme.semiBoldFont }]}>
+                  0
+                </Text>
+                <Text allowFontScaling={false} style={[styles.youFollowLabel, { fontFamily: theme.regularFont }]}>
+                  {t('common.following')}
+                </Text>
+              </View>
+              <View style={styles.youFollowDivider} />
+              <View style={styles.youFollowCol}>
+                <Text allowFontScaling={false} style={[styles.youFollowNum, { fontFamily: theme.semiBoldFont }]}>
+                  0
+                </Text>
+                <Text allowFontScaling={false} style={[styles.youFollowLabel, { fontFamily: theme.regularFont }]}>
+                  {t('common.followers')}
+                </Text>
+              </View>
             </View>
           </View>
         ) : showScoreCard ? (
           <View style={[styles.scoreCol, { width: colW }]}>{scoreCard}</View>
         ) : null}
-        {youPageLayout && showShare ? (
+        {youPageLayout && showShare && !showScoreCard ? (
           <TouchableOpacity
             onPress={onSharePress}
             style={[styles.shareInlineYou, { width: shareSlotW }]}
@@ -340,6 +396,72 @@ const styles = StyleSheet.create({
   scoreCard: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  youCol: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 12,
+    gap: 8,
+  },
+  youNameRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  youNameCol: { flex: 1, minWidth: 0 },
+  youName: {
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+  youPremium: {
+    fontSize: 12,
+    color: '#00BBFF',
+    marginTop: 1,
+  },
+  youScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  youScoreTextCol: { flex: 1, minWidth: 0 },
+  youScoreTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  youScoreTitle: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    lineHeight: 17,
+    flexShrink: 1,
+  },
+  youScoreHint: {
+    fontSize: 10,
+    color: 'rgba(134, 167, 210, 0.85)',
+    lineHeight: 13,
+    marginTop: 3,
+  },
+  youFollowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  youFollowCol: { flex: 1, alignItems: 'center' },
+  youFollowNum: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    lineHeight: 18,
+  },
+  youFollowLabel: {
+    fontSize: 11,
+    color: 'rgba(134, 167, 210, 0.85)',
+    marginTop: 1,
+  },
+  youFollowDivider: {
+    width: 1,
+    height: 26,
+    backgroundColor: 'rgba(134, 167, 210, 0.3)',
   },
   scoreImg: {
     position: 'absolute',

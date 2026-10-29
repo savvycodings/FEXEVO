@@ -167,13 +167,22 @@ export function LocalSvgAsset({
   useEffect(() => {
     if (!xml || paintReady) return
 
-    const task = InteractionManager.runAfterInteractions(() => {
+    let done = false
+    const paint = () => {
+      if (done) return
+      done = true
       requestAnimationFrame(() => {
         setPaintReady(true)
         setPaintKey((k) => k + 1)
       })
-    })
-    return () => task.cancel()
+    }
+    const task = InteractionManager.runAfterInteractions(paint)
+    // A looping Animated (isInteraction) never lets interactions settle; don't wait on it forever.
+    const fallback = setTimeout(paint, 300)
+    return () => {
+      task.cancel()
+      clearTimeout(fallback)
+    }
   }, [xml, paintReady])
 
   const boxStyle = [{ width, height }, style]

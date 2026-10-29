@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Image, TouchableOpacity, Share } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { ThemeContext } from "../context";
 import { useSessionData } from "../context/SessionDataContext";
 import {
@@ -104,6 +104,7 @@ function ProfileAiInsightBanner({
 
 export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => void }) {
   const { ratingCategories, ratingLoading, profileName, overallPillarScore } = useSessionData();
+  const navigation = useNavigation();
   const [dismissLoaded, setDismissLoaded] = useState(false);
   const [dismissedUntilMs, setDismissedUntilMs] = useState(0);
 
@@ -150,8 +151,9 @@ export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => 
 
   return (
     <ActivitiesCalendarFlow
-      monthNavStyle="pill"
+      monthNavStyle="card"
       showHeroRow={false}
+      onViewAll={() => navigation.navigate("Activities" as never)}
       aboveActivitiesTitle={
         <>
           <ProfileHeroScoreBlock
@@ -163,7 +165,7 @@ export function Profile(props?: { onProfileUpdated?: () => void; onDone?: () => 
             shareIconSize={28}
             shareAccessibilityLabel="Share profile"
           />
-          <ProfileRatingDashboard />
+          <ProfileRatingDashboard framed />
           {showAiInsight && insight ? (
             <ProfileAiInsightBanner insight={insight} onDismiss={onDismissInsight} />
           ) : null}

@@ -6,6 +6,8 @@ import { useSessionData } from '../context/SessionDataContext'
 import { TRAIN_CATEGORIES, type TrainCategory } from '../lib/train-taxonomy'
 import { pillarTwoLineLabels } from '../i18n/taxonomyLabels'
 import { useTranslation } from 'react-i18next'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import { CARD_GLOW, UI } from './ui'
 
 /** You → Rating: pillar code at full strength; two-line subheading uses this at 50% via wrapper. */
 const RATING_METRIC_LABEL = '#86A7D2'
@@ -70,13 +72,15 @@ const GAUGE_SIZE_MAX = 84
 type Props = {
   /** When set, skips API and shows these rows (tests / story). */
   metrics?: RatingMetricRow[]
+  /** You tab: bordered card, info icon by the title, score-style rings. */
+  framed?: boolean
 }
 
 const EMPTY_METRICS = mapApiToMetrics(
   RING_CATEGORY_ORDER.map((id) => ({ id, thisWeek: 0, lastWeek: 0 }))
 )
 
-export function ProfileRatingDashboard({ metrics: controlledMetrics }: Props) {
+export function ProfileRatingDashboard({ metrics: controlledMetrics, framed = false }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const { width: winW } = useWindowDimensions()
@@ -84,14 +88,14 @@ export function ProfileRatingDashboard({ metrics: controlledMetrics }: Props) {
 
   /** Five rings in one row: tight gaps, size derived from width so nothing scrolls off-screen. */
   const gaugeSize = useMemo(() => {
-    const CARD_HORIZONTAL = 8
-    const LR_INSET = 28
+    const CARD_HORIZONTAL = framed ? 24 : 8
+    const LR_INSET = framed ? 40 : 28
     const COLUMN_GAP = 2
     const gaps = 4 * COLUMN_GAP
     const usable = Math.max(260, winW - LR_INSET - CARD_HORIZONTAL)
     const slot = (usable - gaps) / 5
     return Math.max(50, Math.min(GAUGE_SIZE_MAX, Math.floor(slot - 1)))
-  }, [winW])
+  }, [winW, framed])
 
   const metrics = useMemo(() => {
     if (controlledMetrics) return controlledMetrics
@@ -113,6 +117,23 @@ export function ProfileRatingDashboard({ metrics: controlledMetrics }: Props) {
           paddingHorizontal: 4,
           marginBottom: 12,
         },
+        cardFramed: {
+          paddingTop: 4,
+          paddingBottom: 14,
+          paddingHorizontal: 12,
+          marginBottom: 16,
+          borderRadius: UI.radiusCard,
+          borderWidth: 1,
+          borderColor: UI.cardBorder,
+          backgroundColor: UI.cardBg,
+          ...CARD_GLOW,
+        },
+        titleRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+        },
+        infoIcon: { marginTop: 12 },
         header: {
           flexDirection: 'row',
           alignItems: 'center',
@@ -205,11 +226,16 @@ export function ProfileRatingDashboard({ metrics: controlledMetrics }: Props) {
   )
 
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        <Text allowFontScaling={false} style={styles.title}>
-          {t('profileRating.title')}
-        </Text>
+    <View style={framed ? styles.cardFramed : styles.card}>
+      <View style={[styles.header, framed && { marginBottom: 12 }]}>
+        <View style={styles.titleRow}>
+          <Text allowFontScaling={false} style={styles.title}>
+            {t('profileRating.title')}
+          </Text>
+          {framed ? (
+            <Ionicons name="information-circle-outline" size={16} color={RATING_METRIC_LABEL} style={styles.infoIcon} />
+          ) : null}
+        </View>
         <View style={styles.legend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: RING_THIS_WEEK }]} />
@@ -243,6 +269,7 @@ export function ProfileRatingDashboard({ metrics: controlledMetrics }: Props) {
                 thisWeek={m.thisWeek}
                 lastWeek={m.lastWeek}
                 theme={theme}
+                outOf={framed}
               />
               <Text allowFontScaling={false} style={styles.abbr}>
                 {m.abbr}

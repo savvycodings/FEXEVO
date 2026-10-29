@@ -345,5 +345,25 @@ export function findCountry(value: string | null | undefined): Country | null {
   if (byName) return byName
   const byCode = COUNTRIES_BY_CODE.get(trimmed.toUpperCase())
   if (byCode) return byCode
+  // "City, Country": the country is the last part.
+  const comma = trimmed.lastIndexOf(',')
+  if (comma >= 0) return findCountry(trimmed.slice(comma + 1))
   return null
+}
+
+/** Split a stored area location ("City, Country" or just "Country") into its parts. */
+export function splitAreaLocation(value: string | null | undefined): { city: string; country: Country | null } {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  if (!trimmed) return { city: '', country: null }
+  const whole = findCountry(trimmed)
+  const comma = trimmed.lastIndexOf(',')
+  if (comma < 0) return { city: whole ? '' : trimmed, country: whole }
+  return { city: trimmed.slice(0, comma).trim(), country: whole }
+}
+
+/** Store city and country the way the backend leaderboard reads it: "City, Country". */
+export function joinAreaLocation(city: string, countryName: string | null | undefined): string {
+  const c = city.trim()
+  const n = countryName?.trim() ?? ''
+  return c && n ? `${c}, ${n}` : c || n
 }

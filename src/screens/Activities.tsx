@@ -40,6 +40,7 @@ import {
   type ShotsSort,
 } from './activities/shots/shotsFilter'
 import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
+import { UI } from '../components/ui'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { useTranslation } from 'react-i18next'
 import { profileImageSource } from '../lib/defaultProfilePicture'
@@ -112,6 +113,7 @@ const CAL_SUBMISSION_DOT = '#1FD1A0'
 const CAL_WEEK_LABEL = '#86A7D2'
 const CAL_DAY_NUM = 'rgba(134, 167, 210, 0.75)'
 const CAL_DAY_MUTED = 'rgba(134, 167, 210, 0.25)'
+const CAL_GRID_LINE = 'rgba(134, 167, 210, 0.14)'
 
 function monthYearPillLines(d: Date): { month: string; year: string } {
   return {
@@ -546,11 +548,14 @@ export type ActivitiesCalendarFlowProps = {
   belowCalendar?: ReactNode
   /**
    * `inline` = month + arrows inside the calendar card (Activities tab, original).
-   * `pill` = dark pill banner above the card (You / Profile only).
+   * `pill` = dark pill banner above the card (coach Activities).
+   * `card` = month nav and grid in one bordered card, activity as dots (You tab).
    */
-  monthNavStyle?: 'pill' | 'inline'
+  monthNavStyle?: 'pill' | 'inline' | 'card'
   /** Inserted between hero and section title (You tab: AI Insight). */
   aboveActivitiesTitle?: ReactNode
+  /** Shows a "View All" link beside the section title. */
+  onViewAll?: () => void
   /** Profile uses `false` to drop the placeholder shield/score hero; Activities tab keeps the default. */
   showHeroRow?: boolean
   /** Deep link from notifications — opens shot detail when activities list has the session. */
@@ -573,6 +578,7 @@ export function ActivitiesCalendarFlow({
   belowCalendar,
   monthNavStyle = 'inline',
   aboveActivitiesTitle,
+  onViewAll,
   showHeroRow = true,
   openAnalysisId,
   onOpenAnalysisConsumed,
@@ -845,6 +851,30 @@ export function ActivitiesCalendarFlow({
                 pointerEvents="none"
               />
             ) : null
+            if (monthNavStyle === 'card') {
+              return (
+                <Pressable
+                  key={idx}
+                  onPress={() => onPressDay(cell.date, cell.inMonth)}
+                  style={[styles.dayCell, styles.dayCellCard, col === 6 && styles.dayCellCardLast]}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.dayNumCard,
+                      !cell.inMonth && styles.dayNumMuted,
+                      (isSel || isToday) && styles.dayNumSelectedColor,
+                    ]}
+                  >
+                    {cell.date.getDate()}
+                  </Text>
+                  <View style={styles.dayDotRow} pointerEvents="none">
+                    {has && cell.inMonth && !coachInbox ? <View style={styles.dayDotActivity} /> : null}
+                    {hasSubmission && cell.inMonth ? <View style={styles.dayDotSubmission} /> : null}
+                  </View>
+                </Pressable>
+              )
+            }
             return (
               <Pressable
                 key={idx}
@@ -1055,14 +1085,58 @@ export function ActivitiesCalendarFlow({
 
       {aboveActivitiesTitle}
 
-      <Text allowFontScaling={false} style={styles.sectionTitle}>
-        {resolvedSectionTitle}
-      </Text>
+      <View style={styles.sectionTitleRow}>
+        <Text allowFontScaling={false} style={[styles.sectionTitle, onViewAll && styles.sectionTitleInRow]}>
+          {resolvedSectionTitle}
+        </Text>
+        {onViewAll ? (
+          <TouchableOpacity onPress={onViewAll} hitSlop={10} style={styles.viewAll} accessibilityRole="link">
+            <Text allowFontScaling={false} style={styles.viewAllText}>
+              {t('common.viewAll')}
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={CAL_WEEK_LABEL} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
 
       {error ? (
         <Text allowFontScaling={false} style={styles.errorText}>
           {error}
         </Text>
+      ) : monthNavStyle === 'card' ? (
+        <View style={styles.calCardFramed}>
+          <View style={styles.calCardHeader}>
+            <TouchableOpacity
+              onPress={goPrevMonth}
+              hitSlop={8}
+              style={styles.calCardNav}
+              activeOpacity={0.75}
+              accessibilityLabel={t('common.previous')}
+            >
+              <Ionicons name="chevron-back" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text allowFontScaling={false} style={styles.calCardMonth}>
+              {formatMonthYear(viewMonth)}
+            </Text>
+            <TouchableOpacity
+              onPress={goNextMonth}
+              hitSlop={8}
+              style={styles.calCardNav}
+              activeOpacity={0.75}
+              accessibilityLabel={t('common.next')}
+            >
+              <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          <View style={[styles.weekRow, styles.weekRowCard]}>
+            {WEEK_LABELS.map((w, i) => (
+              <Text allowFontScaling={false} key={`${w}-${i}`} style={styles.weekLabel}>
+                {w}
+              </Text>
+            ))}
+          </View>
+          {loading ? <ActivityIndicator color="#00BBFF" style={styles.loader} /> : dayGrid}
+        </View>
       ) : monthNavStyle === 'pill' ? (
         <>
           {monthPillLines ? (
@@ -1193,6 +1267,95 @@ function getStyles(theme: any, _winW: number) {
       fontSize: 18,
       color: theme.textColor,
       marginBottom: 12,
+    },
+    sectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    sectionTitleInRow: { fontSize: 20 },
+    viewAll: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      marginBottom: 12,
+    },
+    viewAllText: {
+      fontFamily: theme.mediumFont,
+      fontSize: 13,
+      color: CAL_WEEK_LABEL,
+    },
+    calCardFramed: {
+      borderRadius: UI.radiusCard,
+      borderWidth: 1,
+      borderColor: UI.cardBorder,
+      backgroundColor: UI.cardBg,
+      paddingTop: 12,
+      paddingBottom: 6,
+      overflow: 'hidden',
+    },
+    calCardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 12,
+      marginBottom: 12,
+    },
+    calCardNav: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: UI.surface,
+      borderWidth: 1,
+      borderColor: UI.surfaceBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    calCardMonth: {
+      fontFamily: theme.semiBoldFont,
+      fontSize: 16,
+      color: '#FFFFFF',
+    },
+    weekRowCard: {
+      marginBottom: 0,
+      paddingBottom: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: CAL_GRID_LINE,
+    },
+    dayCellCard: {
+      height: 42,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: CAL_GRID_LINE,
+      justifyContent: 'flex-start',
+      paddingTop: 9,
+    },
+    dayCellCardLast: { borderRightWidth: 0 },
+    dayNumCard: {
+      fontFamily: theme.mediumFont,
+      fontSize: 13,
+      lineHeight: 16,
+      textAlign: 'center',
+      color: '#FFFFFF',
+      ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+    },
+    dayDotRow: {
+      flexDirection: 'row',
+      gap: 3,
+      marginTop: 4,
+      height: 6,
+    },
+    dayDotActivity: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: CAL_ACTIVITY_CIRCLE,
+    },
+    dayDotSubmission: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: CAL_SUBMISSION_DOT,
     },
     loader: {
       marginVertical: 24,
