@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { PG, glow } from '../../screens/progress/progressTheme'
 
 export type StepperStep<K extends string> = { key: K; label: string }
@@ -13,17 +14,43 @@ type Props<K extends string> = {
   fontFamily?: string
   /** Clip thumbnail shown on the right. */
   thumbnail?: ReactNode
+  /** Chevron on the left of the steps (design); omitted when the screen has its own back control. */
+  onBack?: () => void
+  backTestID?: string
+  backAccessibilityLabel?: string
 }
 
-const CIRCLE = 40
+const CIRCLE = 32
 const LINE_ON = '#2A88F4'
 const LINE_OFF = '#0B2A6B'
 
 /** Numbered 1–2–3 stepper joined by a line; the current step glows. */
-export function ShotStepper<K extends string>({ steps, current, enabled, onPress, fontFamily, thumbnail }: Props<K>) {
+export function ShotStepper<K extends string>({
+  steps,
+  current,
+  enabled,
+  onPress,
+  fontFamily,
+  thumbnail,
+  onBack,
+  backTestID,
+  backAccessibilityLabel,
+}: Props<K>) {
   const currentIdx = steps.findIndex((s) => s.key === current)
   return (
     <View style={styles.row}>
+      {onBack ? (
+        <TouchableOpacity
+          onPress={onBack}
+          testID={backTestID}
+          accessibilityRole="button"
+          accessibilityLabel={backAccessibilityLabel}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 8 }}
+          style={styles.back}
+        >
+          <Ionicons name="chevron-back" size={30} color={PG.labelBlue} />
+        </TouchableOpacity>
+      ) : null}
       <View style={styles.track}>
         {/* Line runs behind the circles, from the first circle's center to the last one's. */}
         <View style={styles.lineRow} pointerEvents="none">
@@ -77,7 +104,9 @@ export function ShotStepper<K extends string>({ steps, current, enabled, onPress
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  /** Lines the chevron up with the circles, not the circles + labels block. */
+  back: { marginLeft: -6, marginBottom: 20 },
   track: { flex: 1, minWidth: 0, flexDirection: 'row', justifyContent: 'space-between' },
   lineRow: {
     position: 'absolute',
@@ -87,7 +116,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   line: { flex: 1, height: 3, borderRadius: 2 },
-  step: { alignItems: 'center', gap: 6, width: CIRCLE + 24 },
+  step: { alignItems: 'center', gap: 4, width: CIRCLE + 28 },
   circle: {
     width: CIRCLE,
     height: CIRCLE,
@@ -98,14 +127,14 @@ const styles = StyleSheet.create({
   },
   circleDone: { backgroundColor: '#0B2A6B' },
   circleActive: { backgroundColor: '#0B2A6B', borderWidth: 3, borderColor: PG.labelBlue },
-  num: { fontSize: 17, color: '#2A5BBF' },
+  num: { fontSize: 15, color: '#2A5BBF' },
   numOn: { color: PG.labelBlue },
-  label: { fontSize: 14, color: '#2A5BBF' },
+  label: { fontSize: 12, color: '#2A5BBF' },
   labelActive: { color: '#FFFFFF' },
   thumb: {
-    width: 88,
-    height: 88,
-    borderRadius: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: '#4DA6FF',
     overflow: 'hidden',

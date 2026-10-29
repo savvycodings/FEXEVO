@@ -70,7 +70,6 @@ import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import InCardRecorder from '../components/InCardRecorder'
 import { ShotDetailsPicker } from '../components/ShotDetailsPicker'
-import { FlowBackButton } from '../components/shotFlow/FlowBackButton'
 import { LOADING_OVERLAY_SCRIM } from '../constants/loadingVideoFullscreen'
 import {
   AICoachCoachReviewBanner,
@@ -85,9 +84,11 @@ import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
 import { startHologram } from '../lib/hologramJob'
 import { proLibraryVideoUrl } from '../lib/mediaUrl'
-import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
+import { BiggestMistakesView, mistakeFocusOrder } from './techniqueResults/BiggestMistakesView'
+import { DrillsView } from './techniqueResults/DrillsView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
-import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
+import { ViewAnglesPage } from './techniqueResults/ViewAnglesPage'
+import { CorrectMovementView } from './techniqueResults/CorrectMovementView'
 import { CoachHome } from './coachHome/CoachHome'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientProgressBar } from '../components'
@@ -99,6 +100,7 @@ import { PaddlePongGame } from '../components/PaddlePongGame'
 import { AnalyzingDashSpinner } from '../components/AnalyzingDashSpinner'
 import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
 import { SentToSupportModal } from '../components/SentToSupportModal'
+import { GlowButton, UI } from '../components/ui'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
 import {
@@ -150,11 +152,12 @@ const FRAME_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 2
 const FRAME_ASPECT = 9 / 16
 const FRAME_HEIGHT = FRAME_WIDTH / FRAME_ASPECT
 /** Upload step: bar slightly narrower than the “Uploading your video” caption line. */
-const UPLOAD_PROGRESS_TRACK_WIDTH = Math.min(200, Math.max(168, Math.round(FRAME_WIDTH * 0.56)))
+/** Short bar under the upload icon (design: ~90pt). */
+const UPLOAD_PROGRESS_TRACK_WIDTH = 92
 const STROKE_WIDTH = 4
 const FRAME_RADIUS = 24
 /** Set Clip hint card thumbnail. */
-const STEP2_THUMB = 64
+const STEP2_THUMB = 56
 const STEP2_TRASH_ICON = '#0A1E5C'
 const GRADIENT_COLORS = ['#0022FF', '#00BBFF', '#00BBFF', '#0022FF']
 const GRADIENT_STOPS = ['0%', '30%', '70%', '100%']
@@ -531,7 +534,7 @@ export function Technique() {
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   /** Which results sub-page is showing. Does not reload analysis. */
   const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
-  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare'>('overview')
+  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'correct' | 'drills'>('overview')
   const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
   const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
   const resultsScrollRef = useRef<ScrollView>(null)
@@ -547,7 +550,7 @@ export function Technique() {
         [
           ['smartFocus', 'analysis.overview'],
           ['metrics', 'analysis.metrics'],
-          ['proReference', 'analysis.proReference'],
+          ['viewAngles', 'analysis.viewAngles'],
         ] as const
       ).map(([id, key]) => ({ id, label: t(key) })),
     [t]
@@ -788,15 +791,10 @@ export function Technique() {
   const trimPreviewLayout = useMemo(() => {
     const maxW = Math.max(1, winW - HORIZONTAL_PADDING * 2)
     const maxH = Math.min(420, Math.max(220, Math.round(winH * 0.4)))
-    if (!trimPreviewNaturalSize || trimPreviewNaturalSize.w <= 0 || trimPreviewNaturalSize.h <= 0) {
-      return { height: Math.min(Math.round(maxW * (9 / 16)), maxH) }
-    }
-    const vw = trimPreviewNaturalSize.w
-    const vh = trimPreviewNaturalSize.h
-    const intrinsicH = maxW * (vh / vw)
-    const height = Math.round(Math.min(Math.max(120, intrinsicH), maxH))
-    return { height: Math.max(1, height) }
-  }, [winW, winH, trimPreviewNaturalSize])
+    // Design: a square box (width = height), capped so it stays on screen. Wider clips
+    // letterbox inside it, portrait clips pillarbox; either way the whole frame is visible.
+    return { height: Math.max(1, Math.round(Math.min(maxW, maxH))) }
+  }, [winW, winH])
 
   const failVisual = useMemo(() => {
     const overlayW = processFailedOverlayW > 0 ? processFailedOverlayW : winW
@@ -864,19 +862,6 @@ export function Technique() {
     () => parseBiomechanicsSummary(metrics as Record<string, unknown> | null | undefined),
     [metrics]
   )
-  const proCompareRows = useMemo(() => {
-    const rows: ProCompareRow[] = []
-    const angles = biomechanicsSummary?.angles_deg_proxy
-    const elbow = angles?.elbow_impact_deg
-    if (typeof elbow === 'number' && Number.isFinite(elbow)) {
-      rows.push({ label: t('analysis.elbowAngle'), you: `${Math.round(elbow)}°` })
-    }
-    const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
-    if (typeof torso === 'number' && Number.isFinite(torso)) {
-      rows.push({ label: t('analysis.torsoRotation'), you: `${Math.round(torso)}°` })
-    }
-    return rows
-  }, [biomechanicsSummary, t])
 
   const proReferenceShot = useMemo(() => {
     const label = retrieval?.shot_hypothesis?.stroke_label
@@ -2434,24 +2419,12 @@ export function Technique() {
                     does the work, you do the challenge.
                   </Text>
                 </View>
-                <TouchableOpacity
-                  style={styles.playGameBtn}
+                <GlowButton
+                  label="Play a Game"
                   onPress={() => setPaddleGameOpen(true)}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
                   accessibilityLabel="Play a Game"
-                >
-                  <LinearGradient
-                    colors={['#00BBFF', '#0022FF']}
-                    start={{ x: 0, y: 0.5 }}
-                    end={{ x: 1, y: 0.5 }}
-                    style={styles.playGameBtnInner}
-                  >
-                    <Text allowFontScaling={false} style={styles.playGameBtnText}>
-                      Play a Game
-                    </Text>
-                  </LinearGradient>
-                </TouchableOpacity>
+                  style={styles.playGameBtn}
+                />
               </View>
             </>
           )}
@@ -2506,22 +2479,11 @@ export function Technique() {
                   ? analysisError.trim()
                   : t('technique.analysisFailedSubtitle')}
               </Text>
-              <TouchableOpacity
-                style={styles.processFailedPrimaryOuter}
+              <GlowButton
+                label={t('technique.startOver')}
                 onPress={resetToNewVideo}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={['#00BBFF', '#0022FF']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.processFailedPrimaryInner}
-                >
-                  <Text allowFontScaling={false} style={styles.processFailedPrimaryText}>
-                    {t('technique.startOver')}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                style={styles.processFailedPrimaryButton}
+              />
               <TouchableOpacity
                 style={styles.processFailedSecondaryBtn}
                 onPress={handleSendToSupport}
@@ -2578,21 +2540,21 @@ export function Technique() {
             bottomOffset={insets.bottom + 12}
           >
             <View style={styles.step2}>
-                <View style={styles.step2TitleRow}>
-                  <FlowBackButton
+                <View style={styles.step2VideoSummaryCard}>
+                  {/* Back lives in the instruction card (design), not in a title row above it. */}
+                  <TouchableOpacity
                     onPress={() => {
                       void trimPreviewRef.current?.pause()
                       setShotPickerStart('camera')
                       setShotPickerOpen(true)
                     }}
-                    fontFamily={theme.regularFont}
                     testID={TEST_IDS.setClipBack}
-                  />
-                  <Text allowFontScaling={false} style={[styles.step2Title, { fontFamily: theme.mediumFont }]} numberOfLines={1}>
-                    {t('technique.setClipScreen.yourAnalysis')}
-                  </Text>
-                </View>
-                <View style={styles.step2VideoSummaryCard}>
+                    accessibilityRole="button"
+                    accessibilityLabel={t('analysis.back')}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 8 }}
+                  >
+                    <Ionicons name="chevron-back" size={30} color="#86A7D2" />
+                  </TouchableOpacity>
                   <Text allowFontScaling={false} style={styles.step2HintText}>
                     {t('technique.setClipScreen.impactHint')}
                   </Text>
@@ -2865,6 +2827,18 @@ export function Technique() {
           </KeyboardAwareScrollView>
         ) : step === 3 && resultsDetail === 'pose' ? (
           <Smart3DView analysisId={analysisId} onClose={() => setResultsDetail(poseReturn)} />
+        ) : step === 3 && resultsDetail === 'drills' ? (
+          <DrillsView
+            videoUri={uploadedVideoUrl}
+            shotLabel={userShot?.shotLabel ?? proReferenceShot}
+            focus={mistakeFocusOrder(technicalErrorsList)}
+            thumbTimeMs={
+              typeof biomechanicsSummary?.timing?.impact_frame === 'number'
+                ? (biomechanicsSummary.timing.impact_frame / (biomechanicsSummary.timing.fps || 30)) * 1000
+                : 0
+            }
+            onClose={() => setResultsDetail('compare')}
+          />
         ) : step === 3 && resultsDetail === 'compare' ? (
           <CompareWithPro
             videoUri={uploadedVideoUrl}
@@ -2903,11 +2877,31 @@ export function Technique() {
               setPoseReturn('compare')
               setResultsDetail('pose')
             }}
+            onDrills={() => setResultsDetail('drills')}
+            analysisId={analysisId}
+            contactMs={
+              typeof biomechanicsSummary?.timing?.impact_frame === 'number'
+                ? (biomechanicsSummary.timing.impact_frame / (biomechanicsSummary.timing.fps || 30)) * 1000
+                : null
+            }
+          />
+        ) : step === 3 && resultsDetail === 'correct' ? (
+          <CorrectMovementView
+            analysisId={analysisId}
+            originalUri={uploadedVideoUrl}
+            originalAspect={
+              trimPreviewNaturalSize && trimPreviewNaturalSize.w > 0
+                ? trimPreviewNaturalSize.h / trimPreviewNaturalSize.w
+                : null
+            }
+            onProfileChanged={invalidateSessionData}
+            onClose={() => setResultsDetail('mistakes')}
           />
         ) : step === 3 && resultsDetail === 'mistakes' ? (
           <BiggestMistakesView
             videoUri={uploadedVideoUrl}
             videoKey={analysisId ?? 'technique-step3'}
+            analysisId={analysisId}
             poseFrames={step3PoseFrames}
             totalFrames={overlayTotalFrames}
             errors={technicalErrorsList}
@@ -2924,10 +2918,13 @@ export function Technique() {
                   : null
             }
             onClose={() => setResultsDetail('overview')}
-            onSmart3d={() => {
-              setPoseReturn('mistakes')
-              setResultsDetail('pose')
-            }}
+            onSeeCorrect={SHOW_COMFY_CORRECTIONS ? () => setResultsDetail('correct') : undefined}
+            impactFrame={
+              typeof biomechanicsSummary?.timing?.impact_frame === 'number'
+                ? biomechanicsSummary.timing.impact_frame
+                : null
+            }
+            fps={biomechanicsSummary?.timing?.fps ?? null}
           />
         ) : (
         <ScrollView
@@ -3016,21 +3013,12 @@ export function Technique() {
               </View>
             </View>
 
-            <TouchableOpacity
-              style={[styles.profileNextButton, !canContinueProfileStep1 && { opacity: 0.45 }]}
+            <GlowButton
+              label="Set your Ranking"
               onPress={() => setStep(2)}
               disabled={!canContinueProfileStep1}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={['#0022FF', '#00BBFF']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.profileNextButtonInner}
-              >
-                <Text style={styles.profileNextButtonText}>Set your Ranking</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+              style={styles.profileNextButton}
+            />
           </View>
         )}
 
@@ -3110,21 +3098,12 @@ export function Technique() {
               </>
             )}
 
-            <TouchableOpacity
-              style={[styles.profileNextButton, !canContinueProfileStep2 && { opacity: 0.45 }]}
+            <GlowButton
+              label={t('techniqueExtra.goToUpload')}
               onPress={() => setStep(3)}
               disabled={!canContinueProfileStep2}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={['#0022FF', '#00BBFF']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.profileNextButtonInner}
-              >
-                <Text style={styles.profileNextButtonText}>{t('techniqueExtra.goToUpload')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+              style={styles.profileNextButton}
+            />
           </View>
         )}
 
@@ -3178,8 +3157,9 @@ export function Technique() {
                         y2={step1FrameDims.h}
                         gradientUnits="userSpaceOnUse"
                       >
-                        <Stop offset="0" stopColor="#0066FF" stopOpacity={0} />
-                        <Stop offset="1" stopColor="#0066FF" stopOpacity={0.25} />
+                        {/* Visible all round, brightest at the top (design). */}
+                        <Stop offset="0" stopColor={UI.accentStrong} stopOpacity={0.95} />
+                        <Stop offset="1" stopColor={UI.accentStrong} stopOpacity={0.55} />
                       </SvgLinearGradient>
                       <Filter id="insetGlow" x="-20%" y="-20%" width="140%" height="140%">
                         <FeGaussianBlur in="SourceGraphic" stdDeviation={20} />
@@ -3237,7 +3217,7 @@ export function Technique() {
                       ) : null}
                       <View style={styles.uploadDim} />
                       <View style={styles.uploadProgressWrap} testID={TEST_IDS.techniqueUploadProgress}>
-                        <LocalSvgAsset assetModule={UPLOADING_STEP_ICON} width={64} height={64} />
+                        <LocalSvgAsset assetModule={UPLOADING_STEP_ICON} width={60} height={60} />
                         <View style={styles.uploadProgressBarTrack}>
                           <View
                             style={[
@@ -3267,14 +3247,14 @@ export function Technique() {
                         width={step1IconSize}
                         height={step1IconSize}
                       />
-                      <TouchableOpacity
-                        style={styles.chooseFileBtn}
+                      <GlowButton
+                        label={t('technique.chooseFile')}
                         onPress={() => startHowToFlow('gallery')}
                         testID={TEST_IDS.techniqueChooseFile}
-                        activeOpacity={0.85}
-                      >
-                        <Text style={styles.chooseFileBtnText}>{t('technique.chooseFile')}</Text>
-                      </TouchableOpacity>
+                        height={44}
+                        radius={22}
+                        style={styles.chooseFileBtn}
+                      />
                     </View>
                     <View style={styles.recordSection}>
                       <Text style={styles.recordLabel}>{t('techniqueExtra.recordNewVideo')}</Text>
@@ -3330,15 +3310,22 @@ export function Technique() {
               }
               onCompare={() => setResultsDetail('compare')}
               floatPill={false}
-              proReference={
+              viewAngles={
                 uploadedVideoUrl ? (
-                  <ProReferenceCompare
+                  <ViewAnglesPage
                     videoUri={uploadedVideoUrl}
+                    videoKey={analysisId ?? 'technique-step3'}
                     analysisId={analysisId}
-                    referenceImageUri={null}
-                    rows={proCompareRows}
-                    score={score}
-                    onSave={() => navigation.getParent()?.navigate('Progress' as never)}
+                    shotLabel={userShot?.shotLabel ?? proReferenceShot}
+                    poseFrames={step3PoseFrames}
+                    totalFrames={overlayTotalFrames}
+                    impactFrame={
+                      typeof biomechanicsSummary?.timing?.impact_frame === 'number'
+                        ? biomechanicsSummary.timing.impact_frame
+                        : null
+                    }
+                    fps={biomechanicsSummary?.timing?.fps ?? null}
+                    framesPrepToImpact={biomechanicsSummary?.timing?.frames_prep_to_impact ?? null}
                   />
                 ) : null
               }
@@ -3715,22 +3702,11 @@ export function Technique() {
                                 <Text style={[styles.placeholderHint, { color: '#FF6B6B' }]}>
                                   {correctionsTestError}
                                 </Text>
-                                <TouchableOpacity
-                                  style={[styles.correctionGenerateButton, { marginTop: 8 }]}
+                                <GlowButton
+                                  label="Retry (test frames)"
                                   onPress={generateTestPoseExtraction}
-                                  activeOpacity={0.9}
-                                >
-                                  <LinearGradient
-                                    colors={['#0022FF', '#00BBFF']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.correctionGenerateButtonInner}
-                                  >
-                                    <Text style={styles.correctionGenerateButtonText}>
-                                      Retry (test frames)
-                                    </Text>
-                                  </LinearGradient>
-                                </TouchableOpacity>
+                                  style={styles.correctionRetryButton}
+                                />
                               </View>
                             )}
 
@@ -3748,20 +3724,11 @@ export function Technique() {
                                 <Text style={[styles.placeholderHint, { color: '#FF6B6B' }]}>
                                   {correctionsError}
                                 </Text>
-                                <TouchableOpacity
-                                  style={[styles.correctionGenerateButton, { marginTop: 8 }]}
+                                <GlowButton
+                                  label={t('technique.retry')}
                                   onPress={() => void generateCorrectionImages()}
-                                  activeOpacity={0.9}
-                                >
-                                  <LinearGradient
-                                    colors={['#0022FF', '#00BBFF']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.correctionGenerateButtonInner}
-                                  >
-                                    <Text style={styles.correctionGenerateButtonText}>{t('technique.retry')}</Text>
-                                  </LinearGradient>
-                                </TouchableOpacity>
+                                  style={styles.correctionRetryButton}
+                                />
                               </View>
                             )}
 
@@ -3807,20 +3774,11 @@ export function Technique() {
                                 <Text style={[styles.placeholderHint, { color: '#FF6B6B' }]}>
                                   {correctionsFalError}
                                 </Text>
-                                <TouchableOpacity
-                                  style={[styles.correctionGenerateButton, { marginTop: 8 }]}
+                                <GlowButton
+                                  label="Retry (fal.ai)"
                                   onPress={generateFalCorrectionImages}
-                                  activeOpacity={0.9}
-                                >
-                                  <LinearGradient
-                                    colors={['#0022FF', '#00BBFF']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.correctionGenerateButtonInner}
-                                  >
-                                    <Text style={styles.correctionGenerateButtonText}>Retry (fal.ai)</Text>
-                                  </LinearGradient>
-                                </TouchableOpacity>
+                                  style={styles.correctionRetryButton}
+                                />
                               </View>
                             )}
 
@@ -3864,20 +3822,11 @@ export function Technique() {
                                 <Text style={[styles.placeholderHint, { color: '#FF6B6B' }]}>
                                   {correctionsComfyError}
                                 </Text>
-                                <TouchableOpacity
-                                  style={[styles.correctionGenerateButton, { marginTop: 8 }]}
+                                <GlowButton
+                                  label={t('technique.retry')}
                                   onPress={generateComfyCorrectionImages}
-                                  activeOpacity={0.9}
-                                >
-                                  <LinearGradient
-                                    colors={['#0022FF', '#00BBFF']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.correctionGenerateButtonInner}
-                                  >
-                                    <Text style={styles.correctionGenerateButtonText}>{t('technique.retry')}</Text>
-                                  </LinearGradient>
-                                </TouchableOpacity>
+                                  style={styles.correctionRetryButton}
+                                />
                               </View>
                             )}
 
@@ -4234,7 +4183,7 @@ export function Technique() {
             <View style={styles.howToBadgeRow}>
               <View style={styles.howToBadgeCol}>
                 <View style={[styles.howToBadgeCircle, styles.howToBadgeWrong]}>
-                  <Ionicons name="close" size={20} color="#FFFFFF" />
+                  <Ionicons name="close" size={22} color="#FF9C82" />
                 </View>
               </View>
               <View style={styles.howToBadgeCol}>
@@ -4275,25 +4224,16 @@ export function Technique() {
               activeOpacity={0.85}
             >
               <View style={[styles.howToCheckbox, hideHowToNextTime && styles.howToCheckboxChecked]}>
-                {hideHowToNextTime && <Ionicons name="checkmark" size={14} color="#03112B" />}
+                {hideHowToNextTime && <Ionicons name="checkmark" size={14} color={UI.text} />}
               </View>
               <Text style={styles.howToCheckboxText}>{t('technique.hideHowTo')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.9}
+            <GlowButton
+              label={t('technique.accept')}
               onPress={acceptHowToModal}
               testID={TEST_IDS.howToAccept}
-              style={styles.howToAcceptOuter}
-            >
-              <LinearGradient
-                colors={['#00BBFF', '#0022FF']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.howToAcceptInner}
-              >
-                <Text style={styles.howToAcceptText}>{t('technique.accept')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+              style={styles.howToAcceptButton}
+            />
           </View>
         </View>
       </Modal>
@@ -4491,19 +4431,6 @@ function getStyles(theme: any) {
     },
     profileNextButton: {
       marginTop: 10,
-      borderRadius: 999,
-      overflow: 'hidden',
-    },
-    profileNextButtonInner: {
-      minHeight: 46,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 999,
-    },
-    profileNextButtonText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 14,
-      color: '#FFFFFF',
     },
     step1: { flex: 1, minHeight: 0, width: '100%', alignSelf: 'stretch' },
     frameWrap: { alignItems: 'center', marginTop: 0, flex: 1, justifyContent: 'flex-start' },
@@ -4527,26 +4454,17 @@ function getStyles(theme: any) {
       justifyContent: 'center',
     },
     uploadTitle: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 17,
+      fontFamily: theme.mediumFont,
+      fontSize: 20,
       color: '#FFFFFF',
       textAlign: 'center',
       marginBottom: 20,
     },
     chooseFileBtn: {
-      backgroundColor: '#FFFFFF',
-      borderRadius: 24,
-      paddingVertical: 10,
-      paddingHorizontal: 24,
-      marginTop: 20,
+      marginTop: 28,
       alignSelf: 'center',
+      minWidth: 140,
       maxWidth: '100%',
-      alignItems: 'center',
-    },
-    chooseFileBtnText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 14,
-      color: '#0A1628',
     },
     reviewVideoBtn: {
       marginTop: 10,
@@ -4626,26 +4544,28 @@ function getStyles(theme: any) {
     },
     recordLabel: {
       fontFamily: theme.regularFont,
-      fontSize: 13,
-      color: 'rgba(200,220,255,0.6)',
+      fontSize: 15,
+      color: UI.textMuted,
       textAlign: 'center',
       marginBottom: 16,
     },
+    /** Orange record button with a warm glow (design). */
     recordButton: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: 64,
+      height: 64,
+      borderRadius: 32,
       backgroundColor: 'transparent',
-      borderWidth: 2,
-      borderColor: 'rgba(255,255,255,0.25)',
+      borderWidth: 1.5,
+      borderColor: 'rgba(255, 190, 170, 0.7)',
+      boxShadow: '0px 0px 18px 0px rgba(255, 90, 30, 0.45)',
       alignItems: 'center',
       justifyContent: 'center',
     },
     recordButtonInner: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: '#E53935',
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: '#D94F22',
     },
     primaryAction: {
       flexDirection: 'row',
@@ -4677,20 +4597,20 @@ function getStyles(theme: any) {
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 24,
-      gap: 12,
+      gap: 10,
     },
     uploadProgressBarTrack: {
       width: UPLOAD_PROGRESS_TRACK_WIDTH,
-      height: 8,
-      borderRadius: 4,
+      height: 6,
+      borderRadius: 3,
       overflow: 'hidden',
-      backgroundColor: 'rgba(255,255,255,0.14)',
+      backgroundColor: 'rgba(3, 10, 23, 0.55)',
     },
     uploadProgressBarFill: {
       height: '100%',
       minWidth: 0,
-      borderRadius: 4,
-      backgroundColor: '#00BBFF',
+      borderRadius: 3,
+      backgroundColor: UI.accent,
     },
     /** Recorder / upload preview inside the step-1 card, edge to edge within the stroke. */
     frameMedia: {
@@ -4703,7 +4623,8 @@ function getStyles(theme: any) {
       overflow: 'hidden',
       backgroundColor: '#000',
     },
-    uploadDim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,10,28,0.62)' },
+    /** Blue wash over the clip while it uploads; the video stays visible underneath (design). */
+    uploadDim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8, 30, 110, 0.42)' },
     uploadingText: {
       fontFamily: theme.regularFont,
       fontSize: 16,
@@ -4711,8 +4632,6 @@ function getStyles(theme: any) {
       textAlign: 'center',
     },
     step2: { position: 'relative' as const, flexShrink: 0, gap: 20 },
-    step2TitleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 20 },
-    step2Title: { flexShrink: 1, color: '#FFFFFF', fontSize: 26, lineHeight: 32 },
     analysisTitleRow: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
@@ -4851,13 +4770,13 @@ function getStyles(theme: any) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 16,
-      paddingVertical: 18,
-      paddingLeft: 18,
+      gap: 10,
+      paddingVertical: 16,
+      paddingLeft: 12,
       paddingRight: 16,
       borderRadius: 24,
       borderWidth: 0,
-      backgroundColor: '#041641',
+      backgroundColor: UI.surface,
       marginTop: 4,
       marginBottom: 4,
     },
@@ -4865,7 +4784,7 @@ function getStyles(theme: any) {
       flex: 1,
       fontFamily: theme.regularFont,
       fontSize: 16,
-      lineHeight: 22,
+      lineHeight: 21,
       color: '#FFFFFF',
     },
     step2SummaryThumbOuter: {
@@ -5683,23 +5602,9 @@ function getStyles(theme: any) {
       marginBottom: 36,
       paddingHorizontal: 8,
     },
-    processFailedPrimaryOuter: {
+    processFailedPrimaryButton: {
       width: '100%',
-      borderRadius: 18,
-      overflow: 'hidden',
       marginBottom: 14,
-    },
-    processFailedPrimaryInner: {
-      minHeight: 60,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 18,
-      paddingHorizontal: 24,
-    },
-    processFailedPrimaryText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 18,
-      color: '#FFFFFF',
     },
     processFailedSecondaryBtn: {
       width: '100%',
@@ -5747,18 +5652,6 @@ function getStyles(theme: any) {
       alignSelf: 'center',
       maxWidth: 340,
       width: '100%',
-    },
-    playGameBtnInner: {
-      height: 52,
-      borderRadius: 26,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    playGameBtnText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 17,
-      color: '#FFFFFF',
-      letterSpacing: 0.2,
     },
     paddleGameOverlayInner: {
       flex: 1,
@@ -5870,6 +5763,9 @@ function getStyles(theme: any) {
       borderRadius: 14,
       overflow: 'hidden',
       marginTop: 4,
+    },
+    correctionRetryButton: {
+      marginTop: 8,
     },
     correctionVideoBlock: {
       marginTop: 12,
@@ -6197,7 +6093,7 @@ function getStyles(theme: any) {
     },
     howToCard: {
       borderRadius: 28,
-      backgroundColor: '#030A17',
+      backgroundColor: UI.cardBg,
       paddingHorizontal: 16,
       paddingVertical: 18,
       alignSelf: 'center',
@@ -6209,18 +6105,18 @@ function getStyles(theme: any) {
     },
     howToTitle: {
       textAlign: 'center',
-      color: '#FFFFFF',
-      fontFamily: theme.semiBoldFont,
-      fontSize: 20,
-      lineHeight: 24,
+      color: UI.text,
+      fontFamily: theme.regularFont,
+      fontSize: 24,
+      lineHeight: 30,
     },
     howToSubtitle: {
       marginTop: 6,
       textAlign: 'center',
-      color: '#86A7D2',
+      color: UI.textMuted,
       fontFamily: theme.regularFont,
-      fontSize: 13,
-      lineHeight: 17,
+      fontSize: 15,
+      lineHeight: 20,
       paddingHorizontal: 10,
     },
     howToBadgeRow: {
@@ -6237,17 +6133,18 @@ function getStyles(theme: any) {
       justifyContent: 'center',
     },
     howToBadgeCircle: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
       alignItems: 'center',
       justifyContent: 'center',
     },
+    /** Muted brick red, not alarm red (design). */
     howToBadgeWrong: {
-      backgroundColor: '#D90E27',
+      backgroundColor: '#8A2B1B',
     },
     howToBadgeCorrect: {
-      backgroundColor: '#10B8FF',
+      backgroundColor: UI.accent,
     },
     howToImagesRow: {
       marginTop: 10,
@@ -6269,11 +6166,11 @@ function getStyles(theme: any) {
     },
     howToImageWrapWrong: {
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.12)',
+      borderColor: 'rgba(255,255,255,0.08)',
     },
     howToImageWrapCorrect: {
       borderWidth: 2,
-      borderColor: '#00BBFF',
+      borderColor: UI.accent,
     },
     howToImage: {
       width: '100%',
@@ -6304,39 +6201,26 @@ function getStyles(theme: any) {
       width: 22,
       height: 22,
       borderRadius: 6,
-      borderWidth: 1,
-      borderColor: '#00BBFF',
+      borderWidth: 1.5,
+      borderColor: UI.textMuted,
       backgroundColor: 'transparent',
       alignItems: 'center',
       justifyContent: 'center',
     },
     howToCheckboxChecked: {
-      backgroundColor: '#00BBFF',
+      backgroundColor: UI.accent,
+      borderColor: UI.accent,
     },
     howToCheckboxText: {
-      color: 'rgba(235, 246, 255, 0.92)',
-      fontFamily: theme.mediumFont,
-      fontSize: 15,
+      color: UI.textMuted,
+      fontFamily: theme.regularFont,
+      fontSize: 16,
     },
-    howToAcceptOuter: {
+    howToAcceptButton: {
       // Same 88% side margins as the imagery + checkbox above.
       marginTop: 4,
-      borderRadius: 22,
-      overflow: 'hidden',
       alignSelf: 'center',
       width: '88%',
-    },
-    howToAcceptInner: {
-      minHeight: 56,
-      borderRadius: 22,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    howToAcceptText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 20,
-      lineHeight: 24,
-      color: '#FFFFFF',
     },
   })
 }

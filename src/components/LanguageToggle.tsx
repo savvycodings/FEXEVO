@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { ThemeContext } from "../context";
 import { setAppLanguage, type AppLanguage, currentAppLanguage } from "../i18n/language";
+import { UI } from "./ui/tokens";
 
 type Props = {
   /** Extra top margin when stacked under form content */
@@ -69,26 +70,22 @@ function getStyles(theme: { mediumFont?: string; semiBoldFont?: string }) {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 10,
+      gap: 40,
       paddingVertical: 16,
       marginTop: 8,
     },
     link: {
       fontFamily: theme.mediumFont,
-      fontSize: 14,
-      color: "rgba(140, 176, 226, 0.85)",
-      textDecorationLine: "underline",
-      textDecorationColor: "rgba(140, 176, 226, 0.55)",
+      fontSize: 15,
+      color: "rgba(123, 140, 230, 0.7)",
     },
     linkActive: {
-      color: "#00BBFF",
-      fontFamily: theme.semiBoldFont,
-      textDecorationColor: "#00BBFF",
+      color: UI.accent,
     },
     sep: {
       fontFamily: (theme as { regularFont?: string }).regularFont ?? theme.mediumFont,
       fontSize: 14,
-      color: "rgba(255,255,255,0.25)",
+      color: "rgba(123, 140, 230, 0.7)",
     },
   });
 }

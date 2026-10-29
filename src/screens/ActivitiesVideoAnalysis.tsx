@@ -42,7 +42,9 @@ import { Smart3DView } from './techniqueResults/Smart3DView'
 import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { MetricsPage } from './techniqueResults/MetricsPage'
-import { ProReferenceCompare, type ProCompareRow } from './techniqueResults/ProReferenceCompare'
+import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
+import { CorrectMovementView } from './techniqueResults/CorrectMovementView'
+import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { useNavigation } from '@react-navigation/native'
 import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
 import {
@@ -636,7 +638,7 @@ export function ActivitiesVideoAnalysis({
   const [correctionCompareW, setCorrectionCompareW] = useState(0)
 
   const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'proReference'>('overview')
-  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare'>('overview')
+  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'correct'>('overview')
   const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
 
   const styles = useMemo(() => getStyles(theme), [theme])
@@ -900,16 +902,7 @@ export function ActivitiesVideoAnalysis({
   const correctionPairs =
     correctionGemini.length > 0 ? correctionGemini : correctionFal
 
-  const proCompareRows: ProCompareRow[] = []
-  const angleProxy = aiSnapshot?.biomechanicsSummary?.angles_deg_proxy
-  const elbow = angleProxy?.elbow_impact_deg
-  if (typeof elbow === 'number' && Number.isFinite(elbow)) {
-    proCompareRows.push({ label: t('analysis.elbowAngle'), you: `${Math.round(elbow)}°` })
-  }
-  const torso = angleProxy?.torso_sep_delta_deg ?? angleProxy?.shoulder_hip_sep_impact_deg
-  if (typeof torso === 'number' && Number.isFinite(torso)) {
-    proCompareRows.push({ label: t('analysis.torsoRotation'), you: `${Math.round(torso)}°` })
-  }
+  const proCompareMetrics = compareMetricsFromSummary(aiSnapshot?.biomechanicsSummary, t)
 
   const proReferenceShot = aiSections?.strokeLabel
     ? stripTrainClipIndexSuffix(aiSections.strokeLabel)
@@ -1056,6 +1049,24 @@ export function ActivitiesVideoAnalysis({
             setPoseReturn('compare')
             setOverviewDetail('pose')
           }}
+          analysisId={session.analysisId}
+          contactMs={
+            typeof aiSnapshot?.biomechanicsSummary?.timing?.impact_frame === 'number'
+              ? (aiSnapshot.biomechanicsSummary.timing.impact_frame / (aiSnapshot.biomechanicsSummary.timing.fps || 30)) * 1000
+              : null
+          }
+        />
+      </View>
+    )
+  }
+
+  if (overviewDetail === 'correct') {
+    return (
+      <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
+        <CorrectMovementView
+          analysisId={session.analysisId}
+          originalUri={videoUri(session.videoPath)}
+          onClose={() => setOverviewDetail('mistakes')}
         />
       </View>
     )
@@ -1069,16 +1080,14 @@ export function ActivitiesVideoAnalysis({
         <BiggestMistakesView
           videoUri={videoUri(session.videoPath)}
           videoKey={session.analysisId}
+          analysisId={session.analysisId}
           poseFrames={poseFrames}
           totalFrames={totalVidFrames}
           errors={aiSections?.technicalErrors ?? []}
           elbowDeg={typeof angles?.elbow_impact_deg === 'number' ? angles.elbow_impact_deg : null}
           torsoDeg={typeof torso === 'number' ? torso : null}
           onClose={() => setOverviewDetail('overview')}
-          onSmart3d={() => {
-            setPoseReturn('mistakes')
-            setOverviewDetail('pose')
-          }}
+          onSeeCorrect={SHOW_COMFY_CORRECTIONS ? () => setOverviewDetail('correct') : undefined}
         />
       </View>
     )
@@ -1174,7 +1183,7 @@ export function ActivitiesVideoAnalysis({
             videoUri={videoUri(session.videoPath)}
             analysisId={session.analysisId}
             referenceImageUri={correctionPairs[0]?.correctedImage ?? null}
-            rows={proCompareRows}
+            metrics={proCompareMetrics}
             score={
               aiSnapshot?.scorePercent ??
               (typeof session.score === 'number' ? Math.round(session.score) : null)

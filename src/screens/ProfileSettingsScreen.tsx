@@ -25,6 +25,7 @@ import { ThemeContext } from "../context";
 import { useSessionData } from "../context/SessionDataContext";
 import { AdminGradientCard } from "../components";
 import { LanguageToggle } from "../components/LanguageToggle";
+import { GlowButton, SurfaceIconButton } from "../components/ui";
 import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { ShieldHeroRow } from "../components/ShieldHeroRow";
@@ -32,7 +33,6 @@ import { signOutAndClearProfileCache } from "../lib/signOut";
 import { authClient } from "../lib/auth-client";
 import { useTranslation } from "react-i18next";
 import { genderTranslationKey } from "../i18n/profileOptionValues";
-import { LinearGradient } from "expo-linear-gradient";
 import { DOMAIN } from "../../constants";
 import * as ImagePicker from "expo-image-picker";
 import { getCachedProfile, setCachedProfile } from "../lib/profile-cache";
@@ -763,36 +763,15 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     primaryLoading?: boolean;
   }) => (
     <View style={styles.subsectionFooterRow}>
-      <TouchableOpacity
-        style={styles.subsectionBackBtn}
-        onPress={onBack}
-        activeOpacity={0.85}
-        accessibilityLabel={t("common.goBack")}
-      >
-        <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
-      </TouchableOpacity>
+      <SurfaceIconButton icon="chevron-back" onPress={onBack} accessibilityLabel={t("common.goBack")} />
       {onPrimary ? (
-        <TouchableOpacity
-          style={[
-            styles.subsectionPrimaryOuter,
-            (primaryDisabled || primaryLoading) && styles.subsectionFooterDisabled,
-          ]}
+        <GlowButton
+          label={primaryLoading ? "Saving..." : primaryLabel ?? ""}
           onPress={onPrimary}
           testID={TEST_IDS.settingsSave}
           disabled={primaryDisabled || primaryLoading}
-          activeOpacity={0.85}
-        >
-          <LinearGradient
-            colors={["#0022FF", "#00BBFF"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.subsectionPrimaryInner}
-          >
-            <Text style={styles.subsectionPrimaryText}>
-              {primaryLoading ? "Saving..." : primaryLabel}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
+          style={styles.subsectionPrimaryButton}
+        />
       ) : (
         <View style={styles.subsectionFooterSpacer} />
       )}
@@ -1781,38 +1760,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         <LanguageToggle style={styles.settingsLanguageToggle} />
 
         <View style={styles.settingsFooterStack}>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate("AdminHub")}
-            style={styles.settingsFooterGradientOuter}
-          >
-            <LinearGradient
-              colors={["#0022FF", "#00BBFF"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.settingsFooterGradientInner}
-            >
-              <Text allowFontScaling={false} style={styles.settingsFooterGradientText}>
-                Admin
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setLogoutModalVisible(true)}
-            style={styles.settingsFooterGradientOuter}
-          >
-            <LinearGradient
-              colors={["#0022FF", "#00BBFF"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.settingsFooterGradientInner}
-            >
-              <Text allowFontScaling={false} style={styles.settingsFooterGradientText}>
-                {t("profileSettingsUi.signOut")}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          <GlowButton label="Admin" onPress={() => navigation.navigate("AdminHub")} />
+          <GlowButton label={t("profileSettingsUi.signOut")} onPress={() => setLogoutModalVisible(true)} />
         </View>
       </KeyboardAwareScrollView>
       <LogoutConfirmModal
@@ -1946,34 +1895,8 @@ function getStyles(theme: any) {
       gap: 10,
       marginTop: 14,
     },
-    subsectionBackBtn: {
-      width: 54,
-      height: 54,
-      borderRadius: 16,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: "rgba(6, 26, 86, 0.9)",
-      borderWidth: 1,
-      borderColor: "rgba(0, 120, 255, 0.45)",
-    },
-    subsectionPrimaryOuter: {
-      flex: 1,
-      borderRadius: 16,
-      overflow: "hidden",
-    },
-    subsectionPrimaryInner: {
-      minHeight: 54,
-      borderRadius: 16,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    subsectionPrimaryText: {
-      fontSize: 17,
-      fontFamily: theme.semiBoldFont,
-      color: theme.tintTextColor,
-    },
+    subsectionPrimaryButton: { flex: 1 },
     subsectionFooterSpacer: { flex: 1, minHeight: 54 },
-    subsectionFooterDisabled: { opacity: 0.65 },
     resetLink: {
       marginTop: 4,
       fontSize: 13,
@@ -1989,22 +1912,6 @@ function getStyles(theme: any) {
       marginTop: 4,
       marginBottom: 4,
       paddingVertical: 14,
-    },
-    settingsFooterGradientOuter: {
-      width: "100%",
-      borderRadius: 16,
-      overflow: "hidden",
-    },
-    settingsFooterGradientInner: {
-      minHeight: 54,
-      borderRadius: 16,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    settingsFooterGradientText: {
-      fontSize: 17,
-      fontFamily: theme.semiBoldFont,
-      color: theme.tintTextColor,
     },
     editCard: {
       width: "100%",

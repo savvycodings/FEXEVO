@@ -8,6 +8,7 @@ export const TEST_IDS = {
   welcomeNext: 'welcome-next',
   welcomeFreeTrial: 'welcome-free-trial',
   welcomeLogin: 'welcome-login',
+  welcomeCoachSignup: 'welcome-coach-signup',
   // Sign up / sign in / verification / reset
   signupName: 'signup-name',
   signupEmail: 'signup-email',

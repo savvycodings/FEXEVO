@@ -14,6 +14,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { LocalSvgAsset, prefetchSvgAssets } from './LocalSvgAsset'
 import { profileImageSource } from '../lib/defaultProfilePicture'
 import { useCoachAssistant } from '../context/CoachAssistantContext'
+import { useHasUnreadNotifications } from '../lib/unreadNotifications'
 
 const HEADER_MARK_SVG = require('../../assets/pro.svg')
 const HEADER_WORDMARK = require('../../assets/logo.png')
@@ -25,8 +26,9 @@ prefetchSvgAssets([HEADER_MARK_SVG, SETTINGS_ICON, SEARCH_ICON, NOTI_ICON])
 
 const HEADER_HEIGHT = 44
 const HORIZONTAL_PADDING = 16
-/** Bottom hairline under main app header (#0066FF @ 20% — not used on `WelcomeHeader`). */
-const HEADER_BOTTOM_STROKE = 'rgba(0, 102, 255, 0.2)'
+const MARK_SLOT_WIDTH = 76
+/** Bottom hairline under main app header; the tab bar's top edge uses the same color. */
+const HEADER_BOTTOM_STROKE = 'rgba(0, 102, 255, 0.3)'
 
 type HeaderProps = {
   /** Opens Pro subscription screen (top-right PRO badge). */
@@ -74,6 +76,7 @@ export function Header({
   const leftSearch = headerLeftMode === 'search' && onSearchPress
   const bgBottom = theme.backgroundColor ?? '#030A17'
   const { reportHeaderHeight } = useCoachAssistant()
+  const hasUnreadNotifications = useHasUnreadNotifications(Boolean(onNotificationsPress))
 
   return (
     <View style={styles.wrap} onLayout={(e) => reportHeaderHeight(e.nativeEvent.layout.height)}>
@@ -147,6 +150,9 @@ export function Header({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <LocalSvgAsset assetModule={NOTI_ICON} width={26} height={26} />
+            {hasUnreadNotifications ? (
+              <View style={styles.notiDot} testID="header-noti-dot" pointerEvents="none" />
+            ) : null}
           </TouchableOpacity>
         ) : null}
         {onSettingsPress ? (
@@ -160,6 +166,7 @@ export function Header({
             <LocalSvgAsset assetModule={SETTINGS_ICON} width={26} height={26} />
           </TouchableOpacity>
         ) : null}
+        <View style={styles.markSlot}>
         {mark === 'logo' ? (
           <Image
             source={HEADER_WORDMARK}
@@ -177,6 +184,7 @@ export function Header({
             <LocalSvgAsset assetModule={HEADER_MARK_SVG} width={65} height={24} />
           </TouchableOpacity>
         )}
+        </View>
       </View>
       </View>
     </View>
@@ -293,6 +301,16 @@ function getStyles(
       justifyContent: 'center',
       marginRight: -2,
     },
+    /** Matches the dot that used to be baked into `notiicon.svg` (24→26px scale, centered in the 40pt button). */
+    notiDot: {
+      position: 'absolute',
+      top: 9,
+      left: 23,
+      width: 6.5,
+      height: 6.5,
+      borderRadius: 3.25,
+      backgroundColor: '#FF005D',
+    },
     settingsButton: {
       width: 40,
       height: 40,
@@ -307,10 +325,15 @@ function getStyles(
       justifyContent: 'center',
       alignItems: 'center',
     },
+    /** Same width for the Xevo logo (Home) and the PRO badge (other tabs), so bell and settings don't shift between tabs. */
+    markSlot: {
+      width: MARK_SLOT_WIDTH,
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+    },
     wordmark: {
-      width: 92,
-      height: 34,
-      marginLeft: 4,
+      width: MARK_SLOT_WIDTH,
+      height: 28,
     },
     /** Fallback only if `pro.svg` fails to resolve (asset load). */
     markFallback: {

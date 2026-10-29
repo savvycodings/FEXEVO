@@ -8,7 +8,6 @@ import {
   useWindowDimensions,
 } from 'react-native'
 import { Video, ResizeMode } from 'expo-av'
-import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
@@ -17,20 +16,20 @@ import type { AnalysisCoreGroup, UserShotDeclaration } from '../navigation/types
 import { ANALYSIS_CORE_CATEGORIES, ANALYSIS_CORE_SHOTS, type CoachUploadShotItem } from '../lib/coachStudentUploadShots'
 import { CAMERA_ANGLES, type CameraAngleId } from '../lib/cameraAngles'
 import { CameraAngleExampleModal } from './CameraAngleExampleModal'
-import { FlowBackButton } from './shotFlow/FlowBackButton'
 import { ShotStepper } from './shotFlow/ShotStepper'
 import { ShotTile } from './shotFlow/ShotTile'
-import { PG, glow } from '../screens/progress/progressTheme'
+import { PG } from '../screens/progress/progressTheme'
+import { GlowButton, UI } from './ui'
 import { TEST_IDS } from '../lib/testIds'
 
 const HORIZONTAL_PAD = 24
 const GRID_GAP = 12
-const ANGLE_COLS = 3
 const ANGLE_GAP = 10
-const ANGLE_TILE_ASPECT = 155 / 117
-/** Near-square tiles like the mockup, capped so tablets don't get huge boxes. */
-const TILE_ASPECT = 0.95
-const TILE_MAX_H = 180
+/** Design: front / back / side in a row of three, the four 45° angles in a row of four. */
+const ANGLE_ROWS = [CAMERA_ANGLES.slice(0, 3), CAMERA_ANGLES.slice(3)]
+/** Wide, short tiles like the design, capped so tablets don't get huge boxes. */
+const TILE_ASPECT = 0.55
+const TILE_MAX_H = 110
 
 export type ShotPickerStep = 'shot' | 'type' | 'camera'
 
@@ -81,7 +80,7 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
   const contentW = Math.min(winW, 640) - HORIZONTAL_PAD * 2
   const tileW = (contentW - GRID_GAP) / 2
   const tileH = Math.min(TILE_MAX_H, Math.round(tileW * TILE_ASPECT))
-  const angleW = Math.floor((contentW - ANGLE_GAP * (ANGLE_COLS - 1)) / ANGLE_COLS) - 1
+  const angleW = (cols: number) => Math.floor((contentW - ANGLE_GAP * (cols - 1)) / cols) - 1
 
   const group = ANALYSIS_CORE_CATEGORIES.find((c) => c.coreGroup === coreGroup) ?? null
   const shots = coreGroup ? ANALYSIS_CORE_SHOTS[coreGroup] : []
@@ -136,13 +135,10 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
   return (
     <View style={styles.root}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <FlowBackButton
-          onPress={goBack}
-          fontFamily={fonts.regular}
-          testID={TEST_IDS.shotPickerBack}
-          style={styles.back}
-        />
         <ShotStepper
+          onBack={goBack}
+          backTestID={TEST_IDS.shotPickerBack}
+          backAccessibilityLabel={t('analysis.back')}
           steps={[
             { key: 'shot', label: t('technique.shotPicker.tabShot') },
             { key: 'type', label: t('technique.shotPicker.tabType') },
@@ -170,7 +166,7 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
 
         {step === 'shot' ? (
           <View style={styles.section}>
-            <Text allowFontScaling={false} style={[styles.title, { fontFamily: fonts.medium }]}>
+            <Text allowFontScaling={false} style={[styles.title, { fontFamily: fonts.regular }]}>
               {t('studentProfile.shotCategoryTitle')}
             </Text>
             <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: fonts.regular }]}>
@@ -195,7 +191,7 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
 
         {step === 'type' ? (
           <View style={styles.section}>
-            <Text allowFontScaling={false} style={[styles.title, { fontFamily: fonts.medium }]}>
+            <Text allowFontScaling={false} style={[styles.title, { fontFamily: fonts.regular }]}>
               {t('technique.shotPicker.shotType')}
             </Text>
             <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: fonts.regular }]}>
@@ -221,7 +217,7 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
         {step === 'camera' ? (
           <View style={styles.section}>
             <View style={styles.titleRow}>
-              <Text allowFontScaling={false} style={[styles.title, styles.titleInRow, { fontFamily: fonts.medium }]}>
+              <Text allowFontScaling={false} style={[styles.title, styles.titleInRow, { fontFamily: fonts.regular }]}>
                 {t('technique.shotPicker.cameraAngle')}
               </Text>
               <TouchableOpacity
@@ -233,42 +229,33 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
                 <Ionicons name="information-circle-outline" size={28} color={PG.labelBlue} />
               </TouchableOpacity>
             </View>
-            <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: fonts.regular }]}>
-              {t('technique.shotPicker.cameraSubtitle')}
-            </Text>
             <View style={styles.angleGrid}>
-              {CAMERA_ANGLES.map((angle) => (
-                <ShotTile
-                  key={angle.id}
-                  image={angle.tile}
-                  selected={viewId === angle.id}
-                  width={angleW}
-                  height={Math.round(angleW * ANGLE_TILE_ASPECT)}
-                  onPress={() => setExampleAngleId(angle.id)}
-                  testID={TEST_IDS.viewAngle(angle.id)}
-                  accessibilityLabel={t(angle.labelKey)}
-                />
-              ))}
+              {ANGLE_ROWS.map((row, r) => {
+                const w = angleW(row.length)
+                return (
+                  <View key={r} style={styles.angleRow}>
+                    {row.map((angle) => (
+                      <ShotTile
+                        key={angle.id}
+                        image={angle.tile}
+                        selected={viewId === angle.id}
+                        width={w}
+                        height={Math.round((w * angle.tileHeight) / angle.tileWidth)}
+                        onPress={() => setExampleAngleId(angle.id)}
+                        testID={TEST_IDS.viewAngle(angle.id)}
+                        accessibilityLabel={t(angle.labelKey)}
+                      />
+                    ))}
+                  </View>
+                )
+              })}
             </View>
             {canContinue ? (
-              <TouchableOpacity
-                activeOpacity={0.88}
+              <GlowButton
+                label={t('studentProfile.continueToSetClip')}
                 onPress={finish}
                 testID={TEST_IDS.setClipContinue}
-                style={[styles.continueOuter, glow(16, 0.6)]}
-                accessibilityRole="button"
-              >
-                <LinearGradient
-                  colors={['#5BC0FF', '#0A2BFF']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.continueGradient}
-                >
-                  <Text allowFontScaling={false} style={[styles.continueText, { fontFamily: fonts.medium }]}>
-                    {t('studentProfile.continueToSetClip')}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+              />
             ) : null}
           </View>
         ) : null}
@@ -299,15 +286,12 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 40,
   },
-  back: { marginBottom: 18 },
-  section: { marginTop: 24 },
-  title: { color: '#FFFFFF', fontSize: 28, lineHeight: 34 },
+  section: { marginTop: 20 },
+  title: { color: UI.text, fontSize: 24, lineHeight: 30 },
   titleInRow: { flexShrink: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  subtitle: { color: '#8FA8D6', fontSize: 16, lineHeight: 22, marginTop: 8, marginBottom: 20 },
+  subtitle: { color: UI.textMuted, fontSize: 15, lineHeight: 21, marginTop: 14, marginBottom: 14 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
-  angleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: ANGLE_GAP, marginBottom: 28 },
-  continueOuter: { borderRadius: 20 },
-  continueGradient: { height: 58, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  continueText: { color: '#FFFFFF', fontSize: 18 },
+  angleGrid: { gap: ANGLE_GAP, marginTop: 14, marginBottom: 28 },
+  angleRow: { flexDirection: 'row', gap: ANGLE_GAP },
 })

@@ -3,14 +3,13 @@ import {
   Modal,
   View,
   Text,
-  TouchableOpacity,
   Pressable,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
+import { GlowButton, SurfaceButton } from './ui'
 import { ProLibraryGradientFrame } from './ProLibraryGradientFrame'
 
 const MODAL_FILL = '#030A17'
@@ -55,33 +54,16 @@ export function LogoutConfirmModal({ visible, onCancel, onConfirm }: LogoutConfi
                 {t('profileSettingsUi.logoutMessage')}
               </Text>
               <View style={styles.actions}>
-                <TouchableOpacity
-                  style={styles.cancelBtn}
+                <SurfaceButton
+                  label={t('profileSettingsUi.logoutCancel')}
                   onPress={onCancel}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                >
-                  <Text allowFontScaling={false} style={styles.cancelText}>
-                    {t('profileSettingsUi.logoutCancel')}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.confirmOuter}
+                  style={styles.actionButton}
+                />
+                <GlowButton
+                  label={t('profileSettingsUi.logoutConfirm')}
                   onPress={onConfirm}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                >
-                  <LinearGradient
-                    colors={['#0022FF', '#00BBFF']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.confirmGradient}
-                  >
-                    <Text allowFontScaling={false} style={styles.confirmText}>
-                      {t('profileSettingsUi.logoutConfirm')}
-                    </Text>
-                  </LinearGradient>
-                </TouchableOpacity>
+                  style={styles.actionButton}
+                />
               </View>
             </View>
           </ProLibraryGradientFrame>
@@ -136,34 +118,8 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       gap: 12,
       width: '100%',
     },
-    cancelBtn: {
+    actionButton: {
       flex: 1,
-      minHeight: 54,
-      borderRadius: 16,
-      backgroundColor: '#041641',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    cancelText: {
-      color: '#00BBFF',
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
-    },
-    confirmOuter: {
-      flex: 1,
-      borderRadius: 16,
-      overflow: 'hidden',
-    },
-    confirmGradient: {
-      minHeight: 54,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    confirmText: {
-      color: '#FFFFFF',
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
     },
   })
 }

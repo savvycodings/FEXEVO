@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 import { ThemeContext } from '../context'
 
 /** Which results section is on screen. Local UI state only — not a route. */
-export type ResultSectionId = 'smartFocus' | 'shotInfo' | 'metrics' | 'proReference'
+export type ResultSectionId = 'smartFocus' | 'shotInfo' | 'metrics' | 'viewAngles'
 
 type Tab<T extends string> = { id: T; label: string }
 

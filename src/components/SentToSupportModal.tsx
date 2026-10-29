@@ -3,15 +3,14 @@ import {
   Modal,
   View,
   Text,
-  TouchableOpacity,
   Pressable,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { ProLibraryGradientFrame } from './ProLibraryGradientFrame'
+import { GlowButton } from './ui'
 
 const MODAL_FILL = '#030A17'
 const FRAME_OUTER_RADIUS = 28
@@ -53,23 +52,7 @@ export function SentToSupportModal({ visible, onDone }: SentToSupportModalProps)
               <Text allowFontScaling={false} style={styles.message}>
                 {t('technique.sentToSupportMessage')}
               </Text>
-              <TouchableOpacity
-                style={styles.doneOuter}
-                onPress={onDone}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-              >
-                <LinearGradient
-                  colors={['#00BBFF', '#0022FF']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.doneGradient}
-                >
-                  <Text allowFontScaling={false} style={styles.doneText}>
-                    {t('common.done')}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+              <GlowButton label={t('common.done')} onPress={onDone} style={styles.doneButton} />
             </View>
           </ProLibraryGradientFrame>
         </View>
@@ -111,23 +94,9 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       lineHeight: 20,
       textAlign: 'center',
     },
-    doneOuter: {
+    doneButton: {
       marginTop: 24,
       width: '100%',
-      borderRadius: 16,
-      overflow: 'hidden',
-    },
-    doneGradient: {
-      minHeight: 54,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 20,
-    },
-    doneText: {
-      color: '#FFFFFF',
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
     },
   })
 }

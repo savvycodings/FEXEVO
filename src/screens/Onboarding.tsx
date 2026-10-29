@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, ActivityIndicator } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useContext } from "react";
 import { ThemeContext } from "../context";
@@ -11,7 +10,6 @@ import { ProfileSetup } from "./ProfileSetup";
 import { AccountCreated } from "./AccountCreated";
 import { VerifyEmail } from "./VerifyEmail";
 import { WelcomeIntro } from "./WelcomeIntro";
-import { useTranslation } from "react-i18next";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { WELCOME_SEEN_KEY } from "./WelcomeIntro";
 const Stack = createNativeStackNavigator();
@@ -28,37 +26,27 @@ function SignInScreen({ navigation }: { navigation: any }) {
 
 function SignUpScreen({
   navigation,
+  route,
   onContinue,
   initialDraft,
 }: {
   navigation: any;
+  route: { params?: { coachSignup?: boolean } };
   onContinue: (draft: SignUpDraft) => void;
   initialDraft: SignUpDraft | null;
 }) {
-  const { t } = useTranslation();
-  const { theme } = useContext(ThemeContext);
-  const insets = useSafeAreaInsets();
-  const styles = getStyles(theme);
+  const coachSignup = route.params?.coachSignup ?? initialDraft?.coachSignup ?? false;
   return (
-    <View style={styles.screenContainer}>
-      <SignUp
-        initialDraft={initialDraft}
-        onBack={() => navigation.navigate("SignIn")}
-        onContinue={(draft) => {
-          onContinue(draft);
-          navigation.replace("VerifyEmail");
-        }}
-      />
-      <TouchableOpacity
-        style={[styles.switchLink, { paddingBottom: insets.bottom + 20 }]}
-        onPress={() => navigation.navigate("SignIn")}
-      >
-        <Text style={styles.switchText}>
-          {t("auth.hasAccount")}{" "}
-          <Text style={styles.switchTextBold}>{t("auth.signIn")}</Text>
-        </Text>
-      </TouchableOpacity>
-    </View>
+    <SignUp
+      initialDraft={initialDraft}
+      coachSignup={coachSignup}
+      onBack={() => navigation.navigate("SignIn")}
+      onSignIn={() => navigation.navigate("SignIn")}
+      onContinue={(draft) => {
+        onContinue(draft);
+        navigation.replace("VerifyEmail");
+      }}
+    />
   );
 }
 
@@ -141,8 +129,6 @@ export function Onboarding(props?: {
         options={{
           title: "Welcome",
           contentStyle: { backgroundColor: "#030A17" },
-          statusBarTranslucent: true,
-          statusBarStyle: "light",
         }}
       >
         {({ navigation }) => <WelcomeIntro navigation={navigation} />}
@@ -159,9 +145,10 @@ export function Onboarding(props?: {
         name="SignUp"
         options={{ title: "Sign up" }}
       >
-        {({ navigation }) => (
+        {({ navigation, route }) => (
           <SignUpScreen
             navigation={navigation}
+            route={route as { params?: { coachSignup?: boolean } }}
             initialDraft={signUpDraft}
             onContinue={(draft) => {
               setSignUpDraft(draft);
@@ -212,26 +199,4 @@ export function Onboarding(props?: {
       </Stack.Screen>
     </Stack.Navigator>
   );
-}
-
-function getStyles(theme: any) {
-  return StyleSheet.create({
-    screenContainer: {
-      flex: 1,
-    },
-    switchLink: {
-      paddingTop: 24,
-      paddingHorizontal: 24,
-      alignItems: "center",
-    },
-    switchText: {
-      fontSize: 15,
-      fontFamily: theme.regularFont,
-      color: theme.mutedForegroundColor,
-    },
-    switchTextBold: {
-      fontFamily: theme.semiBoldFont,
-      color: "#00BBFF",
-    },
-  });
 }

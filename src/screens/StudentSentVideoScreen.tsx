@@ -15,6 +15,7 @@ import { Video, ResizeMode } from 'expo-av'
 import { ThemeContext } from '../context'
 import { useTranslation } from 'react-i18next'
 import { authClient } from '../lib/auth-client'
+import { markNotificationReadLocally } from '../lib/unreadNotifications'
 import { DOMAIN } from '../../constants'
 import type { MainStackParamList } from '../navigation/types'
 
@@ -85,6 +86,7 @@ export function StudentSentVideoScreen() {
 
   useEffect(() => {
     if (!notificationId) return
+    markNotificationReadLocally(notificationId)
     void authClient
       .$fetch(`/profile/notifications/${encodeURIComponent(notificationId)}/read`, {
         method: 'POST',

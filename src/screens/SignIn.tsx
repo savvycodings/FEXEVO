@@ -2,9 +2,7 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Alert,
   Image,
 } from "react-native";
@@ -20,14 +18,13 @@ import {
   getEnabledSocialProviders,
   formatSocialAuthError,
 } from "../lib/socialAuth";
-import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { AuthFormField } from "../components/AuthFormField";
 import { AuthPasswordField } from "../components/AuthPasswordField";
 import { TEST_IDS } from '../lib/testIds'
+import { AuthBackdrop, GlassCard, GlowButton, OrDivider, SocialAuthRow, SurfaceIconButton, TextLink, UI } from "../components/ui";
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -123,6 +120,8 @@ export function SignIn({ onForgotPassword, onSignUp, onRestart }: SignInProps) {
     }
   };
 
+  const busy = loading || !!socialLoading;
+
   return (
     <KeyboardAwareScrollView
       style={styles.container}
@@ -131,40 +130,17 @@ export function SignIn({ onForgotPassword, onSignUp, onRestart }: SignInProps) {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <Svg pointerEvents="none" style={styles.heroGlow}>
-        <Defs>
-          <SvgRadialGradient
-            id="signInRadialBg"
-            cx="50%"
-            cy="-30%"
-            rx="120%"
-            ry="95%"
-          >
-            <Stop offset="0%" stopColor="#071D47" stopOpacity={1} />
-            <Stop offset="100%" stopColor="#071D47" stopOpacity={0} />
-          </SvgRadialGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#signInRadialBg)" />
-      </Svg>
+      <AuthBackdrop id="signInRadialBg" />
       <View style={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
-        {onRestart ? (
-          <TouchableOpacity
-            style={styles.restartTouch}
-            onPress={onRestart}
-            testID={TEST_IDS.signinRestart}
-            accessibilityRole="button"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text allowFontScaling={false} style={styles.restartText}>{t("auth.restart")}</Text>
-          </TouchableOpacity>
-        ) : null}
         <View style={styles.logoWrap}>
           <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
         </View>
 
+        <Text allowFontScaling={false} style={styles.title}>{t("auth.signIn")}</Text>
+
         <AuthFormField
           theme={theme}
-          placeholder={t("auth.email")}
+          label={t("auth.email")}
           testID={TEST_IDS.signinEmail}
           value={email}
           onChangeText={setEmail}
@@ -172,123 +148,72 @@ export function SignIn({ onForgotPassword, onSignUp, onRestart }: SignInProps) {
           keyboardType="email-address"
           autoComplete="email"
           editable={!loading}
-          fieldStyle={styles.inputSpacing}
-          leftIcon="mail-outline"
         />
         <AuthPasswordField
           theme={theme}
-          placeholder={t("auth.password")}
+          label={t("auth.password")}
           testID={TEST_IDS.signinPassword}
           value={password}
           onChangeText={setPassword}
           autoComplete="password"
-          editable={!loading && !socialLoading}
-          wrapStyle={styles.inputSpacing}
-          leftIcon="lock-closed-outline"
+          editable={!busy}
         />
-
-        <TouchableOpacity
-          style={[styles.buttonOuter, (loading || socialLoading) && styles.buttonDisabled]}
-          onPress={handleSignIn}
-          testID={TEST_IDS.signinSubmit}
-          disabled={loading || !!socialLoading}
-        >
-          <LinearGradient
-            colors={["#0022FF", "#00BBFF"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.button}
-          >
-            {loading ? (
-              <ActivityIndicator color={theme.tintTextColor} />
-            ) : (
-              <View style={styles.buttonRow}>
-                <Text allowFontScaling={false} style={styles.buttonText}>{t("auth.signIn")}</Text>
-                <Ionicons name="arrow-forward" size={20} color={theme.tintTextColor} />
-              </View>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          activeOpacity={0.8}
-          style={styles.forgotWrap}
-          onPress={onForgotPassword}
-          testID={TEST_IDS.signinForgot}
-          disabled={!onForgotPassword || loading || !!socialLoading}
-          accessibilityRole="button"
-        >
-          <Text allowFontScaling={false} style={styles.forgotText}>{t("auth.forgotPassword")}</Text>
-        </TouchableOpacity>
 
         {enabledSocialProviders.length > 0 ? (
           <>
-            <View style={styles.socialDividerRow}>
-              <View style={styles.socialDividerLine} />
-              <Text allowFontScaling={false} style={styles.socialDividerText}>{t("auth.orLogInWith")}</Text>
-              <View style={styles.socialDividerLine} />
-            </View>
-
-            <View style={styles.socialRow}>
-              {enabledSocialProviders.map((provider) => (
-                <TouchableOpacity
-                  key={provider}
-                  style={[styles.socialButton, socialLoading && styles.socialButtonDisabled]}
-                  activeOpacity={0.85}
-                  onPress={() => handleSocialSignIn(provider)}
-                  disabled={!!socialLoading || loading}
-                >
-                  {socialLoading === provider ? (
-                    <ActivityIndicator
-                      color={provider === "facebook" ? "#2D7DFF" : "#FFFFFF"}
-                      size="small"
-                    />
-                  ) : (
-                    <Ionicons
-                      name={
-                        provider === "google"
-                          ? "logo-google"
-                          : provider === "facebook"
-                            ? "logo-facebook"
-                            : "logo-apple"
-                      }
-                      size={22}
-                      color={provider === "facebook" ? "#2D7DFF" : "#FFFFFF"}
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+            <OrDivider label={t("auth.orLogInWith")} style={styles.divider} />
+            <SocialAuthRow
+              providers={enabledSocialProviders}
+              loading={socialLoading}
+              disabled={loading}
+              onPress={handleSocialSignIn}
+            />
           </>
         ) : null}
+
+        <View style={styles.actionRow}>
+          {onRestart ? (
+            <SurfaceIconButton
+              icon="chevron-back"
+              onPress={onRestart}
+              accessibilityLabel={t("auth.restart")}
+              testID={TEST_IDS.signinRestart}
+            />
+          ) : null}
+          <GlowButton
+            label={t("auth.signIn")}
+            onPress={handleSignIn}
+            loading={loading}
+            disabled={!!socialLoading}
+            testID={TEST_IDS.signinSubmit}
+            style={styles.submit}
+          />
+        </View>
+
+        <TextLink
+          label={t("auth.forgotPassword")}
+          onPress={onForgotPassword}
+          testID={TEST_IDS.signinForgot}
+          disabled={busy}
+          style={styles.forgot}
+        />
+
         <LanguageToggle />
 
         {onSignUp ? (
-          <View style={styles.signUpCard}>
-            <View style={styles.signUpCardIcon}>
-              <Ionicons name="person-add-outline" size={22} color="#3D8BFF" />
-            </View>
+          <GlassCard style={styles.signUpCard}>
+            <Ionicons name="person-add-outline" size={36} color={UI.accent} />
             <Text allowFontScaling={false} style={styles.signUpCardText} numberOfLines={2}>
               {t("auth.noAccount")}
             </Text>
-            <TouchableOpacity
-              style={styles.signUpCardBtnOuter}
+            <GlowButton
+              label={t("auth.signUp")}
+              arrow
               onPress={onSignUp}
+              disabled={busy}
               testID={TEST_IDS.signinToSignup}
-              activeOpacity={0.9}
-              accessibilityRole="button"
-              disabled={loading || !!socialLoading}
-            >
-              <LinearGradient
-                colors={["#0022FF", "#00BBFF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.signUpCardBtn}
-              >
-                <Text allowFontScaling={false} style={styles.signUpCardBtnText}>{t("auth.signUp")}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+            />
+          </GlassCard>
         ) : null}
       </View>
     </KeyboardAwareScrollView>
@@ -299,7 +224,7 @@ function getStyles(theme: any) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: theme.backgroundColor,
+      backgroundColor: UI.pageBg,
     },
     kasvContent: {
       flexGrow: 1,
@@ -309,145 +234,47 @@ function getStyles(theme: any) {
       flex: 1,
       justifyContent: "center",
       paddingHorizontal: 24,
-      paddingTop: 0,
-    },
-    restartTouch: {
-      alignSelf: "flex-end",
-      marginBottom: 8,
-    },
-    restartText: {
-      color: "rgba(165,196,235,0.92)",
-      fontSize: 15,
-      fontFamily: theme.mediumFont,
     },
     logoWrap: {
       alignItems: "center",
-      marginBottom: 42,
+      marginBottom: 56,
     },
     logoImage: {
-      width: 172,
-      height: 92,
+      width: 190,
+      height: 100,
     },
-    inputSpacing: {
-      marginBottom: 12,
-    },
-    buttonOuter: {
-      borderRadius: 14,
-      overflow: "hidden",
-      marginTop: 14,
-    },
-    button: {
-      borderRadius: 14,
-      paddingVertical: 14,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    buttonRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
-    buttonDisabled: {
-      opacity: 0.7,
-    },
-    buttonText: {
-      fontSize: 17,
-      fontFamily: theme.semiBoldFont,
-      color: theme.tintTextColor,
-    },
-    forgotWrap: {
-      alignItems: "center",
-      marginTop: 14,
-      marginBottom: 18,
-    },
-    forgotText: {
-      color: "#18C0FF",
-      fontSize: 12,
+    title: {
+      color: UI.text,
+      fontSize: 24,
       fontFamily: theme.regularFont,
+      marginBottom: 20,
     },
-    socialDividerRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginBottom: 16,
-      gap: 8,
+    divider: {
+      marginTop: 18,
+      marginBottom: 22,
     },
-    socialDividerLine: {
-      flex: 1,
-      height: 1,
-      backgroundColor: "rgba(255,255,255,0.12)",
-    },
-    socialDividerText: {
-      fontSize: 12,
-      color: "rgba(255,255,255,0.55)",
-      fontFamily: theme.regularFont,
-    },
-    socialRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      gap: 12,
-      marginBottom: 8,
-    },
-    socialButton: {
-      flex: 1,
-      height: 50,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: "rgba(21, 102, 196, 0.45)",
-      backgroundColor: "#0B1F57",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    signUpCard: {
+    actionRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
       marginTop: 28,
-      padding: 14,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: "rgba(21, 102, 196, 0.45)",
-      backgroundColor: "#06143D",
     },
-    signUpCardIcon: {
-      width: 44,
-      height: 44,
-      borderRadius: 14,
-      backgroundColor: "#0B1F57",
+    submit: {
+      flex: 1,
+    },
+    forgot: {
+      alignSelf: "flex-end",
+      marginTop: 18,
+    },
+    signUpCard: {
       alignItems: "center",
-      justifyContent: "center",
+      marginTop: 24,
     },
     signUpCardText: {
-      flex: 1,
-      minWidth: 0,
-      color: "#FFFFFF",
+      color: UI.textMuted,
       fontSize: 15,
-      fontFamily: theme.mediumFont,
-    },
-    signUpCardBtnOuter: {
-      borderRadius: 14,
-      overflow: "hidden",
-    },
-    signUpCardBtn: {
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    signUpCardBtnText: {
-      color: "#FFFFFF",
-      fontSize: 15,
-      fontFamily: theme.semiBoldFont,
-    },
-    socialButtonDisabled: {
-      opacity: 0.55,
-    },
-    heroGlow: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 430,
-      opacity: 1,
+      fontFamily: theme.regularFont,
+      marginBottom: 4,
     },
   });
 }

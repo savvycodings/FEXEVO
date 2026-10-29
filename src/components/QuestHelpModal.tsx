@@ -9,12 +9,12 @@ import {
   type ImageSourcePropType,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from './LocalSvgAsset'
 import { DailyQuestXpBadge } from './DailyQuestXpBadge'
+import { GlowButton } from './ui'
 import { getQuestDescriptionKey } from '../lib/dailyQuestHelp'
 import type { QuestCadence } from '../lib/dailyQuestsCatalog'
 
@@ -106,18 +106,7 @@ export function QuestHelpModal({ visible, quest, onClose }: Props) {
             </Text>
           </View>
 
-          <TouchableOpacity activeOpacity={0.88} onPress={onClose} style={styles.btnOuter}>
-            <LinearGradient
-              colors={['#0022FF', '#00BBFF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.btnInner}
-            >
-              <Text allowFontScaling={false} style={[styles.btnText, { fontFamily: theme.semiBoldFont }]}>
-                {t('progress.achievementGotIt')}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          <GlowButton label={t('progress.achievementGotIt')} onPress={onClose} />
         </View>
       </View>
     </Modal>
@@ -210,19 +199,6 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
     },
     progressValue: {
       fontSize: 13,
-      color: '#FFFFFF',
-    },
-    btnOuter: {
-      borderRadius: 14,
-      overflow: 'hidden',
-    },
-    btnInner: {
-      paddingVertical: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    btnText: {
-      fontSize: 15,
       color: '#FFFFFF',
     },
   })

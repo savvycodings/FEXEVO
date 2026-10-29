@@ -1,7 +1,7 @@
 import path from 'path'
 import { expect, request, test } from '@playwright/test'
 import { API_URL, FIXTURE_VIDEO, authStatePath } from './env'
-import { T, openApp, uploadAndAnalyze } from './helpers'
+import { T, openApp, uploadAndAnalyze, openMagicShot } from './helpers'
 
 test.use({ storageState: authStatePath('player') })
 
@@ -25,6 +25,7 @@ async function setFlags(body: Record<string, unknown>) {
 async function magicShot(page: import('@playwright/test').Page, timeoutMs: number): Promise<VideoStatus> {
   await openApp(page)
   const analysisId = await uploadAndAnalyze(page, path.resolve(FIXTURE_VIDEO))
+  await openMagicShot(page)
   await page.getByTestId(T.magicShotGenerate).click()
   const api = await request.newContext({ baseURL: API_URL, storageState: authStatePath('player') })
   let last: VideoStatus | null = null

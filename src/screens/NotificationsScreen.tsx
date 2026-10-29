@@ -20,6 +20,7 @@ import { authClient } from '../lib/auth-client'
 import { navigateToActivityAnalysis } from '../lib/openActivityAnalysis'
 import { useSessionData } from '../context/SessionDataContext'
 import { useTranslation } from 'react-i18next'
+import { markNotificationReadLocally, setUnreadFromNotifications } from '../lib/unreadNotifications'
 
 const TICK_ICON = require('../../assets/coachs/tickicon.svg')
 const MSG_ICON = require('../../assets/coachs/msgicon.svg')
@@ -73,7 +74,12 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
         notifications?: ApiNotification[]
         error?: string
       }
-      setNotifications(Array.isArray(body?.notifications) ? body.notifications : [])
+      if (Array.isArray(body?.notifications)) {
+        setNotifications(body.notifications)
+        setUnreadFromNotifications(body.notifications)
+      } else {
+        setNotifications([])
+      }
     } finally {
       setNotiLoading(false)
     }
@@ -143,6 +149,7 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                   activeOpacity={0.82}
                   onPress={() => {
                     void (async () => {
+                      markNotificationReadLocally(n.id)
                       try {
                         await authClient.$fetch(`/profile/notifications/${n.id}/read`, {
                           method: 'POST',

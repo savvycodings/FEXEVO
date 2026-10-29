@@ -39,7 +39,7 @@ import { AchievementDetailScreen } from './screens/AchievementDetailScreen'
 import { Header } from './components'
 import { MainTabBarBackground } from './components/MainTabBarBackground'
 import { screenEntranceLayout } from './components/PageEntrance'
-import { TAB_ACTIVE, TAB_INACTIVE, renderTabIcon, tabLabelGlow } from './components/tabBarStyle'
+import { TAB_ACTIVE, TAB_INACTIVE, renderTabIcon, tabLabelActive } from './components/tabBarStyle'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ThemeContext } from './context'
@@ -417,7 +417,7 @@ function MainTabsLayoutInner({
 
   const tabBg = theme.backgroundColor ?? '#030A17'
 
-  /** Tab label; the active one gets a soft glow. */
+  /** Tab label; the active one is white. */
   const renderTabLabel = useCallback(
     (label: string) =>
       ({ color, focused }: { color: string; focused: boolean }) => (
@@ -435,7 +435,7 @@ function MainTabsLayoutInner({
             marginTop: 0,
             marginBottom: 0,
             ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
-            ...(focused ? tabLabelGlow : null),
+            ...(focused ? tabLabelActive : null),
           }}
         >
           {label}

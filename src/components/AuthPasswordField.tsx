@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react'
-import { View, TextInput, TouchableOpacity, type TextInputProps, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
+import React, { useMemo, useRef, useState } from 'react'
+import { Pressable, Text, View, TextInput, TouchableOpacity, type TextInputProps, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LocalSvgAsset } from './LocalSvgAsset'
 import { createAuthFormStyles, AUTH_ICON_COLOR } from './authFormStyles'
@@ -21,6 +21,8 @@ type AuthPasswordFieldProps = Omit<TextInputProps, 'secureTextEntry'> & {
   leftIcon?: React.ComponentProps<typeof Ionicons>['name']
   /** Visibility toggle art: the scan-frame SVG (default) or an eye icon. */
   toggleIcon?: 'scan' | 'eye'
+  /** Floating label shown inside the box above the value (login design). */
+  label?: string
 }
 
 export function AuthPasswordField({
@@ -35,11 +37,37 @@ export function AuthPasswordField({
   editable = true,
   leftIcon,
   toggleIcon = 'scan',
+  label,
   ...rest
 }: AuthPasswordFieldProps) {
   const [focused, setFocused] = useState(false)
+  const inputRef = useRef<TextInput>(null)
   const [visible, setVisible] = useState(false)
   const styles = useMemo(() => createAuthFormStyles(theme), [theme])
+
+  const input = (
+    <TextInput
+      ref={inputRef}
+      style={[
+        label ? styles.floatInput : styles.passwordInput,
+        leftIcon && { paddingLeft: 0 },
+        fieldStyle,
+        style,
+      ]}
+      placeholderTextColor={placeholderTextColor ?? theme.placeholderTextColor}
+      secureTextEntry={!visible}
+      editable={editable}
+      onFocus={(e) => {
+        setFocused(true)
+        onFocus?.(e)
+      }}
+      onBlur={(e) => {
+        setFocused(false)
+        onBlur?.(e)
+      }}
+      {...rest}
+    />
+  )
 
   return (
     <View style={[styles.passwordWrap, wrapStyle]}>
@@ -53,28 +81,18 @@ export function AuthPasswordField({
         ]}
       >
         {leftIcon ? (
-          <Ionicons name={leftIcon} size={20} color={AUTH_ICON_COLOR} style={styles.leftIcon} />
+          <Ionicons name={leftIcon} size={24} color={AUTH_ICON_COLOR} style={styles.leftIcon} />
         ) : null}
-        <TextInput
-          style={[
-            styles.passwordInput,
-            leftIcon && { paddingLeft: 0 },
-            fieldStyle,
-            style,
-          ]}
-          placeholderTextColor={placeholderTextColor ?? theme.placeholderTextColor}
-          secureTextEntry={!visible}
-          editable={editable}
-          onFocus={(e) => {
-            setFocused(true)
-            onFocus?.(e)
-          }}
-          onBlur={(e) => {
-            setFocused(false)
-            onBlur?.(e)
-          }}
-          {...rest}
-        />
+        {label ? (
+          <Pressable style={styles.floatColumn} onPress={() => inputRef.current?.focus()}>
+            <Text allowFontScaling={false} style={styles.floatLabel}>
+              {label}
+            </Text>
+            {input}
+          </Pressable>
+        ) : (
+          input
+        )}
         <TouchableOpacity
           style={styles.passwordToggle}
           onPress={() => setVisible((v) => !v)}

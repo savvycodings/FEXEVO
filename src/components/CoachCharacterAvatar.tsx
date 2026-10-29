@@ -206,8 +206,11 @@ export function CoachCharacterAvatar({
 }
 
 /** Tab-bar orb at its design size (36px ball, per Figma); still image only (no GIF faces). */
-/** Tab-bar ring around the orb: ball diameter, ring stroke and how far it rises above the other icons. */
-const TAB_ORB_RING = { ballD: 40, stroke: 2.5, gap: 1, lift: 6 } as const
+/**
+ * Tab-bar ring around the orb: ball diameter, ring stroke and how far it rises above the other icons.
+ * Lift 0 keeps the orb on the same line as the other icons, with ring + halo below the bar's top stroke.
+ */
+const TAB_ORB_RING = { ballD: 34, stroke: 2.5, gap: 1, lift: 0 } as const
 
 export function CoachTabOrb({
   ballSize,
@@ -226,7 +229,8 @@ export function CoachTabOrb({
   const lift = ring ? TAB_ORB_RING.lift : 0
   const cy = TAB_ICON_SLOT.height / 2 - lift
   const ringR = d / 2 + TAB_ORB_RING.gap + TAB_ORB_RING.stroke / 2
-  const box = (ringR + TAB_ORB_RING.stroke) * 2 + 16
+  // Halo fades out 3px past the ring, so the glow ends below the bar's top stroke (orb center sits 27px down).
+  const box = (ringR + TAB_ORB_RING.stroke + 3) * 2
   // Per-instance ids: on web, SVG ids are document-wide, and the copy in a hidden tab bar would win.
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   const ids = { under: `tabOrbUnderGlow${uid}`, halo: `tabOrbHalo${uid}`, ring: `tabOrbRing${uid}` }

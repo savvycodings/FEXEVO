@@ -2,10 +2,11 @@ import { View, StyleSheet, Platform } from 'react-native'
 import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
 
-const STROKE = 'rgba(61, 139, 255, 0.55)'
-const INNER_GLOW = 'rgba(0, 102, 255, 0.5)'
-const BOTTOM_GLOW = 'rgba(0, 82, 255, 0.35)'
-const SIDE_GLOW = 'rgba(0, 82, 255, 0.18)'
+/** Same hairline as the header's bottom edge, so the top and bottom chrome match. */
+const STROKE = 'rgba(0, 102, 255, 0.3)'
+const INNER_GLOW = 'rgba(0, 102, 255, 0.18)'
+const BOTTOM_GLOW = 'rgba(0, 72, 255, 0.28)'
+const SIDE_GLOW = 'rgba(0, 72, 255, 0.12)'
 
 /**
  * expo-blur uses intensity 0–100. “Strong” frosted bar — tune if you want subtler blur.
@@ -68,10 +69,10 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   webFallback: {
-    backgroundColor: 'rgba(3, 10, 23, 0.82)',
+    backgroundColor: 'rgba(3, 10, 23, 0.92)',
   },
   tint: {
-    backgroundColor: 'rgba(3, 10, 23, 0.28)',
+    backgroundColor: 'rgba(3, 10, 23, 0.55)',
   },
   innerGlow: {
     position: 'absolute',

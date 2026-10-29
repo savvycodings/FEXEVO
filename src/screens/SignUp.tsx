@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Alert,
   Image,
 } from "react-native";
@@ -20,8 +19,6 @@ import {
   getEnabledSocialProviders,
   formatSocialAuthError,
 } from "../lib/socialAuth";
-import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "../components/LanguageToggle";
@@ -31,6 +28,7 @@ import { AuthPasswordField } from "../components/AuthPasswordField";
 import { AUTH_INPUT_FOCUS_BORDER, AUTH_INPUT_FOCUS_BORDER_WIDTH, AUTH_INPUT_ERROR_BORDER_WIDTH, AUTH_ICON_COLOR, createAuthFormStyles } from "../components/authFormStyles";
 import { findCountry, type Country } from "../lib/countries";
 import { TEST_IDS } from '../lib/testIds'
+import { AuthBackdrop, GlowButton, OrDivider, SocialAuthRow, UI } from "../components/ui";
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -40,12 +38,17 @@ export type SignUpDraft = {
   password: string;
   country: string;
   verificationToken?: string;
+  /** Started from the welcome "Coach Signup" button. Recorded only; the coach role is still granted by an admin. */
+  coachSignup?: boolean;
 };
 
 type SignUpProps = {
   onContinue?: (draft: SignUpDraft) => void;
   onBack?: () => void;
+  /** "Already have an account? Sign in" */
+  onSignIn?: () => void;
   initialDraft?: SignUpDraft | null;
+  coachSignup?: boolean;
 };
 
 export function SignUp(props?: SignUpProps) {
@@ -121,6 +124,7 @@ export function SignUp(props?: SignUpProps) {
       email: email.trim(),
       password,
       country: selectedCountry?.name ?? "",
+      ...(props?.coachSignup ? { coachSignup: true } : {}),
     });
     setLoading(false);
   };
@@ -157,22 +161,8 @@ export function SignUp(props?: SignUpProps) {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <Svg pointerEvents="none" style={styles.heroGlow}>
-        <Defs>
-          <SvgRadialGradient
-            id="signUpRadialBg"
-            cx="50%"
-            cy="-30%"
-            rx="120%"
-            ry="95%"
-          >
-            <Stop offset="0%" stopColor="#071D47" stopOpacity={1} />
-            <Stop offset="100%" stopColor="#071D47" stopOpacity={0} />
-          </SvgRadialGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#signUpRadialBg)" />
-      </Svg>
-      <View style={styles.content}>
+      <AuthBackdrop id="signUpRadialBg" />
+      <View style={[styles.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.logoWrap}>
           <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
         </View>
@@ -272,13 +262,13 @@ export function SignUp(props?: SignUpProps) {
             </>
           ) : (
             <>
-              <Ionicons name="globe-outline" size={20} color={AUTH_ICON_COLOR} />
+              <Ionicons name="globe-outline" size={24} color={AUTH_ICON_COLOR} />
               <Text allowFontScaling={false} style={styles.countryTriggerPlaceholder} numberOfLines={1}>
                 {t("auth.selectYourCountry")}
               </Text>
             </>
           )}
-          <Ionicons name="chevron-down" size={18} color="rgba(200, 220, 255, 0.85)" />
+          <Ionicons name="chevron-down" size={20} color={UI.accent} />
         </TouchableOpacity>
         {errors.country ? <Text style={fieldStyles.errorText}>{errors.country}</Text> : null}
 
@@ -294,70 +284,38 @@ export function SignUp(props?: SignUpProps) {
 
         {enabledSocialProviders.length > 0 ? (
           <>
-            <View style={styles.socialDividerRow}>
-              <View style={styles.socialDividerLine} />
-              <Text allowFontScaling={false} style={styles.socialDividerText}>{t("auth.orCreateWith")}</Text>
-              <View style={styles.socialDividerLine} />
-            </View>
-
-            <View style={styles.socialRow}>
-              {enabledSocialProviders.map((provider) => (
-                <TouchableOpacity
-                  key={provider}
-                  style={[styles.socialButton, socialLoading && styles.socialButtonDisabled]}
-                  activeOpacity={0.85}
-                  onPress={() => handleSocialSignUp(provider)}
-                  disabled={!!socialLoading || loading}
-                >
-                  {socialLoading === provider ? (
-                    <ActivityIndicator
-                      color={provider === "facebook" ? "#2D7DFF" : "#FFFFFF"}
-                      size="small"
-                    />
-                  ) : (
-                    <Ionicons
-                      name={
-                        provider === "google"
-                          ? "logo-google"
-                          : provider === "facebook"
-                            ? "logo-facebook"
-                            : "logo-apple"
-                      }
-                      size={22}
-                      color={provider === "facebook" ? "#2D7DFF" : "#FFFFFF"}
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+            <OrDivider label={t("auth.orCreateWith")} style={styles.divider} />
+            <SocialAuthRow
+              providers={enabledSocialProviders}
+              loading={socialLoading}
+              disabled={loading}
+              onPress={handleSocialSignUp}
+            />
           </>
         ) : null}
 
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.buttonOuter, { flex: 1 }, (loading || socialLoading) && styles.buttonDisabled]}
-            onPress={handleContinue}
-            testID={TEST_IDS.signupSubmit}
-            disabled={loading || !!socialLoading}
-          >
-            <LinearGradient
-              colors={["#0022FF", "#00BBFF"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.button}
-            >
-              {loading ? (
-                <ActivityIndicator color={theme.tintTextColor} />
-              ) : (
-                <View style={styles.buttonRow}>
-                  <Text allowFontScaling={false} style={styles.buttonText}>{t("auth.signUp")}</Text>
-                  <Ionicons name="arrow-forward" size={20} color={theme.tintTextColor} />
-                </View>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+        <GlowButton
+          label={t("auth.signUp")}
+          arrow
+          onPress={handleContinue}
+          loading={loading}
+          disabled={!!socialLoading}
+          testID={TEST_IDS.signupSubmit}
+          style={styles.submit}
+        />
         <LanguageToggle />
+        {props?.onSignIn ? (
+          <TouchableOpacity
+            style={styles.switchLink}
+            onPress={props.onSignIn}
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text allowFontScaling={false} style={styles.switchText}>
+              {t("auth.hasAccount")} <Text style={styles.switchTextBold}>{t("auth.signIn")}</Text>
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </KeyboardAwareScrollView>
   );
@@ -367,7 +325,7 @@ function getStyles(theme: any) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: theme.backgroundColor,
+      backgroundColor: UI.pageBg,
     },
     kasvContent: {
       flexGrow: 1,
@@ -377,15 +335,14 @@ function getStyles(theme: any) {
       flex: 1,
       justifyContent: "center",
       paddingHorizontal: 24,
-      paddingTop: 0,
     },
     logoWrap: {
       alignItems: "center",
-      marginBottom: 32,
+      marginBottom: 20,
     },
     logoImage: {
-      width: 172,
-      height: 92,
+      width: 190,
+      height: 100,
     },
     header: {
       alignItems: "center",
@@ -393,37 +350,32 @@ function getStyles(theme: any) {
     },
     heroTitleTechniqueWeb: {
       fontSize: 34,
-      fontFamily: theme.semiBoldFont,
+      fontFamily: theme.mediumFont,
       textAlign: "center",
       marginBottom: 8,
-      color: "#FFFFFF",
+      color: UI.text,
     },
     heroTitleAccent: {
-      color: "#18C0FF",
-    },
-    buttonRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
+      color: UI.accentStrong,
     },
     subtitle: {
-      fontSize: 12,
+      fontSize: 15,
       fontFamily: theme.regularFont,
-      color: "rgba(255,255,255,0.62)",
+      color: UI.textMuted,
       textAlign: "center",
-      marginTop: 0,
     },
     countryTrigger: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
-      borderWidth: 0,
-      borderRadius: 16,
-      paddingHorizontal: 16,
+      gap: 12,
+      borderWidth: 1,
+      borderColor: UI.surfaceBorder,
+      borderRadius: UI.radius,
+      paddingHorizontal: 18,
       paddingVertical: 12,
-      minHeight: 48,
-      backgroundColor: "#0B1F57",
-      marginBottom: 10,
+      minHeight: UI.fieldHeight,
+      backgroundColor: UI.surface,
+      marginBottom: 12,
     },
     countryTriggerFocused: {
       borderWidth: AUTH_INPUT_FOCUS_BORDER_WIDTH,
@@ -453,70 +405,25 @@ function getStyles(theme: any) {
       fontFamily: theme.regularFont,
       color: theme.placeholderTextColor,
     },
-    buttonOuter: {
-      borderRadius: 16,
-      overflow: "hidden",
+    divider: {
+      marginTop: 10,
+      marginBottom: 18,
     },
-    button: {
-      minHeight: 54,
-      borderRadius: 16,
+    submit: {
+      marginTop: 22,
+    },
+    switchLink: {
       alignItems: "center",
-      justifyContent: "center",
+      paddingTop: 4,
     },
-    buttonDisabled: {
-      opacity: 0.7,
-    },
-    buttonText: {
-      fontSize: 17,
-      fontFamily: theme.semiBoldFont,
-      color: theme.tintTextColor,
-    },
-    actionRow: {
-      marginTop: 14,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-    },
-    socialDividerRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginTop: 8,
-      marginBottom: 14,
-      gap: 8,
-    },
-    socialDividerLine: {
-      flex: 1,
-      height: 1,
-      backgroundColor: "rgba(255,255,255,0.12)",
-    },
-    socialDividerText: {
-      fontSize: 12,
-      color: "rgba(255,255,255,0.55)",
+    switchText: {
+      fontSize: 15,
       fontFamily: theme.regularFont,
+      color: UI.textMuted,
     },
-    socialRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      gap: 12,
-    },
-    socialButton: {
-      flex: 1,
-      height: 50,
-      borderRadius: 16,
-      backgroundColor: "#0B1F57",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    socialButtonDisabled: {
-      opacity: 0.55,
-    },
-    heroGlow: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 430,
-      opacity: 1,
+    switchTextBold: {
+      fontFamily: theme.semiBoldFont,
+      color: UI.accent,
     },
   });
 }

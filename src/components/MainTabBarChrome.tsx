@@ -17,7 +17,7 @@ import { useSessionData } from "../context/SessionDataContext";
 import type { MainStackParamList, MainTabParamList } from "../navigation/types";
 import { useCoachAssistant } from "../context/CoachAssistantContext";
 import { TAB_ICON_SLOT } from "./CoachCharacterAvatar";
-import { TAB_ACTIVE, TAB_INACTIVE, renderTabIcon, tabLabelGlow } from "./tabBarStyle";
+import { TAB_INACTIVE, renderTabIcon, tabLabelActive } from "./tabBarStyle";
 
 const TAB_ORDER: (keyof MainTabParamList)[] = [
   "AICoach",
@@ -91,10 +91,7 @@ export function MainTabBarChrome({ activeTab }: Props) {
           textAlign: "center",
           ...(Platform.OS === "android" ? { includeFontPadding: false } : null),
         },
-        labelActive: {
-          color: TAB_ACTIVE,
-          ...tabLabelGlow,
-        },
+        labelActive: tabLabelActive,
         labelInactive: {
           color: TAB_INACTIVE,
         },

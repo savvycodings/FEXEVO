@@ -4,15 +4,12 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Alert,
   Image,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTranslation } from "react-i18next";
 import { ThemeContext } from "../context";
 import { LanguageToggle } from "../components/LanguageToggle";
@@ -21,6 +18,7 @@ import { AuthPasswordField } from "../components/AuthPasswordField";
 import { createAuthFormStyles } from "../components/authFormStyles";
 import { requestPasswordResetCode, resetPasswordWithCode } from "../lib/passwordReset";
 import { TEST_IDS } from '../lib/testIds'
+import { GlowButton, SurfaceIconButton } from "../components/ui";
 
 const APP_LOGO = require("../../assets/logo.png");
 const RESEND_COOLDOWN_SEC = 60;
@@ -245,8 +243,8 @@ export function ForgotPassword({ onBack, initialEmail = "" }: ForgotPasswordProp
         )}
 
         <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={styles.backButton}
+          <SurfaceIconButton
+            icon="chevron-back"
             onPress={() => {
               if (step === "code") {
                 setStep("email");
@@ -254,34 +252,15 @@ export function ForgotPassword({ onBack, initialEmail = "" }: ForgotPasswordProp
               }
               onBack();
             }}
-            activeOpacity={0.85}
-            accessibilityRole="button"
             accessibilityLabel={t("common.back")}
-          >
-            <Ionicons name="chevron-back" size={22} color="#00BBFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.buttonOuter, loading && styles.buttonDisabled]}
+          />
+          <GlowButton
+            style={{ flex: 1 }}
+            label={step === "email" ? t("auth.sendCode") : t("auth.updatePassword")}
             onPress={() => void (step === "email" ? handleSendCode() : handleReset())}
             testID={TEST_IDS.resetSubmit}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={["#0022FF", "#00BBFF"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.button}
-            >
-              {loading ? (
-                <ActivityIndicator color={theme.tintTextColor} />
-              ) : (
-                <Text allowFontScaling={false} style={styles.buttonText}>
-                  {step === "email" ? t("auth.sendCode") : t("auth.updatePassword")}
-                </Text>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
+            loading={loading}
+          />
         </View>
         <LanguageToggle />
       </View>
@@ -352,33 +331,6 @@ function getStyles(theme: any) {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-    },
-    backButton: {
-      width: 54,
-      height: 54,
-      borderRadius: 16,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: "rgba(6, 26, 86, 0.9)",
-    },
-    buttonOuter: {
-      flex: 1,
-      borderRadius: 16,
-      overflow: "hidden",
-    },
-    button: {
-      minHeight: 54,
-      borderRadius: 16,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    buttonDisabled: {
-      opacity: 0.7,
-    },
-    buttonText: {
-      fontSize: 17,
-      fontFamily: theme.semiBoldFont,
-      color: theme.tintTextColor,
     },
     heroGlow: {
       position: "absolute",

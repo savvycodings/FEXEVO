@@ -1,9 +1,10 @@
-import { StyleSheet } from 'react-native'
+import { Platform, StyleSheet } from 'react-native'
+import { UI } from './ui/tokens'
 
-export const AUTH_INPUT_FOCUS_BORDER = 'rgba(0, 184, 255, 0.25)'
-export const AUTH_INPUT_FOCUS_BORDER_WIDTH = 2
+export const AUTH_INPUT_FOCUS_BORDER = UI.accent
+export const AUTH_INPUT_FOCUS_BORDER_WIDTH = 1.5
 export const AUTH_INPUT_ERROR_BORDER_WIDTH = 1.5
-export const AUTH_ICON_COLOR = '#3D8BFF'
+export const AUTH_ICON_COLOR = UI.accent
 
 export function createAuthFormStyles(theme: {
   regularFont: string
@@ -13,15 +14,17 @@ export function createAuthFormStyles(theme: {
 }) {
   return StyleSheet.create({
     input: {
-      borderWidth: 0,
-      borderRadius: 16,
-      paddingHorizontal: 16,
+      borderWidth: 1,
+      borderColor: UI.surfaceBorder,
+      borderRadius: UI.radius,
+      paddingHorizontal: 18,
       paddingVertical: 12,
+      minHeight: UI.fieldHeight,
       fontSize: 15,
       fontFamily: theme.regularFont,
       color: theme.textColor,
-      backgroundColor: '#0B1F57',
-      marginBottom: 10,
+      backgroundColor: UI.surface,
+      marginBottom: 12,
     },
     inputFocused: {
       borderWidth: AUTH_INPUT_FOCUS_BORDER_WIDTH,
@@ -34,7 +37,7 @@ export function createAuthFormStyles(theme: {
       marginBottom: 6,
     },
     passwordWrap: {
-      marginBottom: 10,
+      marginBottom: 12,
     },
     passwordField: {
       flexDirection: 'row',
@@ -51,7 +54,7 @@ export function createAuthFormStyles(theme: {
       paddingVertical: 12,
       paddingLeft: 16,
       paddingRight: 8,
-      minHeight: 48,
+      minHeight: UI.fieldHeight - 2,
       fontSize: 15,
       fontFamily: theme.regularFont,
       color: theme.textColor,
@@ -60,11 +63,11 @@ export function createAuthFormStyles(theme: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 0,
-      paddingLeft: 14,
+      paddingLeft: 18,
       paddingRight: 0,
     },
     leftIcon: {
-      marginRight: 10,
+      marginRight: 12,
     },
     iconInput: {
       flex: 1,
@@ -73,7 +76,7 @@ export function createAuthFormStyles(theme: {
       backgroundColor: 'transparent',
       paddingVertical: 12,
       paddingRight: 16,
-      minHeight: 48,
+      minHeight: UI.fieldHeight - 2,
       fontSize: 15,
       fontFamily: theme.regularFont,
       color: theme.textColor,
@@ -86,8 +89,40 @@ export function createAuthFormStyles(theme: {
       paddingLeft: 4,
       minWidth: 40,
     },
+    /** Floating-label field: small label above the value, both inside the box. */
+    floatField: {
+      justifyContent: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 18,
+      minHeight: UI.fieldHeight + 2,
+    },
+    floatColumn: {
+      flex: 1,
+      minWidth: 0,
+      justifyContent: 'center',
+      paddingVertical: 8,
+      paddingLeft: 18,
+    },
+    floatLabel: {
+      fontSize: 12,
+      fontFamily: theme.regularFont,
+      color: UI.textMuted,
+      marginBottom: 2,
+    },
+    floatInput: {
+      borderWidth: 0,
+      backgroundColor: 'transparent',
+      margin: 0,
+      padding: 0,
+      minHeight: 22,
+      /** No browser focus ring inside the box on web; the box border shows focus. */
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null),
+      fontSize: 16,
+      fontFamily: theme.regularFont,
+      color: theme.textColor,
+    },
     errorText: {
-      color: '#FF6B7A',
+      color: UI.error,
       fontSize: 12,
       fontFamily: theme.mediumFont,
       marginBottom: 10,

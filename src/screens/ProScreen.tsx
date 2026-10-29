@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
-  Platform,
   useWindowDimensions,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -18,6 +17,7 @@ import { ThemeContext } from '../context'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { ProLibraryGradientFrame } from '../components/ProLibraryGradientFrame'
 import { MainTabBarChrome } from '../components/MainTabBarChrome'
+import { GlowButton } from '../components/ui'
 import type { MainStackParamList } from '../navigation/types'
 import { getCachedProfile } from '../lib/profile-cache'
 import { DOMAIN } from '../../constants'
@@ -305,25 +305,14 @@ export function ProScreen({ onClose: _onClose }: { onClose?: () => void }) {
         </View>
 
         {/* CTA */}
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={styles.ctaOuter}
+        <GlowButton
+          label="Start 3-Day Free Trial"
+          style={styles.ctaButton}
           onPress={() => {
             /* subscription flow TBD */
           }}
           accessibilityLabel="Start 3-Day Free Trial"
-        >
-          <LinearGradient
-            colors={['#00BBFF', '#0022FF']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.ctaInner}
-          >
-            <Text allowFontScaling={false} style={styles.ctaText}>
-              Start 3-Day Free Trial
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        />
       </View>
 
       <MainTabBarChrome />
@@ -607,25 +596,10 @@ function getStyles(theme: { semiBoldFont?: string; regularFont?: string; mediumF
       fontSize: 11,
       lineHeight: 14,
     },
-    ctaOuter: {
+    ctaButton: {
       marginTop: 24,
       marginBottom: 32,
       marginHorizontal: horizontalPad,
-      borderRadius: 12,
-      overflow: 'hidden',
-    },
-    ctaInner: {
-      paddingVertical: 15,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 12,
-    },
-    ctaText: {
-      color: '#FFFFFF',
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
-      lineHeight: 20,
-      ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
     },
   })
 }

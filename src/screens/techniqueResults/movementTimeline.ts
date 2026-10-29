@@ -32,7 +32,7 @@ function racketTilt(frame: PoseFrameRow, side: 'LEFT' | 'RIGHT'): number | null 
   return Math.min(180, Math.abs((Math.atan2(dx, -dy) * 180) / Math.PI))
 }
 
-function dominantSide(frames: PoseFrameRow[]): 'LEFT' | 'RIGHT' {
+export function dominantSide(frames: PoseFrameRow[]): 'LEFT' | 'RIGHT' {
   let left = 0
   let right = 0
   for (const frame of frames) {

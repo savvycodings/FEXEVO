@@ -22,7 +22,16 @@ import {
 } from '../lib/techniquePose'
 import {
   computeOverlayJointAngles,
+  computeTrunkLean,
   emaAngle,
+  landmarkVisOk,
+  ANKLE_JOINT_ANGLES,
+  computeRacketTilt,
+  HEAD_JOINT_ANGLES,
+  OVERLAY_JOINT_ANGLES,
+  RACKET_ANGLE_ID,
+  TORSO_ANGLE_ID,
+  WRIST_JOINT_ANGLES,
   jointArcSvgPath,
   jointLabelOffset,
   JOINT_DOT_COLOR,
@@ -206,6 +215,21 @@ function PoseSkeletonOverlay({
             const degLabel = `${Math.round(j.deg)}°`
             return (
               <React.Fragment key={`ang-${j.id}`}>
+                {j.kind === 'torso' || j.kind === 'racket' ? (
+                  <>
+                    <Line
+                      x1={j.b.x}
+                      y1={j.b.y}
+                      x2={j.a.x}
+                      y2={j.a.y}
+                      stroke={j.color}
+                      strokeWidth={1.4}
+                      strokeDasharray="4 4"
+                      strokeOpacity={0.8}
+                    />
+                    <Line x1={j.b.x} y1={j.b.y} x2={j.c.x} y2={j.c.y} stroke={j.color} strokeWidth={2} />
+                  </>
+                ) : null}
                 {arc ? (
                   <Path
                     d={arc}
@@ -231,6 +255,12 @@ function PoseSkeletonOverlay({
         : null}
     </>
   )
+}
+
+const MOTION_PATH_COLOR = '#00BBFF'
+
+function pointsToPath(pts: { x: number; y: number }[]): string {
+  return pts.map((p, i) => `${i ? 'L' : 'M'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
 }
 
 function sessionToTone(
@@ -306,6 +336,17 @@ export type TechniqueAnalysisVideoPanelProps = {
   focusScale?: number
   /** Parent scroll lock while a sideways drag is moving through the clip. */
   onScrubbingChange?: (active: boolean) => void
+  /**
+   * Only draw these angle arcs (ids from poseJointAngles, plus wrist ids and `TORSO_ANGLE_ID`).
+   * Unset draws the default overlay set.
+   */
+  jointAngleIds?: readonly string[]
+  /** Trace this landmark across the clip: faint for the whole shot, bright up to the current frame. */
+  motionPathLandmark?: string | null
+  /** Jump to a 0–1 position. Change `key` to repeat a jump to the same spot. */
+  seekTo?: { fraction: number; key: number } | null
+  /** Clip pixel size when the player can't report it (expo-av on web often doesn't). */
+  naturalSizeHint?: { w: number; h: number } | null
 }
 
 /**
@@ -339,6 +380,10 @@ export function TechniqueAnalysisVideoPanel({
   scrubSpanMs = 2000,
   focusScale = 1,
   onScrubbingChange,
+  jointAngleIds,
+  motionPathLandmark = null,
+  seekTo = null,
+  naturalSizeHint = null,
 }: TechniqueAnalysisVideoPanelProps) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -403,11 +448,11 @@ export function TechniqueAnalysisVideoPanel({
   const paintSize = useMemo(
     () =>
       resolveDisplaySizeForVideo({
-        encoded: encodedNatural,
-        container: naturalSize,
+        encoded: encodedNatural ?? naturalSizeHint,
+        container: naturalSize ?? naturalSizeHint,
         orientation: videoOrientation,
       }),
-    [encodedNatural, naturalSize, videoOrientation]
+    [encodedNatural, naturalSize, videoOrientation, naturalSizeHint]
   )
 
   const videoH = useMemo(() => {
@@ -617,6 +662,7 @@ export function TechniqueAnalysisVideoPanel({
     return { x: sx / n, y: sy / n }
   }, [focusScale, highlightedLandmarks, landmarksForPoseOverlay, width, videoH, paintSize, overlayFit])
 
+  const angleIdsKey = jointAngleIds ? jointAngleIds.join('|') : null
   const focusKey = highlightedLandmarks?.join('|') ?? ''
   const focusKeyRef = useRef(focusKey)
   useEffect(() => {
@@ -663,14 +709,52 @@ export function TechniqueAnalysisVideoPanel({
         paintSize.h,
         overlayFit
       )
-    const raw = computeOverlayJointAngles(getPx, landmarksForPoseOverlay)
+    const wanted = angleIdsKey == null ? null : angleIdsKey.split('|')
+    const defs = wanted
+      ? [...OVERLAY_JOINT_ANGLES, ...WRIST_JOINT_ANGLES, ...HEAD_JOINT_ANGLES, ...ANKLE_JOINT_ANGLES].filter((d) =>
+          wanted.includes(d.id)
+        )
+      : OVERLAY_JOINT_ANGLES
+    const raw = computeOverlayJointAngles(getPx, landmarksForPoseOverlay, undefined, defs)
+    if (wanted?.includes(TORSO_ANGLE_ID)) {
+      const lean = computeTrunkLean(getPx, landmarksForPoseOverlay)
+      if (lean) raw.push(lean)
+    }
+    for (const side of ['LEFT', 'RIGHT'] as const) {
+      if (!wanted?.includes(`${RACKET_ANGLE_ID}_${side}`)) continue
+      const tilt = computeRacketTilt(getPx, landmarksForPoseOverlay, side)
+      if (tilt) raw.push(tilt)
+    }
     const next = raw.map((j) => {
       const smoothed = emaAngle(angleEmaRef.current[j.id], j.deg)
       if (smoothed != null) angleEmaRef.current[j.id] = smoothed
       return { ...j, deg: smoothed ?? j.deg }
     })
     setJointAngles(next)
-  }, [showDetailedPoseOverlay, showJointAngles, landmarksForPoseOverlay, width, videoH, paintSize, overlayFit])
+  }, [showDetailedPoseOverlay, showJointAngles, landmarksForPoseOverlay, width, videoH, paintSize, overlayFit, angleIdsKey])
+
+  const motionPathPoints = useMemo(() => {
+    if (!motionPathLandmark) return null
+    const pts: { frame: number; x: number; y: number }[] = []
+    for (const row of poseFrames) {
+      if (!landmarkVisOk(row.landmarks[motionPathLandmark])) continue
+      const p = projectLmPx(motionPathLandmark, row.landmarks, width, videoH, paintSize.w, paintSize.h, overlayFit)
+      if (p) pts.push({ frame: row.frame, x: p.x, y: p.y })
+    }
+    return pts.length > 1 ? pts : null
+  }, [motionPathLandmark, poseFrames, width, videoH, paintSize, overlayFit])
+
+  const seekKey = seekTo?.key
+  useEffect(() => {
+    if (seekKey == null || !seekTo) return
+    const dur = durationRef.current
+    if (dur <= 0) return
+    userMovedRef.current = true
+    pushScrub(seekTo.fraction * dur)
+    flushScrub()
+    // Only a new key asks for a jump.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seekKey])
 
   const racketOverlayBox = useMemo(() => {
     const est = estimatedVideoFrame
@@ -1182,6 +1266,27 @@ export function TechniqueAnalysisVideoPanel({
         style={[styles.overlaySvg, { width, height: videoH }]}
         pointerEvents="none"
       >
+        {motionPathPoints ? (
+          <>
+            <Path
+              d={pointsToPath(motionPathPoints)}
+              fill="none"
+              stroke={MOTION_PATH_COLOR}
+              strokeOpacity={0.3}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <Path
+              d={pointsToPath(motionPathPoints.filter((p) => p.frame <= estimatedVideoFrame))}
+              fill="none"
+              stroke={MOTION_PATH_COLOR}
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        ) : null}
         {poseOverlaySvg}
         {detectionRects}
       </Svg>

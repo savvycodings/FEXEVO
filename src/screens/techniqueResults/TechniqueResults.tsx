@@ -4,7 +4,6 @@ import { ResultSectionPill, type ResultSectionId } from '../../components/Result
 import type { PhysicalMetricsValues } from '../../lib/physicalMetrics'
 import type { PoseFrameRow } from '../../lib/techniquePose'
 import { MetricsPage } from './MetricsPage'
-import { ProReferencePage } from './ProReferencePage'
 import { ShotInfoPage } from './ShotInfoPage'
 import { SmartFocusPage } from './SmartFocusPage'
 
@@ -24,8 +23,8 @@ type Props = {
   poseFrames: PoseFrameRow[]
   impactFrame: number | null
   onCompare?: () => void
-  /** Pro Reference compare. The third tab stays this compare, not a separate angles view. */
-  proReference?: ReactNode
+  /** View Angles: per-joint angles on the clip. Replaced the Pro Reference compare. */
+  viewAngles?: ReactNode
   /** Smart Focus only: sit the pill on top of the video instead of above it. */
   floatPill?: boolean
 }
@@ -47,7 +46,7 @@ export function TechniqueResults({
   poseFrames,
   impactFrame,
   onCompare,
-  proReference,
+  viewAngles,
   floatPill = false,
 }: Props) {
   const overlay = floatPill && section === 'smartFocus'
@@ -75,9 +74,7 @@ export function TechniqueResults({
         impactFrame={impactFrame}
         onCompare={onCompare}
       />
-      {section === 'proReference' ? (
-        proReference ?? <ProReferencePage visible />
-      ) : null}
+      {section === 'viewAngles' ? viewAngles ?? null : null}
       {overlay ? (
         <View pointerEvents="box-none" style={styles.pillOverlay}>
           {pill}

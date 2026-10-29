@@ -11,18 +11,16 @@ import {
 } from './NavTabIcons'
 import { CoachTabOrb } from './CoachCharacterAvatar'
 import type { MainTabParamList } from '../navigation/types'
+import { UI } from './ui/tokens'
 
 /** Shared by the tab navigator (`main.tsx`) and `MainTabBarChrome`, so both bars stay identical. */
-/** Colors from the design team's `menu_icons` set. */
-export const TAB_ACTIVE = '#00B7FF'
-export const TAB_INACTIVE = '#336AB3'
+/** Home design: active icon in the accent blue with a white label, inactive icon and label muted. */
+export const TAB_ACTIVE = UI.accent
+export const TAB_INACTIVE = UI.textMuted
+export const TAB_LABEL_ACTIVE = UI.text
 
-/** Soft blue glow on the active label. */
-export const tabLabelGlow: TextStyle = {
-  textShadowColor: 'rgba(0, 183, 255, 0.75)',
-  textShadowOffset: { width: 0, height: 0 },
-  textShadowRadius: 8,
-}
+/** Active label style (plain white in the design, no glow). */
+export const tabLabelActive: TextStyle = { color: TAB_LABEL_ACTIVE }
 
 /** Glow behind the active icon (no colored shadow on Android). */
 const iconGlow: ViewStyle =

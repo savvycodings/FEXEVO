@@ -30,7 +30,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
 import { PAGE_TOP_EXTRA_PADDING } from "../../constants";
 import { TEST_IDS } from '../lib/testIds'
-import { glow } from "./progress/progressTheme";
+import { CARD_GLOW, GlowButton, OptionButton, SegmentedToggle, SurfaceIconButton, UI } from "../components/ui";
 
 const APP_LOGO = require("../../assets/logo.png");
 const COURT_IMAGE = require("../../assets/court.png");
@@ -133,6 +133,19 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
     Number(heightCmInput) <= 250 &&
     Number(weightKgInput) >= 30 &&
     Number(weightKgInput) <= 250;
+
+  function chooseHasRanking(next: "yes" | "no") {
+    if (next === "no") {
+      setHasRanking(false);
+      setRankingOrg(null);
+      setRankingValue("");
+    } else {
+      setHasRanking(true);
+      setRankingOrg((prev) => prev || "WPR");
+    }
+    setLevel(null);
+    setCustomLevelText("");
+  }
 
   function selectDominantHand(hand: "left" | "right") {
     setDominantHand(hand);
@@ -520,24 +533,15 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.boxTitle}>
             {t("profileSetup.dominantHand")}
           </Text>
-          <View style={styles.row}>
-            <ChoicePill
-              label={t("profileSetup.leftHand")}
-              active={dominantHand === "left"}
-              onPress={() => selectDominantHand("left")}
-              testID={TEST_IDS.setupHand("left")}
-              styles={styles}
-              glowing={!isEditMode}
-            />
-            <ChoicePill
-              label={t("profileSetup.rightHand")}
-              active={dominantHand === "right"}
-              onPress={() => selectDominantHand("right")}
-              testID={TEST_IDS.setupHand("right")}
-              styles={styles}
-              glowing={!isEditMode}
-            />
-          </View>
+          <SegmentedToggle
+            accessibilityLabel={t("profileSetup.dominantHand")}
+            value={dominantHand}
+            onChange={selectDominantHand}
+            options={[
+              { value: "left", label: t("profileSetup.leftHand"), testID: TEST_IDS.setupHand("left") },
+              { value: "right", label: t("profileSetup.rightHand"), testID: TEST_IDS.setupHand("right") },
+            ]}
+          />
           </View>
 
           <View style={styles.selectionBox}>
@@ -548,24 +552,15 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
           >
             {t("profileSetup.courtSide")}
           </Text>
-          <View style={styles.row}>
-            <ChoicePill
-              label={t("common.left")}
-              active={courtSide === "left"}
-              onPress={() => setCourtSide("left")}
-              testID={TEST_IDS.setupCourt("left")}
-              styles={styles}
-              glowing={!isEditMode}
-            />
-            <ChoicePill
-              label={t("common.right")}
-              active={courtSide === "right"}
-              onPress={() => setCourtSide("right")}
-              testID={TEST_IDS.setupCourt("right")}
-              styles={styles}
-              glowing={!isEditMode}
-            />
-          </View>
+          <SegmentedToggle
+            accessibilityLabel={t("profileSetup.courtSide")}
+            value={courtSide}
+            onChange={setCourtSide}
+            options={[
+              { value: "left", label: t("common.left"), testID: TEST_IDS.setupCourt("left") },
+              { value: "right", label: t("common.right"), testID: TEST_IDS.setupCourt("right") },
+            ]}
+          />
           <CourtSideGraphic courtSide={courtSide} />
           </View>
 
@@ -660,33 +655,19 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
           </View>
 
           <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={styles.backButton}
+            <SurfaceIconButton
+              icon="chevron-back"
               onPress={onBack}
-              activeOpacity={0.85}
               accessibilityLabel={t("profileSetup.goBack")}
-            >
-              <Ionicons name="chevron-back" size={22} color="#00BBFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.primaryOuter, { flex: 1 }, !canContinueStep1 && { opacity: 0.45 }]}
-              testID={TEST_IDS.setupStep1Next}
+            />
+            <GlowButton
+              style={styles.actionPrimary}
+              label={t("profileSetup.setYourRankingBtn")}
+              arrow
               onPress={() => setStep(2)}
+              testID={TEST_IDS.setupStep1Next}
               disabled={!canContinueStep1}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={["#0022FF", "#00BBFF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.primaryInner}
-              >
-                <View style={styles.primaryRow}>
-                  <Text allowFontScaling={false} style={styles.primaryText}>{t("profileSetup.setYourRankingBtn")}</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#fff" />
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+            />
           </View>
           </>
         )}
@@ -705,60 +686,28 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               </Text>
             </View>
             <View style={styles.selectionBox}>
-              <View style={styles.row}>
-                <ChoicePill
-                  testID={TEST_IDS.setupRankingNo}
-                  label={t("common.no")}
-                  active={hasRanking === false}
-                  onPress={() => {
-                    setHasRanking(false);
-                    setRankingOrg(null);
-                    setRankingValue("");
-                    setLevel(null);
-                    setCustomLevelText("");
-                  }}
-                  styles={styles}
-                />
-                <ChoicePill
-                  label={t("common.yes")}
-                  active={hasRanking === true}
-                  onPress={() => {
-                    setHasRanking(true);
-                    setRankingOrg((prev) => prev || "WPR");
-                    setLevel(null);
-                    setCustomLevelText("");
-                  }}
-                  styles={styles}
-                />
-              </View>
+              <SegmentedToggle
+                value={hasRanking === null ? null : hasRanking ? "yes" : "no"}
+                onChange={chooseHasRanking}
+                options={[
+                  { value: "no", label: t("common.no"), testID: TEST_IDS.setupRankingNo },
+                  { value: "yes", label: t("common.yes") },
+                ]}
+              />
             </View>
             <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={styles.backButton}
+              <SurfaceIconButton
+                icon="chevron-back"
                 onPress={() => setStep(1)}
-                activeOpacity={0.85}
                 accessibilityLabel={t("profileSetup.goBack")}
-              >
-                <Ionicons name="chevron-back" size={22} color="#00BBFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.primaryOuter, { flex: 1 }, hasRanking === null && { opacity: 0.45 }]}
+              />
+              <GlowButton
+                style={styles.actionPrimary}
+                label={t("profileSetup.setYourLevelBtn")}
                 onPress={() => setRankingSetupPhase("configure")}
                 testID={TEST_IDS.setupRankingNext}
                 disabled={hasRanking === null}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={["#0022FF", "#00BBFF"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.primaryInner}
-                >
-                  <Text allowFontScaling={false} style={styles.primaryText}>
-                    {t("profileSetup.setYourLevelBtn")}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+              />
             </View>
           </>
         )}
@@ -784,31 +733,14 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             ) : null}
             <View style={styles.selectionBox}>
               {(isEditMode || hasRanking === true) ? (
-                <View style={styles.row}>
-                  <ChoicePill
-                    label={t("common.no")}
-                    active={hasRanking === false}
-                    onPress={() => {
-                      setHasRanking(false);
-                      setRankingOrg(null);
-                      setRankingValue("");
-                      setLevel(null);
-                      setCustomLevelText("");
-                    }}
-                    styles={styles}
-                  />
-                  <ChoicePill
-                    label={t("common.yes")}
-                    active={hasRanking === true}
-                    onPress={() => {
-                      setHasRanking(true);
-                      setRankingOrg((prev) => prev || "WPR");
-                      setLevel(null);
-                      setCustomLevelText("");
-                    }}
-                    styles={styles}
-                  />
-                </View>
+                <SegmentedToggle
+                  value={hasRanking === null ? null : hasRanking ? "yes" : "no"}
+                  onChange={chooseHasRanking}
+                  options={[
+                    { value: "no", label: t("common.no") },
+                    { value: "yes", label: t("common.yes") },
+                  ]}
+                />
               ) : null}
 
               {hasRanking === false && (
@@ -816,23 +748,16 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                   {standardLevelOptions.map((opt) => {
                     const active = level === opt;
                     return (
-                      <TouchableOpacity
+                      <OptionButton
                         key={opt}
-                        style={[styles.levelOption, active && styles.levelOptionActive]}
+                        label={t(levelTranslationKey(opt))}
+                        selected={active}
                         testID={TEST_IDS.setupLevel(opt)}
                         onPress={() => {
                           setCustomLevelText("");
                           setLevel(opt);
                         }}
-                        activeOpacity={0.85}
-                      >
-                        <Text
-                          allowFontScaling={false}
-                          style={[styles.levelText, active && styles.levelTextActive]}
-                        >
-                          {t(levelTranslationKey(opt))}
-                        </Text>
-                      </TouchableOpacity>
+                      />
                     );
                   })}
                   <TextInput
@@ -852,7 +777,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                     }}
                     style={styles.levelOtherInput}
                     placeholder={t(levelTranslationKey("Other"))}
-                    placeholderTextColor="#1848BA"
+                    placeholderTextColor={UI.textMuted}
                     allowFontScaling={false}
                     underlineColorAndroid="transparent"
                   />
@@ -914,8 +839,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             </View>
 
             <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={styles.backButton}
+              <SurfaceIconButton
+                icon="chevron-back"
                 onPress={() => {
                   if (!isEditMode && rankingSetupPhase === "configure") {
                     setRankingSetupPhase("choose");
@@ -923,29 +848,16 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                   }
                   setStep(1);
                 }}
-                activeOpacity={0.85}
                 accessibilityLabel={t("profileSetup.goBack")}
-              >
-                <Ionicons name="chevron-back" size={22} color="#00BBFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.primaryOuter, { flex: 1 }, (!canContinueStep2 || saving) && { opacity: 0.45 }]}
+              />
+              <GlowButton
+                style={styles.actionPrimary}
+                label={isEditMode ? t("common.done") : t("profileSetup.finishSetup")}
                 onPress={saveProfile}
                 testID={TEST_IDS.setupFinish}
-                disabled={!canContinueStep2 || saving}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={isEditMode ? ["#00BBFF", "#0022FF"] : ["#0022FF", "#00BBFF"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.primaryInner}
-                >
-                  <Text allowFontScaling={false} style={styles.primaryText}>
-                    {isEditMode ? t("common.done") : t("profileSetup.finishSetup")}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                disabled={!canContinueStep2}
+                loading={saving}
+              />
             </View>
           </>
         )}
@@ -1015,76 +927,6 @@ const courtGraphicStyles = StyleSheet.create({
     right: BALL_SIDE_PCT,
   },
 });
-
-function ChoicePill({
-  label,
-  active,
-  onPress,
-  styles,
-  testID,
-  glowing = false,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  styles: any;
-  testID?: string;
-  /** Onboarding style: the selected pill gets a bright border and glow instead of a white fill. */
-  glowing?: boolean;
-}) {
-  return (
-    <TouchableOpacity
-      testID={testID}
-      style={
-        glowing
-          ? [styles.choicePill, styles.choicePillGlowOff, active && styles.choicePillGlowOn, active && glow(12, 0.7)]
-          : [styles.choicePill, active && styles.choicePillActive]
-      }
-      onPress={onPress}
-      activeOpacity={0.85}
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      aria-selected={active}
-    >
-      <Text
-        allowFontScaling={false}
-        style={[styles.choiceText, active && (glowing ? styles.choiceTextGlowOn : styles.choiceTextActive)]}
-      >
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-function PrimaryButton({
-  label,
-  onPress,
-  disabled,
-  styles,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  styles: any;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.primaryOuter, disabled && { opacity: 0.45 }]}
-      onPress={onPress}
-      disabled={disabled}
-      activeOpacity={0.85}
-    >
-      <LinearGradient
-        colors={["#0022FF", "#00BBFF"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.primaryInner}
-      >
-        <Text allowFontScaling={false} style={styles.primaryText}>{label}</Text>
-      </LinearGradient>
-    </TouchableOpacity>
-  );
-}
 
 function getStyles(theme: any) {
   return StyleSheet.create({
@@ -1245,17 +1087,21 @@ function getStyles(theme: any) {
       fontSize: 13,
     },
     selectionBox: {
-      borderRadius: 22,
-      backgroundColor: SELECTION_BOX_BG,
-      paddingHorizontal: 16,
-      paddingVertical: 18,
-      gap: 12,
+      borderRadius: UI.radiusCard,
+      backgroundColor: UI.cardBg,
+      ...CARD_GLOW,
+      paddingHorizontal: 19,
+      paddingVertical: 24,
+      gap: 16,
     },
     boxTitle: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 20,
-      color: "#fff",
+      fontFamily: theme.mediumFont,
+      fontSize: 22,
+      color: UI.text,
       textAlign: "center",
+    },
+    actionPrimary: {
+      flex: 1,
     },
     anthroHint: {
       fontFamily: theme.regularFont,
@@ -1337,23 +1183,6 @@ function getStyles(theme: any) {
       gap: 10,
     },
     cardTitle: { fontFamily: theme.semiBoldFont, fontSize: 21, color: "#fff", textAlign: "center" },
-    row: { flexDirection: "row", gap: 10 },
-    choicePill: {
-      flex: 1,
-      minHeight: 38,
-      borderRadius: 14,
-      backgroundColor: "#07256D",
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-    },
-    choicePillActive: { backgroundColor: "#FFFFFF" },
-    choicePillGlowOff: { minHeight: 46, borderWidth: 1.5, borderColor: "#0B2160", backgroundColor: "#06143D" },
-    choicePillGlowOn: { borderWidth: 2, borderColor: "#3D8BFF", backgroundColor: "#0B2A6B" },
-    choiceTextGlowOn: { color: "#FFFFFF" },
-    choiceText: { fontFamily: theme.mediumFont, fontSize: 16, lineHeight: 20, color: "#00B8FF" },
-    choiceTextActive: { color: "#062063" },
     levelList: {
       gap: 8,
     },
@@ -1426,40 +1255,16 @@ function getStyles(theme: any) {
       alignItems: "center",
       justifyContent: "center",
     },
-    levelOption: {
-      minHeight: 44,
-      borderRadius: 16,
-      borderWidth: 2,
-      borderColor: "#1848BA",
-      backgroundColor: "transparent",
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-    levelOptionActive: {
-      borderColor: "#00BBFF",
-      backgroundColor: "transparent",
-    },
-    levelText: {
-      fontFamily: theme.mediumFont,
-      color: "#1848BA",
-      fontSize: 16,
-      lineHeight: 20,
-    },
-    levelTextActive: {
-      color: "#00BBFF",
-    },
     levelOtherInput: {
       marginTop: 10,
-      minHeight: 50,
-      borderRadius: 16,
-      borderWidth: 2,
-      borderColor: "#1848BA",
-      backgroundColor: "#07256D",
-      color: "#1848BA",
+      minHeight: UI.fieldHeight,
+      borderRadius: UI.radius,
+      borderWidth: 1,
+      borderColor: UI.trackBorder,
+      backgroundColor: UI.surface,
+      color: UI.text,
       fontFamily: theme.mediumFont,
-      fontSize: 16,
+      fontSize: 17,
       paddingHorizontal: 18,
       paddingVertical: 12,
       textAlignVertical: "center",
@@ -1482,23 +1287,11 @@ function getStyles(theme: any) {
       letterSpacing: 1.6,
       fontSize: 18,
     },
-    primaryOuter: { borderRadius: 16, overflow: "hidden" },
-    primaryInner: { minHeight: 54, alignItems: "center", justifyContent: "center", borderRadius: 16 },
-    primaryText: { fontFamily: theme.semiBoldFont, fontSize: 17, color: "#fff" },
-    primaryRow: { flexDirection: "row", alignItems: "center", gap: 8 },
     actionRow: {
       marginTop: 8,
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-    },
-    backButton: {
-      width: 54,
-      height: 54,
-      borderRadius: 12,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: SELECTION_BOX_BG,
     },
   });
 }

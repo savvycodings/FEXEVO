@@ -39,7 +39,7 @@ export function emaAngle(
   return prev * (1 - alpha) + next * alpha
 }
 
-export type JointAngleKind = 'elbow' | 'knee' | 'shoulder'
+export type JointAngleKind = 'elbow' | 'knee' | 'shoulder' | 'wrist' | 'torso' | 'head' | 'ankle' | 'racket'
 
 export type JointAngleDef = {
   id: string
@@ -103,6 +103,42 @@ export const OVERLAY_JOINT_ANGLES: JointAngleDef[] = [
   },
 ]
 
+/** Wrist bend, elbow–wrist–index, as the server measures it. Only drawn when asked for by id. */
+export const WRIST_JOINT_ANGLES: JointAngleDef[] = (['LEFT', 'RIGHT'] as const).map((side) => ({
+  id: `${side}_WRIST`,
+  kind: 'wrist',
+  a: `${side}_ELBOW`,
+  b: `${side}_WRIST`,
+  c: `${side}_INDEX`,
+  color: '#FF2D55',
+}))
+
+/** Head tilt, ear–nose–shoulder (the server's body-mobility head angle). Only drawn when asked for by id. */
+export const HEAD_JOINT_ANGLES: JointAngleDef[] = (['LEFT', 'RIGHT'] as const).map((side) => ({
+  id: `${side}_HEAD`,
+  kind: 'head',
+  a: `${side}_EAR`,
+  b: 'NOSE',
+  c: `${side}_SHOULDER`,
+  color: '#34C759',
+}))
+
+/** Ankle bend, knee–ankle–toe. Only drawn when asked for by id. */
+export const ANKLE_JOINT_ANGLES: JointAngleDef[] = (['LEFT', 'RIGHT'] as const).map((side) => ({
+  id: `${side}_ANKLE`,
+  kind: 'ankle',
+  a: `${side}_KNEE`,
+  b: `${side}_ANKLE`,
+  c: `${side}_FOOT_INDEX`,
+  color: '#00E5FF',
+}))
+
+/** Id prefix of the racket-tilt reading (wrist to index finger, from vertical): `RACKET_LEFT` / `RACKET_RIGHT`. */
+export const RACKET_ANGLE_ID = 'RACKET'
+
+/** Id of the trunk-lean reading (hips to shoulders, from vertical). */
+export const TORSO_ANGLE_ID = 'TORSO'
+
 /** Joint marker colors (mock). */
 export const JOINT_DOT_COLOR: Record<string, string> = {
   LEFT_SHOULDER: '#FFD400',
@@ -135,10 +171,11 @@ export type ComputedJointAngle = {
 export function computeOverlayJointAngles(
   getPx: (name: string) => Pt2 | null,
   landmarks: Record<string, LandmarkPoint>,
-  minVis = JOINT_VISIBILITY_MIN
+  minVis = JOINT_VISIBILITY_MIN,
+  defs: JointAngleDef[] = OVERLAY_JOINT_ANGLES
 ): ComputedJointAngle[] {
   const out: ComputedJointAngle[] = []
-  for (const def of OVERLAY_JOINT_ANGLES) {
+  for (const def of defs) {
     if (
       !landmarkVisOk(landmarks[def.a], minVis) ||
       !landmarkVisOk(landmarks[def.b], minVis) ||
@@ -205,5 +242,106 @@ export function jointLabelOffset(
   return {
     x: vertex.x + Math.cos(mid) * distance,
     y: vertex.y + Math.sin(mid) * distance,
+  }
+}
+
+/**
+ * Trunk lean from vertical, drawn at the hip midpoint (matches the server's torso reading).
+ * `a` is a point straight above the hips, `c` the shoulder midpoint.
+ */
+export function computeTrunkLean(
+  getPx: (name: string) => Pt2 | null,
+  landmarks: Record<string, LandmarkPoint>,
+  minVis = JOINT_VISIBILITY_MIN
+): ComputedJointAngle | null {
+  const names = ['LEFT_HIP', 'RIGHT_HIP', 'LEFT_SHOULDER', 'RIGHT_SHOULDER']
+  if (!names.every((n) => landmarkVisOk(landmarks[n], minVis))) return null
+  const [lh, rh, ls, rs] = names.map(getPx)
+  if (!lh || !rh || !ls || !rs) return null
+  const hips = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 }
+  const shoulders = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 }
+  const len = Math.hypot(shoulders.x - hips.x, shoulders.y - hips.y)
+  if (len < 1) return null
+  const up = { x: hips.x, y: hips.y - len }
+  const deg = angleDeg(up, hips, shoulders)
+  if (deg == null) return null
+  return { id: TORSO_ANGLE_ID, kind: 'torso', deg, color: '#00E5FF', a: up, b: hips, c: shoulders }
+}
+
+/**
+ * Racket tilt from vertical, drawn at the wrist: wrist → index finger stands in for the racket
+ * shaft. `a` is a point straight above the wrist, `c` the index finger.
+ */
+export function computeRacketTilt(
+  getPx: (name: string) => Pt2 | null,
+  landmarks: Record<string, LandmarkPoint>,
+  side: 'LEFT' | 'RIGHT',
+  minVis = JOINT_VISIBILITY_MIN
+): ComputedJointAngle | null {
+  const w = `${side}_WRIST`
+  const i = `${side}_INDEX`
+  if (!landmarkVisOk(landmarks[w], minVis) || !landmarkVisOk(landmarks[i], minVis)) return null
+  const wrist = getPx(w)
+  const index = getPx(i)
+  if (!wrist || !index) return null
+  const len = Math.max(24, Math.hypot(index.x - wrist.x, index.y - wrist.y) * 2)
+  const up = { x: wrist.x, y: wrist.y - len }
+  // Draw the shaft out past the hand so the arc has room.
+  const k = len / Math.max(1, Math.hypot(index.x - wrist.x, index.y - wrist.y))
+  const tip = { x: wrist.x + (index.x - wrist.x) * k, y: wrist.y + (index.y - wrist.y) * k }
+  const deg = angleDeg(up, wrist, tip)
+  if (deg == null) return null
+  return { id: `${RACKET_ANGLE_ID}_${side}`, kind: 'racket', deg, color: '#FF9F0A', a: up, b: wrist, c: tip }
+}
+
+export type PoseAngleJoint = 'head' | 'shoulder' | 'elbow' | 'wrist' | 'torso' | 'knee' | 'feet' | 'racket'
+
+/**
+ * Contact angle from the pose itself, same definitions as the server (jointMetrics.ts).
+ * Used when the joints endpoint has nothing for this shot. Head, feet and racket are client-only.
+ */
+export function poseAngle(
+  row: { landmarks: Record<string, LandmarkPoint | undefined> } | null,
+  joint: PoseAngleJoint,
+  side: 'LEFT' | 'RIGHT'
+): number | null {
+  if (!row) return null
+  const lm = row.landmarks
+  const pt = (n: string) => (landmarkVisOk(lm[n]) ? lm[n]! : null)
+  const tri = (a: string, b: string, c: string) => {
+    const pa = pt(a)
+    const pb = pt(b)
+    const pc = pt(c)
+    return pa && pb && pc ? angleDeg(pa, pb, pc) : null
+  }
+  const S = side
+  switch (joint) {
+    case 'shoulder':
+      return tri(`${S}_ELBOW`, `${S}_SHOULDER`, `${S}_HIP`)
+    case 'elbow':
+      return tri(`${S}_SHOULDER`, `${S}_ELBOW`, `${S}_WRIST`)
+    case 'wrist':
+      return tri(`${S}_ELBOW`, `${S}_WRIST`, `${S}_INDEX`)
+    case 'knee':
+      return tri(`${S}_HIP`, `${S}_KNEE`, `${S}_ANKLE`)
+    case 'head':
+      return tri(`${S}_EAR`, 'NOSE', `${S}_SHOULDER`)
+    case 'feet':
+      return tri(`${S}_KNEE`, `${S}_ANKLE`, `${S}_FOOT_INDEX`)
+    case 'racket': {
+      // Wrist → index finger stands in for the shaft; tilt from vertical.
+      const w = pt(`${S}_WRIST`)
+      const i = pt(`${S}_INDEX`)
+      if (!w || !i || Math.hypot(i.x - w.x, i.y - w.y) < 1e-8) return null
+      return (Math.atan2(Math.abs(i.x - w.x), w.y - i.y) * 180) / Math.PI
+    }
+    case 'torso': {
+      const [lh, rh, ls, rs] = ['LEFT_HIP', 'RIGHT_HIP', 'LEFT_SHOULDER', 'RIGHT_SHOULDER'].map(pt)
+      if (!lh || !rh || !ls || !rs) return null
+      const dx = (ls.x + rs.x - lh.x - rh.x) / 2
+      const up = (lh.y + rh.y - ls.y - rs.y) / 2
+      if (Math.hypot(dx, up) < 1e-8) return null
+      return (Math.atan2(Math.abs(dx), up) * 180) / Math.PI
+    }
   }
 }

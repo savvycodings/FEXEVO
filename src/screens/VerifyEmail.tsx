@@ -10,14 +10,13 @@ import {
   Image,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Rect } from "react-native-svg";
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTranslation } from "react-i18next";
 import { ThemeContext } from "../context";
 import { LanguageToggle } from "../components/LanguageToggle";
 import type { SignUpDraft } from "./SignUp";
 import { TEST_IDS } from '../lib/testIds'
+import { GlowButton, SurfaceIconButton } from "../components/ui";
 import {
   sendSignupVerificationCode,
   verifySignupVerificationCode,
@@ -298,31 +297,15 @@ export function VerifyEmail({ draft, onVerified, onBack }: VerifyEmailProps) {
           </View>
 
           <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.85}>
-              <Ionicons name="chevron-back" size={22} color="#00BBFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.buttonOuter, { flex: 1 }, inputsDisabled && styles.buttonDisabled]}
+            <SurfaceIconButton icon="chevron-back" onPress={onBack} accessibilityLabel={t("common.back")} />
+            <GlowButton
+              style={{ flex: 1 }}
+              label={t("verifyEmail.next")}
               onPress={() => void handleVerify()}
               testID={TEST_IDS.verifySubmit}
-              disabled={inputsDisabled}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={["#0022FF", "#00BBFF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.button}
-              >
-                {verifying ? (
-                  <ActivityIndicator color={theme.tintTextColor} />
-                ) : (
-                  <Text allowFontScaling={false} style={styles.buttonText}>
-                    {t("verifyEmail.next")}
-                  </Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
+              disabled={inputsDisabled && !verifying}
+              loading={verifying}
+            />
           </View>
 
         </View>
@@ -413,32 +396,6 @@ function getStyles(theme: any) {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-    },
-    backButton: {
-      width: 54,
-      height: 54,
-      borderRadius: 12,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: CODE_BOX_BG,
-    },
-    buttonOuter: {
-      borderRadius: 16,
-      overflow: "hidden",
-    },
-    button: {
-      minHeight: 54,
-      borderRadius: 16,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    buttonDisabled: {
-      opacity: 0.7,
-    },
-    buttonText: {
-      fontSize: 17,
-      fontFamily: theme.semiBoldFont,
-      color: theme.tintTextColor,
     },
   });
 }

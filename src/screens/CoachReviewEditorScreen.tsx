@@ -20,7 +20,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import Svg, { Path, Polygon } from 'react-native-svg'
 import { Video, ResizeMode } from 'expo-av'
-import { LinearGradient } from 'expo-linear-gradient'
 import { captureRef } from 'react-native-view-shot'
 import * as VideoThumbnails from '../lib/videoThumbnails'
 import * as FileSystemLegacy from 'expo-file-system/legacy'
@@ -35,6 +34,7 @@ import { useTranslation } from 'react-i18next'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { Header } from '../components/Header'
 import { MainTabBarChrome } from '../components/MainTabBarChrome'
+import { GlowButton, SurfaceIconButton } from '../components/ui'
 import { TEST_IDS } from '../lib/testIds'
 
 const SMALLER_BRUSH_ICON = require('../../assets/videoanalysis/smallericon.svg')
@@ -983,36 +983,18 @@ export function CoachReviewEditorScreen() {
       </View>
 
       <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={styles.backButton}
+        <SurfaceIconButton
+          icon="chevron-back"
           onPress={() => navigation.goBack()}
-          activeOpacity={0.85}
           accessibilityLabel={t('coachReview.backToStudent')}
-        >
-          <Ionicons name="chevron-back" size={22} color="#00BBFF" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.submitButtonOuter, submitting && styles.submitButtonDisabled]}
+        />
+        <GlowButton
+          label={t('coachReview.submitReviews')}
           onPress={() => void submit()}
           testID={TEST_IDS.coachReviewSubmit}
-          disabled={submitting}
-          activeOpacity={0.88}
-        >
-          <LinearGradient
-            colors={['#0022FF', '#00BBFF']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.submitButtonInner}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text allowFontScaling={false} style={[styles.submitButtonText, { fontFamily: theme.semiBoldFont }]}>
-                {t('coachReview.submitReviews')}
-              </Text>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
+          loading={submitting}
+          style={styles.submitButton}
+        />
       </View>
       </KeyboardAwareScrollView>
       <MainTabBarChrome activeTab="MyCoach" />
@@ -1034,31 +1016,8 @@ function getStyles(theme: { backgroundColor?: string; mutedForegroundColor?: str
       gap: 10,
       marginBottom: 16,
     },
-    backButton: {
-      width: 54,
-      height: 54,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'rgba(6, 26, 86, 0.9)',
-    },
-    submitButtonOuter: {
+    submitButton: {
       flex: 1,
-      borderRadius: 16,
-      overflow: 'hidden',
-    },
-    submitButtonDisabled: {
-      opacity: 0.7,
-    },
-    submitButtonInner: {
-      minHeight: 54,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    submitButtonText: {
-      fontSize: 17,
-      color: '#FFFFFF',
     },
     title: { color: '#FFFFFF', fontSize: 24, marginBottom: 14 },
     metaRow: {

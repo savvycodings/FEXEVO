@@ -1,9 +1,10 @@
-import { useContext, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { Circle, Defs, G, Line, Rect, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { TEST_IDS } from '../../lib/testIds'
@@ -98,6 +99,13 @@ function ratingTone(rating: string | null, score: number | null) {
   return 'poor'
 }
 
+/** How often expo-av reports position; the skeleton fills the gaps with a playback clock. */
+const STATUS_INTERVAL_MS = 100
+/** Seek at most this often while dragging, so the decoder keeps up. */
+const SCRUB_SEEK_MS = 80
+/** Exact seeks, so the paused picture matches the slider and the skeleton. */
+const EXACT_SEEK = { toleranceMillisBefore: 0, toleranceMillisAfter: 0 }
+
 function clock(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000))
   const minutes = Math.floor(total / 60)
@@ -126,8 +134,13 @@ export function AnalysisOverview({
   const [trackW, setTrackW] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
+  /** Playback position: the last reported one, advanced by a frame clock while playing. */
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
+  /** Slider position while the finger is on it; overrides playback. */
+  const [scrubMs, setScrubMs] = useState<number | null>(null)
+  const anchor = useRef({ pos: 0, at: 0, rate: 1, playing: false })
+  const scrub = useRef({ wasPlaying: false, lastSeek: 0 })
   const tone = ratingTone(rating, score)
   const toneColor = tone === 'needs_improvement' ? '#FFB020' : tone === 'poor' ? '#FF5A6A' : '#3DDC97'
   const toneLabel =
@@ -141,35 +154,131 @@ export function AnalysisOverview({
             ? t('technique.metrics.good')
             : null
   const progress = score == null ? 0 : Math.max(0, Math.min(1, score / 100))
-  const playProgress = duration > 0 ? Math.max(0, Math.min(1, position / duration)) : 0
+  const shownMs = scrubMs ?? position
+  const playProgress = duration > 0 ? Math.max(0, Math.min(1, shownMs / duration)) : 0
   const frameH = frameW > 0 ? Math.round(frameW * (9 / 16)) : 180
   const pose = useMemo(() => {
     if (!poseFrames?.length || duration <= 0) return null
     const last = poseFrames.reduce((max, row) => Math.max(max, row.frame), 0)
     const total = totalFrames && totalFrames > 1 ? totalFrames : last + 1
-    const idx = Math.round((position / duration) * Math.max(0, total - 1))
+    const idx = Math.round((shownMs / duration) * Math.max(0, total - 1))
     return nearestPoseByFrame(poseFrames, idx)
-  }, [poseFrames, totalFrames, position, duration])
+  }, [poseFrames, totalFrames, shownMs, duration])
 
   function onStatus(status: AVPlaybackStatus) {
     if (!status.isLoaded) return
+    anchor.current = {
+      pos: status.positionMillis,
+      at: Date.now(),
+      rate: status.rate ?? 1,
+      playing: status.isPlaying,
+    }
     setPosition(status.positionMillis)
     setDuration(status.durationMillis ?? 0)
     setPlaying(status.isPlaying)
   }
 
+  // Status only arrives every STATUS_INTERVAL_MS; between reports, advance the position with a
+  // clock so the skeleton moves with the picture instead of jumping behind it.
+  useEffect(() => {
+    if (!playing || scrubMs != null) return
+    let raf = 0
+    let lastFrame = -1
+    const tick = () => {
+      const a = anchor.current
+      if (a.playing) {
+        const est = Math.min(duration || Infinity, a.pos + (Date.now() - a.at) * a.rate)
+        // Re-render once per ~30 fps video frame, not every display refresh.
+        const frame = Math.floor(est / 33)
+        if (frame !== lastFrame) {
+          lastFrame = frame
+          setPosition(est)
+        }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing, scrubMs, duration])
+
   function togglePlay() {
     const video = videoRef.current
     if (!video) return
-    if (playing) void video.pauseAsync()
+    if (playing) {
+      void video.pauseAsync()
+      return
+    }
+    // At the end, play starts over instead of doing nothing.
+    if (duration > 0 && position >= duration - 100) void video.replayAsync()
     else void video.playAsync()
   }
 
-  function seekAt(locationX: number, width: number) {
-    if (duration <= 0 || width <= 0) return
-    const next = Math.max(0, Math.min(1, locationX / width)) * duration
-    void videoRef.current?.setPositionAsync(next)
-  }
+  const msAt = useCallback(
+    (x: number) => (duration > 0 && trackW > 0 ? Math.max(0, Math.min(1, x / trackW)) * duration : 0),
+    [duration, trackW]
+  )
+
+  const scrubStart = useCallback(
+    (x: number) => {
+      scrub.current = { wasPlaying: anchor.current.playing, lastSeek: 0 }
+      onScrubbingChange?.(true)
+      if (anchor.current.playing) void videoRef.current?.pauseAsync()
+      setScrubMs(msAt(x))
+    },
+    [msAt, onScrubbingChange]
+  )
+
+  const scrubMove = useCallback(
+    (x: number) => {
+      const ms = msAt(x)
+      setScrubMs(ms)
+      const now = Date.now()
+      if (now - scrub.current.lastSeek >= SCRUB_SEEK_MS) {
+        scrub.current.lastSeek = now
+        void videoRef.current?.setPositionAsync(ms, EXACT_SEEK)
+      }
+    },
+    [msAt]
+  )
+
+  const scrubEnd = useCallback(
+    (x: number) => {
+      const ms = msAt(x)
+      const video = videoRef.current
+      onScrubbingChange?.(false)
+      setPosition(ms)
+      anchor.current = { ...anchor.current, pos: ms, at: Date.now() }
+      void (async () => {
+        try {
+          await video?.setPositionAsync(ms, EXACT_SEEK)
+          if (scrub.current.wasPlaying) await video?.playAsync()
+        } finally {
+          setScrubMs(null)
+        }
+      })()
+    },
+    [msAt, onScrubbingChange]
+  )
+
+  // Tap or drag anywhere on the track. Coordinates are relative to the whole track, not to the
+  // fill or thumb under the finger.
+  const trackGesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .runOnJS(true)
+      .activeOffsetX([-4, 4])
+      .failOffsetY([-14, 14])
+      .onStart((e) => scrubStart(e.x))
+      .onUpdate((e) => scrubMove(e.x))
+      .onEnd((e) => scrubEnd(e.x))
+    const tap = Gesture.Tap()
+      .runOnJS(true)
+      .onEnd((e, success) => {
+        if (!success) return
+        scrubStart(e.x)
+        scrubEnd(e.x)
+      })
+    return Gesture.Exclusive(pan, tap)
+  }, [scrubStart, scrubMove, scrubEnd])
 
   return (
     <View style={styles.page}>
@@ -195,6 +304,7 @@ export function AnalysisOverview({
                 style={{ width: frameW, height: frameH }}
                 resizeMode={ResizeMode.COVER}
                 onPlaybackStatusUpdate={onStatus}
+                progressUpdateIntervalMillis={STATUS_INTERVAL_MS}
                 onReadyForDisplay={(event) => {
                   const n = event.naturalSize
                   if (n?.width > 0 && n?.height > 0) setNatural({ w: n.width, h: n.height })
@@ -277,15 +387,15 @@ export function AnalysisOverview({
               <Ionicons name="scan-outline" size={16} color="#FFFFFF" />
             </Pressable>
             <View style={styles.controls}>
-              <Pressable style={styles.play} onPress={togglePlay} accessibilityRole="button">
+              <Pressable style={styles.play} onPress={togglePlay} accessibilityRole="button" testID="analysis-video-play">
                 <Ionicons name={playing ? 'pause' : 'play'} size={16} color="#FFFFFF" style={playing ? undefined : styles.playIcon} />
               </Pressable>
-              <Pressable
+              <GestureDetector gesture={trackGesture}>
+              <View
                 style={styles.trackHit}
                 onLayout={(event) => setTrackW(event.nativeEvent.layout.width)}
-                onPressIn={() => onScrubbingChange?.(true)}
-                onPressOut={() => onScrubbingChange?.(false)}
-                onPress={(event) => seekAt(event.nativeEvent.locationX, trackW)}
+                accessibilityRole="adjustable"
+                testID="analysis-video-track"
               >
                 <View style={styles.track}>
                   <LinearGradient
@@ -296,9 +406,10 @@ export function AnalysisOverview({
                   />
                   <View style={[styles.thumb, { left: `${playProgress * 100}%` }]} />
                 </View>
-              </Pressable>
+              </View>
+              </GestureDetector>
               <Text allowFontScaling={false} style={[styles.time, { fontFamily: theme.mediumFont }]}>
-                {clock(position)}/{clock(duration)}
+                {clock(shownMs)}/{clock(duration)}
               </Text>
             </View>
           </View>
@@ -401,7 +512,12 @@ export function AnalysisOverview({
         })}
       </View>
 
-      <Pressable onPress={onBiggestMistakes} accessibilityRole="button" style={styles.primaryGlow}>
+      <Pressable
+        onPress={onBiggestMistakes}
+        accessibilityRole="button"
+        style={styles.primaryGlow}
+        testID="overview-biggest-mistakes"
+      >
         <LinearGradient
           colors={detail === 'mistakes' ? ['#1A8CFF', '#1236C8'] : ['#3EC8FF', '#2454FF']}
           start={{ x: 0, y: 0 }}

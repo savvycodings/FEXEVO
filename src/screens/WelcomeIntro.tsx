@@ -7,25 +7,33 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  PanResponder,
   useWindowDimensions,
 } from 'react-native'
 import { ThemeContext } from '../context'
-import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { StatusBar } from 'expo-status-bar'
-import { WelcomeHeader, LanguageToggle } from '../components'
+import { WelcomeHeader } from '../components'
+import { LocalSvgAsset, prefetchSvgAssets } from '../components/LocalSvgAsset'
+import { GlowButton, SurfaceButton, TextLink, UI } from '../components/ui'
 import { useTranslation } from 'react-i18next'
 import { TEST_IDS } from '../lib/testIds'
 
 const WELCOME_SEEN_KEY = 'xevo_welcome_v1'
 
-const STEP_SEGMENT_COLORS = ['#0022FF', '#005CFF', '#00BBFF'] as const
 const PROGRESS_HEIGHT = 6
+const ICON_SIZE = 36
+const TITLE_LINE = 28
+const BODY_LINE = 21
+/** Two title lines (slide 1) vs one title + two body lines (slides 2–3): reserve the larger. */
+const TEXT_BLOCK_HEIGHT = Math.max(TITLE_LINE * 2, TITLE_LINE + 10 + BODY_LINE * 2)
+/** Horizontal drag (pt) that flips to the next / previous slide. */
+const SWIPE_THRESHOLD = 40
 
 const HERO_IMAGES = [
   require('../../assets/loading/1.png'),
   require('../../assets/loading/2.png'),
-  require('../../assets/loading/3.png'),
+  require('../../assets/loading/3.jpg'),
 ] as const
 
 const ICON_MODULES = [
@@ -33,6 +41,8 @@ const ICON_MODULES = [
   require('../../assets/loading/2icon.svg'),
   require('../../assets/loading/3icon.svg'),
 ] as const
+
+prefetchSvgAssets([...ICON_MODULES])
 
 async function markWelcomeSeen() {
   try {
@@ -42,7 +52,9 @@ async function markWelcomeSeen() {
   }
 }
 
-type Props = { navigation: { navigate: (n: string) => void; replace: (n: string) => void } }
+type Props = {
+  navigation: { navigate: (n: string, params?: object) => void; replace: (n: string) => void }
+}
 
 export function WelcomeIntro({ navigation }: Props) {
   const { t } = useTranslation()
@@ -63,10 +75,23 @@ export function WelcomeIntro({ navigation }: Props) {
   )
 
   const slide = slides[step]
-  const isLast = step === slides.length - 1
+
+  /** Swipe left/right anywhere on the screen to change slide (there is no Next button). */
+  const swipe = React.useMemo(
+    () =>
+      PanResponder.create({
+        // Capture phase so the vertical ScrollView doesn't take clearly horizontal drags first.
+        onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        onPanResponderRelease: (_, g) => {
+          if (g.dx <= -SWIPE_THRESHOLD) setStep((s) => Math.min(s + 1, slides.length - 1))
+          else if (g.dx >= SWIPE_THRESHOLD) setStep((s) => Math.max(s - 1, 0))
+        },
+      }),
+    [slides.length]
+  )
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} {...swipe.panHandlers}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
       <ScrollView
         style={styles.scroll}
@@ -95,66 +120,64 @@ export function WelcomeIntro({ navigation }: Props) {
 
         <View style={styles.lower}>
           <View style={styles.progressWrap}>
-            {[0, 1, 2].map((i) => (
-              <View
+            {slides.map((_, i) => (
+              <TouchableOpacity
                 key={i}
-                style={[
-                  styles.progressSegment,
-                  i <= step && { backgroundColor: STEP_SEGMENT_COLORS[i] },
-                ]}
-              />
+                style={styles.progressHit}
+                onPress={() => setStep(i)}
+                testID={i === step + 1 ? TEST_IDS.welcomeNext : undefined}
+                accessibilityRole="button"
+                accessibilityLabel={`${i + 1} / ${slides.length}`}
+                accessibilityState={{ selected: i === step }}
+              >
+                <View style={[styles.progressSegment, i === step && styles.progressSegmentActive]} />
+              </TouchableOpacity>
             ))}
           </View>
 
+          {/* Fixed-size icon slot + text block sized for the tallest slide, so the buttons never move between slides. */}
           <View style={styles.iconWrap}>
-            <Image source={ICON_MODULES[step]} style={styles.iconImg} resizeMode="contain" />
+            <LocalSvgAsset assetModule={ICON_MODULES[step]} width={ICON_SIZE} height={ICON_SIZE} />
+          </View>
+          <View style={styles.textBlock}>
+            <Text allowFontScaling={false} numberOfLines={2} style={styles.title}>
+              {slide.title}
+            </Text>
+            {slide.body ? (
+              <Text allowFontScaling={false} numberOfLines={2} style={styles.body}>
+                {slide.body}
+              </Text>
+            ) : null}
           </View>
 
-          <Text style={styles.title}>{slide.title}</Text>
-          {slide.body ? <Text style={styles.body}>{slide.body}</Text> : null}
-
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={styles.primaryBtnOuter}
+          <GlowButton
+            label={t('welcome.freeTrial')}
             testID={TEST_IDS.welcomeFreeTrial}
+            style={styles.primaryBtn}
             onPress={async () => {
               await markWelcomeSeen()
               navigation.navigate('SignUp')
             }}
-          >
-            <LinearGradient
-              colors={['#0022FF', '#00BBFF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.primaryBtnInner}
-            >
-              <Text style={styles.primaryBtnText}>{t('welcome.freeTrial')}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          {isLast ? (
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              testID={TEST_IDS.welcomeLogin}
-              onPress={async () => {
-                await markWelcomeSeen()
-                navigation.replace('SignIn')
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.secondaryBtnText}>{t('auth.login')}</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              onPress={() => setStep((s) => Math.min(s + 1, slides.length - 1))}
-              testID={TEST_IDS.welcomeNext}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.secondaryBtnText}>{t('common.next')}</Text>
-            </TouchableOpacity>
-          )}
-          <LanguageToggle />
+          />
+          <SurfaceButton
+            label={t('welcome.coachSignup')}
+            testID={TEST_IDS.welcomeCoachSignup}
+            style={styles.secondaryBtn}
+            onPress={async () => {
+              await markWelcomeSeen()
+              navigation.navigate('SignUp', { coachSignup: true })
+            }}
+          />
+          <TextLink
+            label={t('auth.login')}
+            muted
+            testID={TEST_IDS.welcomeLogin}
+            style={styles.loginLink}
+            onPress={async () => {
+              await markWelcomeSeen()
+              navigation.replace('SignIn')
+            }}
+          />
         </View>
       </ScrollView>
     </View>
@@ -165,14 +188,12 @@ function getStyles(theme: any) {
   return StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: '#030A17',
+      backgroundColor: UI.pageBg,
     },
     scroll: { flex: 1, width: '100%' },
     scrollInner: {
       flexGrow: 1,
       paddingBottom: 28,
-      paddingHorizontal: 0,
-      marginHorizontal: 0,
       width: '100%',
       alignItems: 'stretch',
     },
@@ -205,69 +226,60 @@ function getStyles(theme: any) {
     },
     lower: {
       paddingHorizontal: 24,
-      paddingTop: 18,
+      paddingTop: 14,
     },
     progressWrap: {
       flexDirection: 'row',
-      gap: 8,
-      marginBottom: 18,
+      gap: 4,
+      marginBottom: 16,
       alignSelf: 'center',
-      width: '70%',
+      width: '60%',
+    },
+    progressHit: {
+      flex: 1,
+      paddingVertical: 8,
     },
     progressSegment: {
-      flex: 1,
       height: PROGRESS_HEIGHT,
       borderRadius: PROGRESS_HEIGHT / 2,
-      backgroundColor: 'rgba(255,255,255,0.12)',
+      backgroundColor: UI.track,
+    },
+    progressSegmentActive: {
+      backgroundColor: UI.accent,
     },
     iconWrap: {
       alignItems: 'center',
-      marginBottom: 12,
+      justifyContent: 'center',
+      height: ICON_SIZE,
+      marginBottom: 10,
     },
-    iconImg: {
-      width: 46,
-      height: 46,
+    textBlock: {
+      height: TEXT_BLOCK_HEIGHT,
+      alignItems: 'center',
     },
     title: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 17,
-      color: '#00BBFF',
+      fontFamily: theme.regularFont,
+      fontSize: 22,
+      lineHeight: TITLE_LINE,
+      color: UI.accent,
       textAlign: 'center',
-      marginBottom: 12,
+      marginBottom: 10,
     },
     body: {
       fontFamily: theme.regularFont,
-      fontSize: 14,
-      color: 'rgba(255,255,255,0.78)',
+      fontSize: 15,
+      color: UI.textMuted,
       textAlign: 'center',
-      lineHeight: 21,
-      marginBottom: 28,
+      lineHeight: BODY_LINE,
     },
-    primaryBtnOuter: {
-      borderRadius: 14,
-      overflow: 'hidden',
-      marginTop: 24,
-    },
-    primaryBtnInner: {
-      paddingVertical: 15,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 14,
-    },
-    primaryBtnText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
-      color: '#fff',
+    primaryBtn: {
+      marginTop: 18,
     },
     secondaryBtn: {
       marginTop: 14,
-      paddingVertical: 12,
-      alignItems: 'center',
     },
-    secondaryBtnText: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 16,
-      color: '#8CB0E2',
+    loginLink: {
+      marginTop: 18,
     },
   })
 }

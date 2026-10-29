@@ -19,6 +19,7 @@ export type CameraAngle = {
   hintKey: string
 }
 
+/** Picker order (design): front, back, side, then left-side and right-side 45° pairs. */
 export const CAMERA_ANGLES: CameraAngle[] = [
   {
     id: 'front',
@@ -48,24 +49,6 @@ export const CAMERA_ANGLES: CameraAngle[] = [
     hintKey: 'studentProfile.viewHints.side',
   },
   {
-    id: 'deg45_right_side_left_camera',
-    tile: require('../../assets/angelvideo/angleimages/rightsideleftcam.png'),
-    tileWidth: 85,
-    tileHeight: 132,
-    video: require('../../assets/angelvideo/45rightsideleftcamera.mp4'),
-    labelKey: 'studentProfile.views.deg45RightSideLeftCamera',
-    hintKey: 'studentProfile.viewHints.deg45RightSideLeftCamera',
-  },
-  {
-    id: 'deg45_right_side_right_camera',
-    tile: require('../../assets/angelvideo/angleimages/rightsiderightcam.png'),
-    tileWidth: 85,
-    tileHeight: 132,
-    video: require('../../assets/angelvideo/45rightsiderightcamera.mp4'),
-    labelKey: 'studentProfile.views.deg45RightSideRightCamera',
-    hintKey: 'studentProfile.viewHints.deg45RightSideRightCamera',
-  },
-  {
     id: 'deg45_left_side_right_camera',
     tile: require('../../assets/angelvideo/angleimages/leftsiderightcam.png'),
     tileWidth: 85,
@@ -82,6 +65,24 @@ export const CAMERA_ANGLES: CameraAngle[] = [
     video: require('../../assets/angelvideo/45leftsideleftcamera.mp4'),
     labelKey: 'studentProfile.views.deg45LeftSideLeftCamera',
     hintKey: 'studentProfile.viewHints.deg45LeftSideLeftCamera',
+  },
+  {
+    id: 'deg45_right_side_right_camera',
+    tile: require('../../assets/angelvideo/angleimages/rightsiderightcam.png'),
+    tileWidth: 85,
+    tileHeight: 132,
+    video: require('../../assets/angelvideo/45rightsiderightcamera.mp4'),
+    labelKey: 'studentProfile.views.deg45RightSideRightCamera',
+    hintKey: 'studentProfile.viewHints.deg45RightSideRightCamera',
+  },
+  {
+    id: 'deg45_right_side_left_camera',
+    tile: require('../../assets/angelvideo/angleimages/rightsideleftcam.png'),
+    tileWidth: 85,
+    tileHeight: 132,
+    video: require('../../assets/angelvideo/45rightsideleftcamera.mp4'),
+    labelKey: 'studentProfile.views.deg45RightSideLeftCamera',
+    hintKey: 'studentProfile.viewHints.deg45RightSideLeftCamera',
   },
 ]
 

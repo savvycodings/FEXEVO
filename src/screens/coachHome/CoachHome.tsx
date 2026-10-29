@@ -16,6 +16,7 @@ import Svg, {
   Stop,
 } from 'react-native-svg'
 import { ThemeContext } from '../../context'
+import { CARD_GLOW, UI } from '../../components/ui'
 import { glow } from '../progress/progressTheme'
 import { TEST_IDS } from '../../lib/testIds'
 import type { PhysicalHistoryItem, PhysicalMetricsValues } from '../../lib/physicalMetrics'
@@ -41,7 +42,6 @@ const ICON_METRIC_POWER = require('../../../assets/aicoach/home/icon-metric-powe
 const ICON_METRIC_AGILITY = require('../../../assets/aicoach/home/icon-metric-agility.svg')
 const ICON_METRIC_REACTION = require('../../../assets/aicoach/home/icon-metric-reaction.svg')
 const ICON_METRIC_ACCELERATION = require('../../../assets/aicoach/home/icon-metric-acceleration.svg')
-const ICON_VIEWALL = require('../../../assets/aicoach/home/icon-viewall-arrow.svg')
 const ICON_PLAY = require('../../../assets/aicoach/home/icon-play-btn.svg')
 const ICON_RECORD = require('../../../assets/aicoach/home/icon-record.svg')
 const ICON_GALLERY = require('../../../assets/aicoach/home/icon-gallery.svg')
@@ -242,7 +242,7 @@ export function CoachHome({
             </Text>
             <Text
               allowFontScaling={false}
-              style={[styles.headlineLine, styles.headlineLineDeep, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
+              style={[styles.headlineLine, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
             >
               {t('technique.home.headline2')}
             </Text>
@@ -251,7 +251,7 @@ export function CoachHome({
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.8}
-              style={[styles.headlineSub, { fontFamily: theme.mediumFont }]}
+              style={[styles.headlineSub, { fontFamily: theme.regularFont }]}
             >
               {t('technique.home.headlineSub')}
             </Text>
@@ -437,7 +437,7 @@ function AnalyzeBlock({
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.8}
-                style={[styles.analyzeSub, { fontFamily: fonts.mediumFont }]}
+                style={[styles.analyzeSub, { fontFamily: fonts.regularFont }]}
               >
                 {t('technique.home.analyzeSubtitle')}
               </Text>
@@ -1046,10 +1046,10 @@ function LatestCard({
           {t('technique.home.latest')}
         </Text>
         <Pressable accessibilityRole="button" onPress={onPress} hitSlop={8} style={styles.viewAllBtn}>
-          <Text allowFontScaling={false} style={[styles.viewAll, { fontFamily: fonts.lightFont ?? fonts.regularFont }]}>
+          <Text allowFontScaling={false} style={[styles.viewAll, { fontFamily: fonts.regularFont }]}>
             {t('technique.home.viewAll')}
           </Text>
-          <Image source={ICON_VIEWALL} style={styles.viewAllArrow} contentFit="contain" />
+          <Ionicons name="chevron-forward" size={14} color={UI.textMuted} />
         </Pressable>
       </View>
       {metrics ? <MetricChips metrics={metrics} fonts={fonts} /> : null}
@@ -1141,9 +1141,10 @@ const styles = StyleSheet.create({
   },
   heroFlex: { flex: 1, minHeight: 180, alignSelf: 'stretch' },
   headline: { gap: 2 },
-  headlineLine: { color: '#00C2FF', fontSize: 30, lineHeight: 34, letterSpacing: -0.4 },
-  headlineLineDeep: { color: '#3B6DFF' },
-  headlineSub: { color: '#9BB0D0', fontSize: 12, marginTop: 8, lineHeight: 16 },
+  /** Both lines share the greeting name's blue (design). */
+  headlineLine: { color: '#00C2FF', fontSize: 26, lineHeight: 30, letterSpacing: -0.4 },
+  /** Web has no `adjustsFontSizeToFit`, so it starts a size smaller to keep the full line. */
+  headlineSub: { color: '#9BB0D0', fontSize: Platform.OS === 'web' ? 11 : 12, marginTop: 8, lineHeight: 16 },
   heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '58%' },
   heroOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 28, paddingBottom: 18 },
   analyzeWrap: { gap: 20 },
@@ -1211,7 +1212,7 @@ const styles = StyleSheet.create({
   },
   analyzeCopy: { flex: 1, minWidth: 0, gap: 2 },
   analyzeTitle: { color: '#FFFFFF', fontSize: 16, lineHeight: 20 },
-  analyzeSub: { color: 'rgba(255, 255, 255, 0.62)', fontSize: 12, lineHeight: 16 },
+  analyzeSub: { color: 'rgba(255, 255, 255, 0.62)', fontSize: Platform.OS === 'web' ? 11 : 12, lineHeight: 16 },
   arrowBtn: {
     width: 48,
     height: 48,
@@ -1243,17 +1244,18 @@ const styles = StyleSheet.create({
   sourceLabel: { flex: 1, color: '#FFFFFF', fontSize: 11, lineHeight: 13, letterSpacing: -0.2 },
   pressed: { opacity: 0.82 },
   coachSlot: { width: '100%' },
+  /** Same glass card as onboarding: subtle blue edge, not the bright cyan one. */
   performanceCard: {
-    borderRadius: 20,
+    borderRadius: UI.radiusCard,
     borderWidth: 1,
-    borderColor: '#00B8FF',
-    backgroundColor: '#001435',
+    borderColor: UI.trackBorder,
+    backgroundColor: UI.cardBg,
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 18,
     gap: 12,
     overflow: 'hidden',
-    boxShadow: 'inset 0px 0px 20px 0px rgba(0, 72, 255, 0.55)',
+    ...CARD_GLOW,
   },
   performanceHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   performanceTitle: { color: '#00B8FF', fontSize: 16, flex: 1 },
@@ -1336,8 +1338,8 @@ const styles = StyleSheet.create({
   latestHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   latestTitle: { color: '#00B8FF', fontSize: 16 },
   viewAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  viewAll: { color: 'rgba(0, 184, 255, 0.5)', fontSize: 16 },
-  viewAllArrow: { width: 22, height: 22, transform: [{ rotate: '-90deg' }] },
+  /** Small muted "View all ›" (design). */
+  viewAll: { color: UI.textMuted, fontSize: 14 },
   latestCard: {
     minHeight: 116,
     borderRadius: 20,

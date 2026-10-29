@@ -6,7 +6,6 @@ import {
   Image,
   PanResponder,
   Modal,
-  TouchableOpacity,
   Pressable,
   Platform,
   useWindowDimensions,
@@ -17,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Defs, RadialGradient as SvgRadialGradient, Stop, Circle as SvgCircle } from 'react-native-svg'
 import { ThemeContext } from '../context'
 import { ProLibraryGradientFrame } from './ProLibraryGradientFrame'
+import { GlowButton } from './ui'
 
 const COURT_IMG = require('../../assets/game/courtgame.png')
 const PADDLE_IMG = require('../../assets/game/padle.png')
@@ -776,24 +776,12 @@ export function PaddlePongGame({ paused = false }: Props) {
                 <Text allowFontScaling={false} style={styles.modalScore}>
                   {formatScore(missScore)}
                 </Text>
-                <TouchableOpacity
-                  style={styles.retryOuter}
+                <GlowButton
+                  label="Retry"
                   onPress={onRetry}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
                   accessibilityLabel="Retry"
-                >
-                  <LinearGradient
-                    colors={['#00BBFF', '#0022FF']}
-                    start={{ x: 0, y: 0.5 }}
-                    end={{ x: 1, y: 0.5 }}
-                    style={styles.retryGradient}
-                  >
-                    <Text allowFontScaling={false} style={styles.retryText}>
-                      Retry
-                    </Text>
-                  </LinearGradient>
-                </TouchableOpacity>
+                  style={styles.retryButton}
+                />
               </View>
             </ProLibraryGradientFrame>
           </View>
@@ -873,23 +861,9 @@ function getStyles(theme: {
       letterSpacing: 2,
       textAlign: 'center',
     },
-    retryOuter: {
+    retryButton: {
       marginTop: 24,
       width: '100%',
-      borderRadius: 16,
-      overflow: 'hidden',
-    },
-    retryGradient: {
-      minHeight: 54,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 20,
-    },
-    retryText: {
-      color: '#FFFFFF',
-      fontFamily: theme.semiBoldFont ?? 'System',
-      fontSize: 16,
     },
   })
 }
