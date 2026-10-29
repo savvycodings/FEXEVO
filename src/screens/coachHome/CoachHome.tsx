@@ -131,6 +131,7 @@ export function CoachHome({
     }, [load])
   )
 
+  const [periodDays, setPeriodDays] = useState<PeriodDays>(30)
   const firstName = displayName.trim().split(/\s+/)[0] || t('technique.home.player')
   const hasHistory = ready && ((history?.length ?? 0) > 0 || latest != null)
   const newest = history?.[0] ?? null
@@ -150,21 +151,20 @@ export function CoachHome({
       const age = now - at
       return age > minDays * day && age <= maxDays * day
     })
-  const last30Items = inWindow(-1, 30)
-  const prior30Items = inWindow(30, 60)
+  const period = PERIODS.find((p) => p.days === periodDays) ?? PERIODS[1]
+  const periodItems = inWindow(-1, period.days)
+  const priorItems = inWindow(period.days, period.days * 2)
   let delta: number | null = null
-  let deltaCaption = t('technique.home.vsLastMonth')
-  const last30Avg = average(last30Items.map((item) => item.score as number))
-  const prior30Avg = average(prior30Items.map((item) => item.score as number))
-  if (last30Avg != null && prior30Avg != null) {
-    delta = Math.round(last30Avg - prior30Avg)
-    deltaCaption = t('technique.home.vsLastMonth')
+  let deltaCaption = t(period.vsKey)
+  const periodAvg = average(periodItems.map((item) => item.score as number))
+  const priorAvg = average(priorItems.map((item) => item.score as number))
+  if (periodAvg != null && priorAvg != null) {
+    delta = Math.round(periodAvg - priorAvg)
   } else if (scoredItems.length >= 2) {
     delta = Math.round((scoredItems[0].score as number) - (scoredItems[1].score as number))
     deltaCaption = t('technique.home.vsLastSession')
   }
-  const windowLabel = t('technique.home.last30')
-  const bars = last30Items
+  const bars = periodItems
     .slice()
     .reverse()
     .slice(-12)
@@ -276,7 +276,8 @@ export function CoachHome({
           delta={delta}
           deltaCaption={deltaCaption}
           bars={bars}
-          windowLabel={windowLabel}
+          periodDays={period.days}
+          onPeriodChange={setPeriodDays}
           fonts={theme}
         />
       ) : null}
@@ -773,22 +774,35 @@ function MetricChips({
   )
 }
 
+type PeriodDays = 7 | 30 | 90
+
+/** Windows the performance card can show; each is compared with the window just before it. */
+const PERIODS: { days: PeriodDays; labelKey: string; vsKey: string }[] = [
+  { days: 7, labelKey: 'technique.home.last7', vsKey: 'technique.home.vsLastWeek' },
+  { days: 30, labelKey: 'technique.home.last30', vsKey: 'technique.home.vsLastMonth' },
+  { days: 90, labelKey: 'technique.home.last90', vsKey: 'technique.home.vsPrevious90' },
+]
+
 function PerformanceCard({
   score,
   delta,
   deltaCaption,
   bars,
-  windowLabel,
+  periodDays,
+  onPeriodChange,
   fonts,
 }: {
   score: number | null
   delta: number | null
   deltaCaption: string
   bars: number[]
-  windowLabel: string
+  periodDays: PeriodDays
+  onPeriodChange: (days: PeriodDays) => void
   fonts: Fonts
 }) {
   const { t } = useTranslation()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const current = PERIODS.find((p) => p.days === periodDays) ?? PERIODS[1]
   const shown = score == null ? null : Math.round(Math.max(0, Math.min(100, score)))
   const deltaLabel =
     delta == null ? null : `${delta > 0 ? '+' : ''}${delta}%`
@@ -810,14 +824,49 @@ function PerformanceCard({
           >
             {t('technique.home.performance')}
           </Text>
-          <View style={styles.windowPill}>
+          <Pressable
+            onPress={() => setMenuOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: menuOpen }}
+            hitSlop={6}
+            style={styles.windowPill}
+            testID="home-performance-period"
+          >
             <Ionicons name="calendar-outline" size={14} color="#FFFFFF" />
             <Text allowFontScaling={false} style={[styles.windowText, { fontFamily: fonts.regularFont }]}>
-              {windowLabel}
+              {t(current.labelKey)}
             </Text>
-            <Ionicons name="chevron-down" size={12} color="#FFFFFF" />
-          </View>
+            <Ionicons name={menuOpen ? 'chevron-up' : 'chevron-down'} size={12} color="#FFFFFF" />
+          </Pressable>
         </View>
+        {menuOpen ? (
+          <View style={styles.periodMenu} accessibilityRole="tablist">
+            {PERIODS.map((p) => {
+              const on = p.days === periodDays
+              return (
+                <Pressable
+                  key={p.days}
+                  onPress={() => {
+                    onPeriodChange(p.days)
+                    setMenuOpen(false)
+                  }}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  style={[styles.periodOption, on && styles.periodOptionOn]}
+                  testID={`home-performance-period-${p.days}`}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    numberOfLines={1}
+                    style={[styles.periodOptionText, on && styles.periodOptionTextOn, { fontFamily: fonts.mediumFont }]}
+                  >
+                    {t(p.labelKey)}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        ) : null}
         <View style={styles.performanceBody}>
           <ScoreRing score={shown} font={fonts.mediumFont ?? fonts.semiBoldFont} size={102} accent />
           <View style={styles.deltaCol}>
@@ -1269,6 +1318,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   windowText: { color: '#FFFFFF', fontSize: 11 },
+  periodMenu: { flexDirection: 'row', gap: 6 },
+  periodOption: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 184, 255, 0.35)',
+    backgroundColor: 'rgba(0, 25, 80, 0.5)',
+  },
+  periodOptionOn: { backgroundColor: '#0A5BD8', borderColor: '#00B8FF' },
+  periodOptionText: { color: '#86A7D2', fontSize: 11 },
+  periodOptionTextOn: { color: '#FFFFFF' },
   performanceBody: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   deltaCol: { flex: 1, minWidth: 0, gap: 2 },
   deltaValue: { color: '#00FFA6', fontSize: 22 },

@@ -1,12 +1,26 @@
-import { Fragment, useContext, useEffect, useState } from 'react'
-import { ActivityIndicator, BackHandler, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Fragment, useContext, useEffect, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  BackHandler,
+  Image,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native'
+import { Audio, InterruptionModeIOS, ResizeMode, Video, type AVPlaybackStatus } from 'expo-av'
+import { File, Paths } from 'expo-file-system'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import Svg, { Circle, Line } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
-import { useHologram, type HologramKeypoints } from '../../lib/hologramJob'
+import { useHologram, type HologramKeypoints, type HologramOrbitFrame } from '../../lib/hologramJob'
 import { useContactJoints, type ContactJoint } from '../../lib/jointsApi'
 import { JointDetailView } from './JointDetailView'
 
@@ -81,12 +95,62 @@ function partKeypoints(part: BodyPart, side: 'LEFT' | 'RIGHT'): string[] {
   }
 }
 
-/** Joint markers over a square hologram drawn with resizeMode="cover" in a w x h stage. */
-function JointMarkers({ keypoints, w, h, lit }: { keypoints: HologramKeypoints; w: number; h: number; lit: string[] }) {
-  const d = Math.max(w, h)
+/** MediaPipe frame closest to the scrub position. */
+function orbitKeypointsAt(frames: HologramOrbitFrame[] | null, index: number): HologramKeypoints | null {
+  if (!frames?.length) return null
+  let best = frames[0]
+  let dist = Math.abs(best.frame - index)
+  for (const row of frames) {
+    const d = Math.abs(row.frame - index)
+    if (d < dist) {
+      best = row
+      dist = d
+    }
+  }
+  return best.keypoints
+}
+
+/**
+ * The orbit file is the square hologram still with black bars above and below.
+ * Draw the full frame so those bars fall outside the stage and the still fills it.
+ */
+function orbitPlacement(stageW: number, stageH: number, videoW: number, videoH: number) {
+  const side = Math.min(videoW, videoH)
+  const scale = Math.max(stageW / side, stageH / side)
+  const w = videoW * scale
+  const h = videoH * scale
+  const contentX = ((videoW - side) / 2) * scale
+  const contentY = ((videoH - side) / 2) * scale
+  return {
+    x: (stageW - side * scale) / 2 - contentX,
+    y: (stageH - side * scale) / 2 - contentY,
+    w,
+    h,
+  }
+}
+
+/** Joint markers. 0..1 follows the orbit frame, including the part that hangs outside the card. */
+function JointMarkers({
+  keypoints,
+  w,
+  h,
+  lit,
+  video,
+}: {
+  keypoints: HologramKeypoints
+  w: number
+  h: number
+  lit: string[]
+  video: { x: number; y: number; w: number; h: number } | null
+}) {
   const at = (name: string) => {
     const p = keypoints[name]
-    return p ? { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d } : null
+    if (!p) return null
+    if (!video) {
+      const d = Math.max(w, h)
+      return { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d }
+    }
+    return { x: video.x + p.x * video.w, y: video.y + p.y * video.h }
   }
   const names = [...BASE_MARKERS, ...lit.filter((name) => !BASE_MARKERS.includes(name))]
   return (
@@ -125,17 +189,123 @@ export function Smart3DView({ analysisId, onClose }: Props) {
   const hologram = useHologram(analysisId)
   const contactJoints = useContactJoints(analysisId)
   const [detail, setDetail] = useState<ContactJoint | null>(null)
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 })
+  const videoRef = useRef<Video>(null)
+  const [orbitIndex, setOrbitIndex] = useState(0)
+  const [playbackUri, setPlaybackUri] = useState<string | null>(null)
+  const orbitIndexRef = useRef(0)
+  const iosPrimed = useRef(false)
+  const grantIndex = useRef(0)
+  const stageWRef = useRef(1)
+  const frameCountRef = useRef(2)
+  const durationRef = useRef(4000)
+  const seekGen = useRef(0)
+  const seekQueue = useRef<{ ms: number | null; running: boolean }>({ ms: null, running: false })
+  const showOrbit = layer === 'player' && Boolean(hologram.orbitVideo)
+  frameCountRef.current = Math.max(2, hologram.orbitFrameCount ?? 2)
+  durationRef.current = hologram.orbitDurationMs && hologram.orbitDurationMs > 0 ? hologram.orbitDurationMs : 4000
+  const stageWidth = Math.max(1, windowWidth - 32)
+  // The visible picture is the square still. The 9:16 file's black bars are cropped off.
+  const naturalHeight = stageWidth
+  const maxHeight = Math.max(280, windowHeight - (300 + insets.bottom))
+  const stageHeight = Math.min(naturalHeight, maxHeight)
+
+  useEffect(() => {
+    setOrbitIndex(0)
+    orbitIndexRef.current = 0
+  }, [hologram.orbitVideo])
+
+  // iOS AVPlayer often never paints a remote, paused clip. Save the file, then play it from disk.
+  useEffect(() => {
+    const remote = hologram.orbitVideo
+    setPlaybackUri(null)
+    iosPrimed.current = false
+    if (!remote) return
+    let cancelled = false
+    const name = remote.split('/').pop()?.split('?')[0] || 'orbit.mp4'
+    void (async () => {
+      try {
+        const file = await File.downloadFileAsync(remote, new File(Paths.cache, name), { idempotent: true })
+        if (!cancelled) setPlaybackUri(file.uri)
+      } catch {
+        if (!cancelled) setPlaybackUri(remote)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [hologram.orbitVideo])
+
+  function seekOrbit(index: number) {
+    const last = frameCountRef.current - 1
+    const clamped = Math.min(last, Math.max(0, index))
+    orbitIndexRef.current = clamped
+    setOrbitIndex(clamped)
+    const q = seekQueue.current
+    q.ms = (clamped / last) * durationRef.current
+    if (q.running) return
+    q.running = true
+    const pump = async () => {
+      while (q.ms != null) {
+        const next = q.ms
+        q.ms = null
+        seekGen.current += 1
+        try {
+          await videoRef.current?.setPositionAsync(next)
+        } catch {
+          /* the next drag sends a fresh position */
+        }
+      }
+      q.running = false
+    }
+    void pump()
+  }
+
+  function scrubMillis() {
+    const last = Math.max(frameCountRef.current - 1, 1)
+    return (orbitIndexRef.current / last) * durationRef.current
+  }
+
+  function onOrbitStatus(status: AVPlaybackStatus) {
+    if (Platform.OS !== 'ios' || !status.isLoaded || iosPrimed.current) return
+    if (!status.isPlaying || status.positionMillis < 80) return
+    iosPrimed.current = true
+    void videoRef.current?.setStatusAsync({ shouldPlay: false, positionMillis: scrubMillis() })
+  }
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6,
+      onPanResponderGrant: () => {
+        grantIndex.current = orbitIndexRef.current
+      },
+      onPanResponderMove: (_, g) => {
+        const last = frameCountRef.current - 1
+        const delta = (g.dx / Math.max(stageWRef.current, 1)) * last
+        seekOrbit(grantIndex.current + delta)
+      },
+      onPanResponderTerminationRequest: () => false,
+    })
+  ).current
   /** Player hologram is blue; the pro reference is the red render of the matched library clip. */
   const holoImage = layer === 'pro' ? hologram.proImage : hologram.image
   const holoKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
   const building =
     layer === 'pro'
       ? hologram.proStatus === 'running'
-      : hologram.status === 'running' || (layer === 'overlay' && hologram.proStatus === 'running')
+      : hologram.status === 'running' ||
+        (layer === 'player' && hologram.orbitStatus === 'running' && !hologram.orbitVideo) ||
+        (layer === 'overlay' && hologram.proStatus === 'running')
   /** Pro tab with nothing to draw: no matched pro clip, or its render failed or never started. */
   const proMissing = layer === 'pro' && !hologram.proImage && hologram.proStatus !== 'running'
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
+  const markerKeys = showOrbit ? orbitKeypointsAt(hologram.orbitFrames, orbitIndex) : holoKeys
+  const placed =
+    showOrbit && hologram.orbitWidth && hologram.orbitHeight
+      ? orbitPlacement(stageSize.w || stageWidth, stageSize.h || stageHeight, hologram.orbitWidth, hologram.orbitHeight)
+      : null
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -173,8 +343,10 @@ export function Smart3DView({ analysisId, onClose }: Props) {
     )
   }
 
+  const pictureUri = showOrbit ? playbackUri : null
+
   return (
-    <View style={[styles.screen, { paddingBottom: 8 + insets.bottom }]}>
+    <View style={styles.screen}>
       <View style={styles.titleRow}>
         <Pressable
           accessibilityRole="button"
@@ -191,23 +363,80 @@ export function Smart3DView({ analysisId, onClose }: Props) {
       </View>
       <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} trackStyle={styles.pill} />
       <View
-        style={styles.stage}
-        onLayout={(e) => setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+        style={[styles.stage, Platform.OS === 'ios' && styles.stageIos, { height: stageHeight }]}
+        onLayout={(e) => {
+          stageWRef.current = e.nativeEvent.layout.width
+          setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
+        }}
       >
-        {holoImage ? (
+        {pictureUri ? (
+          <Video
+            ref={videoRef}
+            source={{ uri: pictureUri }}
+            resizeMode={ResizeMode.COVER}
+            isMuted
+            progressUpdateIntervalMillis={100}
+            usePoster={Platform.OS === 'ios' && Boolean(holoImage)}
+            posterSource={Platform.OS === 'ios' && holoImage ? { uri: holoImage } : undefined}
+            onLoad={() => {
+              const player = videoRef.current
+              if (!player) return
+              if (Platform.OS === 'ios') {
+                iosPrimed.current = false
+                void Audio.setAudioModeAsync({
+                  allowsRecordingIOS: false,
+                  playsInSilentModeIOS: true,
+                  staysActiveInBackground: false,
+                  interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+                }).finally(() => player.playAsync())
+                return
+              }
+              const gen = seekGen.current
+              const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
+              void player
+                .playAsync()
+                .then(() => player.pauseAsync())
+                .then(() => {
+                  if (seekGen.current !== gen) return
+                  return player.setPositionAsync(at)
+                })
+            }}
+            onPlaybackStatusUpdate={onOrbitStatus}
+            onError={() => {
+              if (pictureUri !== hologram.orbitVideo && hologram.orbitVideo) setPlaybackUri(hologram.orbitVideo)
+            }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: stageSize.w || stageWidth,
+              height: stageSize.h || stageHeight,
+            }}
+          />
+        ) : null}
+        {!pictureUri && holoImage ? (
           <Image source={{ uri: holoImage }} resizeMode="cover" style={StyleSheet.absoluteFill} />
-        ) : (
+        ) : !pictureUri ? (
           <Image
             source={BODY}
             resizeMode="cover"
             style={[StyleSheet.absoluteFill, layer === 'pro' && styles.bodyGhost]}
           />
-        )}
+        ) : null}
         {layer === 'overlay' && hologram.proImage ? (
           <Image source={{ uri: hologram.proImage }} resizeMode="cover" style={[StyleSheet.absoluteFill, { opacity: 0.72 }]} />
         ) : null}
-        {holoImage && holoKeys && stageSize.w ? (
-          <JointMarkers keypoints={holoKeys} w={stageSize.w} h={stageSize.h} lit={lit} />
+        {markerKeys && stageSize.w ? (
+          <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
+        ) : null}
+        {showOrbit ? <View style={StyleSheet.absoluteFill} {...pan.panHandlers} /> : null}
+        {proMissing ? (
+          <View pointerEvents="none" style={styles.proMissing} testID="smart3d-pro-missing">
+            <Ionicons name="ribbon-outline" size={28} color="#7AECFF" />
+            <Text allowFontScaling={false} style={[styles.proMissingLabel, { fontFamily: theme.mediumFont }]}>
+              {t('analysis.smart3dProMissing')}
+            </Text>
+          </View>
         ) : null}
         {proMissing ? (
           <View pointerEvents="none" style={styles.proMissing} testID="smart3d-pro-missing">
@@ -221,15 +450,18 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           <View pointerEvents="none" style={styles.building}>
             <ActivityIndicator size="small" color="#7AECFF" />
             <Text allowFontScaling={false} style={[styles.buildingLabel, { fontFamily: theme.mediumFont }]}>
-              {t('analysis.smart3dHologramBuilding')}
+              {t(hologram.status === 'done' ? 'analysis.smart3dOrbitBuilding' : 'analysis.smart3dHologramBuilding')}
             </Text>
           </View>
         ) : null}
       </View>
-      <Text allowFontScaling={false} style={[styles.prompt, { fontFamily: theme.mediumFont }]}>
-        {t('analysis.smart3dSelectPart')}
-      </Text>
-      <View style={styles.parts}>
+      <ScrollView style={styles.partsScroll} contentContainerStyle={{ paddingBottom: 8 + insets.bottom }}>
+      {showOrbit ? null : (
+        <Text allowFontScaling={false} style={[styles.prompt, { fontFamily: theme.mediumFont }]}>
+          {t('analysis.smart3dSelectPart')}
+        </Text>
+      )}
+      <View style={[styles.parts, showOrbit && styles.partsAfterOrbit]}>
         {PART_ROWS.map((row, index) => (
           <View key={index} style={styles.partRow}>
             {row.map((item) => {
@@ -255,6 +487,7 @@ export function Smart3DView({ analysisId, onClose }: Props) {
           </View>
         ))}
       </View>
+      </ScrollView>
     </View>
   )
 }
@@ -266,12 +499,14 @@ const styles = StyleSheet.create({
   title: { color: '#FFFFFF', fontSize: 24 },
   pill: { marginBottom: 12 },
   stage: {
-    flex: 1,
-    minHeight: 260,
+    width: '100%',
     borderRadius: 24,
     backgroundColor: '#020A1C',
     overflow: 'hidden',
   },
+  // overflow:hidden on the parent keeps AVPlayerLayer from drawing on iOS.
+  stageIos: { overflow: 'visible' },
+  partsScroll: { flex: 1 },
   bodyGhost: { opacity: 0.42 },
   building: {
     position: 'absolute',
@@ -294,6 +529,7 @@ const styles = StyleSheet.create({
   proMissingLabel: { color: '#BFE6FF', fontSize: 15, lineHeight: 21, textAlign: 'center' },
   prompt: { color: '#5E8FD0', fontSize: 18, textAlign: 'center', marginTop: 14, marginBottom: 12 },
   parts: { gap: 10 },
+  partsAfterOrbit: { marginTop: 14 },
   partRow: { flexDirection: 'row', gap: 10 },
   part: {
     flex: 1,

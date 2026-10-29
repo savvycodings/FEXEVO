@@ -2897,6 +2897,18 @@ export function Technique() {
             onProfileChanged={invalidateSessionData}
             onClose={() => setResultsDetail('mistakes')}
           />
+        ) : step === 3 && resultsDetail === 'correct' ? (
+          <CorrectMovementView
+            analysisId={analysisId}
+            originalUri={uploadedVideoUrl}
+            originalAspect={
+              trimPreviewNaturalSize && trimPreviewNaturalSize.w > 0
+                ? trimPreviewNaturalSize.h / trimPreviewNaturalSize.w
+                : null
+            }
+            onProfileChanged={invalidateSessionData}
+            onClose={() => setResultsDetail('mistakes')}
+          />
         ) : step === 3 && resultsDetail === 'mistakes' ? (
           <BiggestMistakesView
             videoUri={uploadedVideoUrl}
