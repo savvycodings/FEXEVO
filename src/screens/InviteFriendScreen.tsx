@@ -28,7 +28,7 @@ import { ThemeContext } from "../context";
 import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { PersonCard } from "../components/PersonCard";
-import { GlowButton, SegmentedToggle, SELECTED_GLOW, UI } from "../components/ui";
+import { CARD_GLOW, GlowButton, SegmentedToggle, SELECTED_GLOW, UI } from "../components/ui";
 import { useSessionData } from "../context/SessionDataContext";
 import { findCountry } from "../lib/countries";
 import { fetchMyFriends, type Friend } from "../lib/friendsApi";
@@ -47,12 +47,17 @@ type InviteSegment = "friends" | "coaches" | "clubs";
 type FriendsView = "mine" | "requests";
 type CoachFilter = "all" | "nearby";
 type CoachSort = "relevance" | "rating" | "name";
+type ClubFilter = "all" | "near" | "courts";
+
+function clubCityLabel(club: ClubSummary): string | null {
+  return [club.city, club.country].filter(Boolean).join(", ") || null;
+}
 
 const PLACEHOLDER = "rgba(255, 255, 255, 0.85)";
 
 /** CClub banners 370×160 */
 const CLUB_BANNER_ASPECT = 160 / 370;
-const CLUB_AVATAR = 44;
+const CLUB_AVATAR = 56;
 
 function matchesQuery(query: string, fields: Array<string | null | undefined>): boolean {
   const needle = query.trim().toLowerCase();
@@ -75,6 +80,9 @@ export function InviteFriendScreen() {
   const [coachFilter, setCoachFilter] = useState<CoachFilter>("all");
   const [sort, setSort] = useState<CoachSort>("relevance");
   const [sortOpen, setSortOpen] = useState(false);
+  const [clubFilter, setClubFilter] = useState<ClubFilter>("all");
+  const [clubCity, setClubCity] = useState<string | null>(null);
+  const [cityOpen, setCityOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   const [clubs, setClubs] = useState<ClubSummary[] | null>(null);
@@ -114,12 +122,30 @@ export function InviteFriendScreen() {
     return friends.filter((f) => matchesQuery(query, [f.name, f.username, f.areaLocation]));
   }, [friends, query]);
 
+  const clubCities = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of clubs ?? []) {
+      const label = clubCityLabel(c);
+      if (label) set.add(label);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [clubs]);
+
   const visibleClubs = useMemo(() => {
     if (clubs == null) return null;
-    return clubs.filter((club) =>
-      matchesQuery(query, [club.name, club.city, club.country, club.region, club.address]),
-    );
-  }, [clubs, query]);
+    const list = clubs.filter((club) => {
+      const country = findCountry(club.country ?? "");
+      if (
+        !matchesQuery(query, [club.name, club.city, club.country, country?.name, club.region, club.address])
+      )
+        return false;
+      if (clubCity && clubCityLabel(club) !== clubCity) return false;
+      if (clubFilter === "near") return myCountry != null && country?.code === myCountry;
+      return true;
+    });
+    if (clubFilter === "courts") list.sort((a, b) => b.courts.length - a.courts.length);
+    return list;
+  }, [clubs, query, clubFilter, clubCity, myCountry]);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,7 +163,8 @@ export function InviteFriendScreen() {
     };
   }, []);
 
-  const cardW = winW - 40;
+  /** Club card: page padding 20 each side, 1px border each side. */
+  const cardW = winW - 42;
   const bannerH = cardW * CLUB_BANNER_ASPECT;
 
   const searchPlaceholder =
@@ -257,40 +284,59 @@ export function InviteFriendScreen() {
       <ActivityIndicator style={styles.listLoading} color={UI.accent} />
     ) : visibleClubs.length === 0 ? (
       <Text style={styles.emptyListText}>
-        {clubs != null && clubs.length > 0 ? "No clubs match your search" : "No clubs yet"}
+        {clubs != null && clubs.length === 0
+          ? t("inviteExtra.noClubs")
+          : clubFilter === "near" && !query.trim() && !clubCity
+            ? t("inviteExtra.noNearbyClubs")
+            : t("inviteExtra.noClubsMatch")}
       </Text>
     ) : (
-      <View style={styles.clubsList}>
-        {visibleClubs.map((club, index) => {
-          const subtitle = [club.city, club.country].filter(Boolean).join(", ");
+      <View style={styles.cardList}>
+        {visibleClubs.map((club) => {
+          const place = [club.city, club.region, findCountry(club.country ?? "")?.name ?? club.country]
+            .filter(Boolean)
+            .join(", ");
           return (
             <TouchableOpacity
               key={club.id}
               activeOpacity={0.9}
-              style={index > 0 ? styles.clubCardFollow : undefined}
+              style={styles.clubCard}
               onPress={() => navigation.navigate("ClubDetail", { clubId: club.slug })}
               accessibilityRole="button"
               accessibilityLabel={club.name}
             >
-              <View style={[styles.clubBannerOuter, { borderRadius: 16 }]}>
+              <View>
                 <ClubBannerImage uri={clubBannerUri(club)} width={cardW} height={bannerH} />
+                {club.courts.length > 0 ? (
+                  <View style={styles.bannerPill}>
+                    <Ionicons name="tennisball-outline" size={13} color="#FFFFFF" />
+                    <Text allowFontScaling={false} style={styles.bannerPillText}>
+                      {club.courts.length === 1
+                        ? t("inviteExtra.oneCourt")
+                        : t("inviteExtra.courts", { count: club.courts.length })}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
               <View style={styles.clubProfileRow}>
-                <View style={styles.clubAvatarSlot}>
+                <View style={styles.clubLogoRing}>
                   <ClubPfpImage uri={clubLogoUri(club)} size={CLUB_AVATAR} fallbackLabel={club.name} />
                 </View>
                 <View style={styles.clubTextCol}>
                   <Text style={styles.clubTitle} numberOfLines={2}>
                     {club.name}
                   </Text>
-                  {subtitle ? (
-                    <Text style={styles.clubSubtitle} numberOfLines={2}>
-                      {subtitle}
-                    </Text>
+                  {place ? (
+                    <View style={styles.clubPlaceRow}>
+                      <Ionicons name="location-outline" size={14} color={UI.textMuted} />
+                      <Text style={styles.clubSubtitle} numberOfLines={1}>
+                        {place}
+                      </Text>
+                    </View>
                   ) : null}
                 </View>
+                <Ionicons name="chevron-forward" size={20} color={UI.textMuted} />
               </View>
-              {index < visibleClubs.length - 1 ? <View style={styles.clubDivider} /> : null}
             </TouchableOpacity>
           );
         })}
@@ -408,6 +454,45 @@ export function InviteFriendScreen() {
             </View>
           ) : null}
 
+          {segment === "clubs" ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {(
+                [
+                  { key: "all", label: t("inviteExtra.allClubs") },
+                  { key: "near", label: t("inviteExtra.nearMe") },
+                  { key: "courts", label: t("inviteExtra.mostCourts") },
+                ] as const
+              ).map(({ key, label }) => (
+                <Pill
+                  key={key}
+                  label={label}
+                  active={clubFilter === key}
+                  onPress={() => setClubFilter(key)}
+                  style={styles.chip}
+                  textStyle={styles.chipLabel}
+                />
+              ))}
+              {clubCities.length > 0 ? (
+                <TouchableOpacity
+                  style={[styles.chip, styles.cityChip, clubCity ? styles.cityChipActive : null]}
+                  onPress={() => setCityOpen(true)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="location-outline" size={15} color={clubCity ? "#FFFFFF" : UI.textMuted} />
+                  <Text
+                    allowFontScaling={false}
+                    numberOfLines={1}
+                    style={[styles.chipLabel, { color: clubCity ? "#FFFFFF" : UI.textMuted }]}
+                  >
+                    {clubCity ?? t("inviteExtra.anyCity")}
+                  </Text>
+                  <Ionicons name="chevron-down" size={14} color={clubCity ? "#FFFFFF" : UI.textMuted} />
+                </TouchableOpacity>
+              ) : null}
+            </ScrollView>
+          ) : null}
+
           {showCoachMeta ? (
             <View style={styles.metaRow}>
               <Text allowFontScaling={false} style={styles.metaText}>
@@ -463,6 +548,37 @@ export function InviteFriendScreen() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={cityOpen} transparent animationType="fade" onRequestClose={() => setCityOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setCityOpen(false)} />
+          <View style={styles.modalCard}>
+            <Text allowFontScaling={false} style={styles.modalTitle}>
+              {t("inviteExtra.cityTitle")}
+            </Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {[null, ...clubCities].map((city) => {
+                const selected = clubCity === city;
+                return (
+                  <TouchableOpacity
+                    key={city ?? "any"}
+                    style={[styles.modalRow, selected && styles.modalRowActive]}
+                    onPress={() => {
+                      setClubCity(city);
+                      setCityOpen(false);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.modalRowText, selected && styles.modalRowTextActive]}>
+                      {city ?? t("inviteExtra.anyCity")}
+                    </Text>
+                    {selected ? <Ionicons name="checkmark" size={18} color={UI.accent} /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -651,26 +767,44 @@ function getStyles(theme: {
       paddingTop: 8,
       paddingBottom: 96,
     },
-    clubsList: {
-      marginTop: 16,
-    },
-    clubCardFollow: {
-      marginTop: 16,
-    },
-    clubBannerOuter: {
-      borderRadius: 16,
+    clubCard: {
+      borderRadius: UI.radiusCard,
+      borderWidth: 1,
+      borderColor: UI.cardBorder,
+      backgroundColor: UI.cardBg,
       overflow: "hidden",
-      width: "100%",
+      ...CARD_GLOW,
+    },
+    bannerPill: {
+      position: "absolute",
+      top: 10,
+      left: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      height: 28,
+      borderRadius: 10,
+      backgroundColor: "rgba(3, 10, 23, 0.75)",
+      borderWidth: 1,
+      borderColor: UI.surfaceBorder,
+    },
+    bannerPillText: {
+      fontFamily: theme.mediumFont ?? "System",
+      fontSize: 12,
+      color: "#FFFFFF",
     },
     clubProfileRow: {
       flexDirection: "row",
       alignItems: "center",
-      marginTop: 12,
       gap: 12,
+      padding: 14,
     },
-    clubAvatarSlot: {
-      width: CLUB_AVATAR,
-      height: CLUB_AVATAR,
+    clubLogoRing: {
+      borderRadius: CLUB_AVATAR / 2 + 3,
+      borderWidth: 2,
+      borderColor: "rgba(255, 255, 255, 0.85)",
+      padding: 1,
     },
     clubTextCol: {
       flex: 1,
@@ -679,21 +813,30 @@ function getStyles(theme: {
     },
     clubTitle: {
       fontFamily: theme.semiBoldFont ?? theme.mediumFont ?? "System",
-      fontSize: 16,
-      lineHeight: 20,
+      fontSize: 18,
+      lineHeight: 22,
       color: "#FFFFFF",
+    },
+    clubPlaceRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      marginTop: 4,
     },
     clubSubtitle: {
       fontFamily: theme.regularFont ?? "System",
       fontSize: 13,
-      lineHeight: 18,
-      marginTop: 4,
-      color: "rgba(160, 180, 210, 0.95)",
+      color: UI.textMuted,
+      flexShrink: 1,
     },
-    clubDivider: {
-      height: 1,
-      backgroundColor: "rgba(21, 60, 120, 0.55)",
-      marginTop: 16,
+    cityChip: {
+      flexDirection: "row",
+      gap: 6,
+      backgroundColor: UI.surface,
+      borderColor: UI.surfaceBorder,
+    },
+    cityChipActive: {
+      borderColor: UI.accent,
     },
     modalOverlay: {
       flex: 1,

@@ -21,7 +21,11 @@ import { ThemeContext } from "../context";
 import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
-import { ProfileHeroScoreBlock } from "../components/ProfileHeroScoreBlock";
+import { ShieldProportionalFrame, fitShieldInBox } from "../components/ShieldProportionalFrame";
+import { CARD_GLOW, SELECTED_GLOW, UI } from "../components/ui";
+import { LinearGradient } from "expo-linear-gradient";
+import { useTranslation } from "react-i18next";
+import { fetchMyFriends } from "../lib/friendsApi";
 import { getCoachDetail, resolveCoachDetail } from "../lib/coach-detail-data";
 import {
   fetchPlayerOverallScore,
@@ -40,16 +44,61 @@ import {
 } from "../lib/coachProfileSectionsApi";
 import type { MainStackParamList, YouTabStackParamList } from "../navigation/types";
 
-const UNFOLLOW_ICON = require("../../assets/youpage/unfollowicon.svg");
-const BOOK_VIDEO_ICON = require("../../assets/youpage/bookvideocall.svg");
-const MESSAGE_ICON = require("../../assets/mystudents/message.svg");
-const PERSONAL_ICON = require("../../assets/coachs/personalicon.png");
-const BD_ICON_SVG = require("../../assets/coachs/bdicon.svg");
 const SHARE_ICON_SVG = require("../../assets/coachs/shareicon.svg");
 const ADD_PHOTOS_ICON = require("../../assets/youpage/addicon.svg");
 
 const SHARE_ICON_SIZE = 28;
-const GALLERY_SIZE = 80;
+/** Big photo + 2×2 grid, like the design; "See all" shows the rest. */
+const GRID_PREVIEW = 5;
+const GRID_GAP = 8;
+
+/** First photo large on the left, up to four small ones in a 2×2 grid; extras wrap in rows of three. */
+function PhotoGrid({
+  items,
+  width,
+  onOpen,
+}: {
+  items: GalleryItem[];
+  width: number;
+  onOpen: (uri: string) => void;
+}) {
+  if (items.length === 0) return null;
+  const [first, ...rest] = items;
+  const small = rest.slice(0, 4);
+  const extra = rest.slice(4);
+  const smallW = small.length > 0 ? (width - GRID_GAP * 2) / 4 : 0;
+  const bigW = small.length > 0 ? width - smallW * 2 - GRID_GAP * 2 : width;
+  const bigH = small.length > 2 ? smallW * 2 + GRID_GAP : Math.max(smallW, width * 0.5);
+  const thumb = (item: GalleryItem, w: number, h: number) => (
+    <TouchableOpacity
+      key={item.key}
+      activeOpacity={0.85}
+      onPress={() => onOpen(item.uri)}
+      accessibilityRole="button"
+      accessibilityLabel="View photo"
+    >
+      <Image source={{ uri: item.uri }} style={{ width: w, height: h, borderRadius: 10 }} resizeMode="cover" />
+    </TouchableOpacity>
+  );
+  const extraW = (width - GRID_GAP * 2) / 3;
+  return (
+    <View style={{ gap: GRID_GAP }}>
+      <View style={{ flexDirection: "row", gap: GRID_GAP }}>
+        {thumb(first!, bigW, bigH)}
+        {small.length > 0 ? (
+          <View style={{ width: smallW * 2 + GRID_GAP, flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP }}>
+            {small.map((item) => thumb(item, smallW, small.length > 2 ? smallW : bigH))}
+          </View>
+        ) : null}
+      </View>
+      {extra.length > 0 ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP }}>
+          {extra.map((item) => thumb(item, extraW, extraW))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 type GalleryItem = {
   key: string;
@@ -101,6 +150,7 @@ export function CoachDetailView({
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
   const { theme } = useContext(ThemeContext);
+  const { t } = useTranslation();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
   const coach = useMemo(
@@ -110,6 +160,12 @@ export function CoachDetailView({
   /** Known sample coaches (invite flow) keep their static location; live coaches don't. */
   const isSampleCoach = useMemo(() => getCoachDetail(coachId) != null, [coachId]);
   const horizontalPad = Math.max(16, insets.left, insets.right);
+  const shieldBox = useMemo(
+    () => fitShieldInBox(Math.min(170, (winW - horizontalPad * 2) * 0.42), 230),
+    [winW, horizontalPad],
+  );
+  /** Card inner width: page padding plus the card's own 16px padding on each side. */
+  const gridW = winW - horizontalPad * 2 - 32;
 
   // Live coach profile (name, headline, birth date, location) + overall score.
   const [live, setLive] = useState<LiveCoachProfile | null>(null);
@@ -117,6 +173,18 @@ export function CoachDetailView({
   const [galleryUploading, setGalleryUploading] = useState(false);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   const [profileSections, setProfileSections] = useState<CoachProfileSection[]>([]);
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
+  const [isMyCoach, setIsMyCoach] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMyFriends().then((friends) => {
+      if (!cancelled) setIsMyCoach(friends.some((f) => f.id === coachId && f.relation === "coach"));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [coachId]);
 
   const reloadGallery = useCallback(async () => {
     const photos = await fetchCoachGalleryPhotos(coachId);
@@ -176,10 +244,8 @@ export function CoachDetailView({
 
   const displayName = live?.name?.trim() || coach?.displayName || coachName?.trim() || "";
   const displayLegalName = live?.name?.trim() || coach?.fullLegalName || displayName;
-  const displayHeadline =
-    live?.headline?.trim() || (isSampleCoach ? coach?.headline ?? "" : "");
-  const displayBirth =
-    live?.birthDisplay?.trim() || (isSampleCoach ? coach?.birthDisplay ?? "" : "");
+  // The public headline is a player's level; a coach's page uses the coach headline instead.
+  const displayHeadline = isSampleCoach ? coach?.headline ?? "" : "";
   const displayLocation =
     live?.areaLocation?.trim() || (isSampleCoach ? coach?.locationDisplay ?? "" : "");
   const displayImage = coachImageUri ?? live?.imageUri ?? null;
@@ -196,6 +262,15 @@ export function CoachDetailView({
       peerRole: "coach",
     });
   }, [navigation, coachId, displayName, displayLocation, displayScore, displayImage]);
+
+  /** No in-app coaching request exists yet; send the coach a note through the share sheet. */
+  const onAskToCoach = useCallback(async () => {
+    try {
+      await Share.share({ message: t("coachProfile.askMessage", { name: displayName }) });
+    } catch {
+      /* dismissed */
+    }
+  }, [t, displayName]);
 
   const onAddPhotos = useCallback(async () => {
     if (galleryUploading) return;
@@ -329,140 +404,141 @@ export function CoachDetailView({
         </TouchableOpacity>
       </View>
 
-      <ProfileHeroScoreBlock
-        horizontalPadding={horizontalPad}
-        premiumLabelNudgeUp={4}
-        marginTop={0}
-        marginBottom={0}
-        youPageLayout
-        scoreNudgeRight={0}
-        ratingUserId={coachId}
-        playerOverride={{
-          name: displayName,
-          imageUri: displayImage,
-          areaLocation: displayLocation || null,
-          score: displayScore,
-        }}
-      />
+      <View style={styles.heroRow}>
+        <ShieldProportionalFrame
+          maxWidth={shieldBox.width}
+          maxHeight={shieldBox.height}
+          variant="small"
+          coachName={displayName}
+          coachImageUri={displayImage}
+          flagCode={(displayLocation || null) as never}
+          showName={false}
+          showScore
+          scoreLabel={t("common.score")}
+          scoreValue={displayScore != null ? String(displayScore) : "—"}
+          showFlag
+          showCrest={false}
+          showPillarScores={false}
+        />
+        <View style={styles.heroText}>
+          <View style={styles.heroNameRow}>
+            <Text style={styles.heroName} numberOfLines={2}>
+              {displayName}
+            </Text>
+            <Ionicons name="checkmark-circle" size={20} color={UI.accentStrong} />
+          </View>
+          <Text style={styles.heroHeadline} numberOfLines={2}>
+            {displayHeadline || t("coachProfile.defaultHeadline")}
+          </Text>
+          {displayLocation ? (
+            <View style={styles.heroLocation}>
+              <Ionicons name="location-outline" size={16} color={UI.textMuted} />
+              <Text style={styles.heroLocationText} numberOfLines={1}>
+                {displayLocation}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
 
       {!embeddedInYouTab ? (
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnFilled]}
             activeOpacity={0.85}
-            onPress={() => navigation.navigate("ProfileSettings")}
+            onPress={isMyCoach ? onOpenMessage : () => void onAskToCoach()}
+            accessibilityRole="button"
           >
-            <Image source={PERSONAL_ICON} style={styles.perfilIcon} resizeMode="contain" />
-            <Text style={styles.actionBtnTextFilled}>Perfil</Text>
+            <LinearGradient
+              colors={UI.gradient}
+              locations={UI.gradientLocations}
+              start={UI.gradientStart}
+              end={UI.gradientEnd}
+              style={[StyleSheet.absoluteFill, styles.actionBtnFill]}
+            />
+            <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.actionBtnFill, SELECTED_GLOW]} />
+            <Ionicons name={isMyCoach ? "checkmark-circle-outline" : "calendar-outline"} size={18} color="#FFFFFF" />
+            <Text style={styles.actionBtnTextFilled} numberOfLines={1}>
+              {isMyCoach ? t("coachProfile.yourCoach") : t("coachProfile.beMyCoach")}
+            </Text>
           </TouchableOpacity>
-          {!isSampleCoach ? (
+          {isMyCoach ? (
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnOutline]}
               activeOpacity={0.85}
               onPress={onOpenMessage}
+              accessibilityRole="button"
             >
-              <LocalSvgAsset
-                assetModule={MESSAGE_ICON}
-                width={16}
-                height={16}
-                strokeColor="#1F6CD0"
-              />
-              <Text style={styles.actionBtnTextOutline}>Message</Text>
+              <Ionicons name="chatbox-outline" size={18} color={UI.textMuted} />
+              <Text style={styles.actionBtnTextOutline} numberOfLines={1}>
+                {t("coachProfile.message")}
+              </Text>
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} activeOpacity={0.85}>
-            <LocalSvgAsset assetModule={UNFOLLOW_ICON} width={16} height={16} />
-            <Text style={styles.actionBtnTextOutline}>Unfollow</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} activeOpacity={0.85}>
-            <LocalSvgAsset assetModule={BOOK_VIDEO_ICON} width={16} height={16} />
-            <Text style={[styles.actionBtnTextOutline, styles.actionBtnTextNarrow]} numberOfLines={2}>
-              Book Video Call
-            </Text>
-          </TouchableOpacity>
         </View>
       ) : null}
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.galleryScroll}
-        nestedScrollEnabled
-      >
-        {galleryItems.map((item) => (
-          <TouchableOpacity
-            key={item.key}
-            style={styles.galleryThumb}
-            activeOpacity={0.85}
-            onPress={() => setViewerUri(item.uri)}
-            accessibilityRole="button"
-            accessibilityLabel="View photo"
-          >
-            <Image
-              source={{ uri: item.uri }}
-              style={{ width: GALLERY_SIZE, height: GALLERY_SIZE }}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {profileSections.map((section) => (
+        <View key={section.id} style={styles.card}>
+          <View style={styles.cardHead}>
+            <Ionicons name="document-text-outline" size={20} color={UI.textMuted} />
+            <Text style={styles.cardTitle}>{section.heading}</Text>
+          </View>
+          <Text style={styles.cardBody}>{section.body}</Text>
+        </View>
+      ))}
 
-      {embeddedInYouTab ? (
-        <TouchableOpacity
-          style={styles.addPhotosRow}
-          activeOpacity={0.85}
-          onPress={() => void onAddPhotos()}
-          disabled={galleryUploading}
-          accessibilityRole="button"
-          accessibilityLabel="Add Photos"
-        >
-          {galleryUploading ? (
-            <ActivityIndicator size="small" color={ACCENT} />
-          ) : (
-            <LocalSvgAsset assetModule={ADD_PHOTOS_ICON} width={24} height={24} />
-          )}
-          <Text style={styles.addPhotosText}>
-            {galleryUploading ? "Uploading…" : "Add Photos"}
-          </Text>
-        </TouchableOpacity>
+      {displayLocation ? (
+        <View style={styles.card}>
+          <View style={styles.cardHead}>
+            <Ionicons name="calendar-outline" size={20} color={UI.textMuted} />
+            <Text style={styles.cardTitle}>{t("coachProfile.location")}</Text>
+          </View>
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={22} color={UI.textMuted} />
+            <Text style={styles.locationText}>{displayLocation}</Text>
+          </View>
+        </View>
       ) : null}
 
-      <View style={styles.personalBlock}>
-        <Text style={styles.legalName}>{displayLegalName}</Text>
-        {displayHeadline ? <Text style={styles.headline}>{displayHeadline}</Text> : null}
-        {displayBirth || displayLocation ? (
-          <View style={styles.personalMeta}>
-            <View style={styles.metaLine}>
-              {displayBirth ? (
-                <>
-                  <LocalSvgAsset assetModule={BD_ICON_SVG} width={20} height={20} />
-                  <Text style={styles.metaText}>{displayBirth}</Text>
-                </>
-              ) : null}
-              {displayBirth && displayLocation ? <View style={styles.metaBetween} /> : null}
-              {displayLocation ? (
-                <>
-                  <Ionicons name="location-outline" size={20} color="#FFFFFF" />
-                  <Text style={[styles.metaText, styles.metaTextLocation]} numberOfLines={1}>
-                    {displayLocation}
-                  </Text>
-                </>
-              ) : null}
-            </View>
+      {galleryItems.length > 0 || embeddedInYouTab ? (
+        <View style={styles.card}>
+          <View style={styles.cardHead}>
+            <Ionicons name="images-outline" size={20} color={UI.textMuted} />
+            <Text style={[styles.cardTitle, { flex: 1 }]}>{t("coachProfile.photos")}</Text>
+            {galleryItems.length > GRID_PREVIEW ? (
+              <TouchableOpacity style={styles.seeAll} onPress={() => setShowAllPhotos((v) => !v)} hitSlop={8}>
+                <Text style={styles.seeAllText}>
+                  {showAllPhotos ? t("coachProfile.showLess") : t("coachProfile.seeAll")}
+                </Text>
+                <Ionicons name={showAllPhotos ? "chevron-up" : "chevron-forward"} size={14} color={UI.textMuted} />
+              </TouchableOpacity>
+            ) : null}
           </View>
-        ) : null}
-      </View>
-
-      {/* Live paragraphs — coach You + student coach detail (banner → CoachDetail). */}
-      {profileSections.length > 0 ? (
-        <View style={styles.sectionsBlock}>
-          {profileSections.map((section) => (
-            <View key={section.id} style={styles.sectionCard}>
-              <Text style={styles.sectionHeading}>{section.heading}</Text>
-              <View style={styles.sectionSeparator} />
-              <Text style={styles.sectionBody}>{section.body}</Text>
-            </View>
-          ))}
+          <PhotoGrid
+            items={showAllPhotos ? galleryItems : galleryItems.slice(0, GRID_PREVIEW)}
+            width={gridW}
+            onOpen={setViewerUri}
+          />
+          {embeddedInYouTab ? (
+            <TouchableOpacity
+              style={styles.addPhotosRow}
+              activeOpacity={0.85}
+              onPress={() => void onAddPhotos()}
+              disabled={galleryUploading}
+              accessibilityRole="button"
+              accessibilityLabel="Add Photos"
+            >
+              {galleryUploading ? (
+                <ActivityIndicator size="small" color={ACCENT} />
+              ) : (
+                <LocalSvgAsset assetModule={ADD_PHOTOS_ICON} width={24} height={24} />
+              )}
+              <Text style={styles.addPhotosText}>
+                {galleryUploading ? "Uploading…" : "Add Photos"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : null}
 
@@ -601,59 +677,100 @@ function getStyles(theme: {
     scrollInner: {
       paddingBottom: 20,
     },
+    heroRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      marginTop: 8,
+    },
+    heroText: { flex: 1, minWidth: 0, gap: 6 },
+    heroNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    heroName: {
+      color: "#FFFFFF",
+      fontFamily: theme.semiBoldFont ?? "System",
+      fontSize: 21,
+      flexShrink: 1,
+    },
+    heroHeadline: {
+      color: UI.textMuted,
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 14,
+    },
+    heroLocation: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 },
+    heroLocationText: {
+      color: UI.textMuted,
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 14,
+      flexShrink: 1,
+    },
     actionRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
-      marginTop: 20,
+      gap: 10,
+      marginTop: 22,
+      marginBottom: 6,
     },
     actionBtn: {
       flex: 1,
       minWidth: 0,
-      height: 38,
-      borderRadius: 19,
-      paddingHorizontal: 6,
+      height: 50,
+      borderRadius: UI.radius,
+      paddingHorizontal: 10,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 6,
     },
-    actionBtnFilled: {
-      backgroundColor: "#041641",
-    },
+    actionBtnFilled: {},
+    actionBtnFill: { borderRadius: UI.radius },
     actionBtnOutline: {
-      backgroundColor: "transparent",
-      borderWidth: 2,
-      borderColor: "#0E2969",
+      backgroundColor: UI.cardBg,
+      borderWidth: 1,
+      borderColor: UI.trackBorder,
     },
     actionBtnTextFilled: {
-      color: "#00B8FF",
+      color: "#FFFFFF",
       fontFamily: theme.mediumFont ?? "System",
-      fontSize: 12,
+      fontSize: 16,
     },
-    perfilIcon: {
-      width: 16,
-      height: 16,
+    card: {
+      marginTop: 14,
+      padding: 16,
+      gap: 12,
+      borderRadius: UI.radiusCard,
+      borderWidth: 1,
+      borderColor: UI.cardBorder,
+      backgroundColor: UI.cardBg,
+      ...CARD_GLOW,
+    },
+    cardHead: { flexDirection: "row", alignItems: "center", gap: 10 },
+    cardTitle: {
+      color: "#FFFFFF",
+      fontFamily: theme.mediumFont ?? "System",
+      fontSize: 16,
+    },
+    cardBody: {
+      color: UI.textMuted,
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    locationRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+    locationText: {
+      color: "#FFFFFF",
+      fontFamily: theme.mediumFont ?? "System",
+      fontSize: 15,
+    },
+    seeAll: { flexDirection: "row", alignItems: "center", gap: 2 },
+    seeAllText: {
+      color: UI.textMuted,
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 13,
     },
     actionBtnTextOutline: {
-      color: "#1F6CD0",
+      color: "#FFFFFF",
       fontFamily: theme.mediumFont ?? "System",
-      fontSize: 11,
-      lineHeight: 13,
-      textAlign: "center",
-    },
-    actionBtnTextNarrow: {
-      flexShrink: 1,
-    },
-    galleryScroll: {
-      paddingVertical: 4,
-      paddingRight: 8,
-      marginTop: 20,
-    },
-    galleryThumb: {
-      borderRadius: 12,
-      overflow: "hidden",
-      marginRight: 12,
+      fontSize: 16,
     },
     addPhotosRow: {
       flexDirection: "row",
@@ -669,63 +786,6 @@ function getStyles(theme: {
       fontSize: 15,
       lineHeight: 20,
     },
-    personalBlock: {
-      marginTop: 28,
-      alignItems: "center",
-      alignSelf: "stretch",
-    },
-    legalName: {
-      color: "#FFFFFF",
-      fontFamily: theme.semiBoldFont ?? theme.mediumFont ?? "System",
-      fontSize: 22,
-      lineHeight: 28,
-      textAlign: "center",
-      alignSelf: "stretch",
-    },
-    headline: {
-      marginTop: 8,
-      color: ACCENT,
-      fontFamily: theme.mediumFont ?? "System",
-      fontSize: 15,
-      lineHeight: 20,
-      textAlign: "center",
-      alignSelf: "stretch",
-    },
-    personalMeta: {
-      marginTop: 16,
-      alignItems: "center",
-      alignSelf: "stretch",
-    },
-    sectionsBlock: {
-      marginTop: 24,
-      alignSelf: "stretch",
-      gap: 24,
-    },
-    sectionCard: {
-      alignSelf: "stretch",
-      alignItems: "stretch",
-    },
-    sectionHeading: {
-      color: "#1F6CD0",
-      fontFamily: theme.semiBoldFont ?? theme.mediumFont ?? "System",
-      fontSize: 22,
-      lineHeight: 28,
-      textAlign: "left",
-    },
-    sectionSeparator: {
-      marginTop: 8,
-      marginBottom: 12,
-      height: StyleSheet.hairlineWidth * 2,
-      backgroundColor: "#001C60",
-      alignSelf: "stretch",
-    },
-    sectionBody: {
-      color: "#86A7D2",
-      fontFamily: theme.regularFont ?? "System",
-      fontSize: 15,
-      lineHeight: 22,
-      textAlign: "left",
-    },
     addParagraphRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -739,26 +799,6 @@ function getStyles(theme: {
       fontFamily: theme.mediumFont ?? "System",
       fontSize: 15,
       lineHeight: 20,
-    },
-    metaLine: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      flexWrap: "wrap",
-      gap: 4,
-      paddingHorizontal: 4,
-    },
-    metaBetween: {
-      width: 16,
-    },
-    metaText: {
-      color: "#86A7D2",
-      fontFamily: theme.regularFont ?? "System",
-      fontSize: 15,
-    },
-    metaTextLocation: {
-      flexShrink: 1,
-      maxWidth: "52%",
     },
     viewerRoot: {
       flex: 1,
