@@ -1,5 +1,5 @@
 import React, { useContext, useMemo, useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -17,6 +17,7 @@ import {
 } from '../lib/coachSpecialties'
 import type { YouTabStackParamList } from '../navigation/types'
 import { TEST_IDS } from '../lib/testIds'
+import { showAlert } from '../lib/showAlert'
 
 type Nav = NativeStackNavigationProp<YouTabStackParamList, 'CoachSpecialtiesEdit'>
 type Route = RouteProp<YouTabStackParamList, 'CoachSpecialtiesEdit'>
@@ -53,7 +54,7 @@ export function CoachSpecialtiesEditScreen() {
       await saveCoachSpecialties(selected)
       navigation.goBack()
     } catch {
-      Alert.alert(t('coachSpecialties.saveErrorTitle'), t('coachSpecialties.saveErrorBody'))
+      showAlert(t('coachSpecialties.saveErrorTitle'), t('coachSpecialties.saveErrorBody'))
     } finally {
       setSaving(false)
     }

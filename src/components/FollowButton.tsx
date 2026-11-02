@@ -1,11 +1,12 @@
 import React, { useContext, useEffect, useRef, useState } from 'react'
-import { Alert, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { SELECTED_GLOW, UI } from './ui'
 import { authClient } from '../lib/auth-client'
+import { showAlert } from '../lib/showAlert'
 import { followTarget, unfollowTarget, type FollowTargetType } from '../lib/followsApi'
 
 export type FollowButtonProps = {
@@ -62,7 +63,7 @@ export function FollowButton({
     } catch {
       setFollowing(!next)
       onChange?.(!next, null)
-      Alert.alert(t('follow.errorTitle'), t('follow.errorBody'))
+      showAlert(t('follow.errorTitle'), t('follow.errorBody'))
     } finally {
       pending.current = false
     }
@@ -99,7 +100,7 @@ export function FollowButton({
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fill, SELECTED_GLOW]} />
         </>
       )}
-      {following ? <Ionicons name="checkmark" size={sm ? 14 : 16} color={UI.textMuted} /> : null}
+      {following ? <Ionicons name="checkmark" size={sm ? 13 : 16} color={UI.textMuted} /> : null}
       <Text
         allowFontScaling={false}
         numberOfLines={1}
@@ -124,10 +125,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  sm: { height: 34, paddingHorizontal: 14, minWidth: 78 },
+  sm: { height: 32, paddingHorizontal: 10, minWidth: 76, gap: 3 },
   md: { height: 50, paddingHorizontal: 18, minWidth: 110 },
   outlined: { backgroundColor: UI.cardBg, borderColor: UI.trackBorder },
   fill: { borderRadius: UI.radiusPill },
-  labelSm: { fontSize: 14 },
+  labelSm: { fontSize: 13 },
   labelMd: { fontSize: 16 },
 })

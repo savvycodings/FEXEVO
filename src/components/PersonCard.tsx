@@ -8,7 +8,9 @@ import { TierShield } from './TierShield'
 import type { CoachTier } from '../lib/coachDirectoryApi'
 
 const AVATAR = 64
-const AVATAR_COACH_NARROW = 52
+/** Coach card avatar: a little smaller than the friend card's, to leave room for the chips. */
+const AVATAR_COACH = 56
+const AVATAR_COACH_NARROW = 48
 /** Coach card shield: 60 points, 52 on screens narrower than 375 points. */
 const COACH_SHIELD = 60
 const COACH_SHIELD_NARROW = 52
@@ -51,7 +53,7 @@ export function PersonCard({
   const { width } = useWindowDimensions()
   const coach = variant === 'coach'
   const narrow = width < NARROW_SCREEN
-  const avatar = coach && narrow ? AVATAR_COACH_NARROW : AVATAR
+  const avatar = coach ? (narrow ? AVATAR_COACH_NARROW : AVATAR_COACH) : AVATAR
   return (
     <TouchableOpacity
       style={coach ? styles.coachCard : styles.card}
@@ -133,7 +135,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     paddingVertical: 16,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderRadius: 30,
     borderWidth: 1.5,
     borderColor: UI.coachCardBorder,
@@ -158,5 +160,5 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   chipText: { fontSize: 12, color: '#FFFFFF' },
-  coachSide: { alignItems: 'center', gap: 10 },
+  coachSide: { alignItems: 'center', gap: 8 },
 })
