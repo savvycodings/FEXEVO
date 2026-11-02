@@ -38,7 +38,8 @@ async function call<T>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET', 
     res = (await authClient.$fetch(path, {
       method,
       headers: { Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
-      ...(body !== undefined ? { body: body as Record<string, unknown> } : {}),
+      // Serialize here: on web the auth client's fetch sends a plain object as "[object Object]".
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })) as FetchResult
   } catch (e) {
     throw new FriendsApiError(0, e instanceof Error ? e.message : 'Network error')

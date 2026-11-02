@@ -18,7 +18,7 @@ import {
   fetchRequestDetail,
   type FriendRequestDetail,
 } from '../lib/friendsApi'
-import { levelTranslationKey } from '../i18n/profileOptionValues'
+import { LEVEL_OPTION_VALUES, levelTranslationKey } from '../i18n/profileOptionValues'
 import type { MainStackParamList } from '../navigation/types'
 
 type Nav = NativeStackNavigationProp<MainStackParamList, 'FriendRequestDetail'>
@@ -30,6 +30,12 @@ function firstNameAndInitial(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length < 2) return parts[0] ?? ''
   return `${parts[0]} ${parts[parts.length - 1]!.charAt(0).toUpperCase()}.`
+}
+
+/** i18n key for a stored level, matched case-insensitively; null for free text we can't map. */
+function levelKey(value: string): string | null {
+  const match = LEVEL_OPTION_VALUES.find((v) => v.toLowerCase() === value.trim().toLowerCase())
+  return match ? levelTranslationKey(match) : null
 }
 
 /** "left" / "right" from court side, falling back to the dominant hand. */
@@ -192,7 +198,7 @@ export function FriendRequestDetailScreen() {
                 <View style={styles.tile} testID="friend-request-level">
                   <Ionicons name="stats-chart" size={22} color={UI.accent} />
                   <Text allowFontScaling={false} numberOfLines={1} style={styles.tileValue}>
-                    {t(levelTranslationKey(sender.level), { defaultValue: sender.level })}
+                    {levelKey(sender.level) ? t(levelKey(sender.level)!) : sender.level}
                   </Text>
                   <Text allowFontScaling={false} style={styles.tileLabel}>
                     {t('friends.level')}
