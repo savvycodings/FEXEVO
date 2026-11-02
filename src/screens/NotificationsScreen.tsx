@@ -57,6 +57,8 @@ type Nav = NativeStackNavigationProp<MainStackParamList>
 const FRIEND_TITLE_PATTERNS: Record<string, RegExp> = {
   friend_request: /^(.*) sent you a friend request$/,
   friend_request_accepted: /^(.*) accepted your friend request$/,
+  club_invite: /^(.*) invited you to join$/,
+  club_join_approved: /^(.*) approved your request$/,
 }
 
 function friendActorName(n: ApiNotification): string | null {
@@ -151,7 +153,7 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                   ? TICK_ICON
                   : n.kind === 'correction_images_ready'
                     ? TICK_ICON
-                    : n.kind === 'friend_request_accepted'
+                    : n.kind === 'friend_request_accepted' || n.kind === 'club_join_approved'
                       ? TICK_ICON
                     : n.kind.includes('message')
                       ? MSG_ICON
@@ -217,6 +219,14 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                         })
                         return
                       }
+                      if (n.kind === 'club_invite') {
+                        navigation.navigate('InviteSearch', { friendsView: 'requests' })
+                        return
+                      }
+                      if (n.kind === 'club_join_approved' && n.refType === 'club' && n.refId) {
+                        navigation.navigate('ClubDetail', { clubId: n.refId })
+                        return
+                      }
                       if (
                         (n.kind === 'correction_images_ready' || isMagicShot) &&
                         n.refType === 'technique_analysis' &&
@@ -254,6 +264,8 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                         {(() => {
                           const actor = friendActorName(n)
                           if (actor == null) return n.title
+                          if (n.kind === 'club_invite') return t('clubMembership.notifInvite', { club: actor })
+                          if (n.kind === 'club_join_approved') return t('clubMembership.notifApproved', { club: actor })
                           return n.kind === 'friend_request'
                             ? t('friends.notifRequest', { name: actor })
                             : t('friends.notifAccepted', { name: actor })
