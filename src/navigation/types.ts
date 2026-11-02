@@ -26,6 +26,8 @@ export type ProgressTabStackParamList = {
 export type YouTabStackParamList = {
   YouMain: undefined;
   CoachProfileSectionEdit: undefined;
+  /** Current specialty keys, so the screen opens without a request. */
+  CoachSpecialtiesEdit: { specialties: string[] };
 };
 
 /** My Coach tab: list + per-student chat (keeps bottom tab bar visible on chat). */
