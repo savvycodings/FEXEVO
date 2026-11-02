@@ -48,6 +48,28 @@ import { LogoutConfirmModal } from "../components/LogoutConfirmModal";
 import { profileImageSource } from "../lib/defaultProfilePicture";
 import { TEST_IDS } from '../lib/testIds'
 import { CountryPickerModal } from "../components/CountryPickerModal";
+import { CourtSideGraphic } from "../components/CourtSideGraphic";
+import { MeasureField, type MeasureInput } from "../components/MeasureField";
+import { CARD_GLOW, SegmentedToggle, UI } from "../components/ui";
+import {
+  DEFAULT_BODY_UNITS,
+  cmToFtIn,
+  formatTenth,
+  ftInToCm,
+  getBodyUnits,
+  heightRangeLabels,
+  isHeightCmValid,
+  isWeightKgValid,
+  kgToLb,
+  lbToKg,
+  parseDecimalInput,
+  roundTenth,
+  setBodyUnits,
+  weightRangeLabels,
+  type BodyUnits,
+  type HeightUnit,
+  type WeightUnit,
+} from "../lib/bodyUnits";
 
 const MENU_SVG = {
   personal: require("../../assets/youpage/personalicon.svg"),
@@ -123,6 +145,8 @@ type ProfileData = {
     birthDate?: string | null;
     heightCm?: number | null;
     weightKg?: number | null;
+    dominantHand?: string | null;
+    courtSide?: string | null;
     gender?: string | null;
     level?: string | null;
     rankingOrg?: string | null;
@@ -131,6 +155,12 @@ type ProfileData = {
     coachStudentRole?: string | null;
   } | null;
 };
+
+type Side = "left" | "right";
+
+function asSide(value: unknown): Side | null {
+  return value === "left" || value === "right" ? value : null;
+}
 
 const GENDER_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 const LEVEL_OPTIONS = [
@@ -291,6 +321,22 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     return null;
   }, [data.profile?.birthDate, birthDayInput, birthMonthInput, birthYearInput]);
   const [activeSection, setActiveSection] = useState<"personal" | "account" | "location" | "game" | null>(null);
+  /** Game Settings is two steps: player details (hand, side, height, weight), then level. */
+  const [gameStep, setGameStep] = useState<"details" | "level">("details");
+  const [handInput, setHandInput] = useState<Side | null>(null);
+  const [courtSideInput, setCourtSideInput] = useState<Side | null>(null);
+  const [bodyUnits, setBodyUnitsState] = useState<BodyUnits>(DEFAULT_BODY_UNITS);
+  const bodyUnitsRef = useRef<BodyUnits>(DEFAULT_BODY_UNITS);
+  /** Canonical values (cm / kg, 0.1). The text fields below only display them in the chosen unit. */
+  const [heightCmValue, setHeightCmValue] = useState<number | null>(null);
+  const [weightKgValue, setWeightKgValue] = useState<number | null>(null);
+  const [heightText, setHeightText] = useState("");
+  const [heightFtText, setHeightFtText] = useState("");
+  const [heightInText, setHeightInText] = useState("");
+  const [weightText, setWeightText] = useState("");
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [detailsSaving, setDetailsSaving] = useState(false);
+  const [detailsSavedNotice, setDetailsSavedNotice] = useState(false);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [personalFocusedField, setPersonalFocusedField] = useState<
@@ -401,6 +447,9 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     setLevelInput(body.profile?.level || null);
     setRankingOrgInput(body.profile?.rankingOrg || "Playtomic");
     setRankingValueInput(body.profile?.rankingValue || "");
+    setHandInput(asSide(body.profile?.dominantHand));
+    setCourtSideInput(asSide(body.profile?.courtSide));
+    syncBodyFields(body.profile?.heightCm ?? null, body.profile?.weightKg ?? null, bodyUnitsRef.current);
     const storedArea = body.profile?.areaLocation || "";
     setLocationInput(storedArea);
     const area = splitAreaLocation(storedArea);
@@ -429,6 +478,148 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     }
   }
 
+  /** Re-renders the canonical cm / kg values into the text fields for the given units. */
+  function syncBodyFields(heightCm: number | null, weightKg: number | null, units: BodyUnits) {
+    setHeightCmValue(heightCm);
+    setWeightKgValue(weightKg);
+    setHeightText(heightCm != null ? formatTenth(heightCm) : "");
+    if (heightCm != null) {
+      const { ft, inches } = cmToFtIn(heightCm);
+      setHeightFtText(String(ft));
+      setHeightInText(String(inches));
+    } else {
+      setHeightFtText("");
+      setHeightInText("");
+    }
+    setWeightText(
+      weightKg == null ? "" : units.weight === "lb" ? String(kgToLb(weightKg)) : formatTenth(weightKg)
+    );
+  }
+
+  function openGameSettings() {
+    setGameStep("details");
+    setDetailsError(null);
+    setDetailsSavedNotice(false);
+    const saved = data.profile;
+    setHandInput(asSide(saved?.dominantHand));
+    setCourtSideInput(asSide(saved?.courtSide));
+    syncBodyFields(saved?.heightCm ?? null, saved?.weightKg ?? null, bodyUnitsRef.current);
+    setActiveSection("game");
+    void getBodyUnits().then((units) => {
+      bodyUnitsRef.current = units;
+      setBodyUnitsState(units);
+      syncBodyFields(saved?.heightCm ?? null, saved?.weightKg ?? null, units);
+    });
+  }
+
+  /** Switching unit only changes the display; the canonical value stays as it is. */
+  function changeBodyUnit(kind: "height", unit: HeightUnit): void;
+  function changeBodyUnit(kind: "weight", unit: WeightUnit): void;
+  function changeBodyUnit(kind: "height" | "weight", unit: HeightUnit | WeightUnit) {
+    const next = { ...bodyUnitsRef.current, [kind]: unit } as BodyUnits;
+    bodyUnitsRef.current = next;
+    setBodyUnitsState(next);
+    void setBodyUnits(next);
+    syncBodyFields(heightCmValue, weightKgValue, next);
+    setDetailsError(null);
+  }
+
+  function onHeightCmText(raw: string) {
+    const clean = raw.replace(/[^0-9.,]/g, "");
+    setHeightText(clean);
+    const n = parseDecimalInput(clean);
+    setHeightCmValue(n == null ? null : roundTenth(n));
+  }
+
+  function recomputeHeightFromFtIn(ft: string, inches: string) {
+    setHeightCmValue(!ft && !inches ? null : ftInToCm(Number(ft || 0), Number(inches || 0)));
+  }
+
+  function onHeightFtText(raw: string) {
+    const clean = raw.replace(/\D/g, "").slice(0, 1);
+    setHeightFtText(clean);
+    recomputeHeightFromFtIn(clean, heightInText);
+  }
+
+  function onHeightInText(raw: string) {
+    let clean = raw.replace(/\D/g, "").slice(0, 2);
+    if (clean && Number(clean) > 11) clean = "11";
+    setHeightInText(clean);
+    recomputeHeightFromFtIn(heightFtText, clean);
+  }
+
+  function onWeightText(raw: string) {
+    if (bodyUnitsRef.current.weight === "lb") {
+      const clean = raw.replace(/\D/g, "").slice(0, 3);
+      setWeightText(clean);
+      setWeightKgValue(clean ? lbToKg(Number(clean)) : null);
+      return;
+    }
+    const clean = raw.replace(/[^0-9.,]/g, "");
+    setWeightText(clean);
+    const n = parseDecimalInput(clean);
+    setWeightKgValue(n == null ? null : roundTenth(n));
+  }
+
+  /** "Set your Level": validate, save what changed via /profile/player-details, then step 2. */
+  async function savePlayerDetails() {
+    setDetailsError(null);
+    if (!handInput) {
+      setDetailsError(t("profileSettingsUi.chooseHand"));
+      return;
+    }
+    if (!courtSideInput) {
+      setDetailsError(t("profileSettingsUi.chooseCourtSide"));
+      return;
+    }
+    if (!isHeightCmValid(heightCmValue)) {
+      setDetailsError(t("profileSettingsUi.heightRangeError", heightRangeLabels(bodyUnits.height)));
+      return;
+    }
+    if (!isWeightKgValid(weightKgValue)) {
+      setDetailsError(t("profileSettingsUi.weightRangeError", weightRangeLabels(bodyUnits.weight)));
+      return;
+    }
+    const saved = data.profile;
+    const changes: Record<string, string | number> = {};
+    if (handInput !== asSide(saved?.dominantHand)) changes.dominantHand = handInput;
+    if (courtSideInput !== asSide(saved?.courtSide)) changes.courtSide = courtSideInput;
+    if (heightCmValue !== (saved?.heightCm ?? null)) changes.heightCm = heightCmValue;
+    if (weightKgValue !== (saved?.weightKg ?? null)) changes.weightKg = weightKgValue;
+
+    if (Object.keys(changes).length > 0) {
+      setDetailsSaving(true);
+      const res = await authClient
+        .$fetch<{ ok?: boolean; error?: string }>("/profile/player-details", {
+          method: "POST",
+          body: changes as any,
+        })
+        .catch((e) => ({ error: e?.message } as any));
+      const body = ((res as any)?.data ?? res) as { ok?: boolean; error?: unknown };
+      if (!body?.ok) {
+        setDetailsSaving(false);
+        const err = (res as any)?.error ?? body?.error;
+        const message =
+          typeof err === "string"
+            ? err
+            : typeof err?.error === "string"
+              ? err.error
+              : typeof err?.message === "string"
+                ? err.message
+                : null;
+        setDetailsError(message || t("profileSettingsUi.playerDetailsSaveFailed"));
+        return;
+      }
+      await loadRemote();
+      setDetailsSaving(false);
+      onProfileUpdated?.();
+      setDetailsSavedNotice(true);
+    } else {
+      setDetailsSavedNotice(false);
+    }
+    setGameStep("level");
+  }
+
   async function loadRemote(opts?: { showLoading?: boolean }) {
     if (opts?.showLoading) setLoading(true);
     const res = await authClient.$fetch("/profile/me", { method: "GET" }).catch(() => null);
@@ -448,6 +639,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           birthDate: body.profile?.birthDate ?? null,
           heightCm: body.profile?.heightCm ?? null,
           weightKg: body.profile?.weightKg ?? null,
+          dominantHand: body.profile?.dominantHand ?? null,
+          courtSide: body.profile?.courtSide ?? null,
           phone: body.profile?.phone || null,
           gender: body.profile?.gender || null,
           level: body.profile?.level || null,
@@ -478,6 +671,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             birthDate: cached.profile?.birthDate ?? null,
             heightCm: cached.profile?.heightCm ?? null,
             weightKg: cached.profile?.weightKg ?? null,
+            dominantHand: cached.profile?.dominantHand ?? null,
+            courtSide: cached.profile?.courtSide ?? null,
             gender: cached.profile?.gender || null,
             level: cached.profile?.level || null,
             rankingOrg: cached.profile?.rankingOrg || null,
@@ -1499,11 +1694,59 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
 
   if (activeSection === "game") {
     const rankingLogoMod = rankingLogoModule(rankingOrgInput);
+    const displayFullName =
+      joinDisplayName(firstNameInput, lastNameInput) || data.user?.name || "Player";
+    const backFromGame = () => (gameStep === "level" ? setGameStep("details") : setActiveSection(null));
+    const heightInputs: MeasureInput[] =
+      bodyUnits.height === "ftin"
+        ? [
+            {
+              value: heightFtText,
+              onChangeText: onHeightFtText,
+              suffix: t("profileSettingsUi.feetShort"),
+              placeholder: "5",
+              testID: TEST_IDS.settingsHeightFt,
+              keyboardType: "number-pad",
+              maxLength: 1,
+              width: 14,
+            },
+            {
+              value: heightInText,
+              onChangeText: onHeightInText,
+              suffix: t("profileSettingsUi.inchesShort"),
+              placeholder: "7",
+              testID: TEST_IDS.settingsHeightIn,
+              keyboardType: "number-pad",
+              maxLength: 2,
+              width: 24,
+            },
+          ]
+        : [
+            {
+              value: heightText,
+              onChangeText: onHeightCmText,
+              suffix: t("profileSettingsUi.unitCm"),
+              placeholder: t("profileSettingsUi.heightPlaceholder"),
+              testID: TEST_IDS.settingsHeight,
+              maxLength: 5,
+            },
+          ];
+    const weightInputs: MeasureInput[] = [
+      {
+        value: weightText,
+        onChangeText: onWeightText,
+        suffix: bodyUnits.weight === "lb" ? t("profileSettingsUi.unitLb") : t("profileSettingsUi.unitKg"),
+        placeholder: bodyUnits.weight === "lb" ? "165" : t("profileSettingsUi.weightPlaceholder"),
+        testID: TEST_IDS.settingsWeight,
+        keyboardType: bodyUnits.weight === "lb" ? "number-pad" : "decimal-pad",
+        maxLength: bodyUnits.weight === "lb" ? 3 : 5,
+      },
+    ];
     return (
       <View style={styles.screenRoot}>
         <Header
           flatOverlay
-          onBackPress={() => setActiveSection(null)}
+          onBackPress={backFromGame}
           onProPress={() => navigation.navigate("ProSubscription")}
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
@@ -1522,98 +1765,199 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           bottomOffset={insets.bottom + 12}
         >
           <Text style={styles.detailPageHeading}>{currentTitle}</Text>
-          <View style={styles.editCard}>
-              <Text style={styles.inputLabel}>Set your Ranking</Text>
-              <View style={styles.row}>
-                <TouchableOpacity
-                  style={[styles.choicePill, hasRankingInput === false && styles.choicePillActive]}
-                  onPress={() => {
-                    setHasRankingInput(false);
-                    setRankingOrgInput(null);
-                    setRankingValueInput("");
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.choiceText, hasRankingInput === false && styles.choiceTextActive]}>
-                    No
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.choicePill, hasRankingInput === true && styles.choicePillActive]}
-                  onPress={() => {
-                    setHasRankingInput(true);
-                    setRankingOrgInput((prev) => prev || "Playtomic");
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.choiceText, hasRankingInput === true && styles.choiceTextActive]}>
-                    Yes
-                  </Text>
-                </TouchableOpacity>
+          {gameStep === "details" ? (
+            <>
+              <View style={styles.personalHeroRow}>
+                <Image
+                  source={profileImageSource(profileImageUri)}
+                  style={styles.personalHeroAvatar}
+                  resizeMode="cover"
+                />
+                <Text allowFontScaling={false} style={styles.personalHeroName} numberOfLines={2}>
+                  {displayFullName}
+                </Text>
               </View>
 
-              {hasRankingInput === false && (
-                <View style={{ gap: 8, marginTop: 8 }}>
-                  <Text style={styles.inputLabel}>Set your Level</Text>
-                  {LEVEL_OPTIONS.map((opt) => (
+              <View style={styles.gameCard}>
+                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.gameCardTitle}>
+                  {t("profileSetup.dominantHand")}
+                </Text>
+                <SegmentedToggle
+                  accessibilityLabel={t("profileSetup.dominantHand")}
+                  value={handInput}
+                  onChange={(v) => {
+                    // Court side is a saved choice here, so changing hand never moves it.
+                    setHandInput(v);
+                    setDetailsError(null);
+                  }}
+                  options={[
+                    { value: "left", label: t("profileSetup.leftHand"), testID: TEST_IDS.settingsHand("left") },
+                    { value: "right", label: t("profileSetup.rightHand"), testID: TEST_IDS.settingsHand("right") },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.gameCard}>
+                <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.gameCardTitle}>
+                  {t("profileSetup.courtSide")}
+                </Text>
+                <SegmentedToggle
+                  accessibilityLabel={t("profileSetup.courtSide")}
+                  value={courtSideInput}
+                  onChange={(v) => {
+                    setCourtSideInput(v);
+                    setDetailsError(null);
+                  }}
+                  options={[
+                    { value: "left", label: t("common.left"), testID: TEST_IDS.settingsCourt("left") },
+                    { value: "right", label: t("common.right"), testID: TEST_IDS.settingsCourt("right") },
+                  ]}
+                />
+                <CourtSideGraphic courtSide={courtSideInput} />
+              </View>
+
+              <MeasureField<HeightUnit>
+                label={t("profileSettingsUi.height")}
+                inputs={heightInputs}
+                unit={bodyUnits.height}
+                unitOptions={[
+                  { value: "cm", label: t("profileSettingsUi.unitCm"), testID: TEST_IDS.settingsUnitOption("cm") },
+                  { value: "ftin", label: t("profileSettingsUi.unitFtIn"), testID: TEST_IDS.settingsUnitOption("ftin") },
+                ]}
+                onUnitChange={(u) => changeBodyUnit("height", u)}
+                unitPickerTitle={t("profileSettingsUi.heightUnitTitle")}
+                unitTestID={TEST_IDS.settingsUnit("height")}
+                closeLabel={t("profileSettingsUi.close")}
+              />
+              <MeasureField<WeightUnit>
+                label={t("profileSettingsUi.weight")}
+                inputs={weightInputs}
+                unit={bodyUnits.weight}
+                unitOptions={[
+                  { value: "kg", label: t("profileSettingsUi.unitKg"), testID: TEST_IDS.settingsUnitOption("kg") },
+                  { value: "lb", label: t("profileSettingsUi.unitLb"), testID: TEST_IDS.settingsUnitOption("lb") },
+                ]}
+                onUnitChange={(u) => changeBodyUnit("weight", u)}
+                unitPickerTitle={t("profileSettingsUi.weightUnitTitle")}
+                unitTestID={TEST_IDS.settingsUnit("weight")}
+                closeLabel={t("profileSettingsUi.close")}
+              />
+
+              {detailsError ? (
+                <Text style={styles.gameErrorText} testID={TEST_IDS.settingsDetailsError} accessibilityRole="alert">
+                  {detailsError}
+                </Text>
+              ) : null}
+
+              <SubsectionFooter
+                onBack={backFromGame}
+                primaryLabel={t("profileSettingsUi.setYourLevel")}
+                onPrimary={() => void savePlayerDetails()}
+                primaryDisabled={detailsSaving}
+                primaryLoading={detailsSaving}
+                primaryTestID={TEST_IDS.settingsSetLevel}
+              />
+            </>
+          ) : (
+            <View testID={TEST_IDS.settingsLevelStep}>
+              {detailsSavedNotice ? (
+                <Text style={styles.gameSavedNotice}>{t("profileSettingsUi.playerDetailsSaved")}</Text>
+              ) : null}
+              <View style={styles.editCard}>
+                  <Text style={styles.inputLabel}>Set your Ranking</Text>
+                  <View style={styles.row}>
                     <TouchableOpacity
-                      key={opt}
-                      style={[styles.levelOption, levelInput === opt && styles.levelOptionActive]}
-                      onPress={() => setLevelInput(opt)}
+                      style={[styles.choicePill, hasRankingInput === false && styles.choicePillActive]}
+                      onPress={() => {
+                        setHasRankingInput(false);
+                        setRankingOrgInput(null);
+                        setRankingValueInput("");
+                      }}
                       activeOpacity={0.85}
                     >
-                      <Text style={[styles.levelText, levelInput === opt && styles.levelTextActive]}>
-                        {opt}
+                      <Text style={[styles.choiceText, hasRankingInput === false && styles.choiceTextActive]}>
+                        No
                       </Text>
                     </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+                    <TouchableOpacity
+                      style={[styles.choicePill, hasRankingInput === true && styles.choicePillActive]}
+                      onPress={() => {
+                        setHasRankingInput(true);
+                        setRankingOrgInput((prev) => prev || "Playtomic");
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.choiceText, hasRankingInput === true && styles.choiceTextActive]}>
+                        Yes
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
 
-              {hasRankingInput === true && (
-                <View style={{ gap: 10, marginTop: 8 }}>
-                  <View style={styles.rankLogoWrap}>
-                    {rankingLogoMod != null ? (
-                      <LocalSvgAsset assetModule={rankingLogoMod} width={300} height={64} />
-                    ) : (
-                      <Text style={styles.rankLogoFallback}>{rankingOrgInput || "Playtomic"}</Text>
-                    )}
-                  </View>
-                  <View style={styles.chipWrap}>
-                    {RANKING_ORG_OPTIONS.map((opt) => (
-                      <TouchableOpacity
-                        key={opt}
-                        style={[styles.chip, rankingOrgInput === opt && styles.chipActive]}
-                        onPress={() => setRankingOrgInput(opt)}
-                        activeOpacity={0.85}
-                      >
-                        <Text
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                          style={[styles.chipText, rankingOrgInput === opt && styles.chipTextActive]}
+                  {hasRankingInput === false && (
+                    <View style={{ gap: 8, marginTop: 8 }}>
+                      <Text style={styles.inputLabel}>Set your Level</Text>
+                      {LEVEL_OPTIONS.map((opt) => (
+                        <TouchableOpacity
+                          key={opt}
+                          testID={TEST_IDS.settingsLevel(opt)}
+                          style={[styles.levelOption, levelInput === opt && styles.levelOptionActive]}
+                          onPress={() => setLevelInput(opt)}
+                          activeOpacity={0.85}
                         >
-                          {opt}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <TextInput
-                    value={rankingValueInput}
-                    onChangeText={setRankingValueInput}
-                    style={styles.input}
-                    placeholder={t("profileSetup.ratingPlaceholder")}
-                    placeholderTextColor={theme.placeholderTextColor ?? theme.mutedForegroundColor}
-                  />
+                          <Text style={[styles.levelText, levelInput === opt && styles.levelTextActive]}>
+                            {opt}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {hasRankingInput === true && (
+                    <View style={{ gap: 10, marginTop: 8 }}>
+                      <View style={styles.rankLogoWrap}>
+                        {rankingLogoMod != null ? (
+                          <LocalSvgAsset assetModule={rankingLogoMod} width={300} height={64} />
+                        ) : (
+                          <Text style={styles.rankLogoFallback}>{rankingOrgInput || "Playtomic"}</Text>
+                        )}
+                      </View>
+                      <View style={styles.chipWrap}>
+                        {RANKING_ORG_OPTIONS.map((opt) => (
+                          <TouchableOpacity
+                            key={opt}
+                            style={[styles.chip, rankingOrgInput === opt && styles.chipActive]}
+                            onPress={() => setRankingOrgInput(opt)}
+                            activeOpacity={0.85}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                              style={[styles.chipText, rankingOrgInput === opt && styles.chipTextActive]}
+                            >
+                              {opt}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      <TextInput
+                        value={rankingValueInput}
+                        onChangeText={setRankingValueInput}
+                        style={styles.input}
+                        placeholder={t("profileSetup.ratingPlaceholder")}
+                        placeholderTextColor={theme.placeholderTextColor ?? theme.mutedForegroundColor}
+                      />
+                    </View>
+                  )}
                 </View>
-              )}
+              <SubsectionFooter
+                onBack={backFromGame}
+                primaryLabel={t("profileSettingsUi.saveGameSettings")}
+                onPrimary={saveGameSettings}
+                primaryDisabled={gameSaving}
+                primaryLoading={gameSaving}
+              />
             </View>
-          <SubsectionFooter
-            onBack={() => setActiveSection(null)}
-            primaryLabel={t("profileSettingsUi.saveGameSettings")}
-            onPrimary={saveGameSettings}
-            primaryDisabled={gameSaving}
-            primaryLoading={gameSaving}
-          />
+          )}
         </KeyboardAwareScrollView>
         <MainTabBarChrome activeTab="You" />
       </View>
@@ -1776,7 +2120,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             title={t("profileSettingsUi.gameSettings")}
             subtitle={t("profileSettingsUi.gameSettingsSub")}
             iconModule={MENU_SVG.game}
-            onPress={() => setActiveSection("game")}
+            onPress={openGameSettings}
             testID={TEST_IDS.settingsSection("game")}
           />
           <MenuRow
@@ -2171,6 +2515,35 @@ function getStyles(theme: any) {
       fontFamily: theme.semiBoldFont,
       fontSize: 20,
       letterSpacing: 0.2,
+    },
+    gameCard: {
+      borderRadius: UI.radiusCard,
+      backgroundColor: UI.cardBg,
+      ...CARD_GLOW,
+      paddingHorizontal: 16,
+      paddingVertical: 20,
+      gap: 14,
+      marginBottom: 12,
+    },
+    gameCardTitle: {
+      fontFamily: theme.mediumFont,
+      fontSize: 20,
+      color: UI.text,
+      textAlign: "center",
+    },
+    gameErrorText: {
+      color: UI.error,
+      fontFamily: theme.regularFont,
+      fontSize: 14,
+      lineHeight: 19,
+      marginTop: 4,
+      marginBottom: 4,
+    },
+    gameSavedNotice: {
+      color: PERSONAL_LABEL_COLOR,
+      fontFamily: theme.regularFont,
+      fontSize: 14,
+      marginBottom: 10,
     },
     personalFieldBox: {
       width: "100%",
