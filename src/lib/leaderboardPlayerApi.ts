@@ -22,6 +22,8 @@ export type PublicPlayerProfile = {
     rankingValue: string | null
     hasRanking: boolean | null
     headline: string
+    /** Coach specialty keys; empty unless the user is a coach. Missing on older servers. */
+    coachSpecialties?: string[]
   }
   totalXp: number
 }
