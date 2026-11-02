@@ -40,11 +40,24 @@ export function specialtyLabels(keys: readonly unknown[] | null | undefined, t: 
   return sortSpecialties(keys).map((k) => t(specialtyI18nKey(k)))
 }
 
-/** Labels for a coach card: the first 3, then "+N" for the rest. */
-export function chipsForCard(keys: readonly unknown[] | null | undefined, t: TFunction): string[] {
-  const labels = specialtyLabels(keys, t)
-  if (labels.length <= CARD_CHIP_LIMIT) return labels
-  return [...labels.slice(0, CARD_CHIP_LIMIT), `+${labels.length - CARD_CHIP_LIMIT}`]
+/**
+ * How many chips fit in one row of `available` points: at most `max`, and when some are left out
+ * a "+N" chip of `plusWidth` must fit too. `widths` are the measured chip widths, in order.
+ */
+export function fitChipCount(
+  widths: readonly number[],
+  plusWidth: number,
+  available: number,
+  gap: number,
+  max: number = CARD_CHIP_LIMIT,
+): number {
+  const n = widths.length
+  for (let k = Math.min(n, max); k >= 0; k--) {
+    const chips = widths.slice(0, k).reduce((a, w) => a + w, 0) + Math.max(0, k - 1) * gap
+    const plus = k < n ? (k > 0 ? gap : 0) + plusWidth : 0
+    if (chips + plus <= available) return k
+  }
+  return 0
 }
 
 /** Replace the signed-in coach's specialties. Returns the saved list; throws on failure. */

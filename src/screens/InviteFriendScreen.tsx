@@ -42,7 +42,7 @@ import {
 } from "../lib/clubsApi";
 import { fetchCoachCards, type CoachCard } from "../lib/coachDirectoryApi";
 import { fetchMyFollows } from "../lib/followsApi";
-import { chipsForCard } from "../lib/coachSpecialties";
+import { specialtyLabels } from "../lib/coachSpecialties";
 import { FollowButton } from "../components/FollowButton";
 import { TEST_IDS } from "../lib/testIds";
 import { useTranslation } from "react-i18next";
@@ -263,7 +263,7 @@ export function InviteFriendScreen() {
             location={coach.areaLocation}
             verified
             tier={coach.tier}
-            chips={chipsForCard(coach.specialties, t)}
+            chips={specialtyLabels(coach.specialties, t)}
             action={
               <FollowButton
                 targetType="coach"
