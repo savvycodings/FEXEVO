@@ -158,7 +158,8 @@ function JointMarkers({
     const p = keypoints[name]
     if (!p) return null
     if (!video) {
-      const d = Math.max(w, h)
+      // Match Image resizeMode="contain" for the square hologram still.
+      const d = Math.min(w, h)
       return { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d }
     }
     return { x: video.x + p.x * video.w, y: video.y + p.y * video.h }
@@ -308,11 +309,14 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const holoImage = layer === 'pro' ? hologram.proImage : hologram.image
   const holoKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
   const building =
-    layer === 'pro'
+    hologram.ready &&
+    (layer === 'pro'
       ? hologram.proStatus === 'running'
       : hologram.status === 'running' ||
+        (layer === 'player' && hologram.status !== 'done' && !hologram.image) ||
+        // Saved orbit clip means show it — never overlay "Building the turn…" on reopen.
         (layer === 'player' && hologram.orbitStatus === 'running' && !hologram.orbitVideo) ||
-        (layer === 'overlay' && hologram.proStatus === 'running')
+        (layer === 'overlay' && hologram.proStatus === 'running'))
   /** Pro tab with nothing to draw: no matched pro clip, or its render failed or never started. */
   const proMissing = layer === 'pro' && !hologram.proImage && hologram.proStatus !== 'running'
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
@@ -404,7 +408,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
           <Video
             ref={videoRef}
             source={{ uri: pictureUri }}
-            resizeMode={ResizeMode.COVER}
+            // 9:16 orbit is laid out so the square hologram band fills the stage (same as the still).
+            resizeMode={placed ? ResizeMode.STRETCH : ResizeMode.COVER}
             isMuted
             progressUpdateIntervalMillis={100}
             usePoster={Platform.OS === 'ios' && Boolean(holoImage)}
@@ -436,21 +441,31 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
             onError={() => {
               if (pictureUri !== hologram.orbitVideo && hologram.orbitVideo) setPlaybackUri(hologram.orbitVideo)
             }}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: stageSize.w || stageWidth,
-              height: stageSize.h || stageHeight,
-            }}
+            style={
+              placed
+                ? {
+                    position: 'absolute',
+                    left: placed.x,
+                    top: placed.y,
+                    width: placed.w,
+                    height: placed.h,
+                  }
+                : {
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: stageSize.w || stageWidth,
+                    height: stageSize.h || stageHeight,
+                  }
+            }
           />
         ) : null}
         {!pictureUri && holoImage ? (
-          <Image source={{ uri: holoImage }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+          <Image source={{ uri: holoImage }} resizeMode="contain" style={StyleSheet.absoluteFill} />
         ) : !pictureUri ? (
           <Image
             source={BODY}
-            resizeMode="cover"
+            resizeMode="contain"
             // absoluteFill alone leaves a bundled image at its natural size on web.
             style={[styles.fill, layer === 'pro' && styles.bodyGhost]}
           />
