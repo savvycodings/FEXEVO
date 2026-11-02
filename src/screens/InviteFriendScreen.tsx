@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -20,7 +20,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { StatusBar } from "expo-status-bar";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { MainStackParamList } from "../navigation/types";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -31,7 +31,15 @@ import { PersonCard } from "../components/PersonCard";
 import { CARD_GLOW, GlowButton, SegmentedToggle, SELECTED_GLOW, UI } from "../components/ui";
 import { useSessionData } from "../context/SessionDataContext";
 import { findCountry } from "../lib/countries";
-import { fetchMyFriends, type Friend } from "../lib/friendsApi";
+import {
+  acceptRequest,
+  declineRequest,
+  fetchIncomingRequests,
+  fetchMyFriends,
+  type Friend,
+  type FriendRequest,
+} from "../lib/friendsApi";
+import { FriendRequestCard } from "../components/FriendRequestCard";
 import { ClubBannerImage } from "../components/ClubBannerImage";
 import { ClubPfpImage } from "../components/ClubPfpImage";
 import {
@@ -48,6 +56,9 @@ type FriendsView = "mine" | "requests";
 type CoachFilter = "all" | "nearby";
 type CoachSort = "relevance" | "rating" | "name";
 type ClubFilter = "all" | "near" | "courts";
+type RequestSort = "newest" | "oldest";
+
+const ERROR_TOAST_MS = 3500;
 
 function clubCityLabel(club: ClubSummary): string | null {
   return [club.city, club.country].filter(Boolean).join(", ") || null;
@@ -66,17 +77,19 @@ function matchesQuery(query: string, fields: Array<string | null | undefined>): 
 }
 
 type InviteSearchNav = NativeStackNavigationProp<MainStackParamList, "InviteSearch">;
+type InviteSearchRoute = RouteProp<MainStackParamList, "InviteSearch">;
 
 export function InviteFriendScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<InviteSearchNav>();
+  const route = useRoute<InviteSearchRoute>();
   const { theme } = useContext(ThemeContext);
   const { width: winW } = useWindowDimensions();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const { profileAreaLocation } = useSessionData();
 
   const [segment, setSegment] = useState<InviteSegment>("friends");
-  const [friendsView, setFriendsView] = useState<FriendsView>("mine");
+  const [friendsView, setFriendsView] = useState<FriendsView>(route.params?.friendsView ?? "mine");
   const [coachFilter, setCoachFilter] = useState<CoachFilter>("all");
   const [sort, setSort] = useState<CoachSort>("relevance");
   const [sortOpen, setSortOpen] = useState(false);
@@ -88,6 +101,18 @@ export function InviteFriendScreen() {
   const [clubs, setClubs] = useState<ClubSummary[] | null>(null);
   const [coaches, setCoaches] = useState<CoachCard[] | null>(null);
   const [friends, setFriends] = useState<Friend[] | null>(null);
+
+  /** Pending incoming friend requests (server order: newest first). */
+  const [requests, setRequests] = useState<FriendRequest[] | null>(null);
+  /** Accepted on this screen; kept only while the Requests view stays open. */
+  const [recentAccepted, setRecentAccepted] = useState<FriendRequest[]>([]);
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
+  const [requestSort, setRequestSort] = useState<RequestSort>("newest");
+  const [requestSortOpen, setRequestSortOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestsRef = useRef<FriendRequest[] | null>(null);
+  requestsRef.current = requests;
 
   const myCountry = useMemo(() => findCountry(profileAreaLocation)?.code ?? null, [profileAreaLocation]);
 
@@ -163,6 +188,113 @@ export function InviteFriendScreen() {
     };
   }, []);
 
+  const showToast = useCallback((message: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(message);
+    toastTimer.current = setTimeout(() => setToast(null), ERROR_TOAST_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
+
+  const loadRequests = useCallback(async () => {
+    try {
+      setRequests(await fetchIncomingRequests());
+    } catch {
+      setRequests((prev) => prev ?? []);
+    }
+  }, []);
+
+  const refreshFriends = useCallback(() => {
+    void fetchMyFriends().then(setFriends);
+  }, []);
+
+  // Results handed back by the detail screen: show the accepted card under "Recent request".
+  const acceptedParam = route.params?.acceptedRequestId;
+  const removedParam = route.params?.removedRequestId;
+  const viewParam = route.params?.friendsView;
+  useEffect(() => {
+    if (!acceptedParam && !removedParam && !viewParam) return;
+    if (viewParam) {
+      setSegment("friends");
+      setFriendsView(viewParam);
+    }
+    const current = requestsRef.current ?? [];
+    if (acceptedParam) {
+      const card = current.find((r) => r.id === acceptedParam);
+      if (card) setRecentAccepted((prev) => (prev.some((r) => r.id === card.id) ? prev : [card, ...prev]));
+      refreshFriends();
+    }
+    const gone = new Set([acceptedParam, removedParam].filter(Boolean));
+    if (gone.size) setRequests((prev) => (prev ? prev.filter((r) => !gone.has(r.id)) : prev));
+    navigation.setParams({ acceptedRequestId: undefined, removedRequestId: undefined, friendsView: undefined });
+  }, [acceptedParam, removedParam, viewParam, navigation, refreshFriends]);
+
+  // Requests (and the badge) refresh whenever the screen gains focus.
+  useFocusEffect(
+    useCallback(() => {
+      void loadRequests();
+    }, [loadRequests]),
+  );
+
+  const sortedRequests = useMemo(() => {
+    if (requests == null) return null;
+    const byTime = (a: FriendRequest, b: FriendRequest) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    return [...requests].sort((a, b) => (requestSort === "newest" ? byTime(a, b) : byTime(b, a)));
+  }, [requests, requestSort]);
+
+  const pendingCount = requests?.length ?? 0;
+
+  const setBusy = useCallback((id: string, busy: boolean) => {
+    setBusyIds((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  /** Optimistic: the card moves to "Recent request" at once and goes back if the call fails. */
+  const onAcceptRequest = useCallback(
+    async (req: FriendRequest) => {
+      setBusy(req.id, true);
+      setRequests((prev) => (prev ? prev.filter((r) => r.id !== req.id) : prev));
+      setRecentAccepted((prev) => [req, ...prev.filter((r) => r.id !== req.id)]);
+      try {
+        await acceptRequest(req.id);
+        refreshFriends();
+      } catch {
+        setRecentAccepted((prev) => prev.filter((r) => r.id !== req.id));
+        setRequests((prev) => (prev && !prev.some((r) => r.id === req.id) ? [...prev, req] : prev));
+        showToast(t("friends.actionFailed"));
+      } finally {
+        setBusy(req.id, false);
+      }
+    },
+    [refreshFriends, setBusy, showToast, t],
+  );
+
+  /** Optimistic: the card disappears at once and comes back if the call fails. */
+  const onDeclineRequest = useCallback(
+    async (req: FriendRequest) => {
+      setBusy(req.id, true);
+      setRequests((prev) => (prev ? prev.filter((r) => r.id !== req.id) : prev));
+      try {
+        await declineRequest(req.id);
+      } catch {
+        setRequests((prev) => (prev && !prev.some((r) => r.id === req.id) ? [...prev, req] : prev));
+        showToast(t("friends.actionFailed"));
+      } finally {
+        setBusy(req.id, false);
+      }
+    },
+    [setBusy, showToast, t],
+  );
+
   /** Club card: page padding 20 each side, 1px border each side. */
   const cardW = winW - 42;
   const bannerH = cardW * CLUB_BANNER_ASPECT;
@@ -205,7 +337,14 @@ export function InviteFriendScreen() {
       navigation.navigate("Main", { screen: "Progress", params: { screen: "Ranking" } });
       return;
     }
+    // Accepted cards only live while the Requests view stays open.
+    if (view !== friendsView) setRecentAccepted([]);
     setFriendsView(view);
+  }
+
+  function onSegment(next: InviteSegment) {
+    if (next !== segment) setRecentAccepted([]);
+    setSegment(next);
   }
 
   const screenBg = theme.backgroundColor ?? "#030A17";
@@ -245,9 +384,91 @@ export function InviteFriendScreen() {
       </View>
     );
 
+  const requestSortLabels: Record<RequestSort, string> = {
+    newest: t("friends.sortNewest"),
+    oldest: t("friends.sortOldest"),
+  };
+
+  const recentSection =
+    recentAccepted.length > 0 ? (
+      <View style={styles.requestSection} testID="recent-requests">
+        <Text allowFontScaling={false} style={styles.sectionTitle}>
+          {t("friends.recentRequest")}
+        </Text>
+        <View style={styles.sectionCards}>
+          {recentAccepted.map((req) => (
+            <FriendRequestCard
+              key={req.id}
+              request={req}
+              state="accepted"
+            />
+          ))}
+        </View>
+      </View>
+    ) : null;
+
+  /** Friend Requests section. add-club-memberships stacks a Club Requests section under it. */
+  const friendRequestsSection =
+    sortedRequests == null ? (
+      <ActivityIndicator style={styles.listLoading} color={UI.accent} />
+    ) : sortedRequests.length === 0 ? (
+      recentAccepted.length === 0 ? (
+        <Text style={styles.emptyListText} testID="friend-requests-empty">
+          {t("friends.noRequests")}
+        </Text>
+      ) : null
+    ) : (
+      <View style={styles.requestSection} testID="friend-requests">
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleRow}>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>
+              {t("friends.friendRequests")}
+            </Text>
+            <View style={styles.countBadge} testID="friend-requests-count">
+              <Text allowFontScaling={false} style={styles.countBadgeText}>
+                {pendingCount}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.sortBtn}
+            onPress={() => setRequestSortOpen(true)}
+            hitSlop={8}
+            testID="friend-requests-sort"
+            accessibilityRole="button"
+          >
+            <Text allowFontScaling={false} style={styles.metaText}>
+              {t("friends.sortLabel", { sort: requestSortLabels[requestSort] })}
+            </Text>
+            <Ionicons name="chevron-down" size={14} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.sectionCards}>
+          {sortedRequests.map((req) => (
+            <FriendRequestCard
+              key={req.id}
+              request={req}
+              state={busyIds.has(req.id) ? "busy" : "pending"}
+              onOpen={() => navigation.navigate("FriendRequestDetail", { requestId: req.id })}
+              onAccept={() => void onAcceptRequest(req)}
+              onDecline={() => void onDeclineRequest(req)}
+            />
+          ))}
+        </View>
+      </View>
+    );
+
+  const requestsBody = (
+    <View>
+      {recentSection}
+      {friendRequestsSection}
+      {/* Club Requests section (add-club-memberships) slots in here. */}
+    </View>
+  );
+
   const friendsBody =
     friendsView === "requests" ? (
-      <Text style={styles.emptyListText}>{t("inviteExtra.noRequests")}</Text>
+      requestsBody
     ) : visibleFriends == null ? (
       <ActivityIndicator style={styles.listLoading} color={UI.accent} />
     ) : visibleFriends.length === 0 ? (
@@ -261,7 +482,13 @@ export function InviteFriendScreen() {
             key={f.id}
             name={f.name}
             imageUri={f.imageUri}
-            subtitle={f.relation === "coach" ? t("inviteExtra.yourCoach") : t("inviteExtra.yourStudent")}
+            subtitle={
+              f.relation === "coach"
+                ? t("inviteExtra.yourCoach")
+                : f.relation === "student"
+                  ? t("inviteExtra.yourStudent")
+                  : t("friends.yourFriend")
+            }
             location={f.areaLocation}
             verified={f.relation === "coach"}
             onPress={
@@ -377,7 +604,7 @@ export function InviteFriendScreen() {
                 key={key}
                 label={label}
                 active={segment === key}
-                onPress={() => setSegment(key)}
+                onPress={() => onSegment(key)}
                 style={styles.segmentPill}
                 textStyle={styles.segmentLabel}
                 role="tab"
@@ -390,7 +617,7 @@ export function InviteFriendScreen() {
               <SegmentedToggle<FriendsView | "ranking">
                 options={[
                   { value: "mine", label: t("inviteExtra.myFriends") },
-                  { value: "requests", label: t("inviteExtra.requests") },
+                  { value: "requests", label: t("inviteExtra.requests"), badge: pendingCount, testID: "friends-requests-tab" },
                   { value: "ranking", label: t("inviteExtra.ranking") },
                 ]}
                 value={friendsView}
@@ -399,6 +626,7 @@ export function InviteFriendScreen() {
             </View>
           ) : null}
 
+          {segment === "friends" && friendsView === "requests" ? null : (
           <View style={styles.searchRow}>
             <View style={styles.searchWrap}>
               <Ionicons name="search-outline" size={20} color={UI.textMuted} />
@@ -434,6 +662,7 @@ export function InviteFriendScreen() {
               <Ionicons name="filter" size={22} color={segment === "coaches" ? "#FFFFFF" : UI.textMuted} />
             </TouchableOpacity>
           </View>
+          )}
 
           {segment === "coaches" ? (
             <View style={styles.chipRow}>
@@ -511,7 +740,13 @@ export function InviteFriendScreen() {
 
           {segment === "coaches" ? coachesBody : segment === "clubs" ? clubsBody : friendsBody}
         </ScrollView>
-        {segment === "friends" ? (
+        {toast ? (
+          <View style={styles.toast} accessibilityRole="alert" testID="friends-toast">
+            <Ionicons name="alert-circle" size={18} color={UI.error} />
+            <Text style={styles.toastText}>{toast}</Text>
+          </View>
+        ) : null}
+        {segment === "friends" && friendsView === "mine" ? (
           <View style={styles.footer}>
             <GlowButton
               label={t("invite.inviteFriend")}
@@ -544,6 +779,41 @@ export function InviteFriendScreen() {
                   activeOpacity={0.85}
                 >
                   <Text style={[styles.modalRowText, selected && styles.modalRowTextActive]}>{sortLabels[key]}</Text>
+                  {selected ? <Ionicons name="checkmark" size={18} color={UI.accent} /> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={requestSortOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRequestSortOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setRequestSortOpen(false)} />
+          <View style={styles.modalCard}>
+            <Text allowFontScaling={false} style={styles.modalTitle}>
+              {t("inviteExtra.sortTitle")}
+            </Text>
+            {(["newest", "oldest"] as const).map((key) => {
+              const selected = requestSort === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.modalRow, selected && styles.modalRowActive]}
+                  onPress={() => {
+                    setRequestSort(key);
+                    setRequestSortOpen(false);
+                  }}
+                  activeOpacity={0.85}
+                  testID={`friend-requests-sort-${key}`}
+                >
+                  <Text style={[styles.modalRowText, selected && styles.modalRowTextActive]}>
+                    {requestSortLabels[key]}
+                  </Text>
                   {selected ? <Ionicons name="checkmark" size={18} color={UI.accent} /> : null}
                 </TouchableOpacity>
               );
@@ -761,6 +1031,63 @@ function getStyles(theme: {
       fontSize: 14,
       lineHeight: 20,
       paddingHorizontal: 16,
+    },
+    requestSection: {
+      marginTop: 20,
+    },
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    sectionTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    sectionTitle: {
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 17,
+      color: "#FFFFFF",
+    },
+    countBadge: {
+      minWidth: 24,
+      height: 24,
+      paddingHorizontal: 6,
+      borderRadius: 12,
+      backgroundColor: "#3D6BFF",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    countBadgeText: {
+      fontFamily: theme.semiBoldFont ?? "System",
+      fontSize: 12,
+      color: "#FFFFFF",
+    },
+    sectionCards: {
+      marginTop: 12,
+      gap: 12,
+    },
+    toast: {
+      position: "absolute",
+      left: 20,
+      right: 20,
+      bottom: 110,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: "rgba(255, 107, 122, 0.5)",
+      backgroundColor: "#1A0F24",
+    },
+    toastText: {
+      flex: 1,
+      color: "#FFFFFF",
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 14,
     },
     footer: {
       paddingHorizontal: 20,
