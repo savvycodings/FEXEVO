@@ -4,7 +4,7 @@ import { expect, request, test, type Browser } from '@playwright/test'
 import { ADMIN_GATE_PASSWORD, API_URL, FIXTURE_VIDEO, authStatePath, type Role } from './env'
 import { T, nav, openApp, openScreen } from './helpers'
 
-const WEB_ORIGIN = 'http://localhost:8090'
+const WEB_ORIGIN = `http://localhost:${process.env.E2E_WEB_PORT ?? 8090}`
 const apiAs = (role: Role, extra: Record<string, string> = {}) =>
   request.newContext({ baseURL: API_URL, storageState: authStatePath(role), extraHTTPHeaders: { Origin: WEB_ORIGIN, ...extra } })
 
@@ -103,4 +103,69 @@ test('admin hub: unlock with the gate password and open members', async ({ brows
   // The members list includes the seeded coach.
   expect(JSON.stringify(await res.json())).toContain('E2E Coach')
   await ctx.close()
+})
+
+test('friend requests: B sends from the profile, A accepts from the detail screen, B shows in My Friends', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const seed = await request.newContext({ baseURL: API_URL })
+  const { accounts } = (await (await seed.post('/__e2e/seed')).json()) as {
+    accounts: Record<Role, { id: string }>
+  }
+  await seed.dispose()
+  const playerId = accounts.player.id
+  const adminId = accounts.admin.id
+
+  // Start clean: no friendship or pending request between admin (B) and player (A).
+  const adminApi = await apiAs('admin')
+  const before = (await (await adminApi.get(`/api/auth/friends/relationship/${playerId}`)).json()) as {
+    status: string
+    requestId?: string
+  }
+  if (before.status === 'friends') await adminApi.delete(`/api/auth/friends/${playerId}`)
+  if (before.status === 'outgoing_pending') await adminApi.delete(`/api/auth/friends/requests/${before.requestId}`)
+  if (before.status === 'incoming_pending') await adminApi.post(`/api/auth/friends/requests/${before.requestId}/decline`)
+
+  // B opens A's profile and taps Add friend.
+  const b = await pageAs(browser, 'admin')
+  await nav(b.page, 'Main', {
+    screen: 'Progress',
+    params: {
+      screen: 'LeaderboardPlayer',
+      params: { userId: playerId, name: 'E2E Player', image: null, areaLocation: null, totalXp: 0, rank: 1, overallScore: null },
+    },
+  })
+  const sent = b.page.waitForResponse((r) => r.url().includes('/friends/requests') && r.request().method() === 'POST')
+  await b.page.getByTestId('friend-action-none').click()
+  expect((await sent).status()).toBeLessThan(300)
+  await expect(b.page.getByTestId('friend-action-outgoing_pending')).toBeVisible()
+  const rel = (await (await adminApi.get(`/api/auth/friends/relationship/${playerId}`)).json()) as { requestId: string }
+  const requestId = rel.requestId
+
+  // A sees it under Requests with a count of 1.
+  const a = await pageAs(browser, 'player')
+  await openScreen(a.page, 'InviteSearch', undefined, ['/api/auth/friends/requests/incoming'])
+  await expect(a.page.getByTestId('friends-requests-tab-badge')).toHaveText('1')
+  await a.page.getByTestId('friends-requests-tab').click()
+  await expect(a.page.getByTestId('friend-requests-count')).toHaveText('1')
+  await expect(a.page.getByTestId(`friend-request-${requestId}`)).toContainText(/Admin/)
+
+  // Opens the detail and accepts.
+  await a.page.getByTestId(`friend-request-open-${requestId}`).click()
+  await expect(a.page.getByTestId('friend-request-detail')).toContainText(/Admin/)
+  const accepted = a.page.waitForResponse((r) => r.url().includes(`/friends/requests/${requestId}/accept`))
+  await a.page.getByTestId('friend-request-detail-accept').click()
+  expect((await accepted).status()).toBe(200)
+
+  // Back on Requests, the card shows Accepted.
+  await expect(a.page.getByTestId(`friend-request-accepted-${requestId}`)).toBeVisible()
+  await expect(a.page.getByTestId('recent-requests')).toContainText(/Admin/)
+
+  // B appears in My Friends (the settings spec may have renamed the admin's first name).
+  await a.page.getByText(/^My Friends$/).click()
+  await expect(a.page.getByText(/E2E\S* Admin/).first()).toBeVisible()
+
+  const after = (await (await adminApi.get(`/api/auth/friends/relationship/${playerId}`)).json()) as { status: string }
+  expect(after.status).toBe('friends')
+  expect(adminId).toBeTruthy()
+  await Promise.all([a.ctx.close(), b.ctx.close(), adminApi.dispose()])
 })
