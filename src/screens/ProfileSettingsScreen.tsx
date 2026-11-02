@@ -16,8 +16,6 @@ import {
   Pressable,
 } from "react-native";
 import {
-  getCountriesForPicker,
-  countryMatchesSearchQuery,
   findCountry,
   joinAreaLocation,
   splitAreaLocation,
@@ -49,6 +47,7 @@ import { LocalSvgAsset } from "../components/LocalSvgAsset";
 import { LogoutConfirmModal } from "../components/LogoutConfirmModal";
 import { profileImageSource } from "../lib/defaultProfilePicture";
 import { TEST_IDS } from '../lib/testIds'
+import { CountryPickerModal } from "../components/CountryPickerModal";
 
 const MENU_SVG = {
   personal: require("../../assets/youpage/personalicon.svg"),
@@ -175,8 +174,49 @@ function rankingLogoModule(org: string | null): number | null {
   return mod != null ? mod : null;
 }
 
+/**
+ * Back + primary button row at the bottom of each Profile Edit section. Defined at module level
+ * so it keeps its identity across renders: a component declared inside the screen remounts
+ * whenever a field blurs, and a tap that starts while an input is focused is lost.
+ */
+function SubsectionFooter({
+  onBack,
+  primaryLabel,
+  onPrimary,
+  primaryDisabled,
+  primaryLoading,
+  primaryTestID = TEST_IDS.settingsSave,
+}: {
+  onBack: () => void;
+  primaryLabel?: string;
+  onPrimary?: () => void;
+  primaryDisabled?: boolean;
+  primaryLoading?: boolean;
+  primaryTestID?: string;
+}) {
+  const { t } = useTranslation();
+  const { theme } = useContext(ThemeContext);
+  const styles = getStyles(theme);
+  return (
+    <View style={styles.subsectionFooterRow}>
+      <SurfaceIconButton icon="chevron-back" onPress={onBack} accessibilityLabel={t("common.goBack")} />
+      {onPrimary ? (
+        <GlowButton
+          label={primaryLoading ? "Saving..." : primaryLabel ?? ""}
+          onPress={onPrimary}
+          testID={primaryTestID}
+          disabled={primaryDisabled || primaryLoading}
+          style={styles.subsectionPrimaryButton}
+        />
+      ) : (
+        <View style={styles.subsectionFooterSpacer} />
+      )}
+    </View>
+  );
+}
+
 export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; onClose: () => void }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { onProfileUpdated, onClose } = props;
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { theme } = useContext(ThemeContext);
@@ -223,14 +263,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   const [locationFocusedField, setLocationFocusedField] = useState<"city" | null>(null);
   const cityInputRef = useRef<TextInput | null>(null);
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
-  const [countrySearch, setCountrySearch] = useState("");
-
-  const countryResults = useMemo(() => {
-    const list = getCountriesForPicker();
-    const q = String(countrySearch ?? "").trim().toLowerCase();
-    if (!q) return list;
-    return [...list].filter((c) => countryMatchesSearchQuery(c, q));
-  }, [countrySearch]);
 
   const shieldQuickLocationLabel = useMemo(() => {
     const pickedRaw = locationCountry?.name;
@@ -632,7 +664,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     const areaToSave = joinAreaLocation(locationCity, locationCountry?.name);
     if (locationLanguage !== currentAppLanguage()) {
       await setAppLanguage(locationLanguage);
-      void i18n.changeLanguage(locationLanguage);
     }
     const res = await authClient
       .$fetch<{ ok?: boolean; error?: string }>("/profile/basic", {
@@ -745,35 +776,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
       </View>
       <Ionicons name="chevron-forward" size={18} color="#86A7D2" />
     </TouchableOpacity>
-  );
-
-  const SubsectionFooter = ({
-    onBack,
-    primaryLabel,
-    onPrimary,
-    primaryDisabled,
-    primaryLoading,
-  }: {
-    onBack: () => void;
-    primaryLabel?: string;
-    onPrimary?: () => void;
-    primaryDisabled?: boolean;
-    primaryLoading?: boolean;
-  }) => (
-    <View style={styles.subsectionFooterRow}>
-      <SurfaceIconButton icon="chevron-back" onPress={onBack} accessibilityLabel={t("common.goBack")} />
-      {onPrimary ? (
-        <GlowButton
-          label={primaryLoading ? "Saving..." : primaryLabel ?? ""}
-          onPress={onPrimary}
-          testID={TEST_IDS.settingsSave}
-          disabled={primaryDisabled || primaryLoading}
-          style={styles.subsectionPrimaryButton}
-        />
-      ) : (
-        <View style={styles.subsectionFooterSpacer} />
-      )}
-    </View>
   );
 
   function navigateMainTab(screen: "AICoach" | "You") {
@@ -1353,10 +1355,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
 
           <TouchableOpacity
             style={[styles.personalFieldBox, countryPickerOpen && styles.personalFieldBoxSelected]}
-            onPress={() => {
-              setCountrySearch("");
-              setCountryPickerOpen(true);
-            }}
+            onPress={() => setCountryPickerOpen(true)}
+            testID={TEST_IDS.settingsCountry}
             activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityLabel={t("profileSettingsUi.selectCountry")}
@@ -1366,9 +1366,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 {t("profileSettingsUi.country")}
               </Text>
               <View style={styles.personalGenderValueRow}>
-                {locationCountry ? (
-                  <Image source={locationCountry.flag} style={styles.countryTriggerFlag} />
-                ) : null}
                 <Text
                   allowFontScaling={false}
                   style={[styles.personalGenderValueText, !locationCountry && { color: PERSONAL_LABEL_COLOR }]}
@@ -1403,6 +1400,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 onBlur={() => setLocationFocusedField(null)}
                 style={styles.personalFieldInput}
                 placeholder={t("profileSettingsUi.cityPlaceholder")}
+                testID={TEST_IDS.settingsCity}
                 placeholderTextColor={PERSONAL_LABEL_COLOR}
                 autoCorrect={false}
               />
@@ -1412,6 +1410,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           <TouchableOpacity
             style={[styles.personalFieldBox, languagePickerOpen && styles.personalFieldBoxSelected]}
             onPress={() => setLanguagePickerOpen(true)}
+            testID={TEST_IDS.settingsLanguage}
             activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityLabel={t("profileSettingsUi.language")}
@@ -1464,6 +1463,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   return (
                     <TouchableOpacity
                       key={lang}
+                      testID={TEST_IDS.settingsLanguageOption(lang)}
                       style={[styles.countryRow, selected && styles.countryRowActive]}
                       onPress={() => {
                         setLocationLanguage(lang);
@@ -1482,85 +1482,15 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             </View>
           </Modal>
 
-          <Modal
+          <CountryPickerModal
             visible={countryPickerOpen}
-            animationType="fade"
-            transparent
-            onRequestClose={() => setCountryPickerOpen(false)}
-          >
-            <View style={styles.countryModalOverlay}>
-              <Pressable
-                style={StyleSheet.absoluteFill}
-                onPress={() => setCountryPickerOpen(false)}
-              />
-              <View style={[styles.countryModalCard, { maxHeight: winH * 0.78 }]}>
-                <View style={styles.countryModalHeader}>
-                  <Text style={styles.countryModalTitle}>Select country</Text>
-                  <TouchableOpacity
-                    onPress={() => setCountryPickerOpen(false)}
-                    hitSlop={12}
-                    accessibilityRole="button"
-                    accessibilityLabel="Close"
-                  >
-                    <Ionicons name="close" size={22} color={PERSONAL_LABEL_COLOR} />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.countrySearchWrap}>
-                  <Ionicons
-                    name="search"
-                    size={16}
-                    color="rgba(200, 220, 255, 0.65)"
-                    style={{ marginRight: 8 }}
-                  />
-                  <TextInput
-                    value={countrySearch}
-                    onChangeText={setCountrySearch}
-                    placeholder={t("profileSettingsUi.searchCountry")}
-                    placeholderTextColor={PERSONAL_LABEL_COLOR}
-                    style={styles.countrySearchInput}
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    returnKeyType="search"
-                  />
-                </View>
-                <FlatList
-                  data={countryResults}
-                  keyExtractor={(item) => item.code}
-                  keyboardShouldPersistTaps="handled"
-                  initialNumToRender={20}
-                  maxToRenderPerBatch={30}
-                  windowSize={11}
-                  ListEmptyComponent={
-                    <Text style={styles.countryEmptyText}>No countries match &quot;{countrySearch}&quot;.</Text>
-                  }
-                  renderItem={({ item }) => {
-                    const selected = locationCountry?.code === item.code;
-                    return (
-                      <TouchableOpacity
-                        style={[styles.countryRow, selected && styles.countryRowActive]}
-                        onPress={() => {
-                          setLocationCountry(item);
-                          setCountryPickerOpen(false);
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <Image source={item.flag} style={styles.countryRowFlag} />
-                        <Text
-                          style={[styles.countryRowText, selected && styles.countryRowTextActive]}
-                          numberOfLines={1}
-                        >
-                          {item.name}
-                        </Text>
-                        {selected ? (
-                          <Ionicons name="checkmark" size={18} color="#18C0FF" />
-                        ) : null}
-                      </TouchableOpacity>
-                    );
-                  }}
-                />
-              </View>
-            </View>
-          </Modal>
+            selected={locationCountry}
+            onSelect={(country) => {
+              setLocationCountry(country);
+              setCountryPickerOpen(false);
+            }}
+            onClose={() => setCountryPickerOpen(false)}
+          />
         </KeyboardAwareScrollView>
         <MainTabBarChrome activeTab="You" />
       </View>
@@ -2090,12 +2020,6 @@ function getStyles(theme: any) {
       fontSize: 15,
       marginBottom: 2,
     },
-    countryTriggerFlag: {
-      width: 26,
-      height: 18,
-      borderRadius: 3,
-      backgroundColor: "rgba(255,255,255,0.06)",
-    },
     countryModalOverlay: {
       flex: 1,
       backgroundColor: "rgba(1, 7, 25, 0.78)",
@@ -2123,25 +2047,6 @@ function getStyles(theme: any) {
       fontFamily: theme.semiBoldFont,
       fontSize: 17,
     },
-    countrySearchWrap: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: PROFILE_FIELD_BG,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: "transparent",
-      paddingHorizontal: 12,
-      marginHorizontal: 12,
-      marginBottom: 8,
-      minHeight: 48,
-    },
-    countrySearchInput: {
-      flex: 1,
-      color: "#FFFFFF",
-      fontFamily: theme.regularFont,
-      fontSize: 17,
-      paddingVertical: Platform.OS === "ios" ? 12 : 10,
-    },
     countryRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -2152,12 +2057,6 @@ function getStyles(theme: any) {
     countryRowActive: {
       backgroundColor: "rgba(0, 184, 255, 0.08)",
     },
-    countryRowFlag: {
-      width: 28,
-      height: 20,
-      borderRadius: 3,
-      backgroundColor: "rgba(255,255,255,0.06)",
-    },
     countryRowText: {
       flex: 1,
       color: "#FFFFFF",
@@ -2167,14 +2066,6 @@ function getStyles(theme: any) {
     countryRowTextActive: {
       color: "#FFFFFF",
       fontFamily: theme.semiBoldFont,
-    },
-    countryEmptyText: {
-      color: PERSONAL_LABEL_COLOR,
-      fontFamily: theme.regularFont,
-      fontSize: 15,
-      textAlign: "center",
-      paddingVertical: 24,
-      paddingHorizontal: 16,
     },
     chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
     chip: {
