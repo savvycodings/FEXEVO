@@ -1037,13 +1037,17 @@ function getStyles(theme: {
     },
     sectionHeader: {
       flexDirection: "row",
+      flexWrap: "wrap",
       alignItems: "center",
       justifyContent: "space-between",
+      columnGap: 12,
+      rowGap: 6,
     },
     sectionTitleRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
+      flexShrink: 1,
     },
     sectionTitle: {
       fontFamily: theme.regularFont ?? "System",

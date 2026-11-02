@@ -11,8 +11,8 @@ import { CARD_GLOW, PRIMARY_GLOW, UI } from './ui'
 
 export type FriendRequestCardState = 'pending' | 'busy' | 'accepted'
 
-const AVATAR = 76
-const ACTION = 44
+const AVATAR = 64
+const ACTION = 40
 const ACCEPTED_GREEN = '#6CF29A'
 
 /**
@@ -81,7 +81,7 @@ export function FriendRequestCard({
             accessibilityLabel={t('friends.decline')}
             testID={`friend-request-decline-${request.id}`}
           >
-            <Ionicons name="close" size={24} color={UI.textMuted} />
+            <Ionicons name="close" size={22} color={UI.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.acceptBtn}
@@ -98,7 +98,7 @@ export function FriendRequestCard({
               end={UI.gradientEnd}
               style={[StyleSheet.absoluteFill, styles.round]}
             />
-            <Ionicons name="checkmark" size={24} color="#FFFFFF" />
+            <Ionicons name="checkmark" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       )}
@@ -111,20 +111,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 18,
-    paddingLeft: 18,
-    paddingRight: 16,
+    paddingVertical: 16,
+    paddingLeft: 14,
+    paddingRight: 12,
     borderRadius: UI.radiusCard,
     borderWidth: 1,
     borderColor: UI.cardBorder,
     backgroundColor: UI.cardBg,
     ...CARD_GLOW,
   },
-  body: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  body: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
   textCol: { flex: 1, minWidth: 0 },
-  name: { fontSize: 20, lineHeight: 24, color: '#FFFFFF' },
+  name: { fontSize: 18, lineHeight: 22, color: '#FFFFFF' },
   location: { fontSize: 13, color: UI.textMuted, marginTop: 1 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: ACTION },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: ACTION },
   round: { borderRadius: ACTION / 2 },
   declineBtn: {
     width: ACTION,

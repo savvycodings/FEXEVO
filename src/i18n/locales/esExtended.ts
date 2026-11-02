@@ -590,9 +590,9 @@ export const esExtended = {
   friends: {
     friendRequests: "Solicitudes de amistad",
     recentRequest: "Solicitud reciente",
-    sortNewest: "Más recientes",
-    sortOldest: "Más antiguas",
-    sortLabel: "Ordenar: {{sort}}",
+    sortNewest: "Recientes",
+    sortOldest: "Antiguas",
+    sortLabel: "Orden: {{sort}}",
     mutualFriends_one: "{{count}} amigo en común",
     mutualFriends_other: "{{count}} amigos en común",
     accepted: "Aceptada",

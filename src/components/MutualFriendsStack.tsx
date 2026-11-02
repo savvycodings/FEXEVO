@@ -6,8 +6,8 @@ import { profileImageSource } from '../lib/defaultProfilePicture'
 import type { MutualFriends } from '../lib/friendsApi'
 import { UI } from './ui'
 
-const SIZE = 24
-const OVERLAP = 7
+const SIZE = 22
+const OVERLAP = 8
 
 /** Up to 3 overlapping mutual-friend avatars plus "N mutual friends". Renders nothing at 0. */
 export function MutualFriendsStack({ mutual }: { mutual: MutualFriends }) {
@@ -34,7 +34,7 @@ export function MutualFriendsStack({ mutual }: { mutual: MutualFriends }) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   stack: { height: SIZE },
   avatar: {
     position: 'absolute',
