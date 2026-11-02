@@ -95,7 +95,7 @@ export function CountryRankingScreen() {
           {name}
         </Text>
         {detail?.country.rank != null ? (
-          <Text allowFontScaling={false} numberOfLines={1} style={styles.worldRank} testID="country-world-rank">
+          <Text allowFontScaling={false} numberOfLines={2} style={styles.worldRank} testID="country-world-rank">
             {t('friendsRanking.worldRank', { rank: detail.country.rank })}
           </Text>
         ) : null}

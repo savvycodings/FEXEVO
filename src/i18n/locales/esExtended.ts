@@ -860,7 +860,7 @@ export const esExtended = {
     statPlayers: "Jugadores",
     statAverage: "Rating medio",
     statClubs: "Clubes",
-    tabPlayers: "Mejores jugadores",
+    tabPlayers: "Jugadores",
     tabClubs: "Clubes",
     tabAbout: "Info",
     noCountryPlayers: "Aún no hay jugadores con rating en este país.",

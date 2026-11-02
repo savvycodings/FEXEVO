@@ -227,6 +227,7 @@ export function FriendsRankingView({
               activeOpacity={0.85}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
+              aria-selected={active}
               testID={`ranking-scope-${key}`}
             >
               {active ? (
@@ -287,6 +288,7 @@ export function FriendsRankingView({
           accessibilityRole="button"
           accessibilityLabel={t('friendsRanking.filterTitle')}
           accessibilityState={{ disabled: filterDisabled, selected: filterActive }}
+          aria-disabled={filterDisabled}
           testID="ranking-filter"
         >
           <Ionicons name="filter" size={22} color={filterDisabled ? 'rgba(140, 176, 226, 0.45)' : '#FFFFFF'} />

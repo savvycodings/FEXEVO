@@ -1,5 +1,5 @@
 import React, { useContext, type ReactNode } from 'react'
-import { Image, StyleSheet, Text, TouchableOpacity, View, type ImageSourcePropType } from 'react-native'
+import { Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions, type ImageSourcePropType } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../../context'
@@ -9,6 +9,8 @@ import { formatRating } from '../../lib/rankingApi'
 import { RankMedal } from './RankMedal'
 
 export const RANKING_AVATAR = 46
+/** Below this width (e.g. 360) rows tighten their gaps so names keep more room. */
+const NARROW_WIDTH = 380
 
 /**
  * One ranking row: medal, round avatar, title, a subtitle line, the Rating ("85" over "Rating")
@@ -33,9 +35,10 @@ export function RankingRow({
 }) {
   const { theme } = useContext(ThemeContext)
   const { t, i18n } = useTranslation()
+  const narrow = useWindowDimensions().width < NARROW_WIDTH
   return (
     <TouchableOpacity
-      style={styles.row}
+      style={[styles.row, narrow && styles.rowNarrow]}
       onPress={onPress}
       disabled={!onPress}
       activeOpacity={0.85}
@@ -139,6 +142,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#070D2B',
     boxShadow: '0px 0px 18px 0px #2B3BFF26 inset',
   },
+  rowNarrow: { gap: 7, paddingLeft: 8, paddingRight: 6 },
   avatarRing: {
     width: RANKING_AVATAR + 4,
     height: RANKING_AVATAR + 4,
