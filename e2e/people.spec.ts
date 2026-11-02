@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { expect, request, test, type Browser } from '@playwright/test'
-import { ADMIN_GATE_PASSWORD, API_URL, FIXTURE_VIDEO, authStatePath, type Role } from './env'
+import { ACCOUNTS, ADMIN_GATE_PASSWORD, API_URL, FIXTURE_VIDEO, authStatePath, type Role } from './env'
 import { T, nav, openApp, openScreen } from './helpers'
 
 const WEB_ORIGIN = `http://localhost:${process.env.E2E_WEB_PORT ?? 8090}`
@@ -173,4 +173,95 @@ test('friend requests: B sends from the profile, A accepts from the detail scree
   expect(after.status).toBe('friends')
   expect(adminId).toBeTruthy()
   await Promise.all([a.ctx.close(), b.ctx.close(), adminApi.dispose()])
+})
+
+/** A fresh club owned by the coach, approved by the admin. */
+async function approvedClub(label: string) {
+  const name = `E2E ${label} ${Date.now().toString(36)}`
+  const owner = await apiAs('coach')
+  const created = await owner.post('/api/auth/club', { data: { name, address: '1 Ocean Dr', city: 'Miami', country: 'USA' } })
+  expect(created.status(), await created.text()).toBe(201)
+  const club = ((await created.json()) as { club: { id: string; slug: string } }).club
+  const admin = await apiAs('admin', { 'X-Xevo-Admin-Hub-Password': ADMIN_GATE_PASSWORD })
+  expect((await admin.post(`/api/auth/club/admin/${club.id}/approve`)).status()).toBe(200)
+  await admin.dispose()
+  return { ...club, name, owner }
+}
+
+test('club requests: a club invites the player, who accepts from Friends › Requests', async ({ browser }) => {
+  test.setTimeout(120_000)
+  // Start clean: no other pending club invites for the player.
+  const playerApi = await apiAs('player')
+  const pending = (await (await playerApi.get('/api/auth/club-memberships/invites')).json()) as { invites: Array<{ id: string }> }
+  for (const inv of pending.invites) await playerApi.post(`/api/auth/club-memberships/invites/${inv.id}/decline`)
+  const friendReqs = (await (await playerApi.get('/api/auth/friends/requests/incoming')).json()) as { count: number }
+
+  const club = await approvedClub('Invite Club')
+  const invited = await club.owner.post(`/api/auth/club/mine/${club.id}/invites`, { data: { email: ACCOUNTS.player } })
+  expect(invited.status(), await invited.text()).toBe(201)
+  const inviteId = ((await invited.json()) as { membership: { id: string } }).membership.id
+
+  const p = await pageAs(browser, 'player')
+  await openScreen(p.page, 'InviteSearch', undefined, ['/api/auth/club-memberships/invites'])
+  // The Requests badge counts friend requests and club invites.
+  await expect(p.page.getByTestId('friends-requests-tab-badge')).toHaveText(String(friendReqs.count + 1))
+  await p.page.getByTestId('friends-requests-tab').click()
+  await expect(p.page.getByTestId('club-requests-count')).toHaveText('1')
+  const card = p.page.getByTestId(`club-request-${inviteId}`)
+  await expect(card).toContainText(club.name)
+  await expect(card).toContainText('Miami, USA')
+  await expect(p.page.getByTestId(`club-request-members-${inviteId}`)).toHaveText('0 members')
+
+  const accepted = p.page.waitForResponse((r) => r.url().includes(`/club-memberships/invites/${inviteId}/accept`))
+  await p.page.getByTestId(`club-request-accept-${inviteId}`).click()
+  expect((await accepted).status()).toBe(200)
+  await expect(p.page.getByTestId(`club-request-accepted-${inviteId}`)).toBeVisible()
+  await expect(p.page.getByTestId(`club-request-members-${inviteId}`)).toHaveText('1 member')
+  await expect(p.page.getByTestId('club-requests-count')).toHaveCount(0)
+
+  // Tapping the card body opens the club, where the player is now a member.
+  await p.page.getByTestId(`club-request-open-${inviteId}`).click()
+  await expect(p.page.getByTestId('club-membership-member')).toBeVisible()
+  await expect(p.page.getByTestId('club-detail-members')).toHaveText('1 member')
+
+  await Promise.all([p.ctx.close(), playerApi.dispose(), club.owner.dispose()])
+})
+
+test('club page: the player asks to join, the owner approves, the page shows Member, then the player leaves', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const club = await approvedClub('Join Club')
+  const p = await pageAs(browser, 'player')
+  await openScreen(p.page, 'ClubDetail', { clubId: club.slug }, [`/api/auth/club/${club.slug}`])
+  await expect(p.page.getByTestId('club-detail-members')).toHaveText('0 members')
+
+  const asked = p.page.waitForResponse((r) => r.url().includes('/club-memberships/requests') && r.request().method() === 'POST')
+  await p.page.getByTestId('club-membership-none').click()
+  expect((await asked).status()).toBe(201)
+  await expect(p.page.getByTestId('club-membership-requested')).toBeVisible()
+
+  // The owner approves the request (portal action, done through the API here).
+  const members = (await (await club.owner.get(`/api/auth/club/mine/${club.id}/members`)).json()) as {
+    requests: Array<{ id: string }>
+  }
+  expect(members.requests).toHaveLength(1)
+  const approved = await club.owner.post(`/api/auth/club/mine/${club.id}/requests/${members.requests[0]!.id}/approve`)
+  expect(approved.status(), await approved.text()).toBe(200)
+
+  // Reload the page: Member, with the count up by one.
+  await p.page.reload()
+  await p.page.waitForFunction(() => (globalThis as any).__xevoNav?.ready?.() === true, null, { timeout: 45_000 })
+  await openScreen(p.page, 'ClubDetail', { clubId: club.slug }, [`/api/auth/club/${club.slug}`])
+  await expect(p.page.getByTestId('club-membership-member')).toBeVisible()
+  await expect(p.page.getByTestId('club-detail-members')).toHaveText('1 member')
+
+  // Leave club (with confirmation) returns to Join club.
+  await p.page.getByTestId('club-membership-member').click()
+  await p.page.getByTestId('club-membership-leave').click()
+  const left = p.page.waitForResponse((r) => r.url().includes(`/club-memberships/clubs/${club.id}`) && r.request().method() === 'DELETE')
+  await p.page.getByTestId('club-membership-leave-confirm').click()
+  expect((await left).status()).toBe(200)
+  await expect(p.page.getByTestId('club-membership-none')).toBeVisible()
+  await expect(p.page.getByTestId('club-detail-members')).toHaveText('0 members')
+
+  await Promise.all([p.ctx.close(), club.owner.dispose()])
 })

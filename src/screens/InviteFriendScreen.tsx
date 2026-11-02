@@ -40,12 +40,17 @@ import {
   type FriendRequest,
 } from "../lib/friendsApi";
 import { FriendRequestCard } from "../components/FriendRequestCard";
+import { ClubRequestCard } from "../components/ClubRequestCard";
 import { ClubBannerImage } from "../components/ClubBannerImage";
 import { ClubPfpImage } from "../components/ClubPfpImage";
 import {
+  acceptClubInvite,
+  declineClubInvite,
+  fetchClubInvites,
   fetchClubs,
   clubBannerUri,
   clubLogoUri,
+  type ClubInvite,
   type ClubSummary,
 } from "../lib/clubsApi";
 import { fetchCoachCards, type CoachCard } from "../lib/coachDirectoryApi";
@@ -117,6 +122,11 @@ export function InviteFriendScreen() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestsRef = useRef<FriendRequest[] | null>(null);
   requestsRef.current = requests;
+
+  /** Pending club invites (newest first), plus the ones accepted while Requests stays open. */
+  const [clubInvites, setClubInvites] = useState<ClubInvite[] | null>(null);
+  /** Accepted club invites keep their card (with the Accepted pill) until Requests is left. */
+  const [acceptedClubInvites, setAcceptedClubInvites] = useState<Map<string, ClubInvite>>(() => new Map());
 
   const myCountry = useMemo(() => findCountry(profileAreaLocation)?.code ?? null, [profileAreaLocation]);
 
@@ -207,11 +217,11 @@ export function InviteFriendScreen() {
   );
 
   const loadRequests = useCallback(async () => {
-    try {
-      setRequests(await fetchIncomingRequests());
-    } catch {
-      setRequests((prev) => prev ?? []);
-    }
+    const [friendResult, clubResult] = await Promise.allSettled([fetchIncomingRequests(), fetchClubInvites()]);
+    if (friendResult.status === "fulfilled") setRequests(friendResult.value);
+    else setRequests((prev) => prev ?? []);
+    if (clubResult.status === "fulfilled") setClubInvites(clubResult.value);
+    else setClubInvites((prev) => prev ?? []);
   }, []);
 
   const refreshFriends = useCallback(() => {
@@ -253,6 +263,14 @@ export function InviteFriendScreen() {
   }, [requests, requestSort]);
 
   const pendingCount = requests?.length ?? 0;
+  const pendingClubCount = clubInvites?.length ?? 0;
+
+  /** Pending invites plus accepted ones, newest first, so an accepted card stays where it was. */
+  const clubCards = useMemo(() => {
+    const pending = (clubInvites ?? []).filter((inv) => !acceptedClubInvites.has(inv.id));
+    const all = [...pending, ...acceptedClubInvites.values()];
+    return all.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id.localeCompare(a.id));
+  }, [clubInvites, acceptedClubInvites]);
 
   const setBusy = useCallback((id: string, busy: boolean) => {
     setBusyIds((prev) => {
@@ -323,6 +341,63 @@ export function InviteFriendScreen() {
     setCoaches((prev) => prev?.map((c) => (c.id === coachId ? { ...c, following } : c)) ?? prev);
   }, []);
 
+  const restoreClubInvite = useCallback((inv: ClubInvite) => {
+    setClubInvites((prev) => (prev && !prev.some((x) => x.id === inv.id) ? [...prev, inv] : prev));
+  }, []);
+
+  /** Optimistic: the card shows Accepted (+1 member) at once and goes back if the call fails. */
+  const onAcceptClubInvite = useCallback(
+    async (inv: ClubInvite) => {
+      setBusy(inv.id, true);
+      setClubInvites((prev) => (prev ? prev.filter((x) => x.id !== inv.id) : prev));
+      const optimistic = { ...inv, club: { ...inv.club, memberCount: inv.club.memberCount + 1 } };
+      setAcceptedClubInvites((prev) => new Map(prev).set(inv.id, optimistic));
+      try {
+        const result = await acceptClubInvite(inv.id);
+        if (typeof result?.memberCount === "number") {
+          setAcceptedClubInvites((prev) =>
+            prev.has(inv.id)
+              ? new Map(prev).set(inv.id, { ...inv, club: { ...inv.club, memberCount: result.memberCount } })
+              : prev,
+          );
+        }
+        setClubs((prev) =>
+          prev && typeof result?.memberCount === "number"
+            ? prev.map((c) => (c.id === inv.club.id ? { ...c, memberCount: result.memberCount } : c))
+            : prev,
+        );
+      } catch {
+        setAcceptedClubInvites((prev) => {
+          const next = new Map(prev);
+          next.delete(inv.id);
+          return next;
+        });
+        restoreClubInvite(inv);
+        showToast(t("clubMembership.actionFailed"));
+      } finally {
+        setBusy(inv.id, false);
+      }
+    },
+    [restoreClubInvite, setBusy, showToast, t],
+  );
+
+  /** Optimistic: the card disappears at once and comes back if the call fails. */
+  const onDeclineClubInvite = useCallback(
+    async (inv: ClubInvite) => {
+      setBusy(inv.id, true);
+      setClubInvites((prev) => (prev ? prev.filter((x) => x.id !== inv.id) : prev));
+      try {
+        await declineClubInvite(inv.id);
+      } catch {
+        restoreClubInvite(inv);
+        showToast(t("clubMembership.actionFailed"));
+      } finally {
+        setBusy(inv.id, false);
+      }
+    },
+    [restoreClubInvite, setBusy, showToast, t],
+  );
+
   /** Club card: page padding 20 each side, 1px border each side. */
   const cardW = winW - 42;
   const bannerH = cardW * CLUB_BANNER_ASPECT;
@@ -366,13 +441,18 @@ export function InviteFriendScreen() {
       return;
     }
     // Accepted cards only live while the Requests view stays open.
-    if (view !== friendsView) setRecentAccepted([]);
+    if (view !== friendsView) clearAcceptedCards();
     setFriendsView(view);
   }
 
   function onSegment(next: InviteSegment) {
-    if (next !== segment) setRecentAccepted([]);
+    if (next !== segment) clearAcceptedCards();
     setSegment(next);
+  }
+
+  function clearAcceptedCards() {
+    setRecentAccepted([]);
+    setAcceptedClubInvites((prev) => (prev.size ? new Map() : prev));
   }
 
   const screenBg = theme.backgroundColor ?? "#030A17";
@@ -500,11 +580,44 @@ export function InviteFriendScreen() {
       </View>
     );
 
+  /** Club Requests: shown only while there are pending (or just-accepted) club invites. */
+  const clubRequestsSection =
+    clubCards.length > 0 ? (
+      <View style={styles.requestSection} testID="club-requests">
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleRow}>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>
+              {t("clubMembership.clubRequests")}
+            </Text>
+            {pendingClubCount > 0 ? (
+              <View style={styles.countBadge} testID="club-requests-count">
+                <Text allowFontScaling={false} style={styles.countBadgeText}>
+                  {pendingClubCount}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.sectionCards}>
+          {clubCards.map((inv) => (
+            <ClubRequestCard
+              key={inv.id}
+              invite={inv}
+              state={acceptedClubInvites.has(inv.id) ? "accepted" : busyIds.has(inv.id) ? "busy" : "pending"}
+              onOpen={() => navigation.navigate("ClubDetail", { clubId: inv.club.slug })}
+              onAccept={() => void onAcceptClubInvite(inv)}
+              onDecline={() => void onDeclineClubInvite(inv)}
+            />
+          ))}
+        </View>
+      </View>
+    ) : null;
+
   const requestsBody = (
     <View>
       {recentSection}
       {friendRequestsSection}
-      {/* Club Requests section (add-club-memberships) slots in here. */}
+      {clubRequestsSection}
     </View>
   );
 
@@ -603,6 +716,12 @@ export function InviteFriendScreen() {
                       </Text>
                     </View>
                   ) : null}
+                  <View style={styles.clubPlaceRow}>
+                    <Ionicons name="people-outline" size={14} color={UI.textMuted} />
+                    <Text style={styles.clubSubtitle} numberOfLines={1} testID={`club-card-members-${club.slug}`}>
+                      {t("clubMembership.members", { count: club.memberCount ?? 0 })}
+                    </Text>
+                  </View>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={UI.textMuted} />
               </View>
@@ -660,7 +779,7 @@ export function InviteFriendScreen() {
               <SegmentedToggle<FriendsView | "ranking">
                 options={[
                   { value: "mine", label: t("inviteExtra.myFriends") },
-                  { value: "requests", label: t("inviteExtra.requests"), badge: pendingCount, testID: "friends-requests-tab" },
+                  { value: "requests", label: t("inviteExtra.requests"), badge: pendingCount + pendingClubCount, testID: "friends-requests-tab" },
                   { value: "ranking", label: t("inviteExtra.ranking") },
                 ]}
                 value={friendsView}
