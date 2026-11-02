@@ -58,10 +58,12 @@ import { fetchMyFollows } from "../lib/followsApi";
 import { specialtyLabels } from "../lib/coachSpecialties";
 import { FollowButton } from "../components/FollowButton";
 import { TEST_IDS } from "../lib/testIds";
+import { FriendsRankingView, type FriendsRankingScope } from "../components/ranking/FriendsRankingView";
+import type { RankedCountry, RankedPlayer } from "../lib/rankingApi";
 import { useTranslation } from "react-i18next";
 
 type InviteSegment = "friends" | "coaches" | "clubs";
-type FriendsView = "mine" | "requests";
+type FriendsView = "mine" | "requests" | "ranking";
 type CoachFilter = "all" | "nearby";
 type CoachSort = "relevance" | "rating" | "name";
 type ClubFilter = "all" | "near" | "courts";
@@ -106,6 +108,9 @@ export function InviteFriendScreen() {
   const [clubCity, setClubCity] = useState<string | null>(null);
   const [cityOpen, setCityOpen] = useState(false);
   const [query, setQuery] = useState("");
+  /** Friends › Ranking scope and filter; kept here so they survive My Friends / Requests and back. */
+  const [rankingScope, setRankingScope] = useState<FriendsRankingScope>("world");
+  const [rankingFriendsOnly, setRankingFriendsOnly] = useState(false);
 
   const [clubs, setClubs] = useState<ClubSummary[] | null>(null);
   const [coaches, setCoaches] = useState<CoachCard[] | null>(null);
@@ -318,29 +323,6 @@ export function InviteFriendScreen() {
     [setBusy, showToast, t],
   );
 
-  // A follow made on the coach detail screen shows here when the user comes back.
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-      void fetchMyFollows().then(({ coaches: followed }) => {
-        if (cancelled) return;
-        const set = new Set(followed);
-        setCoaches((prev) =>
-          prev == null
-            ? prev
-            : prev.map((c) => (c.following === set.has(c.id) ? c : { ...c, following: set.has(c.id) })),
-        );
-      });
-      return () => {
-        cancelled = true;
-      };
-    }, []),
-  );
-
-  const setCoachFollowing = useCallback((coachId: string, following: boolean) => {
-    setCoaches((prev) => prev?.map((c) => (c.id === coachId ? { ...c, following } : c)) ?? prev);
-  }, []);
-
   const restoreClubInvite = useCallback((inv: ClubInvite) => {
     setClubInvites((prev) => (prev && !prev.some((x) => x.id === inv.id) ? [...prev, inv] : prev));
   }, []);
@@ -398,6 +380,29 @@ export function InviteFriendScreen() {
     [restoreClubInvite, setBusy, showToast, t],
   );
 
+  // A follow made on the coach detail screen shows here when the user comes back.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void fetchMyFollows().then(({ coaches: followed }) => {
+        if (cancelled) return;
+        const set = new Set(followed);
+        setCoaches((prev) =>
+          prev == null
+            ? prev
+            : prev.map((c) => (c.following === set.has(c.id) ? c : { ...c, following: set.has(c.id) })),
+        );
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
+  const setCoachFollowing = useCallback((coachId: string, following: boolean) => {
+    setCoaches((prev) => prev?.map((c) => (c.id === coachId ? { ...c, following } : c)) ?? prev);
+  }, []);
+
   /** Club card: page padding 20 each side, 1px border each side. */
   const cardW = winW - 42;
   const bannerH = cardW * CLUB_BANNER_ASPECT;
@@ -435,11 +440,7 @@ export function InviteFriendScreen() {
     }
   }
 
-  function onFriendsView(view: FriendsView | "ranking") {
-    if (view === "ranking") {
-      navigation.navigate("Main", { screen: "Progress", params: { screen: "Ranking" } });
-      return;
-    }
+  function onFriendsView(view: FriendsView) {
     // Accepted cards only live while the Requests view stays open.
     if (view !== friendsView) clearAcceptedCards();
     setFriendsView(view);
@@ -448,6 +449,22 @@ export function InviteFriendScreen() {
   function onSegment(next: InviteSegment) {
     if (next !== segment) clearAcceptedCards();
     setSegment(next);
+  }
+
+  function openRankedPlayer(p: RankedPlayer) {
+    navigation.navigate("LeaderboardPlayer", {
+      userId: p.userId,
+      name: p.name,
+      image: p.image,
+      areaLocation: [p.city, p.countryName].filter(Boolean).join(", ") || null,
+      totalXp: p.totalXp,
+      rank: p.rank,
+      overallScore: p.rating,
+    });
+  }
+
+  function openRankedCountry(c: RankedCountry) {
+    navigation.navigate("CountryRanking", { code: c.code, name: c.name });
   }
 
   function clearAcceptedCards() {
@@ -776,11 +793,11 @@ export function InviteFriendScreen() {
 
           {segment === "friends" ? (
             <View style={styles.subTabs}>
-              <SegmentedToggle<FriendsView | "ranking">
+              <SegmentedToggle<FriendsView>
                 options={[
-                  { value: "mine", label: t("inviteExtra.myFriends") },
+                  { value: "mine", label: t("inviteExtra.myFriends"), testID: "friends-mine-tab" },
                   { value: "requests", label: t("inviteExtra.requests"), badge: pendingCount + pendingClubCount, testID: "friends-requests-tab" },
-                  { value: "ranking", label: t("inviteExtra.ranking") },
+                  { value: "ranking", label: t("inviteExtra.ranking"), testID: "friends-ranking-tab" },
                 ]}
                 value={friendsView}
                 onChange={onFriendsView}
@@ -788,7 +805,7 @@ export function InviteFriendScreen() {
             </View>
           ) : null}
 
-          {segment === "friends" && friendsView === "requests" ? null : (
+          {segment === "friends" && friendsView !== "mine" ? null : (
           <View style={styles.searchRow}>
             <View style={styles.searchWrap}>
               <Ionicons name="search-outline" size={20} color={UI.textMuted} />
@@ -900,7 +917,23 @@ export function InviteFriendScreen() {
             </View>
           ) : null}
 
-          {segment === "coaches" ? coachesBody : segment === "clubs" ? clubsBody : friendsBody}
+          {segment === "coaches" ? (
+            coachesBody
+          ) : segment === "clubs" ? (
+            clubsBody
+          ) : friendsView === "ranking" ? (
+            <FriendsRankingView
+              scope={rankingScope}
+              onScopeChange={setRankingScope}
+              friendsOnly={rankingFriendsOnly}
+              onFriendsOnlyChange={setRankingFriendsOnly}
+              onOpenPlayer={openRankedPlayer}
+              onOpenCountry={openRankedCountry}
+              onFindClub={() => onSegment("clubs")}
+            />
+          ) : (
+            friendsBody
+          )}
         </ScrollView>
         {toast ? (
           <View style={styles.toast} accessibilityRole="alert" testID="friends-toast">

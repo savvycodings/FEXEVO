@@ -16,6 +16,8 @@ import {
   DailyQuestScreen,
   RankingScreen,
   LeaderboardPlayerScreen,
+  MainStackLeaderboardPlayerScreen,
+  CountryRankingScreen,
   AllAchievementsScreen,
   NotificationsScreen,
   ProScreen,
@@ -660,6 +662,8 @@ function AuthenticatedStack() {
       />
       <Stack.Screen name="FriendRequestDetail" component={FriendRequestDetailScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="ClubDetail" component={ClubDetailScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="LeaderboardPlayer" component={MainStackLeaderboardPlayerScreen} layout={screenEntranceLayout} />
+      <Stack.Screen name="CountryRanking" component={CountryRankingScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="CoachDetail" component={CoachDetailScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="CoachStudentChat" component={CoachStudentChatScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="AdminHub" layout={screenEntranceLayout}>

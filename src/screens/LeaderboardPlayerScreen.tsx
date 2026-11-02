@@ -28,7 +28,9 @@ import {
 } from '../lib/leaderboardPlayerApi'
 import { resolveUploadUrl } from '../lib/mediaUrl'
 import { DOMAIN } from '../../constants'
-import type { ProgressTabStackParamList } from '../navigation/types'
+import type { LeaderboardPlayerParams, MainStackParamList } from '../navigation/types'
+import { Header } from '../components/Header'
+import { MainTabBarChrome } from '../components/MainTabBarChrome'
 import { useTranslation } from 'react-i18next'
 
 const UNFOLLOW_ICON = require('../../assets/youpage/unfollowicon.svg')
@@ -51,8 +53,9 @@ function videoUri(path: string): string {
   return `${API_ROOT}${path}`
 }
 
-type Route = RouteProp<ProgressTabStackParamList, 'LeaderboardPlayer'>
-type Nav = NativeStackNavigationProp<ProgressTabStackParamList, 'LeaderboardPlayer'>
+/** Registered in both the Progress tab stack and the main stack; only goBack() is used. */
+type Route = RouteProp<{ LeaderboardPlayer: LeaderboardPlayerParams }, 'LeaderboardPlayer'>
+type Nav = NativeStackNavigationProp<{ LeaderboardPlayer: LeaderboardPlayerParams }, 'LeaderboardPlayer'>
 
 export function LeaderboardPlayerScreen() {
   const navigation = useNavigation<Nav>()
@@ -454,4 +457,26 @@ function getStyles(theme: {
       fontSize: 15,
     },
   })
+}
+
+/**
+ * Main-stack entry (Friends › Ranking rows): the same profile with the app header above it and
+ * the tab bar below, so it opens on top of the People screen and Back returns there.
+ */
+export function MainStackLeaderboardPlayerScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList, 'LeaderboardPlayer'>>()
+  return (
+    <View style={{ flex: 1, backgroundColor: '#050A18' }}>
+      <Header
+        flatOverlay
+        onProPress={() => navigation.navigate('ProSubscription')}
+        onSettingsPress={() => navigation.navigate('ProfileSettings')}
+        onNotificationsPress={() => navigation.navigate('Notifications')}
+      />
+      <View style={{ flex: 1 }}>
+        <LeaderboardPlayerScreen />
+      </View>
+      <MainTabBarChrome />
+    </View>
+  )
 }
