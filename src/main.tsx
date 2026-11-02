@@ -34,6 +34,7 @@ import {
   CoachDetailScreen,
   CoachDetailView,
   CoachProfileSectionEditScreen,
+  CoachSpecialtiesEditScreen,
 } from './screens'
 import { AchievementDetailScreen } from './screens/AchievementDetailScreen'
 import { Header } from './components'
@@ -211,6 +212,11 @@ function YouTabStack({
       <YouStack.Screen
         name="CoachProfileSectionEdit"
         component={CoachProfileSectionEditScreen}
+        layout={screenEntranceLayout}
+      />
+      <YouStack.Screen
+        name="CoachSpecialtiesEdit"
+        component={CoachSpecialtiesEditScreen}
         layout={screenEntranceLayout}
       />
     </YouStack.Navigator>
