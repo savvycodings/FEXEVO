@@ -27,6 +27,8 @@ import {
   type ClubSummary,
 } from "../lib/clubsApi";
 import { amenityLabel } from "../lib/clubAmenitiesCatalog";
+import { ClubMembershipButton } from "../components/ClubMembershipButton";
+import { useTranslation } from "react-i18next";
 import type { MainStackParamList } from "../navigation/types";
 
 const ABOUT_ICON = require("../../assets/youpage/abouticon.svg");
@@ -50,6 +52,7 @@ type ClubDetailRoute = RouteProp<MainStackParamList, "ClubDetail">;
 type ClubDetailNav = NativeStackNavigationProp<MainStackParamList, "ClubDetail">;
 
 export function ClubDetailScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<ClubDetailNav>();
   const route = useRoute<ClubDetailRoute>();
   const insets = useSafeAreaInsets();
@@ -198,9 +201,27 @@ export function ClubDetailScreen() {
                   {subtitle}
                 </Text>
               ) : null}
+              <Text style={styles.heroMembers} numberOfLines={1} testID="club-detail-members">
+                {t("clubMembership.members", { count: club.memberCount ?? 0 })}
+              </Text>
             </View>
           </View>
         </View>
+
+        {club.myMembership ? (
+          <ClubMembershipButton
+            clubId={club.id}
+            clubName={club.name}
+            membership={club.myMembership}
+            onChange={(next, memberCount) =>
+              setClub((prev) =>
+                prev
+                  ? { ...prev, myMembership: next, memberCount: memberCount ?? prev.memberCount }
+                  : prev
+              )
+            }
+          />
+        ) : null}
 
         <View style={styles.actionRow}>
           <TouchableOpacity style={[styles.actionBtn, styles.actionBtnFilled]} activeOpacity={0.85}>
@@ -371,6 +392,13 @@ function getStyles(theme: {
       fontFamily: theme.regularFont ?? "System",
       fontSize: 14,
       lineHeight: 18,
+    },
+    heroMembers: {
+      marginTop: 4,
+      color: "rgba(160, 180, 210, 0.95)",
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 13,
+      lineHeight: 17,
     },
     actionRow: {
       flexDirection: "row",
