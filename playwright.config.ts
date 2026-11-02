@@ -30,7 +30,7 @@ export default defineConfig({
   projects: [
     { name: 'en', use: { locale: 'en-US' } },
     // Spanish UI (device locale): the same controls must still be found by test id.
-    { name: 'es', use: { locale: 'es-ES' }, testMatch: /(onboarding-auth|technique)\.spec\.ts/ },
+    { name: 'es', use: { locale: 'es-ES' }, testMatch: /(onboarding-auth|technique|follows)\.spec\.ts/ },
   ],
   webServer: [
     {

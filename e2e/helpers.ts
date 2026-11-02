@@ -85,6 +85,7 @@ export const T = {
   coachSpecialtiesEdit: 'coach-specialties-edit',
   specialtyChip: (key: string) => `specialty-chip-${key}`,
   specialtiesSave: 'specialties-save',
+  inviteSegment: (key: string) => `invite-segment-${key}`,
 }
 
 /** Open the app signed in (storage state) and wait until navigation is ready. */

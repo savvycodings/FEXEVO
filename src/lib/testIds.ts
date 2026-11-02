@@ -95,4 +95,5 @@ export const TEST_IDS = {
   coachSpecialtiesEdit: 'coach-specialties-edit',
   specialtyChip: (key: string) => `specialty-chip-${key}`,
   specialtiesSave: 'specialties-save',
+  inviteSegment: (key: string) => `invite-segment-${key}`,
 } as const

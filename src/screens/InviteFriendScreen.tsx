@@ -423,6 +423,7 @@ export function InviteFriendScreen() {
                 style={styles.segmentPill}
                 textStyle={styles.segmentLabel}
                 role="tab"
+                testID={TEST_IDS.inviteSegment(key)}
               />
             ))}
           </View>
@@ -637,6 +638,7 @@ function Pill({
   style,
   textStyle,
   role = "button",
+  testID,
 }: {
   label: string;
   active: boolean;
@@ -644,6 +646,7 @@ function Pill({
   style: StyleProp<ViewStyle>;
   textStyle: StyleProp<TextStyle>;
   role?: "tab" | "button";
+  testID?: string;
 }) {
   return (
     <TouchableOpacity
@@ -652,6 +655,7 @@ function Pill({
       activeOpacity={0.85}
       accessibilityRole={role}
       accessibilityState={{ selected: active }}
+      testID={testID}
     >
       {active ? (
         <>

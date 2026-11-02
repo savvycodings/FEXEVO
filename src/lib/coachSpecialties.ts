@@ -53,7 +53,8 @@ export async function saveCoachSpecialties(keys: readonly CoachSpecialtyKey[]): 
     .$fetch<{ specialties?: string[]; error?: string }>('/coach/specialties', {
       method: 'PUT',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: { specialties: [...keys] },
+      // Stringified here: on the web build the client sent a plain object as "[object Object]".
+      body: JSON.stringify({ specialties: [...keys] }),
     })
     .catch(() => null)
   const r = res as { data?: { specialties?: unknown }; error?: { message?: string } } | null
