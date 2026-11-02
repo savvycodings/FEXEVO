@@ -41,6 +41,10 @@ import {
   type ClubSummary,
 } from "../lib/clubsApi";
 import { fetchCoachCards, type CoachCard } from "../lib/coachDirectoryApi";
+import { fetchMyFollows } from "../lib/followsApi";
+import { chipsForCard } from "../lib/coachSpecialties";
+import { FollowButton } from "../components/FollowButton";
+import { TEST_IDS } from "../lib/testIds";
 import { useTranslation } from "react-i18next";
 
 type InviteSegment = "friends" | "coaches" | "clubs";
@@ -106,13 +110,14 @@ export function InviteFriendScreen() {
       (b.overallScore ?? -1) - (a.overallScore ?? -1) || byName(a, b);
     if (sort === "name") return list.sort(byName);
     if (sort === "rating") return list.sort(byRating);
-    // Relevance: names that start with the query first, then the best rated.
+    // Relevance: names that start with the query first, then coaches you follow, then the best rated.
     return list.sort((a, b) => {
       if (needle) {
         const sa = a.name.toLowerCase().startsWith(needle) ? 0 : 1;
         const sb = b.name.toLowerCase().startsWith(needle) ? 0 : 1;
         if (sa !== sb) return sa - sb;
       }
+      if (a.following !== b.following) return a.following ? -1 : 1;
       return byRating(a, b);
     });
   }, [coaches, query, coachFilter, myCountry, sort]);
@@ -161,6 +166,29 @@ export function InviteFriendScreen() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // A follow made on the coach detail screen shows here when the user comes back.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void fetchMyFollows().then(({ coaches: followed }) => {
+        if (cancelled) return;
+        const set = new Set(followed);
+        setCoaches((prev) =>
+          prev == null
+            ? prev
+            : prev.map((c) => (c.following === set.has(c.id) ? c : { ...c, following: set.has(c.id) })),
+        );
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
+  const setCoachFollowing = useCallback((coachId: string, following: boolean) => {
+    setCoaches((prev) => prev?.map((c) => (c.id === coachId ? { ...c, following } : c)) ?? prev);
   }, []);
 
   /** Club card: page padding 20 each side, 1px border each side. */
@@ -227,12 +255,26 @@ export function InviteFriendScreen() {
         {visibleCoaches.map((coach) => (
           <PersonCard
             key={coach.id}
+            variant="coach"
+            testID={TEST_IDS.coachCard(coach.id)}
             name={coach.name}
             imageUri={coach.imageUri}
             subtitle={t("inviteExtra.coachSubtitle")}
             location={coach.areaLocation}
             verified
             tier={coach.tier}
+            chips={chipsForCard(coach.specialties, t)}
+            action={
+              <FollowButton
+                targetType="coach"
+                targetId={coach.id}
+                targetName={coach.name}
+                following={coach.following}
+                size="sm"
+                testID={TEST_IDS.followCoach(coach.id)}
+                onChange={(following) => setCoachFollowing(coach.id, following)}
+              />
+            }
             onPress={() =>
               navigation.navigate("CoachDetail", {
                 coachId: coach.id,
