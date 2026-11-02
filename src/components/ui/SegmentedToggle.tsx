@@ -31,7 +31,8 @@ export function SegmentedToggle<T extends string>({
             activeOpacity={0.85}
             testID={opt.testID}
             accessibilityRole="radio"
-            accessibilityState={{ selected }}
+            accessibilityState={{ selected, checked: selected }}
+            aria-checked={selected}
           >
             {selected ? (
               <>
