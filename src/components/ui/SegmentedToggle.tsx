@@ -4,7 +4,13 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { ThemeContext } from '../../context'
 import { UI, SELECTED_GLOW } from './tokens'
 
-export type SegmentOption<T extends string> = { value: T; label: string; testID?: string }
+export type SegmentOption<T extends string> = {
+  value: T
+  label: string
+  testID?: string
+  /** Small count bubble after the label; hidden when 0 or unset. */
+  badge?: number
+}
 
 /** Two-or-more option pill track; the selected segment gets the primary gradient + glow. */
 export function SegmentedToggle<T extends string>({
@@ -56,6 +62,13 @@ export function SegmentedToggle<T extends string>({
             >
               {opt.label}
             </Text>
+            {opt.badge ? (
+              <View style={styles.badge} testID={opt.testID ? `${opt.testID}-badge` : undefined}>
+                <Text allowFontScaling={false} style={[styles.badgeText, { fontFamily: theme.semiBoldFont }]}>
+                  {opt.badge > 99 ? '99+' : opt.badge}
+                </Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
         )
       })}
@@ -76,9 +89,24 @@ const styles = StyleSheet.create({
   segment: {
     flex: 1,
     borderRadius: UI.radius - 1,
+    flexDirection: 'row',
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
+  },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    backgroundColor: '#3D6BFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    fontSize: 11,
+    color: '#FFFFFF',
   },
   segmentSelected: {
     boxShadow: '0px 0px 10px 0px #00B8FF',
