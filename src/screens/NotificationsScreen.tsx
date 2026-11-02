@@ -53,6 +53,17 @@ function formatNotiTime(iso: string): string {
 
 type Nav = NativeStackNavigationProp<MainStackParamList>
 
+/** The server writes English friend titles ("<name> sent you a friend request"); pull the name back out. */
+const FRIEND_TITLE_PATTERNS: Record<string, RegExp> = {
+  friend_request: /^(.*) sent you a friend request$/,
+  friend_request_accepted: /^(.*) accepted your friend request$/,
+}
+
+function friendActorName(n: ApiNotification): string | null {
+  const re = FRIEND_TITLE_PATTERNS[n.kind]
+  return re ? (n.title.match(re)?.[1]?.trim() ?? null) : null
+}
+
 export function NotificationsScreen({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -140,6 +151,8 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                   ? TICK_ICON
                   : n.kind === 'correction_images_ready'
                     ? TICK_ICON
+                    : n.kind === 'friend_request_accepted'
+                      ? TICK_ICON
                     : n.kind.includes('message')
                       ? MSG_ICON
                       : FOLLOWER_ICON
@@ -181,6 +194,29 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                         onClose()
                         return
                       }
+                      if (n.kind === 'friend_request' && n.refType === 'friendship' && n.refId) {
+                        // The detail screen falls back to the Requests list if it's no longer pending.
+                        navigation.navigate('FriendRequestDetail', { requestId: n.refId })
+                        return
+                      }
+                      if (n.kind === 'friend_request_accepted' && n.refType === 'user' && n.refId) {
+                        navigation.navigate('Main', {
+                          screen: 'Progress',
+                          params: {
+                            screen: 'LeaderboardPlayer',
+                            params: {
+                              userId: n.refId,
+                              name: friendActorName(n) ?? '',
+                              image: null,
+                              areaLocation: null,
+                              totalXp: 0,
+                              rank: 0,
+                              overallScore: null,
+                            },
+                          },
+                        })
+                        return
+                      }
                       if (
                         (n.kind === 'correction_images_ready' || isMagicShot) &&
                         n.refType === 'technique_analysis' &&
@@ -215,7 +251,13 @@ export function NotificationsScreen({ onClose }: { onClose: () => void }) {
                   ) : (
                     <View style={styles.textCol}>
                       <Text allowFontScaling={false} style={styles.rowTitle} numberOfLines={2}>
-                        {n.title}
+                        {(() => {
+                          const actor = friendActorName(n)
+                          if (actor == null) return n.title
+                          return n.kind === 'friend_request'
+                            ? t('friends.notifRequest', { name: actor })
+                            : t('friends.notifAccepted', { name: actor })
+                        })()}
                       </Text>
                       {n.body ? (
                         <Text allowFontScaling={false} style={styles.rowBody} numberOfLines={2}>
