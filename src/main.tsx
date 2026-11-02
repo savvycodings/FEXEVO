@@ -36,6 +36,7 @@ import {
   CoachProfileSectionEditScreen,
 } from './screens'
 import { AchievementDetailScreen } from './screens/AchievementDetailScreen'
+import { FriendRequestDetailScreen } from './screens/FriendRequestDetailScreen'
 import { Header } from './components'
 import { MainTabBarBackground } from './components/MainTabBarBackground'
 import { screenEntranceLayout } from './components/PageEntrance'
@@ -651,6 +652,7 @@ function AuthenticatedStack() {
         }}
         layout={screenEntranceLayout}
       />
+      <Stack.Screen name="FriendRequestDetail" component={FriendRequestDetailScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="ClubDetail" component={ClubDetailScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="CoachDetail" component={CoachDetailScreen} layout={screenEntranceLayout} />
       <Stack.Screen name="CoachStudentChat" component={CoachStudentChatScreen} layout={screenEntranceLayout} />

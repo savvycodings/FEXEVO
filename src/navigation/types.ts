@@ -112,7 +112,16 @@ export type MainTabParamList = {
 export type MainStackParamList = {
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
   /** Full-screen modal (friends / coaches / clubs search) from header on You, Progress, Activities. */
-  InviteSearch: undefined;
+  InviteSearch:
+    | {
+        friendsView?: "mine" | "requests";
+        /** Set by the request detail screen after it accepts or declines (shown on return). */
+        acceptedRequestId?: string;
+        removedRequestId?: string;
+      }
+    | undefined;
+  /** Incoming friend request: the sender's profile with Decline / Accept Request. */
+  FriendRequestDetail: { requestId: string };
   ClubDetail: { clubId: ClubId };
   CoachDetail: { coachId: CoachId | string; coachName?: string; coachImageUri?: string | null };
   /** Student ↔ coach private chat (opened from the coach page's Message badge). */
