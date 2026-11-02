@@ -1708,7 +1708,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               testID: TEST_IDS.settingsHeightFt,
               keyboardType: "number-pad",
               maxLength: 1,
-              width: 14,
             },
             {
               value: heightInText,
@@ -1718,7 +1717,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               testID: TEST_IDS.settingsHeightIn,
               keyboardType: "number-pad",
               maxLength: 2,
-              width: 24,
             },
           ]
         : [
