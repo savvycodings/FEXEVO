@@ -17,6 +17,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
+import { FriendActionButton } from '../components/FriendActionButton'
 import { mapApiToMetrics, ProfileRatingDashboard } from '../components/ProfileRatingDashboard'
 import {
   fetchPlayerOverallScore,
@@ -216,6 +217,8 @@ export function LeaderboardPlayerScreen() {
             score,
           }}
         />
+
+        <FriendActionButton userId={userId} name={displayName} />
 
         <View style={styles.actionRow}>
           <TouchableOpacity style={[styles.actionBtn, styles.actionBtnFilled]} activeOpacity={0.85}>
