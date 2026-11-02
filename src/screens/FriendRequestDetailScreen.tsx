@@ -134,7 +134,7 @@ export function FriendRequestDetailScreen() {
         onSettingsPress={() => navigation.navigate('ProfileSettings')}
         onNotificationsPress={() => navigation.navigate('Notifications')}
       />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <TouchableOpacity
           onPress={() => (navigation.canGoBack() ? navigation.goBack() : backToRequests())}
           hitSlop={10}
@@ -234,30 +234,35 @@ export function FriendRequestDetailScreen() {
               </View>
             ) : null}
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <View style={styles.buttons}>
-              <SurfaceButton
-                label={t('friends.decline')}
-                onPress={() => void act('decline')}
-                loading={busy === 'decline'}
-                disabled={busy != null}
-                style={styles.declineBtn}
-                testID="friend-request-detail-decline"
-              />
-              <GlowButton
-                label={t('friends.acceptRequest')}
-                onPress={() => void act('accept')}
-                loading={busy === 'accept'}
-                disabled={busy != null}
-                radius={UI.radiusCard}
-                style={styles.acceptBtn}
-                testID="friend-request-detail-accept"
-              />
-            </View>
           </View>
         )}
       </ScrollView>
+      {/* Pinned between the scroll area and the tab bar so the actions are never hidden behind it. */}
+      {detail && !gone ? (
+        <View style={styles.footer}>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <View style={styles.buttons}>
+            <SurfaceButton
+              label={t('friends.decline')}
+              onPress={() => void act('decline')}
+              loading={busy === 'decline'}
+              disabled={busy != null}
+              style={styles.declineBtn}
+              testID="friend-request-detail-decline"
+            />
+            <GlowButton
+              label={t('friends.acceptRequest')}
+              onPress={() => void act('accept')}
+              loading={busy === 'accept'}
+              disabled={busy != null}
+              radius={UI.radiusCard}
+              style={styles.acceptBtn}
+              testID="friend-request-detail-accept"
+            />
+          </View>
+        </View>
+      ) : null}
       <MainTabBarChrome />
     </View>
   )
@@ -268,7 +273,9 @@ function getStyles(theme: { backgroundColor?: string; mediumFont?: string; regul
   const medium = theme.mediumFont ?? 'System'
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: theme.backgroundColor ?? UI.pageBg },
-    scroll: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 140 },
+    scrollView: { flex: 1 },
+    scroll: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
+    footer: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12 },
     back: { alignSelf: 'flex-start', paddingVertical: 6, marginLeft: -6 },
     message: { marginTop: 40, textAlign: 'center', color: UI.textMuted, fontFamily: regular, fontSize: 15 },
     heroRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 },
@@ -302,8 +309,8 @@ function getStyles(theme: { backgroundColor?: string; mediumFont?: string; regul
     mutualItem: { alignItems: 'center', gap: 6, maxWidth: 80 },
     mutualAvatar: { width: 50, height: 50, borderRadius: 25, borderWidth: 1.5, borderColor: '#8CB0E2' },
     mutualName: { fontFamily: regular, fontSize: 14, color: '#FFFFFF' },
-    error: { marginTop: 16, color: UI.error, fontFamily: regular, fontSize: 14, textAlign: 'center' },
-    buttons: { flexDirection: 'row', gap: 14, marginTop: 24 },
+    error: { marginBottom: 10, color: UI.error, fontFamily: regular, fontSize: 14, textAlign: 'center' },
+    buttons: { flexDirection: 'row', gap: 14 },
     declineBtn: { flex: 2 },
     acceptBtn: { flex: 3 },
   })

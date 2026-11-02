@@ -181,7 +181,7 @@ export function Header({
             onPress={onProPress ?? onLogoPress ?? handlePresentModalPress}
             accessibilityLabel="Open Pro subscription"
           >
-            <LocalSvgAsset assetModule={HEADER_MARK_SVG} width={65} height={24} />
+            <LocalSvgAsset assetModule={HEADER_MARK_SVG} width={65} height={24} scopeIds />
           </TouchableOpacity>
         )}
         </View>

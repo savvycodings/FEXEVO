@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import {
   InteractionManager,
   Platform,
@@ -20,6 +20,12 @@ type LocalSvgAssetProps = {
   fillColor?: string
   /** Replaces `stroke="..."` values in the SVG (e.g. disabled upload icon). */
   strokeColor?: string
+  /**
+   * Suffix the SVG's internal ids (gradients, clip paths) per instance. On web, stacked screens keep
+   * earlier copies of the same SVG in the DOM; with duplicate ids, `url(#id)` resolves to the copy
+   * on the hidden screen and the fill disappears.
+   */
+  scopeIds?: boolean
 }
 
 const svgCache = new Map<number, string>()
@@ -31,6 +37,19 @@ function recolorSvgFill(xml: string, color: string): string {
 
 function recolorSvgStroke(xml: string, color: string): string {
   return xml.replace(/stroke="(#[0-9A-Fa-f]{3,8}|white)"/gi, `stroke="${color}"`)
+}
+
+function scopeSvgIds(xml: string, suffix: string): string {
+  const ids = Array.from(xml.matchAll(/\bid="([^"]+)"/g), (m) => m[1]!)
+  let out = xml
+  for (const id of ids) {
+    const esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    out = out
+      .replace(new RegExp(`\\bid="${esc}"`, 'g'), `id="${id}${suffix}"`)
+      .replace(new RegExp(`url\\(#${esc}\\)`, 'g'), `url(#${id}${suffix})`)
+      .replace(new RegExp(`href="#${esc}"`, 'g'), `href="#${id}${suffix}"`)
+  }
+  return out
 }
 
 function isValidSvg(text: string): boolean {
@@ -124,7 +143,9 @@ export function LocalSvgAsset({
   style,
   fillColor,
   strokeColor,
+  scopeIds = false,
 }: LocalSvgAssetProps) {
+  const idSuffix = `_${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const [xml, setXml] = useState<string | null>(() => svgCache.get(assetModule) ?? null)
   const [paintReady, setPaintReady] = useState(() => svgCache.has(assetModule))
   const [paintKey, setPaintKey] = useState(0)
@@ -195,6 +216,7 @@ export function LocalSvgAsset({
   let renderedXml = xml
   if (renderedXml && fillColor) renderedXml = recolorSvgFill(renderedXml, fillColor)
   if (renderedXml && strokeColor) renderedXml = recolorSvgStroke(renderedXml, strokeColor)
+  if (renderedXml && scopeIds) renderedXml = scopeSvgIds(renderedXml, idSuffix)
 
   if (!renderedXml || !paintReady) {
     return <View style={boxStyle} {...noCollapse} />
