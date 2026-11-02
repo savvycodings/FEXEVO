@@ -6,21 +6,24 @@ export type ClubId = string;
 
 export type CoachId = "steve" | "carlos" | "slama";
 
+/** A player's profile opened from a leaderboard or ranking row (Progress stack or main stack). */
+export type LeaderboardPlayerParams = {
+  userId: string;
+  name: string;
+  image: string | null;
+  areaLocation: string | null;
+  totalXp: number;
+  rank: number;
+  overallScore: number | null;
+};
+
 export type ProgressTabStackParamList = {
   ProgressMain: undefined;
   DailyQuest: undefined;
   AllAchievements: undefined;
   AchievementDetail: { achievementKey: string };
   Ranking: undefined;
-  LeaderboardPlayer: {
-    userId: string;
-    name: string;
-    image: string | null;
-    areaLocation: string | null;
-    totalXp: number;
-    rank: number;
-    overallScore: number | null;
-  };
+  LeaderboardPlayer: LeaderboardPlayerParams;
 };
 
 export type YouTabStackParamList = {
@@ -125,6 +128,10 @@ export type MainStackParamList = {
   /** Incoming friend request: the sender's profile with Decline / Accept Request. */
   FriendRequestDetail: { requestId: string };
   ClubDetail: { clubId: ClubId };
+  /** A player's profile from Friends › Ranking (on top of the People screen). */
+  LeaderboardPlayer: LeaderboardPlayerParams;
+  /** Country page from Friends › Ranking › Country: stats, top players, clubs, about. */
+  CountryRanking: { code: string; name?: string };
   CoachDetail: { coachId: CoachId | string; coachName?: string; coachImageUri?: string | null };
   /** Student ↔ coach private chat (opened from the coach page's Message badge). */
   CoachStudentChat: CoachStudentChatParams;
