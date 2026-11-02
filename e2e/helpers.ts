@@ -91,6 +91,17 @@ export const T = {
   setClipContinue: 'set-clip-continue',
   setClipBack: 'set-clip-back',
   coachHomeAnalyze: 'coach-home-analyze',
+  // Follows and coach specialties
+  coachCard: (id: string) => `coach-card-${id}`,
+  followCoach: (id: string) => `follow-coach-${id}`,
+  coachDetailFollow: 'coach-detail-follow',
+  coachFollowerCount: 'coach-follower-count',
+  coachDetailChips: 'coach-detail-chips',
+  coachSpecialtiesCard: 'coach-specialties-card',
+  coachSpecialtiesEdit: 'coach-specialties-edit',
+  specialtyChip: (key: string) => `specialty-chip-${key}`,
+  specialtiesSave: 'specialties-save',
+  inviteSegment: (key: string) => `invite-segment-${key}`,
 }
 
 /** Open the app signed in (storage state) and wait until navigation is ready. */

@@ -43,6 +43,10 @@ import {
   type CoachProfileSection,
 } from "../lib/coachProfileSectionsApi";
 import type { MainStackParamList, YouTabStackParamList } from "../navigation/types";
+import { FollowButton } from "../components/FollowButton";
+import { TEST_IDS } from "../lib/testIds";
+import { fetchFollowState, type FollowState } from "../lib/followsApi";
+import { sortSpecialties, specialtyLabels, type CoachSpecialtyKey } from "../lib/coachSpecialties";
 
 const SHARE_ICON_SVG = require("../../assets/coachs/shareicon.svg");
 const ADD_PHOTOS_ICON = require("../../assets/youpage/addicon.svg");
@@ -175,6 +179,8 @@ export function CoachDetailView({
   const [profileSections, setProfileSections] = useState<CoachProfileSection[]>([]);
   const [showAllPhotos, setShowAllPhotos] = useState(false);
   const [isMyCoach, setIsMyCoach] = useState(false);
+  const [followState, setFollowState] = useState<FollowState | null>(null);
+  const [specialties, setSpecialties] = useState<CoachSpecialtyKey[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -236,6 +242,14 @@ export function CoachDetailView({
         const sections = await fetchCoachProfileSections(coachId);
         if (!cancelled) setProfileSections(sections);
       })();
+      // Follow state, follower count and specialties refresh on focus, so a save on the
+      // Specialties edit screen shows when the coach comes back.
+      void fetchFollowState("coach", coachId).then((state) => {
+        if (!cancelled && state) setFollowState(state);
+      });
+      void fetchPublicPlayerProfile(coachId).then((profile) => {
+        if (!cancelled && profile) setSpecialties(sortSpecialties(profile.profile.coachSpecialties));
+      });
       return () => {
         cancelled = true;
       };
@@ -319,6 +333,19 @@ export function CoachDetailView({
       setGalleryUploading(false);
     }
   }, [galleryUploading, reloadGallery]);
+
+  const onFollowChange = useCallback((following: boolean, followerCount: number | null) => {
+    setFollowState((prev) => {
+      if (followerCount != null) return { following, followerCount };
+      if (!prev) return prev;
+      if (prev.following === following) return prev;
+      return { following, followerCount: Math.max(0, prev.followerCount + (following ? 1 : -1)) };
+    });
+  }, []);
+
+  const onEditSpecialties = useCallback(() => {
+    (navigation as unknown as YouTabNav).navigate("CoachSpecialtiesEdit", { specialties });
+  }, [navigation, specialties]);
 
   const onAddParagraph = useCallback(() => {
     (navigation as unknown as YouTabNav).navigate("CoachProfileSectionEdit");
@@ -430,11 +457,32 @@ export function CoachDetailView({
           <Text style={styles.heroHeadline} numberOfLines={2}>
             {displayHeadline || t("coachProfile.defaultHeadline")}
           </Text>
+          {!embeddedInYouTab && specialties.length > 0 ? (
+            <View style={styles.chipRow} testID={TEST_IDS.coachDetailChips}>
+              {specialtyLabels(specialties, t).map((label) => (
+                <View key={label} style={styles.chip}>
+                  <Text style={styles.chipText} numberOfLines={1}>
+                    {label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
           {displayLocation ? (
             <View style={styles.heroLocation}>
               <Ionicons name="location-outline" size={16} color={UI.textMuted} />
               <Text style={styles.heroLocationText} numberOfLines={1}>
                 {displayLocation}
+              </Text>
+            </View>
+          ) : null}
+          {followState ? (
+            <View style={styles.heroLocation}>
+              <Ionicons name="people-outline" size={16} color={UI.textMuted} />
+              <Text style={styles.heroLocationText} numberOfLines={1} testID={TEST_IDS.coachFollowerCount}>
+                {followState.followerCount === 1
+                  ? t("follow.followerOne")
+                  : t("follow.followerMany", { count: followState.followerCount })}
               </Text>
             </View>
           ) : null}
@@ -475,6 +523,46 @@ export function CoachDetailView({
               </Text>
             </TouchableOpacity>
           ) : null}
+          <FollowButton
+            targetType="coach"
+            targetId={coachId}
+            targetName={displayName}
+            following={followState?.following ?? false}
+            onChange={onFollowChange}
+            testID={TEST_IDS.coachDetailFollow}
+          />
+        </View>
+      ) : null}
+
+      {embeddedInYouTab ? (
+        <View style={styles.card} testID={TEST_IDS.coachSpecialtiesCard}>
+          <View style={styles.cardHead}>
+            <Ionicons name="ribbon-outline" size={20} color={UI.textMuted} />
+            <Text style={[styles.cardTitle, { flex: 1 }]}>{t("coachSpecialties.cardTitle")}</Text>
+            <TouchableOpacity
+              style={styles.seeAll}
+              onPress={onEditSpecialties}
+              hitSlop={8}
+              accessibilityRole="button"
+              testID={TEST_IDS.coachSpecialtiesEdit}
+            >
+              <Ionicons name="create-outline" size={16} color={ACCENT} />
+              <Text style={[styles.seeAllText, { color: ACCENT }]}>{t("coachSpecialties.edit")}</Text>
+            </TouchableOpacity>
+          </View>
+          {specialties.length > 0 ? (
+            <View style={styles.chipRow}>
+              {specialtyLabels(specialties, t).map((label) => (
+                <View key={label} style={styles.chip}>
+                  <Text style={styles.chipText} numberOfLines={1}>
+                    {label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.cardBody}>{t("coachSpecialties.emptyHint")}</Text>
+          )}
         </View>
       ) : null}
 
@@ -756,6 +844,21 @@ function getStyles(theme: {
       lineHeight: 20,
     },
     locationRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 2 },
+    chip: {
+      height: 28,
+      paddingHorizontal: 12,
+      borderRadius: UI.radiusPill,
+      borderWidth: 1,
+      borderColor: UI.chipBorder,
+      backgroundColor: UI.chipBg,
+      justifyContent: "center",
+    },
+    chipText: {
+      color: "#FFFFFF",
+      fontFamily: theme.mediumFont ?? "System",
+      fontSize: 13,
+    },
     locationText: {
       color: "#FFFFFF",
       fontFamily: theme.mediumFont ?? "System",
