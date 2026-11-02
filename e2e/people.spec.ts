@@ -124,6 +124,11 @@ test('friend requests: B sends from the profile, A accepts from the detail scree
   if (before.status === 'friends') await adminApi.delete(`/api/auth/friends/${playerId}`)
   if (before.status === 'outgoing_pending') await adminApi.delete(`/api/auth/friends/requests/${before.requestId}`)
   if (before.status === 'incoming_pending') await adminApi.post(`/api/auth/friends/requests/${before.requestId}/decline`)
+  // ...and no other pending requests to A, so the count starts at 1.
+  const playerApi = await apiAs('player')
+  const incoming = (await (await playerApi.get('/api/auth/friends/requests/incoming')).json()) as { requests: Array<{ id: string }> }
+  for (const r of incoming.requests) await playerApi.post(`/api/auth/friends/requests/${r.id}/decline`)
+  await playerApi.dispose()
 
   // B opens A's profile and taps Add friend.
   const b = await pageAs(browser, 'admin')
