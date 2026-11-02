@@ -265,3 +265,57 @@ test('club page: the player asks to join, the owner approves, the page shows Mem
 
   await Promise.all([p.ctx.close(), club.owner.dispose()])
 })
+
+test('friends ranking: Ranking stays in Friends; World, Country and the country page', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const p = await pageAs(browser, 'player')
+  await openScreen(p.page, 'InviteSearch', undefined, ['/api/auth/friends/requests/incoming'])
+  const players = p.page.waitForResponse((r) => r.url().includes('/profile/gamification/ranking/players'))
+  await p.page.getByTestId('friends-ranking-tab').click()
+  expect((await players).status()).toBe(200)
+
+  // Still on the People screen (not Progress › Ranking), World selected, rows or the empty message.
+  await expect(p.page.getByTestId('ranking-view')).toBeVisible()
+  await expect(p.page.getByTestId(T.inviteSegment('friends'))).toBeVisible()
+  await expect(p.page.getByTestId('ranking-scope-world')).toHaveAttribute('aria-selected', 'true')
+  await expect(p.page.locator('[data-testid^="ranking-row-player-"], [data-testid="ranking-empty"]').first()).toBeVisible()
+
+  // Country: the filter is disabled; a country row opens its page.
+  const countries = p.page.waitForResponse((r) => r.url().includes('/profile/gamification/ranking/countries'))
+  await p.page.getByTestId('ranking-scope-country').click()
+  expect((await countries).status()).toBe(200)
+  await expect(p.page.getByTestId('ranking-filter')).toHaveAttribute('aria-disabled', 'true')
+  const row = p.page.locator('[data-testid^="ranking-row-country-"]').first()
+  await expect(row.or(p.page.getByTestId('ranking-empty'))).toBeVisible()
+  if (await row.isVisible()) {
+    await row.click()
+    await expect(p.page.getByTestId('country-stats')).toBeVisible()
+    for (const tab of ['players', 'clubs', 'about']) await expect(p.page.getByTestId(`country-tab-${tab}`)).toBeVisible()
+    await p.page.getByTestId('country-back').click()
+    await expect(p.page.getByTestId('ranking-scope-country')).toHaveAttribute('aria-selected', 'true')
+  }
+  await p.ctx.close()
+})
+
+test('friends ranking: a player with no club sees the no-club state and its button opens Clubs', async ({ browser }) => {
+  test.setTimeout(120_000)
+  // Leave every club, so the player has no main club.
+  const playerApi = await apiAs('player')
+  const mine = (await (await playerApi.get('/api/auth/club-memberships/mine')).json()) as { clubs: Array<{ id: string }> }
+  for (const c of mine.clubs) expect((await playerApi.delete(`/api/auth/club-memberships/clubs/${c.id}`)).status()).toBe(200)
+  await playerApi.dispose()
+
+  const p = await pageAs(browser, 'player')
+  await openScreen(p.page, 'InviteSearch', undefined, ['/api/auth/friends/requests/incoming'])
+  await p.page.getByTestId('friends-ranking-tab').click()
+  const club = p.page.waitForResponse((r) => r.url().includes('/ranking/players?scope=club'))
+  await p.page.getByTestId('ranking-scope-club').click()
+  expect((await club).status()).toBe(200)
+  await expect(p.page.getByTestId('ranking-no-club')).toBeVisible()
+  await p.page.getByTestId('ranking-no-club-button').click()
+  await expect(p.page.getByTestId('ranking-view')).toHaveCount(0)
+  // The Clubs segment is shown: the Friends sub-tabs are gone.
+  await expect(p.page.getByTestId('friends-ranking-tab')).toHaveCount(0)
+  await expect(p.page.getByTestId(T.inviteSegment('clubs'))).toBeVisible()
+  await p.ctx.close()
+})
