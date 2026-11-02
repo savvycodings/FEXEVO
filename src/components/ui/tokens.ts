@@ -39,6 +39,13 @@ export const UI = {
   divider: 'rgba(255, 255, 255, 0.14)',
   error: '#FF6B7A',
 
+  /** Coach card (Coaches list): deep navy fill and a blue-violet border, from the coach card mockup. */
+  coachCardBg: '#060B24',
+  coachCardBorder: 'rgba(52, 72, 255, 0.6)',
+  /** Specialty chips on the coach card and coach profile. */
+  chipBg: '#050A26',
+  chipBorder: 'rgba(70, 96, 255, 0.55)',
+
   /** Buttons and options: radius 16, 1px border, 16/8 padding (design spec). */
   radius: 16,
   radiusCard: 20,
@@ -60,4 +67,9 @@ export const CARD_GLOW: ViewStyle = {
 /** Selected segment / option: the same glow, a little tighter. */
 export const SELECTED_GLOW: ViewStyle = {
   boxShadow: '0px 0px 12px 0px #35C7FF inset, 0px 0px 8px 0px #00B8FF',
+}
+
+/** Coach card glow: a stronger blue-violet halo than CARD_GLOW, like the coach card mockup. */
+export const COACH_CARD_GLOW: ViewStyle = {
+  boxShadow: '0px 0px 28px 0px #2B3BFF40 inset, 0px 0px 18px 2px #3448FF66',
 }

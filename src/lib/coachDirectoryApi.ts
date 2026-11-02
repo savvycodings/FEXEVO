@@ -2,12 +2,16 @@ import { authClient } from './auth-client'
 import { resolveUploadUrl } from './mediaUrl'
 import { fetchXpLeaderboard } from './leaderboardApi'
 import { fetchPublicPlayerProfile } from './leaderboardPlayerApi'
+import { fetchMyFollows } from './followsApi'
+import { sortSpecialties, type CoachSpecialtyKey } from './coachSpecialties'
 
 export type CoachDirectoryEntry = {
   id: string
   name: string
   username: string | null
   imageUri: string | null
+  /** Specialty keys in catalog order (empty when the coach hasn't picked any). */
+  specialties: CoachSpecialtyKey[]
 }
 
 type DirectoryUser = {
@@ -16,6 +20,7 @@ type DirectoryUser = {
   image: string | null
   username: string | null
   coachStudentRole: 'coach' | 'student' | 'none'
+  coachSpecialties?: string[]
 }
 
 /** Real coaches (`coachStudentRole === 'coach'`) from the shared user directory — the same
@@ -40,6 +45,7 @@ export async function fetchCoachDirectory(): Promise<CoachDirectoryEntry[]> {
       name: u.name,
       username: u.username,
       imageUri: resolveUploadUrl(u.image),
+      specialties: sortSpecialties(u.coachSpecialties),
     }))
 }
 
@@ -50,14 +56,21 @@ export type CoachCard = CoachDirectoryEntry & {
   overallScore: number | null
   /** Gold, silver and bronze go to the three best-rated coaches, like the Ranking podium. */
   tier: CoachTier
+  /** The signed-in user follows this coach. */
+  following: boolean
 }
 
 /**
- * Coaches with their location and overall score. Scores come from the global leaderboard
+ * Coaches with their location, overall score and follow state. Scores come from the global leaderboard
  * (players with XP); locations from each coach's public profile.
  */
 export async function fetchCoachCards(): Promise<CoachCard[]> {
-  const [coaches, board] = await Promise.all([fetchCoachDirectory(), fetchXpLeaderboard('global')])
+  const [coaches, board, follows] = await Promise.all([
+    fetchCoachDirectory(),
+    fetchXpLeaderboard('global'),
+    fetchMyFollows(),
+  ])
+  const followed = new Set(follows.coaches)
   const scoreById = new Map<string, number | null>()
   const areaById = new Map<string, string | null>()
   if (board.ok) {
@@ -82,5 +95,6 @@ export async function fetchCoachCards(): Promise<CoachCard[]> {
     areaLocation: areaById.get(c.id)?.trim() || publics[i]?.profile.areaLocation?.trim() || null,
     overallScore: scoreById.get(c.id) ?? null,
     tier: tierById.get(c.id) ?? 'blue',
+    following: followed.has(c.id),
   }))
 }

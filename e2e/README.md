@@ -47,10 +47,11 @@ The password for all three is `E2E-test-password-1!`.
 | `magic-shot-video` | the pose-correction Magic Shot: result with the video, skeleton, overlay and corrections against the seeded pro reference. Its `@live` variant sends the same request to the real model on fal (about $0.20) |
 | `progress` | progress overview, daily quests, achievements list and detail, leaderboard, notifications |
 | `people` | coach review round trip (player sends, coach comments and submits, player sees it), clubs (create, approve, page, search), profile settings save, admin hub |
+| `follows` | a coach sets specialties from the You tab; a player sees the chips on the coach card, follows from the card (the detail screen stays closed), still sees Following after a reload, and sees the follower count on the detail screen |
 | `route-smoke` | every route opens on the web without crashing, as the role that uses it |
 | `web-fallbacks` | screens using thumbnails and screenshots open cleanly; web thumbnails return a real frame |
 
-The `es` project re-runs `onboarding-auth` and `technique` with a Spanish UI. Specs select controls by `data-testid` (from `testID`, defined in `src/lib/testIds.ts`), never by visible text.
+The `es` project re-runs `onboarding-auth`, `technique` and `follows` with a Spanish UI. Specs select controls by `data-testid` (from `testID`, defined in `src/lib/testIds.ts`), never by visible text.
 
 ## Notes
 
