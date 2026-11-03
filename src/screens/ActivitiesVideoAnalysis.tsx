@@ -752,6 +752,12 @@ export function ActivitiesVideoAnalysis({
         })
         setPoseFrames(rows)
         setTotalVidFrames(tf)
+        // Reopen a shot that already has a 3D orbit — land on Smart 3D, don't rebuild.
+        const savedHologram = metrics?.hologram as { orbitVideo?: unknown } | undefined
+        if (typeof savedHologram?.orbitVideo === 'string' && savedHologram.orbitVideo.trim()) {
+          setPoseReturn('overview')
+          setOverviewDetail('pose')
+        }
         const expectsCorrections = metrics?.has_correction_images === true
         setHasCorrectionImagesFlag(expectsCorrections)
         const expectsVideo =

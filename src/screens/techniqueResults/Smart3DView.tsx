@@ -106,13 +106,22 @@ function partKeypoints(part: BodyPart, side: 'LEFT' | 'RIGHT'): string[] {
   }
 }
 
-/** MediaPipe frame closest to the scrub position. */
-function orbitKeypointsAt(frames: HologramOrbitFrame[] | null, index: number): HologramKeypoints | null {
+/** MediaPipe frame closest to the scrub position (index is 0..frameCount-1). */
+function orbitKeypointsAt(
+  frames: HologramOrbitFrame[] | null,
+  index: number,
+  frameCount: number
+): HologramKeypoints | null {
   if (!frames?.length) return null
+  const last = Math.max(frameCount - 1, 1)
+  const target =
+    frames.length === 1
+      ? frames[0].frame
+      : frames[0].frame + (index / last) * (frames[frames.length - 1].frame - frames[0].frame)
   let best = frames[0]
-  let dist = Math.abs(best.frame - index)
+  let dist = Math.abs(best.frame - target)
   for (const row of frames) {
-    const d = Math.abs(row.frame - index)
+    const d = Math.abs(row.frame - target)
     if (d < dist) {
       best = row
       dist = d
@@ -123,7 +132,7 @@ function orbitKeypointsAt(frames: HologramOrbitFrame[] | null, index: number): H
 
 /**
  * The orbit file is the square hologram still with black bars above and below.
- * Draw the full frame so those bars fall outside the stage and the still fills it.
+ * Layout is clipped by the stage — only the square band is visible.
  */
 function orbitPlacement(stageW: number, stageH: number, videoW: number, videoH: number) {
   const side = Math.min(videoW, videoH)
@@ -158,7 +167,8 @@ function JointMarkers({
     const p = keypoints[name]
     if (!p) return null
     if (!video) {
-      const d = Math.max(w, h)
+      // Match Image resizeMode="contain" for the square hologram still.
+      const d = Math.min(w, h)
       return { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d }
     }
     return { x: video.x + p.x * video.w, y: video.y + p.y * video.h }
@@ -209,6 +219,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const videoRef = useRef<Video>(null)
   const [orbitIndex, setOrbitIndex] = useState(0)
   const [playbackUri, setPlaybackUri] = useState<string | null>(null)
+  const [orbitReady, setOrbitReady] = useState(false)
   const orbitIndexRef = useRef(0)
   const iosPrimed = useRef(false)
   const grantIndex = useRef(0)
@@ -229,21 +240,28 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   useEffect(() => {
     setOrbitIndex(0)
     orbitIndexRef.current = 0
+    setOrbitReady(false)
   }, [hologram.orbitVideo])
 
   // iOS AVPlayer often never paints a remote, paused clip. Save the file, then play it from disk.
   useEffect(() => {
     const remote = hologram.orbitVideo
     setPlaybackUri(null)
+    setOrbitReady(false)
     iosPrimed.current = false
     if (!remote) return
     let cancelled = false
     const name = remote.split('/').pop()?.split('?')[0] || 'orbit.mp4'
+    if (__DEV__) console.log('[smart3d] orbit download', { remote: remote.slice(0, 120) })
     void (async () => {
       try {
         const file = await File.downloadFileAsync(remote, new File(Paths.cache, name), { idempotent: true })
-        if (!cancelled) setPlaybackUri(file.uri)
-      } catch {
+        if (!cancelled) {
+          if (__DEV__) console.log('[smart3d] orbit local', file.uri)
+          setPlaybackUri(file.uri)
+        }
+      } catch (e) {
+        if (__DEV__) console.warn('[smart3d] orbit download failed, using remote', e)
         if (!cancelled) setPlaybackUri(remote)
       }
     })()
@@ -283,16 +301,23 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   }
 
   function onOrbitStatus(status: AVPlaybackStatus) {
-    if (Platform.OS !== 'ios' || !status.isLoaded || iosPrimed.current) return
-    if (!status.isPlaying || status.positionMillis < 80) return
-    iosPrimed.current = true
-    void videoRef.current?.setStatusAsync({ shouldPlay: false, positionMillis: scrubMillis() })
+    if (!status.isLoaded) return
+    if (Platform.OS === 'ios' && !iosPrimed.current) {
+      if (!status.isPlaying || status.positionMillis < 80) return
+      iosPrimed.current = true
+      setOrbitReady(true)
+      void videoRef.current?.setStatusAsync({ shouldPlay: false, positionMillis: scrubMillis() })
+      return
+    }
+    if (!orbitReady && status.isLoaded) setOrbitReady(true)
   }
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: () => {
         grantIndex.current = orbitIndexRef.current
       },
@@ -301,22 +326,30 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         const delta = (g.dx / Math.max(stageWRef.current, 1)) * last
         seekOrbit(grantIndex.current + delta)
       },
-      onPanResponderTerminationRequest: () => false,
     })
   ).current
   /** Player hologram is blue; the pro reference is the red render of the matched library clip. */
   const holoImage = layer === 'pro' ? hologram.proImage : hologram.image
   const holoKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
   const building =
-    layer === 'pro'
+    hologram.ready &&
+    (layer === 'pro'
       ? hologram.proStatus === 'running'
       : hologram.status === 'running' ||
-        (layer === 'player' && hologram.orbitStatus === 'running' && !hologram.orbitVideo) ||
-        (layer === 'overlay' && hologram.proStatus === 'running')
+        (layer === 'player' && hologram.status !== 'done' && !hologram.image) ||
+        // Still ready, no clip yet — show turn progress for running/idle (kick in flight).
+        // Saved orbitVideo hides this; failed stays off so we do not spin forever.
+        (layer === 'player' &&
+          !hologram.orbitVideo &&
+          hologram.status === 'done' &&
+          hologram.orbitStatus !== 'failed') ||
+        (layer === 'overlay' && hologram.proStatus === 'running'))
   /** Pro tab with nothing to draw: no matched pro clip, or its render failed or never started. */
   const proMissing = layer === 'pro' && !hologram.proImage && hologram.proStatus !== 'running'
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
-  const markerKeys = showOrbit ? orbitKeypointsAt(hologram.orbitFrames, orbitIndex) : holoKeys
+  const markerKeys = showOrbit
+    ? orbitKeypointsAt(hologram.orbitFrames, orbitIndex, frameCountRef.current)
+    : holoKeys
   const placed =
     showOrbit && hologram.orbitWidth && hologram.orbitHeight
       ? orbitPlacement(stageSize.w || stageWidth, stageSize.h || stageHeight, hologram.orbitWidth, hologram.orbitHeight)
@@ -369,6 +402,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   }
 
   const pictureUri = showOrbit ? playbackUri : null
+  // Keep the still visible until the orbit clip has painted (iOS especially).
+  const showStill = Boolean(holoImage) && (!pictureUri || !orbitReady)
 
   return (
     <View style={styles.screen}>
@@ -394,90 +429,119 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
       </View>
       <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} trackStyle={styles.pill} />
       <View
-        style={[styles.stage, Platform.OS === 'ios' && styles.stageIos, { height: stageHeight }]}
+        collapsable={false}
+        style={[styles.stage, { height: stageHeight }]}
         onLayout={(e) => {
           stageWRef.current = e.nativeEvent.layout.width
           setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
         }}
       >
-        {pictureUri ? (
-          <Video
-            ref={videoRef}
-            source={{ uri: pictureUri }}
-            resizeMode={ResizeMode.COVER}
-            isMuted
-            progressUpdateIntervalMillis={100}
-            usePoster={Platform.OS === 'ios' && Boolean(holoImage)}
-            posterSource={Platform.OS === 'ios' && holoImage ? { uri: holoImage } : undefined}
-            onLoad={() => {
-              const player = videoRef.current
-              if (!player) return
-              if (Platform.OS === 'ios') {
-                iosPrimed.current = false
-                void Audio.setAudioModeAsync({
-                  allowsRecordingIOS: false,
-                  playsInSilentModeIOS: true,
-                  staysActiveInBackground: false,
-                  interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-                }).finally(() => player.playAsync())
-                return
+        {/* Clip oversized 9:16 AVPlayerLayer so it cannot float over the part buttons. */}
+        <View collapsable={false} style={styles.stageClip} pointerEvents="box-none">
+          {pictureUri ? (
+            <Video
+              ref={videoRef}
+              source={{ uri: pictureUri }}
+              pointerEvents="none"
+              // 9:16 orbit is laid out so the square hologram band fills the stage (same as the still).
+              resizeMode={placed ? ResizeMode.STRETCH : ResizeMode.COVER}
+              isMuted
+              progressUpdateIntervalMillis={100}
+              onLoad={() => {
+                const player = videoRef.current
+                if (!player) return
+                if (__DEV__) console.log('[smart3d] orbit onLoad', { uri: pictureUri.slice(0, 80) })
+                if (Platform.OS === 'ios') {
+                  iosPrimed.current = false
+                  void Audio.setAudioModeAsync({
+                    allowsRecordingIOS: false,
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: false,
+                    interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+                  }).finally(() => player.playAsync())
+                  return
+                }
+                const gen = seekGen.current
+                const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
+                void player
+                  .playAsync()
+                  .then(() => player.pauseAsync())
+                  .then(() => {
+                    if (seekGen.current !== gen) return
+                    return player.setPositionAsync(at)
+                  })
+                  .then(() => setOrbitReady(true))
+              }}
+              onPlaybackStatusUpdate={onOrbitStatus}
+              onError={(e) => {
+                if (__DEV__) console.warn('[smart3d] orbit video error', e)
+                if (pictureUri !== hologram.orbitVideo && hologram.orbitVideo) setPlaybackUri(hologram.orbitVideo)
+              }}
+              style={
+                placed
+                  ? {
+                      position: 'absolute',
+                      left: placed.x,
+                      top: placed.y,
+                      width: placed.w,
+                      height: placed.h,
+                    }
+                  : StyleSheet.absoluteFillObject
               }
-              const gen = seekGen.current
-              const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
-              void player
-                .playAsync()
-                .then(() => player.pauseAsync())
-                .then(() => {
-                  if (seekGen.current !== gen) return
-                  return player.setPositionAsync(at)
-                })
-            }}
-            onPlaybackStatusUpdate={onOrbitStatus}
-            onError={() => {
-              if (pictureUri !== hologram.orbitVideo && hologram.orbitVideo) setPlaybackUri(hologram.orbitVideo)
-            }}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: stageSize.w || stageWidth,
-              height: stageSize.h || stageHeight,
-            }}
-          />
-        ) : null}
-        {!pictureUri && holoImage ? (
-          <Image source={{ uri: holoImage }} resizeMode="cover" style={StyleSheet.absoluteFill} />
-        ) : !pictureUri ? (
-          <Image
-            source={BODY}
-            resizeMode="cover"
-            // absoluteFill alone leaves a bundled image at its natural size on web.
-            style={[styles.fill, layer === 'pro' && styles.bodyGhost]}
-          />
-        ) : null}
-        {layer === 'overlay' && hologram.proImage ? (
-          <Image source={{ uri: hologram.proImage }} resizeMode="cover" style={[StyleSheet.absoluteFill, { opacity: 0.72 }]} />
-        ) : null}
-        {markerKeys && stageSize.w ? (
-          <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
-        ) : null}
-        {showOrbit ? <View style={StyleSheet.absoluteFill} {...pan.panHandlers} /> : null}
-        {proMissing ? (
-          <View pointerEvents="none" style={styles.proMissing} testID="smart3d-pro-missing">
-            <Ionicons name="ribbon-outline" size={28} color="#7AECFF" />
-            <Text allowFontScaling={false} style={[styles.proMissingLabel, { fontFamily: theme.mediumFont }]}>
-              {t('analysis.smart3dProMissing')}
-            </Text>
-          </View>
-        ) : null}
-        {building ? (
-          <View pointerEvents="none" style={styles.building}>
-            <ActivityIndicator size="small" color="#7AECFF" />
-            <Text allowFontScaling={false} style={[styles.buildingLabel, { fontFamily: theme.mediumFont }]}>
-              {t(hologram.status === 'done' ? 'analysis.smart3dOrbitBuilding' : 'analysis.smart3dHologramBuilding')}
-            </Text>
-          </View>
-        ) : null}
+            />
+          ) : null}
+          {showStill ? (
+            <Image
+              source={{ uri: holoImage! }}
+              resizeMode="contain"
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, pictureUri ? styles.stillUnderOrbit : null]}
+            />
+          ) : !pictureUri ? (
+            <Image
+              source={BODY}
+              resizeMode="contain"
+              pointerEvents="none"
+              // absoluteFill alone leaves a bundled image at its natural size on web.
+              style={[styles.fill, layer === 'pro' && styles.bodyGhost]}
+            />
+          ) : null}
+          {layer === 'overlay' && hologram.proImage ? (
+            <Image
+              source={{ uri: hologram.proImage }}
+              resizeMode="cover"
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { opacity: 0.72 }]}
+            />
+          ) : null}
+          {markerKeys && stageSize.w ? (
+            <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
+          ) : null}
+          {showOrbit && pictureUri ? (
+            <View
+              style={styles.scrubLayer}
+              {...pan.panHandlers}
+              accessibilityRole="adjustable"
+              accessibilityLabel={t('analysis.smart3dTitle')}
+            />
+          ) : null}
+          {proMissing ? (
+            <View pointerEvents="none" style={styles.proMissing} testID="smart3d-pro-missing">
+              <Ionicons name="ribbon-outline" size={28} color="#7AECFF" />
+              <Text allowFontScaling={false} style={[styles.proMissingLabel, { fontFamily: theme.mediumFont }]}>
+                {t('analysis.smart3dProMissing')}
+              </Text>
+            </View>
+          ) : null}
+          {building ? (
+            <View pointerEvents="none" style={styles.building}>
+              <ActivityIndicator size="small" color="#7AECFF" />
+              <Text allowFontScaling={false} style={[styles.buildingLabel, { fontFamily: theme.mediumFont }]}>
+                {t(hologram.status === 'done' ? 'analysis.smart3dOrbitBuilding' : 'analysis.smart3dHologramBuilding')}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
       <ScrollView style={styles.partsScroll} contentContainerStyle={{ paddingBottom: 8 + insets.bottom }}>
       {showOrbit ? null : (
@@ -534,10 +598,24 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#5B6CFF',
     backgroundColor: '#020A1C',
+    // Must clip: the 9:16 AVPlayerLayer is taller than the stage. overflow:visible on iOS
+    // let it paint over the part buttons and steal horizontal drags.
     overflow: 'hidden',
   },
-  // overflow:hidden on the parent keeps AVPlayerLayer from drawing on iOS.
-  stageIos: { overflow: 'visible' },
+  stageClip: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  scrubLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    elevation: 20,
+    backgroundColor: 'transparent',
+  },
+  stillUnderOrbit: {
+    // Keep still as fallback under the video until the first frame has painted.
+    zIndex: 1,
+  },
   partsScroll: { flex: 1 },
   fill: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   bodyGhost: { opacity: 0.42 },
@@ -546,6 +624,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 16,
+    zIndex: 30,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -558,6 +637,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
     paddingHorizontal: 32,
+    zIndex: 15,
   },
   proMissingLabel: { color: '#BFE6FF', fontSize: 15, lineHeight: 21, textAlign: 'center' },
   prompt: { color: UI.text, fontSize: 20, marginTop: 14, marginBottom: 12 },

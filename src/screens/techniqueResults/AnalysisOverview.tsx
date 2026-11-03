@@ -1,11 +1,21 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Svg, { Circle, Defs, G, Line, Rect, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
+import Svg, {
+  Circle,
+  Defs,
+  G,
+  Line,
+  Path,
+  Rect,
+  Text as SvgText,
+  LinearGradient as SvgLinearGradient,
+  Stop,
+} from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { TEST_IDS } from '../../lib/testIds'
 import {
@@ -13,6 +23,13 @@ import {
   type PhysicalMetricKey,
   type PhysicalMetricsValues,
 } from '../../lib/physicalMetrics'
+import {
+  computeOverlayJointAngles,
+  emaAngle,
+  jointArcSvgPath,
+  jointLabelOffset,
+  type ComputedJointAngle,
+} from '../../lib/poseJointAngles'
 import {
   MEDIAPIPE_POSE_CONNECTIONS,
   nearestPoseByFrame,
@@ -172,6 +189,28 @@ export function AnalysisOverview({
     const idx = Math.round((shownMs / duration) * Math.max(0, total - 1))
     return nearestPoseByFrame(poseFrames, idx)
   }, [poseFrames, totalFrames, shownMs, duration])
+  const angleEmaRef = useRef<Record<string, number>>({})
+  const [jointAngles, setJointAngles] = useState<ComputedJointAngle[]>([])
+
+  useEffect(() => {
+    if (!pose || !natural || frameW <= 0) {
+      setJointAngles([])
+      return
+    }
+    const getPx = (name: string) => {
+      const p = pose.landmarks[name]
+      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null
+      return coverPx(p.x, p.y, frameW, frameH, natural.w, natural.h)
+    }
+    const raw = computeOverlayJointAngles(getPx, pose.landmarks)
+    setJointAngles(
+      raw.map((j) => {
+        const smoothed = emaAngle(angleEmaRef.current[j.id], j.deg)
+        if (smoothed != null) angleEmaRef.current[j.id] = smoothed
+        return { ...j, deg: smoothed ?? j.deg }
+      })
+    )
+  }, [pose, natural, frameW, frameH])
 
   function onStatus(status: AVPlaybackStatus) {
     if (!status.isLoaded) return
@@ -343,6 +382,34 @@ export function AnalysisOverview({
                   if (!p || (p.visibility ?? 1) < 0.35) return null
                   const pt = coverPx(p.x, p.y, frameW, frameH, natural.w, natural.h)
                   return <Circle key={name} cx={pt.x} cy={pt.y} r={3.5} fill="#7AECFF" />
+                })}
+                {jointAngles.map((j) => {
+                  const arcR = Math.max(10, Math.min(20, frameW * 0.035))
+                  const arc = jointArcSvgPath(j.b, j.a, j.c, arcR)
+                  const labelAt = jointLabelOffset(j.b, j.a, j.c, arcR + 10)
+                  return (
+                    <Fragment key={`ang-${j.id}`}>
+                      {arc ? (
+                        <Path
+                          d={arc}
+                          fill="none"
+                          stroke={j.color}
+                          strokeWidth={1.6}
+                          strokeOpacity={0.9}
+                        />
+                      ) : null}
+                      <SvgText
+                        x={labelAt.x}
+                        y={labelAt.y + 4}
+                        fill={j.color}
+                        fontSize={Math.max(10, Math.min(13, frameW * 0.032))}
+                        fontWeight="700"
+                        textAnchor="middle"
+                      >
+                        {`${Math.round(j.deg)}°`}
+                      </SvgText>
+                    </Fragment>
+                  )
                 })}
                 {(() => {
                   const box = normBox(pose.racket_bbox)

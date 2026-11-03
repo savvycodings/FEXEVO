@@ -30,6 +30,8 @@ export type HologramState = {
   proStatus: HologramStatus
   proImage: string | null
   proKeypoints: HologramKeypoints | null
+  /** False until the first GET returns — avoids a false "building" flash on reopen. */
+  ready: boolean
 }
 
 function parseKeypoints(raw: unknown): HologramKeypoints | null {
@@ -61,22 +63,44 @@ function num(v: unknown): number | null {
 
 const POLL_MS = 5_000
 
+const EMPTY: HologramState = {
+  status: 'idle',
+  image: null,
+  keypoints: null,
+  error: null,
+  orbitStatus: 'idle',
+  orbitVideo: null,
+  orbitDurationMs: null,
+  orbitFrameCount: null,
+  orbitWidth: null,
+  orbitHeight: null,
+  orbitFrames: null,
+  proStatus: 'idle',
+  proImage: null,
+  proKeypoints: null,
+  ready: false,
+}
+
 function toState(raw: unknown): HologramState | null {
   const body = ((raw as { data?: unknown })?.data ?? raw) as Record<string, unknown> | null
   if (!body || typeof body !== 'object') return null
   const status = body.status
   if (status !== 'idle' && status !== 'running' && status !== 'done' && status !== 'failed') return null
   const proStatus = body.proStatus
+  const orbitVideo = resolveUploadUrl(typeof body.orbitVideo === 'string' ? body.orbitVideo : null)
+  let orbitStatus: HologramStatus =
+    body.orbitStatus === 'running' || body.orbitStatus === 'done' || body.orbitStatus === 'failed'
+      ? body.orbitStatus
+      : 'idle'
+  // Saved clip always means done — never treat a stuck job as "still building".
+  if (orbitVideo) orbitStatus = 'done'
   return {
     status,
     image: resolveUploadUrl(typeof body.image === 'string' ? body.image : null),
     keypoints: parseKeypoints(body.keypoints),
     error: typeof body.error === 'string' ? body.error : null,
-    orbitStatus:
-      body.orbitStatus === 'running' || body.orbitStatus === 'done' || body.orbitStatus === 'failed'
-        ? body.orbitStatus
-        : 'idle',
-    orbitVideo: resolveUploadUrl(typeof body.orbitVideo === 'string' ? body.orbitVideo : null),
+    orbitStatus,
+    orbitVideo,
     orbitDurationMs: num(body.orbitDurationMs),
     orbitFrameCount: num(body.orbitFrameCount),
     orbitWidth: num(body.orbitWidth),
@@ -86,6 +110,7 @@ function toState(raw: unknown): HologramState | null {
       proStatus === 'running' || proStatus === 'done' || proStatus === 'failed' ? proStatus : 'idle',
     proImage: resolveUploadUrl(typeof body.proImage === 'string' ? body.proImage : null),
     proKeypoints: parseKeypoints(body.proKeypoints),
+    ready: true,
   }
 }
 
@@ -96,7 +121,8 @@ function toState(raw: unknown): HologramState | null {
 export async function startHologram(
   analysisId: string,
   contactMs?: number | null,
-  contactFrame?: number | null
+  contactFrame?: number | null,
+  forceRegenerate = false
 ): Promise<HologramState | null> {
   const res = await authClient
     .$fetch('/technique/hologram', {
@@ -106,6 +132,7 @@ export async function startHologram(
         analysisId,
         ...(contactMs != null ? { contactMs } : {}),
         ...(contactFrame != null ? { contactFrame } : {}),
+        ...(forceRegenerate ? { forceRegenerate: true } : {}),
       }),
     })
     .catch(() => null)
@@ -123,32 +150,28 @@ async function fetchHologram(analysisId: string): Promise<HologramState | null> 
   return res ? toState(res) : null
 }
 
+/** True once the contact still (and its joints) are ready — orbit/spin is a separate step. */
+function hasContactStill(state: HologramState | null | undefined): boolean {
+  return Boolean(state && state.status === 'done' && state.image)
+}
+
+function hasOrbit(state: HologramState | null | undefined): boolean {
+  return Boolean(state?.orbitVideo)
+}
+
 /**
- * Hologram for a saved shot. Shots analysed before this existed have none yet, so an idle job is
- * started once from the analysis' own impact frame.
+ * Hologram for a saved shot. Polls until the contact still is back, then until the orbit
+ * clip is ready (or fails). POST only kicks generation when nothing is saved yet —
+ * a finished orbit is never regenerated on reopen.
  */
 export function useHologram(analysisId: string | null | undefined): HologramState {
-  const [state, setState] = useState<HologramState>({
-    status: 'idle',
-    image: null,
-    keypoints: null,
-    error: null,
-    orbitStatus: 'idle',
-    orbitVideo: null,
-    orbitDurationMs: null,
-    orbitFrameCount: null,
-    orbitWidth: null,
-    orbitHeight: null,
-    orbitFrames: null,
-    proStatus: 'idle',
-    proImage: null,
-    proKeypoints: null,
-  })
+  const [state, setState] = useState<HologramState>(EMPTY)
 
   useEffect(() => {
     if (!analysisId) return
     let cancelled = false
-    let started = false
+    let startedStill = false
+    let kickedOrbit = false
     let timer: ReturnType<typeof setInterval> | null = null
 
     const stop = () => {
@@ -159,20 +182,53 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
     const tick = async () => {
       let next = await fetchHologram(analysisId)
       if (cancelled) return
-      const needsOrbit = next?.status === 'done' && next.orbitStatus === 'idle' && !next.orbitVideo
-      if ((next?.status === 'idle' || needsOrbit) && !started) {
-        started = true
+      // Idle, failed, or a "done" row with no image yet — kick (or force-retry) the still.
+      const needsStill = !hasContactStill(next) && next?.status !== 'running'
+      if (needsStill && !startedStill) {
+        startedStill = true
+        const force = next?.status === 'failed' || (next?.status === 'done' && !next.image)
+        next = (await startHologram(analysisId, null, null, force)) ?? next
+        if (cancelled) return
+      }
+      // Still ready, no saved orbit clip, and not already running — kick Seedance once.
+      // Never POST when orbitVideo is present (reopen must reuse the saved mp4).
+      // Retry once after a prior failed orbit so a newly enabled HOLOGRAM_ORBIT_ENABLED can recover.
+      const needsOrbitKick =
+        hasContactStill(next) &&
+        !hasOrbit(next) &&
+        next?.orbitStatus !== 'running' &&
+        next?.orbitStatus !== 'done' &&
+        !kickedOrbit
+      if (needsOrbitKick) {
+        kickedOrbit = true
         next = (await startHologram(analysisId)) ?? next
         if (cancelled) return
       }
-      if (next) setState(next)
+      if (next) {
+        setState(next)
+        if (__DEV__) {
+          console.log('[hologram] poll', {
+            analysisId,
+            status: next.status,
+            image: Boolean(next.image),
+            orbitStatus: next.orbitStatus,
+            orbitVideo: Boolean(next.orbitVideo),
+            orbitFrames: next.orbitFrames?.length ?? 0,
+            orbitSize:
+              next.orbitWidth && next.orbitHeight ? `${next.orbitWidth}x${next.orbitHeight}` : null,
+          })
+        }
+      }
+      // Keep polling while the turn job is running even if a premature orbitVideo appeared
+      // (disk heal can surface the mp4 before MediaPipe frames are written).
       const pending =
-        !next ||
-        next.status === 'idle' ||
-        next.status === 'running' ||
-        next.proStatus === 'running' ||
-        next.orbitStatus === 'running' ||
-        (next.status === 'done' && !next.orbitVideo && next.orbitStatus !== 'failed' && !started)
+        !hasContactStill(next) ||
+        next?.status === 'running' ||
+        next?.proStatus === 'running' ||
+        next?.orbitStatus === 'running' ||
+        (hasContactStill(next) &&
+          !hasOrbit(next) &&
+          next?.orbitStatus !== 'failed')
       if (!pending) stop()
     }
 

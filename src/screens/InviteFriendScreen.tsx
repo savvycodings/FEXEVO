@@ -728,6 +728,12 @@ export function InviteFriendScreen() {
                       </Text>
                     </View>
                   ) : null}
+                  <View style={styles.clubPlaceRow}>
+                    <Ionicons name="people-outline" size={14} color={UI.textMuted} />
+                    <Text style={styles.clubSubtitle} numberOfLines={1} testID={`club-card-members-${club.slug}`}>
+                      {t("clubMembership.members", { count: club.memberCount ?? 0 })}
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.clubMembersCol}>
                   <MemberStack
