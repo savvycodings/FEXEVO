@@ -48,6 +48,7 @@ The password for all three is `E2E-test-password-1!`.
 | `progress` | progress overview, daily quests, achievements list and detail, leaderboard, notifications |
 | `people` | coach review round trip (player sends, coach comments and submits, player sees it), clubs (create, approve, page, search), profile settings save, admin hub, Friends › Ranking (stays on People; World, Country, the country page; the no-club state and its Clubs button) |
 | `follows` | a coach sets specialties from the You tab; a player sees the chips on the coach card, follows from the card (the detail screen stays closed), still sees Following after a reload, and sees the follower count on the detail screen |
+| `tab-header` | after jumping tabs from Friends' tab bar, the header shows the profile and PRO badge (not the AI Coach logo); the logo stays on AI Coach |
 | `route-smoke` | every route opens on the web without crashing, as the role that uses it |
 | `web-fallbacks` | screens using thumbnails and screenshots open cleanly; web thumbnails return a real frame |
 

@@ -63,7 +63,7 @@ import type {
   NativeStackNavigationOptions,
   NativeStackNavigationProp,
 } from '@react-navigation/native-stack'
-import { useFocusEffect, useNavigation, useNavigationState } from '@react-navigation/native'
+import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
 import { TEST_IDS } from './lib/testIds'
 import type {
@@ -374,14 +374,12 @@ function MainTabsLayoutInner({
 
   const styles = getStyles(theme)
 
-  const activeTabName = useNavigationState((state) => {
-    const r = state.routes[state.index]
-    if (r.name !== 'Main' || !r.state || typeof (r.state as { index?: number }).index !== 'number') {
-      return null
-    }
-    const tabState = r.state as { index: number; routes: { name: string }[] }
-    return (tabState.routes[tabState.index]?.name as keyof MainTabParamList | undefined) ?? null
-  })
+  // Track the focused tab from the tab navigator's own focus events. Reading it from the root
+  // state came back null after a stacked screen jumped tabs with navigate('Main', { screen, params }),
+  // so the header fell back to the AI Coach logo on Progress, Activities and You.
+  const mainFocused = useIsFocused()
+  const [focusedTab, setFocusedTab] = useState<keyof MainTabParamList | null>(null)
+  const activeTabName = mainFocused ? focusedTab : null
 
   useEffect(() => {
     if (activeTabName === 'Activities' || activeTabName === 'You' || activeTabName === 'Progress') {
@@ -583,6 +581,7 @@ function MainTabsLayoutInner({
             renderTabIcon(route.name as keyof MainTabParamList, focused, tabMetrics.iconSize, viewerIsCoach),
         })}
         screenListeners={({ route }) => ({
+          focus: () => setFocusedTab(route.name as keyof MainTabParamList),
           tabPress: () => {
             if (route.name !== 'Assistant') closeAssistant()
           },
