@@ -192,6 +192,7 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
       }
       // Still ready, no saved orbit clip, and not already running — kick Seedance once.
       // Never POST when orbitVideo is present (reopen must reuse the saved mp4).
+      // Retry once after a prior failed orbit so a newly enabled HOLOGRAM_ORBIT_ENABLED can recover.
       const needsOrbitKick =
         hasContactStill(next) &&
         !hasOrbit(next) &&
@@ -203,12 +204,31 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
         next = (await startHologram(analysisId)) ?? next
         if (cancelled) return
       }
-      if (next) setState(next)
+      if (next) {
+        setState(next)
+        if (__DEV__) {
+          console.log('[hologram] poll', {
+            analysisId,
+            status: next.status,
+            image: Boolean(next.image),
+            orbitStatus: next.orbitStatus,
+            orbitVideo: Boolean(next.orbitVideo),
+            orbitFrames: next.orbitFrames?.length ?? 0,
+            orbitSize:
+              next.orbitWidth && next.orbitHeight ? `${next.orbitWidth}x${next.orbitHeight}` : null,
+          })
+        }
+      }
+      // Keep polling while the turn job is running even if a premature orbitVideo appeared
+      // (disk heal can surface the mp4 before MediaPipe frames are written).
       const pending =
         !hasContactStill(next) ||
         next?.status === 'running' ||
         next?.proStatus === 'running' ||
-        (next?.orbitStatus === 'running' && !hasOrbit(next))
+        next?.orbitStatus === 'running' ||
+        (hasContactStill(next) &&
+          !hasOrbit(next) &&
+          next?.orbitStatus !== 'failed')
       if (!pending) stop()
     }
 
