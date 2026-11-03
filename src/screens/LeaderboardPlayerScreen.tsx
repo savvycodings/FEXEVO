@@ -6,8 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Share,
-  Image,
+
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native'
 import { Video, ResizeMode } from 'expo-av'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -16,7 +17,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
-import { ProfileHeroScoreBlock } from '../components/ProfileHeroScoreBlock'
+import { ShieldProportionalFrame, fitShieldInBox } from '../components/ShieldProportionalFrame'
+import { ProfileActionRow, ProfileStatRow } from '../components/profile/ProfileActions'
+import { formatCount } from '../lib/formatCount'
 import { FriendActionButton } from '../components/FriendActionButton'
 import { mapApiToMetrics, ProfileRatingDashboard } from '../components/ProfileRatingDashboard'
 import {
@@ -33,17 +36,11 @@ import { Header } from '../components/Header'
 import { MainTabBarChrome } from '../components/MainTabBarChrome'
 import { useTranslation } from 'react-i18next'
 
-const UNFOLLOW_ICON = require('../../assets/youpage/unfollowicon.svg')
-const BOOK_VIDEO_ICON = require('../../assets/youpage/bookvideocall.svg')
-const PERSONAL_ICON = require('../../assets/coachs/personalicon.png')
 const BD_ICON_SVG = require('../../assets/coachs/bdicon.svg')
 const SHARE_ICON_SVG = require('../../assets/coachs/shareicon.svg')
 
 const SHARE_ICON_SIZE = 22
 const GALLERY_SIZE = 80
-const ACCENT = '#00B8FF'
-const PILL_INACTIVE = '#0E1830'
-const OUTLINE_BORDER = 'rgba(0, 184, 255, 0.45)'
 const META_MUTED = 'rgba(160, 180, 210, 0.95)'
 
 const API_ROOT = DOMAIN.replace(/\/+$/, '')
@@ -80,6 +77,11 @@ export function LeaderboardPlayerScreen() {
   const [recentVideos, setRecentVideos] = useState<PlayerRecentVideo[]>([])
 
   const horizontalPad = Math.max(20, insets.left, insets.right)
+  const { width: winW } = useWindowDimensions()
+  const shieldBox = useMemo(
+    () => fitShieldInBox(Math.min(170, (winW - horizontalPad * 2) * 0.42), 230),
+    [winW, horizontalPad],
+  )
 
   const ratingMetrics = useMemo(() => mapApiToMetrics(ratingCategories), [ratingCategories])
 
@@ -95,41 +97,8 @@ export function LeaderboardPlayerScreen() {
         >
           <Ionicons name="chevron-back" size={28} color="#86A7D2" />
         </TouchableOpacity>
-        <Text
-          allowFontScaling={false}
-          numberOfLines={1}
-          style={[styles.screenHeaderTitle, { fontFamily: theme.semiBoldFont }]}
-        >
-          {displayName}
-        </Text>
         <View style={styles.headerSpacer} />
       </View>
-      {headline || locationDisplay ? (
-        <View style={styles.screenHeaderSubtitleRow}>
-          {headline ? (
-            <Text
-              allowFontScaling={false}
-              numberOfLines={1}
-              style={[styles.screenHeaderSubtitle, { fontFamily: theme.mediumFont }]}
-            >
-              {headline}
-            </Text>
-          ) : null}
-          {locationDisplay ? (
-            <>
-              {headline ? <View style={styles.headerSubtitleGap} /> : null}
-              <Ionicons name="location-outline" size={16} color={ACCENT} />
-              <Text
-                allowFontScaling={false}
-                numberOfLines={1}
-                style={[styles.screenHeaderLocation, { fontFamily: theme.regularFont }]}
-              >
-                {locationDisplay}
-              </Text>
-            </>
-          ) : null}
-        </View>
-      ) : null}
     </View>
   )
 
@@ -208,37 +177,51 @@ export function LeaderboardPlayerScreen() {
           </TouchableOpacity>
         </View>
 
-        <ProfileHeroScoreBlock
-          horizontalPadding={horizontalPad}
-          premiumLabelNudgeUp={4}
-          marginBottom={0}
-          ratingUserId={userId}
-          playerOverride={{
-            name: displayName,
-            imageUri: imageUri,
-            areaLocation: locationDisplay,
-            score,
-          }}
-        />
-
-        <FriendActionButton userId={userId} name={displayName} />
-
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnFilled]} activeOpacity={0.85}>
-            <Image source={PERSONAL_ICON} style={styles.perfilIcon} resizeMode="contain" />
-            <Text style={styles.actionBtnTextFilled}>Perfil</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} activeOpacity={0.85}>
-            <LocalSvgAsset assetModule={UNFOLLOW_ICON} width={16} height={16} />
-            <Text style={styles.actionBtnTextOutline}>Unfollow</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} activeOpacity={0.85}>
-            <LocalSvgAsset assetModule={BOOK_VIDEO_ICON} width={16} height={16} />
-            <Text style={[styles.actionBtnTextOutline, styles.actionBtnTextNarrow]} numberOfLines={2}>
-              Book Video Call
+        <View style={styles.heroRow}>
+          <ShieldProportionalFrame
+            maxWidth={shieldBox.width}
+            maxHeight={shieldBox.height}
+            variant="small"
+            coachName={displayName}
+            coachImageUri={imageUri}
+            flagCode={(locationDisplay || null) as never}
+            showName={false}
+            showScore
+            scoreLabel={t('common.score')}
+            scoreValue={score != null ? String(score) : '—'}
+            showFlag
+            showCrest={false}
+            showPillarScores={false}
+          />
+          <View style={styles.heroText}>
+            <Text allowFontScaling={false} style={[styles.heroName, { fontFamily: theme.regularFont }]} numberOfLines={2}>
+              {displayName}
             </Text>
-          </TouchableOpacity>
+            {headline ? (
+              <Text allowFontScaling={false} style={[styles.heroHeadline, { fontFamily: theme.regularFont }]} numberOfLines={1}>
+                {headline}
+              </Text>
+            ) : null}
+            {locationDisplay ? (
+              <View style={styles.heroLocation}>
+                <Ionicons name="location-outline" size={18} color="#4DA6FF" />
+                <Text allowFontScaling={false} style={[styles.heroLocationText, { fontFamily: theme.regularFont }]} numberOfLines={1}>
+                  {locationDisplay}
+                </Text>
+              </View>
+            ) : null}
+            <ProfileStatRow
+              items={[
+                { value: `#${rank}`, label: t('common.ranking') },
+                { value: formatCount(totalXp), label: t('common.xp') },
+              ]}
+            />
+          </View>
         </View>
+
+        <ProfileActionRow>
+          <FriendActionButton userId={userId} name={displayName} />
+        </ProfileActionRow>
 
         {recentVideos.length > 0 ? (
           <ScrollView
@@ -293,6 +276,12 @@ function getStyles(theme: {
   semiBoldFont?: string
 }) {
   return StyleSheet.create({
+    heroRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 4 },
+    heroText: { flex: 1, minWidth: 0, gap: 6 },
+    heroName: { color: '#FFFFFF', fontSize: 22, flexShrink: 1 },
+    heroHeadline: { color: '#86A7D2', fontSize: 15, marginTop: -4 },
+    heroLocation: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+    heroLocationText: { color: '#86A7D2', fontSize: 15, flexShrink: 1 },
     root: {
       flex: 1,
       backgroundColor: '#050A18',
@@ -307,44 +296,11 @@ function getStyles(theme: {
       justifyContent: 'space-between',
       minHeight: 44,
     },
-    screenHeaderSubtitle: {
-      fontSize: 14,
-      lineHeight: 18,
-      color: ACCENT,
-      flexShrink: 1,
-    },
-    screenHeaderSubtitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexWrap: 'wrap',
-      marginTop: 2,
-      marginBottom: 4,
-      paddingHorizontal: 36,
-      gap: 6,
-    },
-    headerSubtitleGap: {
-      width: 12,
-    },
-    screenHeaderLocation: {
-      fontSize: 14,
-      lineHeight: 18,
-      color: ACCENT,
-      flexShrink: 1,
-      maxWidth: '46%',
-    },
     backHit: {
       width: 32,
       height: 44,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    screenHeaderTitle: {
-      flex: 1,
-      fontSize: 18,
-      color: '#FFFFFF',
-      textAlign: 'center',
-      lineHeight: 24,
     },
     headerSpacer: {
       width: 32,
@@ -365,48 +321,6 @@ function getStyles(theme: {
       flex: 1,
     },
     scrollInner: {},
-    actionRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginTop: 20,
-    },
-    actionBtn: {
-      flex: 1,
-      minWidth: 0,
-      borderRadius: 20,
-      paddingVertical: 12,
-      paddingHorizontal: 6,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-    },
-    actionBtnFilled: {
-      backgroundColor: PILL_INACTIVE,
-    },
-    actionBtnOutline: {
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-      borderColor: OUTLINE_BORDER,
-    },
-    actionBtnTextFilled: {
-      color: '#FFFFFF',
-      fontFamily: theme.mediumFont ?? 'System',
-      fontSize: 12,
-    },
-    perfilIcon: {
-      width: 16,
-      height: 16,
-    },
-    actionBtnTextOutline: {
-      color: '#FFFFFF',
-      fontFamily: theme.mediumFont ?? 'System',
-      fontSize: 11,
-      textAlign: 'center',
-    },
-    actionBtnTextNarrow: {
-      flexShrink: 1,
-    },
     galleryScroll: {
       paddingVertical: 4,
       paddingRight: 8,

@@ -28,6 +28,8 @@ export type ClubSummary = {
   galleryImageUrls: string[]
   /** Players in the `member` state. Older backends omit it. */
   memberCount?: number
+  /** Up to three recent members for the card's face stack (list endpoint; older backends omit it). */
+  memberPreview?: { userId: string; name: string; image: string | null }[]
   /** The signed-in viewer's record with this club (club detail only). */
   myMembership?: MyClubMembership
 }

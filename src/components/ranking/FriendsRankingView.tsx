@@ -1,10 +1,10 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../../context'
 import { GlowButton, SELECTED_GLOW, UI } from '../ui'
+import { PillChip } from '../../screens/progress/SegmentedPills'
 import { findCountry } from '../../lib/countries'
 import { resolveUploadUrl } from '../../lib/mediaUrl'
 import {
@@ -220,36 +220,18 @@ export function FriendsRankingView({
         {scopes.map(({ key, label }) => {
           const active = scope === key
           return (
-            <TouchableOpacity
+            <PillChip
               key={key}
-              style={[styles.scopePill, active ? styles.scopePillActive : styles.scopePillIdle]}
+              label={label}
+              active={active}
               onPress={() => onScopeChange(key)}
-              activeOpacity={0.85}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              aria-selected={active}
+              style={styles.scopePill}
+              textStyle={styles.scopeLabel}
+              fontFamily={theme.mediumFont}
+              activeFontFamily={theme.semiBoldFont}
+              role="tab"
               testID={`ranking-scope-${key}`}
-            >
-              {active ? (
-                <>
-                  <LinearGradient
-                    colors={UI.gradient}
-                    locations={UI.gradientLocations}
-                    start={UI.gradientStart}
-                    end={UI.gradientEnd}
-                    style={[StyleSheet.absoluteFill, styles.pillFill]}
-                  />
-                  <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.pillFill, SELECTED_GLOW]} />
-                </>
-              ) : null}
-              <Text
-                allowFontScaling={false}
-                numberOfLines={1}
-                style={[styles.scopeLabel, { color: active ? '#FFFFFF' : UI.textMuted }]}
-              >
-                {label}
-              </Text>
-            </TouchableOpacity>
+            />
           )
         })}
       </View>
@@ -323,9 +305,6 @@ function getStyles(theme: { regularFont?: string; mediumFont?: string; semiBoldF
       justifyContent: 'center',
       paddingHorizontal: 6,
     },
-    scopePillActive: { borderColor: 'transparent' },
-    scopePillIdle: { backgroundColor: UI.surface, borderColor: UI.surfaceBorder },
-    pillFill: { borderRadius: 999 },
     scopeLabel: { fontFamily: theme.mediumFont ?? 'System', fontSize: 14 },
     searchRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
     searchWrap: {

@@ -155,7 +155,8 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
                 style={StyleSheet.absoluteFill}
                 videoStyle={{ width: '100%', height: '100%' }}
                 resizeMode={ResizeMode.COVER}
-                shouldPlay={false}
+                shouldPlay
+                isLooping
                 isMuted
               />
             ) : (

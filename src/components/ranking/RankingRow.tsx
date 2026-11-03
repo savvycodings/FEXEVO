@@ -8,7 +8,8 @@ import { profileImageSource } from '../../lib/defaultProfilePicture'
 import { formatRating } from '../../lib/rankingApi'
 import { RankMedal } from './RankMedal'
 
-export const RANKING_AVATAR = 46
+/** Design: the row's content is at most 40 tall (avatar ring included). */
+export const RANKING_AVATAR = 36
 /** Below this width (e.g. 360) rows tighten their gaps so names keep more room. */
 const NARROW_WIDTH = 380
 
@@ -62,7 +63,9 @@ export function RankingRow({
           {t('friendsRanking.rating')}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={UI.textMuted} />
+      <View style={styles.chevron}>
+        <Ionicons name="chevron-forward" size={20} color="#86A7D2" />
+      </View>
     </TouchableOpacity>
   )
 }
@@ -132,17 +135,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    minHeight: 66,
-    paddingVertical: 8,
+    paddingVertical: 5,
     paddingLeft: 10,
-    paddingRight: 10,
-    borderRadius: 22,
+    paddingRight: 0,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(52, 72, 255, 0.45)',
     backgroundColor: '#070D2B',
     boxShadow: '0px 0px 18px 0px #2B3BFF26 inset',
   },
-  rowNarrow: { gap: 7, paddingLeft: 8, paddingRight: 6 },
+  rowNarrow: { gap: 7, paddingLeft: 8 },
+  /** Chevron hit area on the right edge (the row has no right padding). */
+  chevron: { width: 36, alignItems: 'center', justifyContent: 'center' },
   avatarRing: {
     width: RANKING_AVATAR + 4,
     height: RANKING_AVATAR + 4,
@@ -156,11 +160,11 @@ const styles = StyleSheet.create({
   avatarImg: { width: RANKING_AVATAR, height: RANKING_AVATAR, borderRadius: RANKING_AVATAR / 2 },
   flagPlaceholder: { backgroundColor: UI.surface, alignItems: 'center', justifyContent: 'center' },
   textCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
-  title: { fontSize: 16, color: '#FFFFFF' },
-  subtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, minWidth: 0 },
+  title: { fontSize: 15, color: '#FFFFFF' },
+  subtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1, minWidth: 0 },
   subtitle: { fontSize: 12, color: UI.textMuted, flexShrink: 1 },
   smallFlag: { width: 15, height: 10, borderRadius: 2 },
   ratingCol: { alignItems: 'flex-end', minWidth: 44 },
-  rating: { fontSize: 16, color: '#FFFFFF' },
-  ratingLabel: { fontSize: 11, color: UI.textMuted, marginTop: 1 },
+  rating: { fontSize: 15, color: '#FFFFFF' },
+  ratingLabel: { fontSize: 11, color: '#86A7D2', marginTop: 0 },
 })

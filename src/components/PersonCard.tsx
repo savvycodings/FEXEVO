@@ -2,19 +2,22 @@ import React, { useContext, useState, type ReactNode } from 'react'
 import { Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { ThemeContext } from '../context'
-import { CARD_GLOW, COACH_CARD_GLOW, UI } from './ui'
+import { CARD_GLOW, UI } from './ui'
 import { profileImageSource } from '../lib/defaultProfilePicture'
 import { fitChipCount } from '../lib/coachSpecialties'
 import { TierShield } from './TierShield'
+import { VerifiedBadge } from './VerifiedBadge'
 import type { CoachTier } from '../lib/coachDirectoryApi'
 
 const AVATAR = 64
 /** Coach card avatar: a little smaller than the friend card's, to leave room for the text. */
-const AVATAR_COACH = 56
-const AVATAR_COACH_NARROW = 48
-/** Coach card shield: 60 points, 52 on screens narrower than 375 points. */
-const COACH_SHIELD = 60
-const COACH_SHIELD_NARROW = 52
+const AVATAR_COACH = 62
+const AVATAR_COACH_NARROW = 52
+/** Coach card shield: 48 points, 40 on screens narrower than 375 points. */
+const COACH_SHIELD = 48
+const COACH_SHIELD_NARROW = 40
+/** Design: subtitle, location and pin in a soft lavender. */
+const COACH_MUTED = '#86A7D2'
 const NARROW_SCREEN = 375
 const CHIP_GAP = 5
 /** Widest "+N" a card can need (at most 8 specialties, so N is one digit). */
@@ -65,9 +68,10 @@ function ChipRow({ labels, font, testID }: { labels: string[]; font?: string; te
 
 /**
  * Search result card for a coach or friend: avatar, name, subtitle, location, optional tier shield.
- * `variant="coach"` is the Coaches list card: navy card with a glowing blue border, one row of
- * specialty chips under the avatar and text, a larger shield, and `action` (the Follow button)
- * in place of the chevron. The default variant is the friend card and is unchanged.
+ * `variant="coach"` is the Coaches list card (design): dark card with an inner blue glow, a big
+ * avatar, name / lavender subtitle / location with one row of specialty chips under the text, the
+ * tier shield and a chevron. `action`, when given, replaces the chevron.
+ * The default variant is the friend card and is unchanged.
  */
 export function PersonCard({
   name,
@@ -93,7 +97,7 @@ export function PersonCard({
   variant?: 'default' | 'coach'
   /** Coach variant: every chip label, translated, in display order. The card fits what it can. */
   chips?: string[]
-  /** Coach variant: shown on the right in place of the chevron. */
+  /** Coach variant: optional control shown on the right in place of the chevron. */
   action?: ReactNode
 }) {
   const { theme } = useContext(ThemeContext)
@@ -111,23 +115,38 @@ export function PersonCard({
       />
       <View style={styles.textCol}>
         <View style={styles.nameRow}>
-          <Text allowFontScaling={false} numberOfLines={1} style={[styles.name, { fontFamily: theme.semiBoldFont }]}>
+          <Text
+            allowFontScaling={false}
+            numberOfLines={1}
+            style={[styles.name, coach && styles.nameCoach, { fontFamily: theme.semiBoldFont }]}
+          >
             {name}
           </Text>
-          {verified ? <Ionicons name="checkmark-circle" size={18} color={UI.accentStrong} /> : null}
+          {verified ? <VerifiedBadge size={14} /> : null}
         </View>
         {subtitle ? (
-          <Text allowFontScaling={false} numberOfLines={1} style={[styles.subtitle, { fontFamily: theme.regularFont }]}>
+          <Text
+            allowFontScaling={false}
+            numberOfLines={1}
+            style={[styles.subtitle, coach && styles.subtitleCoach, { fontFamily: coach ? theme.mediumFont : theme.regularFont }]}
+          >
             {subtitle}
           </Text>
         ) : null}
         {location ? (
           <View style={styles.locationRow}>
-            <Ionicons name="location-sharp" size={12} color={UI.textMuted} />
-            <Text allowFontScaling={false} numberOfLines={1} style={[styles.location, { fontFamily: theme.regularFont }]}>
+            <Ionicons name="location-sharp" size={coach ? 14 : 12} color={coach ? COACH_MUTED : UI.textMuted} />
+            <Text
+              allowFontScaling={false}
+              numberOfLines={1}
+              style={[styles.location, coach && styles.locationCoach, { fontFamily: theme.regularFont }]}
+            >
               {location}
             </Text>
           </View>
+        ) : null}
+        {coach && chips && chips.length > 0 ? (
+          <ChipRow labels={chips} font={theme.mediumFont} testID={testID ? `${testID}-chips` : undefined} />
         ) : null}
       </View>
     </>
@@ -145,17 +164,9 @@ export function PersonCard({
     >
       {coach ? (
         <>
-          {/* Left: avatar + text, then the chip row across the full left width. */}
-          <View style={styles.coachMain}>
-            <View style={styles.coachTop}>{identity}</View>
-            {chips && chips.length > 0 ? (
-              <ChipRow labels={chips} font={theme.mediumFont} testID={testID ? `${testID}-chips` : undefined} />
-            ) : null}
-          </View>
-          <View style={styles.coachSide}>
-            {tier ? <TierShield tier={tier} width={narrow ? COACH_SHIELD_NARROW : COACH_SHIELD} /> : null}
-            {action}
-          </View>
+          <View style={styles.coachTop}>{identity}</View>
+          {tier ? <TierShield tier={tier} width={narrow ? COACH_SHIELD_NARROW : COACH_SHIELD} /> : null}
+          {action ?? (onPress ? <Ionicons name="chevron-forward" size={22} color={COACH_MUTED} /> : null)}
         </>
       ) : (
         <>
@@ -184,35 +195,36 @@ const styles = StyleSheet.create({
   coachCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 30,
-    borderWidth: 1.5,
-    borderColor: UI.coachCardBorder,
-    backgroundColor: UI.coachCardBg,
-    ...COACH_CARD_GLOW,
+    gap: 6,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#07256D',
+    backgroundColor: '#030A17',
+    boxShadow: '0px 0px 20px 0px rgba(0, 72, 255, 0.20), 0px 0px 30px 0px rgba(0, 72, 255, 0.50) inset',
   },
-  coachMain: { flex: 1, minWidth: 0, gap: 10 },
-  coachTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  coachTop: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
   textCol: { flex: 1, minWidth: 0 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { fontSize: 17, color: '#FFFFFF', flexShrink: 1 },
+  nameCoach: { fontSize: 18 },
   subtitle: { fontSize: 12, color: UI.textMuted, marginTop: 2 },
+  subtitleCoach: { fontSize: 11, color: COACH_MUTED },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   location: { fontSize: 12, color: '#FFFFFF', flexShrink: 1 },
-  chipRow: { flexDirection: 'row', flexWrap: 'nowrap', gap: CHIP_GAP, height: 24, overflow: 'hidden' },
+  locationCoach: { fontSize: 13, color: COACH_MUTED },
+  chipRow: { flexDirection: 'row', flexWrap: 'nowrap', gap: CHIP_GAP, height: 24, overflow: 'hidden', marginTop: 8 },
   chipMeasure: { position: 'absolute', left: 0, top: 0, flexDirection: 'row', opacity: 0 },
   chip: {
     height: 24,
     paddingHorizontal: 9,
-    borderRadius: UI.radiusPill,
+    borderRadius: 7,
     borderWidth: 1,
-    borderColor: UI.chipBorder,
-    backgroundColor: UI.chipBg,
+    borderColor: '#1A2D80',
+    backgroundColor: '#030A17',
     justifyContent: 'center',
     flexShrink: 0,
   },
   chipText: { fontSize: 12, color: '#FFFFFF' },
-  coachSide: { alignItems: 'center', gap: 8 },
 })

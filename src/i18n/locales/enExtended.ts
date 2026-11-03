@@ -24,6 +24,7 @@ export const enExtended = {
     feedback: "Feedback",
     annotations: "Annotations",
     ranking: "Ranking",
+    xp: "XP",
   },
   progress: {
     title: "Progress",
@@ -680,6 +681,10 @@ export const enExtended = {
     noClubsMatch: "No clubs match your search",
     noNearbyClubs: "No clubs near you yet",
     allCoaches: "All Coaches",
+    proTrainers: "PRO Trainers",
+    speciality: "Speciality",
+    anySpeciality: "Any speciality",
+    noCoachesFilter: "No coaches match these filters",
     nearby: "Nearby",
     coachSubtitle: "Personalized PRO Trainer",
     coachFound: "{{count}} coach found",

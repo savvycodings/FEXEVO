@@ -25,7 +25,6 @@ import { storedAiScoreToPercent } from '../lib/techniqueScoreDisplay'
 import { DOMAIN } from '../../constants'
 import { useFavoriteIds } from '../lib/activitiesFavorites'
 import type { ActivitySession } from '../lib/activitySession'
-import { displayTrainShotTitle } from '../lib/trainShotDisplay'
 import { getMainStackNavigation } from '../lib/mainStackNavigation'
 import { fetchCoachSubmissions, type CoachSubmission } from '../lib/coachSubmissionsApi'
 import { ActivitiesVideoAnalysis } from './ActivitiesVideoAnalysis'
@@ -158,120 +157,6 @@ function ActivitiesNoShotsPlaceholder({
 }
 
 /** API list score / snapshot scores are 0–100. Show whole-number score out of 100. */
-function displayScoreWhole(score0to100: number): number {
-  return Math.round(Math.max(0, Math.min(100, score0to100)))
-}
-
-/**
- * Real coach-comment stats for a shot, taken from the coach's review
- * annotations (coachMarksJson). Each annotation carries a tone of
- * 'good' | 'wrong'. Shots with no coach review return zero counts.
- */
-function coachCommentStats(s: ActivitySession): { total: number; good: number; bad: number } {
-  const marks = s.coachMarksJson
-  let good = 0
-  let bad = 0
-  let total = 0
-  if (Array.isArray(marks)) {
-    for (const row of marks) {
-      const r = row as Record<string, unknown> | null
-      if (!r) continue
-      const comment = typeof r.comment === 'string' ? r.comment.trim() : ''
-      const hasImage = typeof r.imageUri === 'string' && r.imageUri.trim().length > 0
-      if (!comment && !hasImage) continue
-      total++
-      const tone = r.tone
-      if (tone === 'good') good++
-      else if (tone === 'wrong' || tone === 'bad') bad++
-    }
-  }
-  return { total, good, bad }
-}
-
-function commentToneFromStats(stats: { good: number; bad: number }): 'good' | 'bad' | 'both' {
-  if (stats.good > 0 && stats.bad > 0) return 'both'
-  if (stats.bad > 0) return 'bad'
-  return 'good'
-}
-
-function ShotCommentToneIcon({ tone }: { tone: 'good' | 'bad' | 'both' }) {
-  if (tone === 'both') {
-    return <LocalSvgAsset assetModule={MIXED_COMMENT_ICON} width={14} height={8} />
-  }
-  if (tone === 'bad') {
-    return <LocalSvgAsset assetModule={BAD_COMMENT_ICON} width={8} height={8} />
-  }
-  return <LocalSvgAsset assetModule={GOOD_COMMENT_ICON} width={8} height={8} />
-}
-
-/** Stable “last score” marker for dual-bar UI when API does not send lastScore. */
-function derivedLastScore(s: ActivitySession): number | null {
-  if (typeof s.lastScore === 'number') return Math.max(0, Math.min(100, s.lastScore))
-  if (typeof s.score !== 'number') return null
-  let h = 0
-  for (let i = 0; i < s.analysisId.length; i++) {
-    h = (h * 31 + s.analysisId.charCodeAt(i)) >>> 0
-  }
-  const jitter = (h % 19) - 9
-  return Math.max(0, Math.min(100, s.score + jitter))
-}
-
-function SessionScoreBar({ score }: { score: number; last: number | null }) {
-  const pct = Math.max(0, Math.min(100, score))
-  return (
-    <View style={detailScoreBarStyles.wrap}>
-      <View style={detailScoreBarStyles.markerRow} pointerEvents="none">
-        <View style={[detailScoreBarStyles.marker, { left: `${pct}%` }]}>
-          <Text allowFontScaling={false} style={detailScoreBarStyles.markerGlyph}>
-            ▼
-          </Text>
-        </View>
-      </View>
-      <View style={detailScoreBarStyles.track}>
-        <View style={[detailScoreBarStyles.fill, { width: `${pct}%` }]} />
-      </View>
-    </View>
-  )
-}
-
-const detailScoreBarStyles = StyleSheet.create({
-  wrap: {
-    flex: 1,
-    marginRight: 8,
-  },
-  markerRow: {
-    height: 9,
-    position: 'relative',
-    marginBottom: 1,
-  },
-  marker: {
-    position: 'absolute',
-    bottom: 0,
-    marginLeft: -5,
-    width: 10,
-    alignItems: 'center',
-  },
-  markerGlyph: {
-    fontSize: 8,
-    color: C.sky,
-    lineHeight: 8,
-  },
-  track: {
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: C.track,
-    overflow: 'hidden',
-  },
-  fill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 4,
-    backgroundColor: C.sky,
-  },
-})
-
 function ActivitiesDayDetail({
   dateKey,
   sessions,
@@ -298,6 +183,7 @@ function ActivitiesDayDetail({
   const { t } = useTranslation()
   const { width: winW } = useWindowDimensions()
   const insets = useSafeAreaInsets()
+  const { favoriteIds, toggleFavorite } = useFavoriteIds()
   const styles = useMemo(() => getDetailStyles(theme, winW), [theme, winW])
   const backLabel = backToCalendarLabel ?? t('activities.backToProfile')
   const dayDate = parseDateKey(dateKey)
@@ -457,77 +343,18 @@ function ActivitiesDayDetail({
             </Text>
           ) : null
         ) : (
-          visibleSessions.map((s) => {
-            const shot = displayTrainShotTitle({
-              strokeLabel: s.shotLabel,
-              strokeName: s.shotLabel,
-            })
-            const coachStats = coachCommentStats(s)
-            const comments = coachStats.total
-            const hasComments = comments > 0
-            const tone = commentToneFromStats(coachStats)
-            const score = typeof s.score === 'number' ? s.score : null
-            const last = derivedLastScore(s)
-
-            return (
-              <Pressable
-                key={s.analysisId}
-                style={styles.sessionCardRow}
-                onPress={() => onSessionPress?.(s)}
-                android_ripple={{ color: 'rgba(255,255,255,0.08)' }}
-              >
-                <View style={styles.thumbCol}>
-                  <Video
-                    source={{ uri: videoUri(s.videoPath) }}
-                    style={styles.thumbVideo}
-                    resizeMode={ResizeMode.COVER}
-                    useNativeControls={false}
-                    isLooping={false}
-                    shouldPlay={false}
-                  />
-                  <View style={styles.playOverlay} pointerEvents="none">
-                    <Ionicons name="play-circle" size={30} color="rgba(255,255,255,0.92)" />
-                  </View>
-                </View>
-                <View style={styles.whitePanel}>
-                  <View style={styles.whiteTopRow}>
-                    <Text allowFontScaling={false} numberOfLines={1} style={styles.shotTitle}>
-                      {shot}
-                    </Text>
-                    <View style={styles.commentsPill}>
-                      {hasComments ? <ShotCommentToneIcon tone={tone} /> : null}
-                      <Text allowFontScaling={false} style={styles.commentsText}>
-                        {comments} Comments
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.scoreSection}>
-                    <View style={styles.scoreBarCol}>
-                      <View style={styles.scoreBarRow}>
-                        <View style={styles.scoreBarTrackWrap}>
-                          {score != null ? (
-                            <SessionScoreBar score={score} last={last} />
-                          ) : (
-                            <View style={[detailScoreBarStyles.track, { justifyContent: 'center' }]}>
-                              <Text allowFontScaling={false} style={styles.scorePending}>
-                                —
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                        <Text allowFontScaling={false} style={styles.scoreBig}>
-                          {score != null ? String(displayScoreWhole(score)) : '—'}
-                        </Text>
-                      </View>
-                      <Text allowFontScaling={false} style={styles.scoreLabel}>
-                        {t('playlist.score')}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
-            )
-          })
+          visibleSessions.map((s) => (
+            <ShotCard
+              key={s.analysisId}
+              session={s}
+              videoUrl={videoUri(s.videoPath)}
+              theme={theme}
+              compact={winW < 380}
+              favorite={favoriteIds.has(s.analysisId)}
+              onToggleFavorite={() => toggleFavorite(s.analysisId)}
+              onPress={() => onSessionPress?.(s)}
+            />
+          ))
         )}
       </ScrollView>
     </View>

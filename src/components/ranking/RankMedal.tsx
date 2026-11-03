@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { ThemeContext } from '../../context'
 
-const SIZE = 38
+const SIZE = 36
 
 /** Gold / silver / bronze coin colours (top light → bottom dark) and the number's ink. */
 const MEDALS: Record<1 | 2 | 3, { colors: readonly [string, string]; ring: string; ink: string }> = {
@@ -36,7 +36,7 @@ export function RankMedal({ rank, testID }: { rank: number; testID?: string }) {
             allowFontScaling={false}
             numberOfLines={1}
             adjustsFontSizeToFit
-            style={[styles.chipText, { fontFamily: theme.semiBoldFont }]}
+            style={[styles.chipText, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
           >
             {label}
           </Text>
@@ -52,7 +52,7 @@ export function RankMedal({ rank, testID }: { rank: number; testID?: string }) {
 }
 
 const styles = StyleSheet.create({
-  slot: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  slot: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   coin: {
     width: SIZE,
     height: SIZE,
@@ -64,8 +64,8 @@ const styles = StyleSheet.create({
   },
   coinText: { fontSize: 16 },
   chip: {
-    minWidth: 34,
-    height: 34,
+    minWidth: 32,
+    height: 32,
     paddingHorizontal: 4,
     borderRadius: 10,
     backgroundColor: '#141B4D',
@@ -74,6 +74,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipText: { fontSize: 15, color: '#C9D6FF' },
+  /** #4 and below (design): Inter 700, 14px, #86A7D2. */
+  chipText: { fontSize: 14, color: '#86A7D2', textAlign: 'center' },
   crown: { position: 'absolute', top: -9, left: 0, right: 0, alignItems: 'center' },
 })

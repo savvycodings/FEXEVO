@@ -1,7 +1,5 @@
 import React, { useCallback, useContext, useEffect, useState } from 'react'
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import Ionicons from '@expo/vector-icons/Ionicons'
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { authClient } from '../lib/auth-client'
@@ -13,7 +11,8 @@ import {
   unfriend,
   type RelationshipStatus,
 } from '../lib/friendsApi'
-import { PRIMARY_GLOW, UI } from './ui'
+import { UI } from './ui'
+import { ProfileActionButton } from './profile/ProfileActions'
 
 type Confirm = 'cancel' | 'remove' | null
 
@@ -89,7 +88,7 @@ export function FriendActionButton({ userId, name }: { userId: string; name: str
         : status === 'incoming_pending'
           ? t('friends.accept')
           : t('friends.friends')
-  const icon =
+  const icon: 'person-add' | 'time-outline' | 'checkmark' | 'people' =
     status === 'none'
       ? 'person-add'
       : status === 'outgoing_pending'
@@ -100,35 +99,15 @@ export function FriendActionButton({ userId, name }: { userId: string; name: str
 
   return (
     <View style={styles.wrap}>
-      <TouchableOpacity
-        style={[styles.btn, primary ? PRIMARY_GLOW : styles.btnOutline]}
+      <ProfileActionButton
+        label={label}
+        icon={icon}
+        variant={primary ? 'primary' : 'outline'}
         onPress={onPress}
-        disabled={busy}
-        activeOpacity={0.85}
-        accessibilityRole="button"
+        loading={busy}
         accessibilityLabel={label}
         testID={`friend-action-${status}`}
-      >
-        {primary ? (
-          <LinearGradient
-            colors={UI.gradient}
-            locations={UI.gradientLocations}
-            start={UI.gradientStart}
-            end={UI.gradientEnd}
-            style={[StyleSheet.absoluteFill, styles.fill]}
-          />
-        ) : null}
-        {busy ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <>
-            <Ionicons name={icon} size={18} color="#FFFFFF" />
-            <Text allowFontScaling={false} style={[styles.label, { fontFamily: theme.mediumFont }]}>
-              {label}
-            </Text>
-          </>
-        )}
-      </TouchableOpacity>
+      />
       {failed ? <Text style={[styles.error, { fontFamily: theme.regularFont }]}>{t('friends.actionFailed')}</Text> : null}
 
       <Modal visible={confirm != null} transparent animationType="fade" onRequestClose={() => setConfirm(null)}>
@@ -163,20 +142,9 @@ export function FriendActionButton({ userId, name }: { userId: string; name: str
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: 14, alignItems: 'center' },
-  btn: {
-    minWidth: 180,
-    height: 44,
-    paddingHorizontal: 22,
-    borderRadius: UI.radiusPill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    overflow: 'hidden',
-  },
+  /** Sits in a ProfileActionRow; the error line shows under the button. */
+  wrap: {},
   btnOutline: { borderWidth: 1, borderColor: UI.trackBorder, backgroundColor: UI.surface },
-  fill: { borderRadius: UI.radiusPill },
   label: { fontSize: 15, color: '#FFFFFF' },
   error: { marginTop: 6, fontSize: 13, color: UI.error },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },

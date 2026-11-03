@@ -24,6 +24,7 @@ export const esExtended = {
     feedback: "Comentario",
     annotations: "Anotaciones",
     ranking: "Ranking",
+    xp: "XP",
   },
   progress: {
     title: "Progreso",
@@ -681,6 +682,10 @@ export const esExtended = {
     noClubsMatch: "Ningún club coincide con tu búsqueda",
     noNearbyClubs: "Aún no hay clubes cerca de ti",
     allCoaches: "Todos",
+    proTrainers: "Entrenadores PRO",
+    speciality: "Especialidad",
+    anySpeciality: "Cualquier especialidad",
+    noCoachesFilter: "Ningún entrenador coincide con estos filtros",
     nearby: "Cerca",
     coachSubtitle: "Entrenador PRO personalizado",
     coachFound: "{{count}} entrenador encontrado",

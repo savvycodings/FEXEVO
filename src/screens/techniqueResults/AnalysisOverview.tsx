@@ -100,6 +100,14 @@ function ratingTone(rating: string | null, score: number | null) {
 }
 
 /** How often expo-av reports position; the skeleton fills the gaps with a playback clock. */
+/**
+ * CSS `linear-gradient(102.5deg, A 9.07%, B 90.93%)` mapped to expo-linear-gradient points for the
+ * ~343x52 action buttons (102.5deg runs left→right, tilting slightly downward).
+ */
+const CSS_102_5_START = { x: 0.007, y: -0.21 }
+const CSS_102_5_END = { x: 0.993, y: 1.21 }
+const CSS_102_5_LOCATIONS = [0.0907, 0.9093] as const
+
 const STATUS_INTERVAL_MS = 100
 /** Seek at most this often while dragging, so the decoder keeps up. */
 const SCRUB_SEEK_MS = 80
@@ -283,12 +291,7 @@ export function AnalysisOverview({
   return (
     <View style={styles.page}>
       <View style={styles.frameGlow}>
-        <LinearGradient
-          colors={['#7AECFF', '#2F6BFF', '#49D6FF']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.frameBorder}
-        >
+        <View style={styles.frameBorder}>
           <View
             style={styles.frame}
             onLayout={(event) => {
@@ -413,7 +416,7 @@ export function AnalysisOverview({
               </Text>
             </View>
           </View>
-        </LinearGradient>
+        </View>
       </View>
 
       <View style={styles.scoreRow}>
@@ -491,14 +494,7 @@ export function AnalysisOverview({
           const spec = METRIC_ICON[key]
           const value = metrics?.[key]
           return (
-            <LinearGradient
-              key={key}
-              colors={['rgba(90, 190, 255, 0.85)', 'rgba(18, 70, 160, 0.35)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.metricBorder}
-            >
-              <View style={styles.metric}>
+            <View key={key} style={styles.metric}>
                 <Ionicons name={spec.icon} size={18} color={spec.color} />
                 <Text allowFontScaling={false} style={[styles.metricValue, { fontFamily: theme.semiBoldFont }]}>
                   {value ?? '—'}
@@ -506,8 +502,7 @@ export function AnalysisOverview({
                 <Text allowFontScaling={false} numberOfLines={1} style={[styles.metricLabel, { fontFamily: theme.regularFont }]}>
                   {t(`technique.physicalMetric${key[0]!.toUpperCase()}${key.slice(1)}`)}
                 </Text>
-              </View>
-            </LinearGradient>
+            </View>
           )
         })}
       </View>
@@ -515,13 +510,14 @@ export function AnalysisOverview({
       <Pressable
         onPress={onBiggestMistakes}
         accessibilityRole="button"
-        style={styles.primaryGlow}
+        style={styles.btnRadius}
         testID="overview-biggest-mistakes"
       >
         <LinearGradient
-          colors={detail === 'mistakes' ? ['#1A8CFF', '#1236C8'] : ['#3EC8FF', '#2454FF']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
+          colors={['#00BBFF', '#0022FF']}
+          locations={CSS_102_5_LOCATIONS}
+          start={CSS_102_5_START}
+          end={CSS_102_5_END}
           style={styles.primaryBtn}
         >
           <Text allowFontScaling={false} style={[styles.primaryLabel, { fontFamily: theme.semiBoldFont }]}>
@@ -531,19 +527,18 @@ export function AnalysisOverview({
         </LinearGradient>
       </Pressable>
 
-      <Pressable onPress={onSmart3d} accessibilityRole="button" style={styles.secondaryGlow}>
+      <Pressable onPress={onSmart3d} accessibilityRole="button" style={styles.btnRadius}>
         <LinearGradient
-          colors={detail === 'pose' ? ['#7AECFF', '#2454FF'] : ['#3EC8FF', '#1A4FA8']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.secondaryBorder}
+          colors={['#041641', '#0022FF']}
+          locations={CSS_102_5_LOCATIONS}
+          start={CSS_102_5_START}
+          end={CSS_102_5_END}
+          style={styles.secondaryBtn}
         >
-          <View style={[styles.secondaryBtn, detail === 'pose' && styles.secondaryBtnOn]}>
-            <Ionicons name="cube-outline" size={18} color="#3EC8FF" />
-            <Text allowFontScaling={false} style={[styles.secondaryLabel, { fontFamily: theme.semiBoldFont }]}>
-              {t('analysis.smart3d')}
-            </Text>
-          </View>
+          <Ionicons name="cube-outline" size={18} color="#3EC8FF" />
+          <Text allowFontScaling={false} style={[styles.secondaryLabel, { fontFamily: theme.semiBoldFont }]}>
+            {t('analysis.smart3d')}
+          </Text>
         </LinearGradient>
       </Pressable>
     </View>
@@ -552,20 +547,15 @@ export function AnalysisOverview({
 
 const styles = StyleSheet.create({
   page: { alignSelf: 'stretch', gap: 16 },
+  /** No outer glow on the video card (design); only the gradient border remains. */
   frameGlow: {
     alignSelf: 'stretch',
-    borderRadius: 22,
-    padding: 3,
-    backgroundColor: 'rgba(0, 184, 255, 0.22)',
-    shadowColor: '#00C2FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.85,
-    shadowRadius: 16,
-    elevation: 12,
+    borderRadius: 19,
   },
   frameBorder: {
     borderRadius: 19,
-    padding: 2,
+    borderWidth: 2,
+    borderColor: '#0048FF',
   },
   frame: {
     alignSelf: 'stretch',
@@ -646,31 +636,20 @@ const styles = StyleSheet.create({
   tone: { fontSize: 18 },
   summary: { color: 'rgba(231,242,255,0.78)', fontSize: 14, lineHeight: 20 },
   metricRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
-  metricBorder: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 1,
-  },
   metric: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
     minHeight: 84,
-    borderRadius: 15,
-    backgroundColor: '#071428',
+    borderRadius: 16,
+    backgroundColor: '#00195080',
     paddingHorizontal: 2,
     paddingVertical: 8,
   },
   metricValue: { color: '#FFFFFF', fontSize: 18 },
   metricLabel: { color: '#D5E4FF', fontSize: 9, textAlign: 'center' },
-  primaryGlow: {
-    borderRadius: 16,
-    shadowColor: '#2F7BFF',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.7,
-    shadowRadius: 16,
-    elevation: 10,
-  },
+  btnRadius: { borderRadius: 16 },
   primaryBtn: {
     height: 52,
     borderRadius: 16,
@@ -678,29 +657,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    boxShadow: '0px 0px 16px 0px #35C7FF inset, 0px 0px 10px 0px #00B8FF, 0px 0px 15px 0px #0015D4',
   },
   primaryLabel: { color: '#FFFFFF', fontSize: 16 },
-  secondaryGlow: {
-    borderRadius: 16,
-    shadowColor: '#00C2FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  secondaryBorder: {
-    borderRadius: 16,
-    padding: 1.5,
-  },
   secondaryBtn: {
-    height: 50,
-    borderRadius: 14.5,
-    backgroundColor: '#04122C',
+    height: 52,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#00B8FF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    boxShadow: '0px 0px 16px 0px #0048FF40 inset, 0px 0px 15px 0px #0048FF40',
   },
-  secondaryBtnOn: { backgroundColor: '#0A2458' },
   secondaryLabel: { color: '#FFFFFF', fontSize: 16 },
 })

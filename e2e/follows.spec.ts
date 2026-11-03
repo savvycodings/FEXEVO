@@ -4,7 +4,7 @@ import { T, nav, openApp } from './helpers'
 
 /**
  * Follows and coach specialties: the coach sets specialties from the You tab; the player sees the
- * chips on the coach card, follows from the card (the detail screen stays closed), still sees
+ * chips on the coach card, follows from the coach detail screen, still sees
  * Following after a reload, and the detail screen shows the follower count.
  */
 const L = {
@@ -28,7 +28,7 @@ async function openCoaches(page: import('@playwright/test').Page) {
   await page.getByTestId(T.inviteSegment('coaches')).click()
 }
 
-test('follows: coach sets specialties, player follows from the card and sees the count', async ({ browser, baseURL }, info) => {
+test('follows: coach sets specialties, player follows from the coach page and sees the count', async ({ browser, baseURL }, info) => {
   const lang = info.project.name === 'es' ? 'es' : 'en'
   const l = L[lang]
   const origin = baseURL ?? 'http://localhost:8090'
@@ -61,7 +61,7 @@ test('follows: coach sets specialties, player follows from the card and sees the
   await expect(card).toContainText(l.matchplay)
   await coach.ctx.close()
 
-  // Player: the coach card shows the chips; Follow flips without opening the detail screen.
+  // Player: the coach card shows the chips; Follow lives on the detail screen.
   const p = await pageAs(browser, 'player', info.project.use.locale)
   await openCoaches(p.page)
   const coachCard = p.page.getByTestId(T.coachCard(coachId))
@@ -69,22 +69,21 @@ test('follows: coach sets specialties, player follows from the card and sees the
   const chips = p.page.getByTestId(`${T.coachCard(coachId)}-chips`)
   await expect(chips).toContainText(l.technique)
   await expect(chips).toContainText(l.matchplay)
+  await expect(p.page.getByTestId(T.followCoach(coachId))).toHaveCount(0)
+
+  await coachCard.click()
   const followed = p.page.waitForResponse((r) => r.url().includes(`/follows/coach/${coachId}`) && r.request().method() === 'PUT')
-  await p.page.getByTestId(T.followCoach(coachId)).click()
+  await p.page.getByTestId(T.coachDetailFollow).click()
   expect((await followed).status()).toBe(200)
-  await expect(p.page.getByTestId(T.followCoach(coachId))).toContainText(l.following)
-  await expect(p.page.getByTestId(T.coachFollowerCount)).toHaveCount(0)
-  await expect(coachCard).toBeVisible()
+  await expect(p.page.getByTestId(T.coachDetailFollow)).toContainText(l.following)
+  await expect(p.page.getByTestId(T.coachFollowerCount)).toHaveText(String(before + 1))
 
   // Reload: still Following.
   await openApp(p.page)
   await openCoaches(p.page)
-  await expect(p.page.getByTestId(T.followCoach(coachId))).toContainText(l.following)
-
-  // Detail screen: follower count.
   await p.page.getByTestId(T.coachCard(coachId)).click()
-  await expect(p.page.getByTestId(T.coachFollowerCount)).toHaveText(l.followers(before + 1))
   await expect(p.page.getByTestId(T.coachDetailFollow)).toContainText(l.following)
+  await expect(p.page.getByTestId(T.coachFollowerCount)).toHaveText(String(before + 1))
 
   await Promise.all([p.ctx.close(), coachApi.dispose(), playerApi.dispose()])
 })

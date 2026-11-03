@@ -8,6 +8,7 @@ import { SELECTED_GLOW, UI } from './ui'
 import { authClient } from '../lib/auth-client'
 import { showAlert } from '../lib/showAlert'
 import { followTarget, unfollowTarget, type FollowTargetType } from '../lib/followsApi'
+import { ProfileActionButton } from './profile/ProfileActions'
 
 export type FollowButtonProps = {
   targetType: FollowTargetType
@@ -19,6 +20,8 @@ export type FollowButtonProps = {
   following: boolean
   onChange?: (following: boolean, followerCount: number | null) => void
   size?: 'sm' | 'md'
+  /** `profile`: the outlined profile action button (coach page action row). */
+  appearance?: 'pill' | 'profile'
   testID?: string
 }
 
@@ -34,6 +37,7 @@ export function FollowButton({
   following: initial,
   onChange,
   size = 'md',
+  appearance = 'pill',
   testID,
 }: FollowButtonProps) {
   const { t } = useTranslation()
@@ -71,6 +75,21 @@ export function FollowButton({
 
   const sm = size === 'sm'
   const label = following ? t('follow.following') : t('follow.follow')
+  const a11yLabel = following
+    ? t('follow.unfollowA11y', { name: targetName })
+    : t('follow.followA11y', { name: targetName })
+  if (appearance === 'profile') {
+    return (
+      <ProfileActionButton
+        label={label}
+        icon={following ? 'checkmark' : 'person-add-outline'}
+        onPress={(e) => void onPress(e)}
+        accessibilityLabel={a11yLabel}
+        accessibilityState={{ selected: following }}
+        testID={testID}
+      />
+    )
+  }
   return (
     <Pressable
       onPress={(e) => void onPress(e)}

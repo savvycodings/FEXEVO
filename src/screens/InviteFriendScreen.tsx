@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
+  Image,
   StyleSheet,
   TouchableOpacity,
   Share,
@@ -17,7 +18,6 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
@@ -28,8 +28,10 @@ import { ThemeContext } from "../context";
 import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { PersonCard } from "../components/PersonCard";
-import { CARD_GLOW, GlowButton, SegmentedToggle, SELECTED_GLOW, UI } from "../components/ui";
+import { GlowButton, SegmentedToggle, UI } from "../components/ui";
 import { useSessionData } from "../context/SessionDataContext";
+import { PillChip } from "./progress/SegmentedPills";
+import { COACH_SPECIALTY_KEYS, specialtyI18nKey, type CoachSpecialtyKey } from "../lib/coachSpecialties";
 import { findCountry } from "../lib/countries";
 import {
   acceptRequest,
@@ -43,6 +45,8 @@ import { FriendRequestCard } from "../components/FriendRequestCard";
 import { ClubRequestCard } from "../components/ClubRequestCard";
 import { ClubBannerImage } from "../components/ClubBannerImage";
 import { ClubPfpImage } from "../components/ClubPfpImage";
+import { profileImageSource } from "../lib/defaultProfilePicture";
+import { resolveUploadUrl } from "../lib/mediaUrl";
 import {
   acceptClubInvite,
   declineClubInvite,
@@ -56,7 +60,6 @@ import {
 import { fetchCoachCards, type CoachCard } from "../lib/coachDirectoryApi";
 import { fetchMyFollows } from "../lib/followsApi";
 import { specialtyLabels } from "../lib/coachSpecialties";
-import { FollowButton } from "../components/FollowButton";
 import { TEST_IDS } from "../lib/testIds";
 import { FriendsRankingView, type FriendsRankingScope } from "../components/ranking/FriendsRankingView";
 import type { RankedCountry, RankedPlayer } from "../lib/rankingApi";
@@ -64,7 +67,7 @@ import { useTranslation } from "react-i18next";
 
 type InviteSegment = "friends" | "coaches" | "clubs";
 type FriendsView = "mine" | "requests" | "ranking";
-type CoachFilter = "all" | "nearby";
+type CoachFilter = "all" | "pro" | "nearby";
 type CoachSort = "relevance" | "rating" | "name";
 type ClubFilter = "all" | "near" | "courts";
 type RequestSort = "newest" | "oldest";
@@ -107,6 +110,8 @@ export function InviteFriendScreen() {
   const [clubFilter, setClubFilter] = useState<ClubFilter>("all");
   const [clubCity, setClubCity] = useState<string | null>(null);
   const [cityOpen, setCityOpen] = useState(false);
+  const [coachSpecialty, setCoachSpecialty] = useState<CoachSpecialtyKey | null>(null);
+  const [specialtyOpen, setSpecialtyOpen] = useState(false);
   const [query, setQuery] = useState("");
   /** Friends › Ranking scope and filter; kept here so they survive My Friends / Requests and back. */
   const [rankingScope, setRankingScope] = useState<FriendsRankingScope>("world");
@@ -140,6 +145,9 @@ export function InviteFriendScreen() {
     const needle = query.trim().toLowerCase();
     const list = coaches.filter((coach) => {
       if (!matchesQuery(query, [coach.name, coach.username, coach.areaLocation])) return false;
+      if (coachSpecialty && !coach.specialties.includes(coachSpecialty)) return false;
+      // PRO Trainers: the medal-tier coaches (gold / silver / bronze, the best rated).
+      if (coachFilter === "pro") return coach.tier !== "blue";
       if (coachFilter === "nearby") {
         return myCountry != null && findCountry(coach.areaLocation)?.code === myCountry;
       }
@@ -160,7 +168,7 @@ export function InviteFriendScreen() {
       if (a.following !== b.following) return a.following ? -1 : 1;
       return byRating(a, b);
     });
-  }, [coaches, query, coachFilter, myCountry, sort]);
+  }, [coaches, query, coachFilter, coachSpecialty, myCountry, sort]);
 
   const visibleFriends = useMemo(() => {
     if (friends == null) return null;
@@ -399,10 +407,6 @@ export function InviteFriendScreen() {
     }, []),
   );
 
-  const setCoachFollowing = useCallback((coachId: string, following: boolean) => {
-    setCoaches((prev) => prev?.map((c) => (c.id === coachId ? { ...c, following } : c)) ?? prev);
-  }, []);
-
   /** Club card: page padding 20 each side, 1px border each side. */
   const cardW = winW - 42;
   const bannerH = cardW * CLUB_BANNER_ASPECT;
@@ -473,7 +477,7 @@ export function InviteFriendScreen() {
   }
 
   const screenBg = theme.backgroundColor ?? "#030A17";
-  const showCoachMeta = segment === "coaches" && visibleCoaches != null && (query.trim() !== "" || coachFilter !== "all");
+  const showCoachMeta = segment === "coaches" && visibleCoaches != null;
 
   const coachesBody =
     visibleCoaches == null ? (
@@ -482,8 +486,10 @@ export function InviteFriendScreen() {
       <Text style={styles.emptyListText}>
         {coaches != null && coaches.length === 0
           ? t("inviteExtra.noCoaches")
-          : coachFilter === "nearby" && !query.trim()
+          : coachFilter === "nearby" && !query.trim() && !coachSpecialty
             ? t("inviteExtra.noNearbyCoaches")
+            : coachFilter === "pro" || coachSpecialty
+            ? t("inviteExtra.noCoachesFilter")
             : t("inviteExtra.noCoachesMatch")}
       </Text>
     ) : (
@@ -500,17 +506,6 @@ export function InviteFriendScreen() {
             verified
             tier={coach.tier}
             chips={specialtyLabels(coach.specialties, t)}
-            action={
-              <FollowButton
-                targetType="coach"
-                targetId={coach.id}
-                targetName={coach.name}
-                following={coach.following}
-                size="sm"
-                testID={TEST_IDS.followCoach(coach.id)}
-                onChange={(following) => setCoachFollowing(coach.id, following)}
-              />
-            }
             onPress={() =>
               navigation.navigate("CoachDetail", {
                 coachId: coach.id,
@@ -704,7 +699,7 @@ export function InviteFriendScreen() {
               accessibilityRole="button"
               accessibilityLabel={club.name}
             >
-              <View>
+              <View style={styles.clubBanner}>
                 <ClubBannerImage uri={clubBannerUri(club)} width={cardW} height={bannerH} />
                 {club.courts.length > 0 ? (
                   <View style={styles.bannerPill}>
@@ -727,20 +722,27 @@ export function InviteFriendScreen() {
                   </Text>
                   {place ? (
                     <View style={styles.clubPlaceRow}>
-                      <Ionicons name="location-outline" size={14} color={UI.textMuted} />
+                      <Ionicons name="location-outline" size={15} color={CLUB_MUTED} />
                       <Text style={styles.clubSubtitle} numberOfLines={1}>
                         {place}
                       </Text>
                     </View>
                   ) : null}
-                  <View style={styles.clubPlaceRow}>
-                    <Ionicons name="people-outline" size={14} color={UI.textMuted} />
-                    <Text style={styles.clubSubtitle} numberOfLines={1} testID={`club-card-members-${club.slug}`}>
-                      {t("clubMembership.members", { count: club.memberCount ?? 0 })}
-                    </Text>
-                  </View>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={UI.textMuted} />
+                <View style={styles.clubMembersCol}>
+                  <MemberStack
+                    members={club.memberPreview ?? []}
+                    total={club.memberCount ?? 0}
+                    font={theme.mediumFont}
+                  />
+                  <Text
+                    style={styles.clubMembersText}
+                    numberOfLines={1}
+                    testID={`club-card-members-${club.slug}`}
+                  >
+                    {t("clubMembership.members", { count: club.memberCount ?? 0 })}
+                  </Text>
+                </View>
               </View>
             </TouchableOpacity>
           );
@@ -844,22 +846,40 @@ export function InviteFriendScreen() {
           )}
 
           {segment === "coaches" ? (
-            <View style={styles.chipRow}>
-              <Pill
-                label={t("inviteExtra.allCoaches")}
-                active={coachFilter === "all"}
-                onPress={() => setCoachFilter("all")}
-                style={styles.chip}
-                textStyle={styles.chipLabel}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.coachChipScroll}
+              contentContainerStyle={styles.coachChipRow}
+            >
+              {(
+                [
+                  { key: "all", label: t("inviteExtra.allCoaches") },
+                  { key: "pro", label: t("inviteExtra.proTrainers") },
+                  { key: "nearby", label: t("inviteExtra.nearby") },
+                ] as const
+              ).map(({ key, label }) => (
+                <Pill
+                  key={key}
+                  label={label}
+                  active={coachFilter === key}
+                  onPress={() => setCoachFilter(key)}
+                  style={styles.coachChip}
+                  textStyle={styles.coachChipLabel}
+                  testID={`coach-filter-${key}`}
+                  filter
+                />
+              ))}
+              <DropdownChip
+                label={coachSpecialty ? t(specialtyI18nKey(coachSpecialty)) : t("inviteExtra.speciality")}
+                active={coachSpecialty != null}
+                onPress={() => setSpecialtyOpen(true)}
+                style={styles.coachChip}
+                textStyle={styles.coachChipLabel}
+                testID="coach-filter-specialty"
+                filter
               />
-              <Pill
-                label={t("inviteExtra.nearby")}
-                active={coachFilter === "nearby"}
-                onPress={() => setCoachFilter("nearby")}
-                style={styles.chip}
-                textStyle={styles.chipLabel}
-              />
-            </View>
+            </ScrollView>
           ) : null}
 
           {segment === "clubs" ? (
@@ -881,22 +901,14 @@ export function InviteFriendScreen() {
                 />
               ))}
               {clubCities.length > 0 ? (
-                <TouchableOpacity
-                  style={[styles.chip, styles.cityChip, clubCity ? styles.cityChipActive : null]}
+                <DropdownChip
+                  icon="location-outline"
+                  label={clubCity ?? t("inviteExtra.anyCity")}
+                  active={clubCity != null}
                   onPress={() => setCityOpen(true)}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                >
-                  <Ionicons name="location-outline" size={15} color={clubCity ? "#FFFFFF" : UI.textMuted} />
-                  <Text
-                    allowFontScaling={false}
-                    numberOfLines={1}
-                    style={[styles.chipLabel, { color: clubCity ? "#FFFFFF" : UI.textMuted }]}
-                  >
-                    {clubCity ?? t("inviteExtra.anyCity")}
-                  </Text>
-                  <Ionicons name="chevron-down" size={14} color={clubCity ? "#FFFFFF" : UI.textMuted} />
-                </TouchableOpacity>
+                  style={styles.chip}
+                  textStyle={styles.chipLabel}
+                />
               ) : null}
             </ScrollView>
           ) : null}
@@ -1047,21 +1059,88 @@ export function InviteFriendScreen() {
           </View>
         </View>
       </Modal>
+      <Modal visible={specialtyOpen} transparent animationType="fade" onRequestClose={() => setSpecialtyOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSpecialtyOpen(false)} />
+          <View style={styles.modalCard}>
+            <Text allowFontScaling={false} style={styles.modalTitle}>
+              {t("inviteExtra.speciality")}
+            </Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {[null, ...COACH_SPECIALTY_KEYS].map((key) => {
+                const selected = coachSpecialty === key;
+                return (
+                  <TouchableOpacity
+                    key={key ?? "any"}
+                    style={[styles.modalRow, selected && styles.modalRowActive]}
+                    onPress={() => {
+                      setCoachSpecialty(key);
+                      setSpecialtyOpen(false);
+                    }}
+                    activeOpacity={0.85}
+                    testID={`coach-specialty-${key ?? "any"}`}
+                  >
+                    <Text style={[styles.modalRowText, selected && styles.modalRowTextActive]}>
+                      {key ? t(specialtyI18nKey(key)) : t("inviteExtra.anySpeciality")}
+                    </Text>
+                    {selected ? <Ionicons name="checkmark" size={18} color={UI.accent} /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       <MainTabBarChrome />
     </View>
   );
 }
 
-/** Gradient + glow when active, dark outlined pill otherwise (top tabs and filter chips). */
-function Pill({
-  label,
-  active,
-  onPress,
-  style,
-  textStyle,
-  role = "button",
-  testID,
+const CLUB_MUTED = "#86A7D2";
+const FACE = 30;
+
+/** Club card (design): up to three member faces overlapping, then a "+N" bubble for the rest. */
+function MemberStack({
+  members,
+  total,
+  font,
 }: {
+  members: { userId: string; image: string | null }[];
+  total: number;
+  font?: string;
+}) {
+  const rest = Math.max(0, total - members.length);
+  if (members.length === 0 && rest === 0) return null;
+  return (
+    <View style={memberStyles.row}>
+      {members.map((m, i) => (
+        <Image
+          key={m.userId}
+          source={profileImageSource(resolveUploadUrl(m.image))}
+          style={[memberStyles.face, i > 0 && memberStyles.overlap]}
+        />
+      ))}
+      {rest > 0 ? (
+        <View style={[memberStyles.face, memberStyles.more, members.length > 0 && memberStyles.overlap]}>
+          <Text allowFontScaling={false} style={[memberStyles.moreText, { fontFamily: font }]}>
+            +{rest > 99 ? "99" : rest}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const memberStyles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center" },
+  face: { width: FACE, height: FACE, borderRadius: FACE / 2, borderWidth: 2, borderColor: "#8C9BE8" },
+  overlap: { marginLeft: -9 },
+  more: { backgroundColor: "#141E6B", borderColor: "#141E6B", alignItems: "center", justifyContent: "center" },
+  moreText: { color: "#C9D3F5", fontSize: 11 },
+});
+
+/** Top tabs and filter chips: the shared PillChip (same look as every other pill tab). */
+function Pill(props: {
   label: string;
   active: boolean;
   onPress: () => void;
@@ -1069,40 +1148,62 @@ function Pill({
   textStyle: StyleProp<TextStyle>;
   role?: "tab" | "button";
   testID?: string;
+  /** Coach filters (design): Inter 600 throughout, #07256D label when active. */
+  filter?: boolean;
 }) {
+  const { theme } = useContext(ThemeContext);
+  const { filter, ...rest } = props;
   return (
-    <TouchableOpacity
-      style={[style, active ? pillStyles.active : pillStyles.idle]}
-      onPress={onPress}
-      activeOpacity={0.85}
-      accessibilityRole={role}
-      accessibilityState={{ selected: active }}
-      testID={testID}
-    >
-      {active ? (
-        <>
-          <LinearGradient
-            colors={UI.gradient}
-            locations={UI.gradientLocations}
-            start={UI.gradientStart}
-            end={UI.gradientEnd}
-            style={[StyleSheet.absoluteFill, pillStyles.fill]}
-          />
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, pillStyles.fill, SELECTED_GLOW]} />
-        </>
-      ) : null}
-      <Text allowFontScaling={false} numberOfLines={1} style={[textStyle, { color: active ? "#FFFFFF" : UI.textMuted }]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
+    <PillChip
+      {...rest}
+      fontFamily={filter ? theme.semiBoldFont : theme.mediumFont}
+      activeFontFamily={theme.semiBoldFont}
+      activeTextColor={filter ? FILTER_ACTIVE_TEXT : undefined}
+    />
   );
 }
 
-const pillStyles = StyleSheet.create({
-  active: { borderColor: "transparent" },
-  idle: { backgroundColor: UI.surface, borderColor: UI.surfaceBorder },
-  fill: { borderRadius: 999 },
-});
+const FILTER_ACTIVE_TEXT = "#07256D";
+
+/** Filter chip that opens a picker: label + chevron, same colours as the other pills. */
+function DropdownChip({
+  label,
+  active,
+  onPress,
+  style,
+  textStyle,
+  icon,
+  testID,
+  filter,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  style: StyleProp<ViewStyle>;
+  textStyle: StyleProp<TextStyle>;
+  icon?: React.ComponentProps<typeof Ionicons>["name"];
+  testID?: string;
+  filter?: boolean;
+}) {
+  const { theme } = useContext(ThemeContext);
+  return (
+    <PillChip
+      label={label}
+      active={active}
+      onPress={onPress}
+      style={[style, dropdownStyles.row]}
+      textStyle={textStyle}
+      fontFamily={filter ? theme.semiBoldFont : theme.mediumFont}
+      activeFontFamily={theme.semiBoldFont}
+      activeTextColor={filter ? FILTER_ACTIVE_TEXT : undefined}
+      leading={icon}
+      trailing="chevron-down"
+      testID={testID}
+    />
+  );
+}
+
+const dropdownStyles = StyleSheet.create({ row: { flexDirection: "row", gap: 6 } });
 
 function getStyles(theme: {
   backgroundColor?: string;
@@ -1153,9 +1254,10 @@ function getStyles(theme: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
-      height: 54,
-      paddingHorizontal: 16,
+      gap: 15,
+      height: 50,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
       borderRadius: 999,
       borderWidth: 1,
       borderColor: UI.trackBorder,
@@ -1165,7 +1267,7 @@ function getStyles(theme: {
       flex: 1,
       minWidth: 0,
       fontFamily: theme.regularFont ?? "System",
-      fontSize: 14,
+      fontSize: 13,
       color: "#FFFFFF",
       paddingVertical: 0,
       // The field's pill border is the focus cue; drop the browser's outline.
@@ -1198,15 +1300,40 @@ function getStyles(theme: {
       fontFamily: theme.mediumFont ?? "System",
       fontSize: 14,
     },
+    /** Coach filters (design): four chips that share one row, never scroll. */
+    coachChipScroll: {
+      marginTop: 4,
+      marginHorizontal: -10,
+      flexGrow: 0,
+    },
+    /** Wide phones: the chips stretch to fill the row. Narrow ones: the row scrolls, labels stay whole. */
+    coachChipRow: {
+      flexGrow: 1,
+      flexDirection: "row",
+      gap: 6,
+      // Room for the active chip's glow, which the scroll view would otherwise clip.
+      paddingVertical: 10,
+      paddingHorizontal: 10,
+    },
+    coachChip: {
+      flexGrow: 1,
+      flexShrink: 0,
+      height: 38,
+      paddingHorizontal: 9,
+    },
+    coachChipLabel: {
+      fontFamily: theme.mediumFont ?? "System",
+      fontSize: 11,
+    },
     metaRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginTop: 18,
+      marginTop: 8,
     },
     metaText: {
       fontFamily: theme.regularFont ?? "System",
-      fontSize: 15,
+      fontSize: 13,
       color: "#FFFFFF",
     },
     sortBtn: {
@@ -1297,12 +1424,17 @@ function getStyles(theme: {
       paddingBottom: 96,
     },
     clubCard: {
-      borderRadius: UI.radiusCard,
+      borderRadius: 20,
       borderWidth: 1,
-      borderColor: UI.cardBorder,
-      backgroundColor: UI.cardBg,
+      borderColor: "#07256D",
+      backgroundColor: "#030A17",
       overflow: "hidden",
-      ...CARD_GLOW,
+      boxShadow: "0px 0px 20px 0px rgba(0, 72, 255, 0.20), 0px 0px 30px 0px rgba(0, 72, 255, 0.50) inset",
+    },
+    /** Design: the photo is its own rounded panel at the top of the card. */
+    clubBanner: {
+      borderRadius: 20,
+      overflow: "hidden",
     },
     bannerPill: {
       position: "absolute",
@@ -1327,13 +1459,23 @@ function getStyles(theme: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      padding: 14,
+      paddingVertical: 15,
+      paddingHorizontal: 20,
     },
     clubLogoRing: {
       borderRadius: CLUB_AVATAR / 2 + 3,
-      borderWidth: 2,
-      borderColor: "rgba(255, 255, 255, 0.85)",
-      padding: 1,
+      borderWidth: 3,
+      borderColor: "#8C9BE8",
+    },
+    clubMembersCol: {
+      alignItems: "flex-start",
+      gap: 6,
+      flexShrink: 0,
+    },
+    clubMembersText: {
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 11,
+      color: CLUB_MUTED,
     },
     clubTextCol: {
       flex: 1,
@@ -1341,7 +1483,7 @@ function getStyles(theme: {
       justifyContent: "center",
     },
     clubTitle: {
-      fontFamily: theme.semiBoldFont ?? theme.mediumFont ?? "System",
+      fontFamily: theme.regularFont ?? "System",
       fontSize: 18,
       lineHeight: 22,
       color: "#FFFFFF",
@@ -1355,17 +1497,8 @@ function getStyles(theme: {
     clubSubtitle: {
       fontFamily: theme.regularFont ?? "System",
       fontSize: 13,
-      color: UI.textMuted,
+      color: CLUB_MUTED,
       flexShrink: 1,
-    },
-    cityChip: {
-      flexDirection: "row",
-      gap: 6,
-      backgroundColor: UI.surface,
-      borderColor: UI.surfaceBorder,
-    },
-    cityChipActive: {
-      borderColor: UI.accent,
     },
     modalOverlay: {
       flex: 1,

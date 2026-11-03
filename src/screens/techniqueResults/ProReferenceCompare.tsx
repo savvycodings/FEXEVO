@@ -7,6 +7,7 @@ import { Video, ResizeMode } from 'expo-av'
 import { ThemeContext } from '../../context'
 import { useHologram } from '../../lib/hologramJob'
 import { type CompareMetric, buildCompareMetrics, useShotHistory } from './shotHistory'
+import { ResultSectionPill } from '../../components/ResultSectionPill'
 
 type Segment = 'before' | 'after' | 'progress'
 
@@ -139,33 +140,11 @@ export function ProReferenceCompare({ videoUri, analysisId, referenceImageUri, m
         {shotName ? `${t('analysis.compareOverTime')} · ${shotName}` : t('analysis.compareOverTime')}
       </Text>
 
-      <View style={styles.segment}>
-        {segments.map((item) => {
-          const selected = item.id === segment
-          return (
-            <TouchableOpacity
-              key={item.id}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              activeOpacity={0.85}
-              onPress={() => setSegment(item.id)}
-              style={[styles.segmentBtn, selected && styles.segmentBtnOn]}
-              testID={`pro-compare-tab-${item.id}`}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[
-                  styles.segmentLabel,
-                  { fontFamily: selected ? theme.semiBoldFont : theme.mediumFont },
-                  selected && styles.segmentLabelOn,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          )
-        })}
-      </View>
+      <ResultSectionPill
+        tabs={segments.map((item) => ({ ...item, testID: `pro-compare-tab-${item.id}` }))}
+        value={segment}
+        onChange={setSegment}
+      />
 
       {history.loading && segment !== 'after' ? (
         <View style={[styles.compareCard, styles.centered]}>
@@ -320,16 +299,6 @@ const styles = StyleSheet.create({
   page: { alignSelf: 'stretch', paddingHorizontal: 22, gap: 12, paddingBottom: 12 },
   title: { color: '#FFFFFF', fontSize: 22, textAlign: 'center' },
   subtitle: { color: '#3DB7FF', fontSize: 14, textAlign: 'center', marginTop: -8 },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: '#07183F',
-    borderRadius: 999,
-    padding: 4,
-  },
-  segmentBtn: { flex: 1, alignItems: 'center', borderRadius: 999, paddingVertical: 10 },
-  segmentBtnOn: { backgroundColor: '#2454FF' },
-  segmentLabel: { color: '#C5D4F5', fontSize: 14 },
-  segmentLabelOn: { color: '#FFFFFF' },
   compareCard: {
     borderRadius: 18,
     borderWidth: 1,

@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   radius: { borderRadius: UI.radiusCard },
   selectedGlow: { boxShadow: '0px 0px 16px 0px rgba(47, 107, 255, 0.7)' },
   tile: { flex: 1, borderRadius: UI.radiusCard, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  tileOff: { borderWidth: 1.5, borderColor: '#0B2160' },
+  tileOff: { borderWidth: 2, borderColor: '#062C7B', boxShadow: '0px 0px 25px 0px #0048FF80 inset' },
   tileOn: { borderWidth: 2.5, borderColor: '#3D8BFF' },
   labelWrap: { paddingHorizontal: 12 },
   label: { fontSize: 16, lineHeight: 21, color: UI.text, textAlign: 'center' },

@@ -173,7 +173,8 @@ export function ContactFrameGrid({
 
   if (contactFrame == null) return null
 
-  const cellW = gridW > 0 ? (gridW - GAP * (COLS - 1)) / COLS : 0
+  // Floor (minus a px) so Android's pixel rounding can't push the third cell onto the next row.
+  const cellW = gridW > 0 ? Math.floor((gridW - GAP * (COLS - 1)) / COLS) - 1 : 0
   const cellH = cellW / aspect
   // Same instant the thumbnail was decoded at, so the stored contact is that picture.
   const pick = (index: number) => onChangeContactMs(Math.round((index + 0.25) * frameMs))

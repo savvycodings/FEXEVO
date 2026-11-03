@@ -22,8 +22,7 @@ import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
 import { ShieldProportionalFrame, fitShieldInBox } from "../components/ShieldProportionalFrame";
-import { CARD_GLOW, SELECTED_GLOW, UI } from "../components/ui";
-import { LinearGradient } from "expo-linear-gradient";
+import { CARD_GLOW, UI } from "../components/ui";
 import { useTranslation } from "react-i18next";
 import { fetchMyFriends } from "../lib/friendsApi";
 import { getCoachDetail, resolveCoachDetail } from "../lib/coach-detail-data";
@@ -47,6 +46,9 @@ import { FollowButton } from "../components/FollowButton";
 import { TEST_IDS } from "../lib/testIds";
 import { fetchFollowState, type FollowState } from "../lib/followsApi";
 import { sortSpecialties, specialtyLabels, type CoachSpecialtyKey } from "../lib/coachSpecialties";
+import { VerifiedBadge } from '../components/VerifiedBadge'
+import { ProfileActionButton, ProfileActionRow, ProfileStatRow } from "../components/profile/ProfileActions";
+import { formatCount } from "../lib/formatCount";
 
 const SHARE_ICON_SVG = require("../../assets/coachs/shareicon.svg");
 const ADD_PHOTOS_ICON = require("../../assets/youpage/addicon.svg");
@@ -452,7 +454,7 @@ export function CoachDetailView({
             <Text style={styles.heroName} numberOfLines={2}>
               {displayName}
             </Text>
-            <Ionicons name="checkmark-circle" size={20} color={UI.accentStrong} />
+            <VerifiedBadge size={20} />
           </View>
           <Text style={styles.heroHeadline} numberOfLines={2}>
             {displayHeadline || t("coachProfile.defaultHeadline")}
@@ -470,60 +472,39 @@ export function CoachDetailView({
           ) : null}
           {displayLocation ? (
             <View style={styles.heroLocation}>
-              <Ionicons name="location-outline" size={16} color={UI.textMuted} />
+              <Ionicons name="location-outline" size={18} color="#4DA6FF" />
               <Text style={styles.heroLocationText} numberOfLines={1}>
                 {displayLocation}
               </Text>
             </View>
           ) : null}
           {followState ? (
-            <View style={styles.heroLocation}>
-              <Ionicons name="people-outline" size={16} color={UI.textMuted} />
-              <Text style={styles.heroLocationText} numberOfLines={1} testID={TEST_IDS.coachFollowerCount}>
-                {followState.followerCount === 1
-                  ? t("follow.followerOne")
-                  : t("follow.followerMany", { count: followState.followerCount })}
-              </Text>
-            </View>
+            <ProfileStatRow
+              items={[
+                {
+                  value: formatCount(followState.followerCount),
+                  label: t("common.followers"),
+                  testID: TEST_IDS.coachFollowerCount,
+                },
+              ]}
+            />
           ) : null}
         </View>
       </View>
 
       {!embeddedInYouTab ? (
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnFilled]}
-            activeOpacity={0.85}
+        <ProfileActionRow>
+          <ProfileActionButton
+            variant="primary"
+            icon={isMyCoach ? "checkmark-circle-outline" : "calendar-outline"}
+            label={isMyCoach ? t("coachProfile.yourCoach") : t("coachProfile.beMyCoach")}
             onPress={isMyCoach ? onOpenMessage : () => void onAskToCoach()}
-            accessibilityRole="button"
-          >
-            <LinearGradient
-              colors={UI.gradient}
-              locations={UI.gradientLocations}
-              start={UI.gradientStart}
-              end={UI.gradientEnd}
-              style={[StyleSheet.absoluteFill, styles.actionBtnFill]}
-            />
-            <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.actionBtnFill, SELECTED_GLOW]} />
-            <Ionicons name={isMyCoach ? "checkmark-circle-outline" : "calendar-outline"} size={18} color="#FFFFFF" />
-            <Text style={styles.actionBtnTextFilled} numberOfLines={1}>
-              {isMyCoach ? t("coachProfile.yourCoach") : t("coachProfile.beMyCoach")}
-            </Text>
-          </TouchableOpacity>
+          />
           {isMyCoach ? (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnOutline]}
-              activeOpacity={0.85}
-              onPress={onOpenMessage}
-              accessibilityRole="button"
-            >
-              <Ionicons name="chatbox-outline" size={18} color={UI.textMuted} />
-              <Text style={styles.actionBtnTextOutline} numberOfLines={1}>
-                {t("coachProfile.message")}
-              </Text>
-            </TouchableOpacity>
+            <ProfileActionButton icon="chatbox-outline" label={t("coachProfile.message")} onPress={onOpenMessage} />
           ) : null}
           <FollowButton
+            appearance="profile"
             targetType="coach"
             targetId={coachId}
             targetName={displayName}
@@ -531,7 +512,7 @@ export function CoachDetailView({
             onChange={onFollowChange}
             testID={TEST_IDS.coachDetailFollow}
           />
-        </View>
+        </ProfileActionRow>
       ) : null}
 
       {embeddedInYouTab ? (
@@ -775,51 +756,22 @@ function getStyles(theme: {
     heroNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
     heroName: {
       color: "#FFFFFF",
-      fontFamily: theme.semiBoldFont ?? "System",
-      fontSize: 21,
+      fontFamily: theme.regularFont ?? "System",
+      fontSize: 22,
       flexShrink: 1,
     },
     heroHeadline: {
-      color: UI.textMuted,
+      color: "#86A7D2",
       fontFamily: theme.regularFont ?? "System",
-      fontSize: 14,
+      fontSize: 15,
+      marginTop: -4,
     },
-    heroLocation: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 },
+    heroLocation: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
     heroLocationText: {
-      color: UI.textMuted,
+      color: "#86A7D2",
       fontFamily: theme.regularFont ?? "System",
-      fontSize: 14,
+      fontSize: 15,
       flexShrink: 1,
-    },
-    actionRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      marginTop: 22,
-      marginBottom: 6,
-    },
-    actionBtn: {
-      flex: 1,
-      minWidth: 0,
-      height: 50,
-      borderRadius: UI.radius,
-      paddingHorizontal: 10,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 6,
-    },
-    actionBtnFilled: {},
-    actionBtnFill: { borderRadius: UI.radius },
-    actionBtnOutline: {
-      backgroundColor: UI.cardBg,
-      borderWidth: 1,
-      borderColor: UI.trackBorder,
-    },
-    actionBtnTextFilled: {
-      color: "#FFFFFF",
-      fontFamily: theme.mediumFont ?? "System",
-      fontSize: 16,
     },
     card: {
       marginTop: 14,
@@ -869,11 +821,6 @@ function getStyles(theme: {
       color: UI.textMuted,
       fontFamily: theme.regularFont ?? "System",
       fontSize: 13,
-    },
-    actionBtnTextOutline: {
-      color: "#FFFFFF",
-      fontFamily: theme.mediumFont ?? "System",
-      fontSize: 16,
     },
     addPhotosRow: {
       flexDirection: "row",
