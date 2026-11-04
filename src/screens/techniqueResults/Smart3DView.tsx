@@ -175,7 +175,7 @@ function JointMarkers({
   }
   const names = [...BASE_MARKERS, ...lit.filter((name) => !BASE_MARKERS.includes(name))]
   return (
-    <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
+    <Svg width={w} height={h} style={styles.markersLayer} pointerEvents="none">
       {LIMBS.map(([a, b]) => {
         const A = at(a)
         const B = at(b)
@@ -223,6 +223,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const [orbitVideoError, setOrbitVideoError] = useState<string | null>(null)
   const [orbitUrlHttp, setOrbitUrlHttp] = useState<number | null>(null)
   const orbitIndexRef = useRef(0)
+  /** One short iOS prime play, then scrub-only (must stay paused). */
+  const iosPrimeDone = useRef(false)
   const grantIndex = useRef(0)
   const stageWRef = useRef(1)
   const frameCountRef = useRef(2)
@@ -244,6 +246,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitReady(false)
     setOrbitVideoError(null)
     setOrbitUrlHttp(null)
+    iosPrimeDone.current = false
   }, [hologram.orbitVideo])
 
   // Play remote immediately (hides still), then prefer a cached file so iOS AVPlayer paints scrub seeks.
@@ -253,6 +256,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitReady(false)
     setOrbitVideoError(null)
     setOrbitUrlHttp(null)
+    iosPrimeDone.current = false
     if (!remote) return
     let cancelled = false
     const name = remote.split('/').pop()?.split('?')[0] || 'orbit.mp4'
@@ -356,6 +360,10 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
           positionMillis: status.positionMillis,
         })
       }
+    }
+    // Scrub-only: after the brief iOS prime, never let the clip free-run.
+    if (iosPrimeDone.current && status.isPlaying) {
+      void videoRef.current?.pauseAsync().catch(() => {})
     }
   }
 
@@ -495,11 +503,11 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               // 9:16 orbit is laid out so the square hologram band fills the stage (same as the still).
               resizeMode={placed ? ResizeMode.STRETCH : ResizeMode.COVER}
               isMuted
+              shouldPlay={false}
               progressUpdateIntervalMillis={100}
               onLoad={() => {
                 const player = videoRef.current
                 if (!player) return
-                // A1: hide still as soon as the player is loaded — do not wait for prime play.
                 setOrbitReady(true)
                 if (__DEV__) {
                   console.log('[smart3d] orbit onLoad → orbitReady', {
@@ -509,15 +517,18 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
                 }
                 const gen = seekGen.current
                 const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
-                const settle = () =>
+                const freezeAt = () =>
                   player
-                    .pauseAsync()
+                    .setStatusAsync({ shouldPlay: false, positionMillis: at })
                     .then(() => {
-                      if (seekGen.current !== gen) return
-                      return player.setPositionAsync(at)
+                      iosPrimeDone.current = true
                     })
-                    .catch(() => {})
+                    .catch(() => {
+                      iosPrimeDone.current = true
+                    })
+                // iOS often needs one tiny play to paint frame 0, then we lock scrub-only.
                 if (Platform.OS === 'ios') {
+                  iosPrimeDone.current = false
                   void Audio.setAudioModeAsync({
                     allowsRecordingIOS: false,
                     playsInSilentModeIOS: true,
@@ -525,14 +536,15 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
                     interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
                   })
                     .then(() => player.playAsync())
-                    .then(() => settle())
-                    .catch(() => settle())
+                    .then(() => new Promise((r) => setTimeout(r, 50)))
+                    .then(() => {
+                      if (seekGen.current !== gen) return
+                      return freezeAt()
+                    })
+                    .catch(() => freezeAt())
                   return
                 }
-                void player
-                  .playAsync()
-                  .then(() => settle())
-                  .catch(() => settle())
+                void freezeAt()
               }}
               onPlaybackStatusUpdate={onOrbitStatus}
               onError={(e) => {
@@ -549,9 +561,9 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
                       top: placed.y,
                       width: placed.w,
                       height: placed.h,
-                      zIndex: 2,
+                      zIndex: 1,
                     }
-                  : [StyleSheet.absoluteFillObject, { zIndex: 2 }]
+                  : [StyleSheet.absoluteFillObject, { zIndex: 1 }]
               }
             />
           ) : null}
@@ -576,7 +588,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               source={{ uri: hologram.proImage }}
               resizeMode="cover"
               pointerEvents="none"
-              style={[StyleSheet.absoluteFill, { opacity: 0.72 }]}
+              style={[StyleSheet.absoluteFill, { opacity: 0.72, zIndex: 5 }]}
             />
           ) : null}
           {markerKeys && stageSize.w ? (
@@ -685,15 +697,16 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
   },
+  markersLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+    elevation: 10,
+  },
   scrubLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 20,
     elevation: 20,
     backgroundColor: 'transparent',
-  },
-  stillUnderOrbit: {
-    // Keep still as fallback under the video until the first frame has painted.
-    zIndex: 1,
   },
   partsScroll: { flex: 1 },
   fill: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
