@@ -246,7 +246,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitUrlHttp(null)
   }, [hologram.orbitVideo])
 
-  // Probe orbit URL (A2 tick) and download to cache so AVPlayer paints from disk.
+  // Play remote immediately (hides still), then prefer a cached file so iOS AVPlayer paints scrub seeks.
   useEffect(() => {
     const remote = hologram.orbitVideo
     setPlaybackUri(null)
@@ -256,7 +256,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     if (!remote) return
     let cancelled = false
     const name = remote.split('/').pop()?.split('?')[0] || 'orbit.mp4'
-    if (__DEV__) console.log('[smart3d] orbit download', { remote: remote.slice(0, 160) })
+    setPlaybackUri(remote)
+    if (__DEV__) console.log('[smart3d] orbit play', { remote: remote.slice(0, 160) })
     void (async () => {
       try {
         const head = await fetch(remote, { method: 'HEAD' }).catch(() => null)
@@ -276,11 +277,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        if (__DEV__) console.warn('[smart3d] orbit download failed, using remote', msg)
-        if (!cancelled) {
-          setOrbitVideoError(msg)
-          setPlaybackUri(remote)
-        }
+        if (__DEV__) console.warn('[smart3d] orbit download failed, keeping remote', msg)
+        if (!cancelled) setOrbitVideoError(msg)
       }
     })()
     return () => {
@@ -451,8 +449,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   }
 
   const pictureUri = showOrbit ? playbackUri : null
-  // Hide still once Video is loaded (orbitReady). Requiring play≥80ms left the still stuck forever on iOS.
-  const showStill = Boolean(holoImage) && (!pictureUri || !orbitReady)
+  // Once the orbit URI is set, never cover it with the still (joints were scrubbing under a stuck PNG).
+  const showStill = Boolean(holoImage) && !pictureUri
   const orbitFailed =
     layer === 'player' && hologram.ready && hologram.orbitStatus === 'failed' && !hologram.orbitVideo
 
@@ -551,8 +549,9 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
                       top: placed.y,
                       width: placed.w,
                       height: placed.h,
+                      zIndex: 2,
                     }
-                  : StyleSheet.absoluteFillObject
+                  : [StyleSheet.absoluteFillObject, { zIndex: 2 }]
               }
             />
           ) : null}
@@ -561,7 +560,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               source={{ uri: holoImage! }}
               resizeMode="contain"
               pointerEvents="none"
-              style={[StyleSheet.absoluteFill, pictureUri ? styles.stillUnderOrbit : null]}
+              style={StyleSheet.absoluteFill}
             />
           ) : !pictureUri ? (
             <Image
