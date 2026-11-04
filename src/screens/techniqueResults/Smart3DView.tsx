@@ -228,6 +228,9 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const frameCountRef = useRef(2)
   const durationRef = useRef(4000)
   const seekQueue = useRef<{ ms: number | null; running: boolean }>({ ms: null, running: false })
+  const stepGen = useRef(0)
+  /** Frame the finger is on. A stray play is stopped here, not at the end of the clip. */
+  const holdMs = useRef(0)
   const showOrbit = layer === 'player' && Boolean(hologram.orbitVideo)
   frameCountRef.current = Math.max(2, hologram.orbitFrameCount ?? 2)
   durationRef.current = hologram.orbitDurationMs && hologram.orbitDurationMs > 0 ? hologram.orbitDurationMs : 4000
@@ -315,15 +318,33 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitIndex(clamped)
     const q = seekQueue.current
     q.ms = (clamped / last) * durationRef.current
+    holdMs.current = q.ms
     if (q.running) return
     q.running = true
     const pump = async () => {
       while (q.ms != null) {
         const next = q.ms
         q.ms = null
+        holdMs.current = next
+        const gen = ++stepGen.current
+        const player = videoRef.current
+        if (!player) continue
         try {
-          // Same frame as the points. Stay paused — a finished clip ignores a bare seek.
-          await videoRef.current?.setStatusAsync({ shouldPlay: false, positionMillis: next })
+          // iOS only paints a new frame if playback is asked to start at that time.
+          // Pause on the same timestamp so the clip steps with the finger and does not run on.
+          await player.setStatusAsync({
+            shouldPlay: true,
+            positionMillis: next,
+            seekMillisToleranceBefore: 0,
+            seekMillisToleranceAfter: 0,
+          })
+          if (stepGen.current !== gen) continue
+          await player.setStatusAsync({
+            shouldPlay: false,
+            positionMillis: holdMs.current,
+            seekMillisToleranceBefore: 0,
+            seekMillisToleranceAfter: 0,
+          })
         } catch {
           /* the next drag sends a fresh position */
         }
@@ -356,9 +377,16 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         })
       }
     }
-    // Drag seeks only. If the player starts on its own, stop it where it is.
-    if (status.isPlaying) {
-      void videoRef.current?.pauseAsync().catch(() => {})
+    // A step starts playback at the finger's frame and pauses there. Only pull back a real run-on.
+    if (status.isPlaying && status.positionMillis > holdMs.current + 200) {
+      void videoRef.current
+        ?.setStatusAsync({
+          shouldPlay: false,
+          positionMillis: holdMs.current,
+          seekMillisToleranceBefore: 0,
+          seekMillisToleranceAfter: 0,
+        })
+        .catch(() => {})
     }
   }
 
@@ -452,8 +480,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   }
 
   const pictureUri = showOrbit ? playbackUri : null
-  // Once the orbit URI is set, never cover it with the still (joints were scrubbing under a stuck PNG).
-  const showStill = Boolean(holoImage) && !pictureUri
+  // Keep the hologram image until the player has actually drawn a frame.
+  const showStill = Boolean(holoImage) && !orbitReady
   const orbitFailed =
     layer === 'player' && hologram.ready && hologram.orbitStatus === 'failed' && !hologram.orbitVideo
 
@@ -503,15 +531,35 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               onLoad={() => {
                 const player = videoRef.current
                 if (!player) return
-                setOrbitReady(true)
+                const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
+                holdMs.current = at
                 if (__DEV__) {
-                  console.log('[smart3d] orbit onLoad → orbitReady', {
+                  console.log('[smart3d] orbit onLoad', {
                     uri: pictureUri.slice(0, 80),
                     platform: Platform.OS,
+                    at,
                   })
                 }
-                const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
-                void player.setStatusAsync({ shouldPlay: false, positionMillis: at }).catch(() => {})
+                void player
+                  .setStatusAsync({
+                    shouldPlay: true,
+                    positionMillis: at,
+                    seekMillisToleranceBefore: 0,
+                    seekMillisToleranceAfter: 0,
+                  })
+                  .then(() =>
+                    player.setStatusAsync({
+                      shouldPlay: false,
+                      positionMillis: holdMs.current,
+                      seekMillisToleranceBefore: 0,
+                      seekMillisToleranceAfter: 0,
+                    })
+                  )
+                  .catch(() => {})
+              }}
+              onReadyForDisplay={() => {
+                setOrbitReady(true)
+                if (__DEV__) console.log('[smart3d] orbit frame on screen')
               }}
               onPlaybackStatusUpdate={onOrbitStatus}
               onError={(e) => {
