@@ -220,8 +220,9 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const [orbitIndex, setOrbitIndex] = useState(0)
   const [playbackUri, setPlaybackUri] = useState<string | null>(null)
   const [orbitReady, setOrbitReady] = useState(false)
+  const [orbitVideoError, setOrbitVideoError] = useState<string | null>(null)
+  const [orbitUrlHttp, setOrbitUrlHttp] = useState<number | null>(null)
   const orbitIndexRef = useRef(0)
-  const iosPrimed = useRef(false)
   const grantIndex = useRef(0)
   const stageWRef = useRef(1)
   const frameCountRef = useRef(2)
@@ -241,19 +242,32 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitIndex(0)
     orbitIndexRef.current = 0
     setOrbitReady(false)
+    setOrbitVideoError(null)
+    setOrbitUrlHttp(null)
   }, [hologram.orbitVideo])
 
-  // iOS AVPlayer often never paints a remote, paused clip. Save the file, then play it from disk.
+  // Probe orbit URL (A2 tick) and download to cache so AVPlayer paints from disk.
   useEffect(() => {
     const remote = hologram.orbitVideo
     setPlaybackUri(null)
     setOrbitReady(false)
-    iosPrimed.current = false
+    setOrbitVideoError(null)
+    setOrbitUrlHttp(null)
     if (!remote) return
     let cancelled = false
     const name = remote.split('/').pop()?.split('?')[0] || 'orbit.mp4'
-    if (__DEV__) console.log('[smart3d] orbit download', { remote: remote.slice(0, 120) })
+    if (__DEV__) console.log('[smart3d] orbit download', { remote: remote.slice(0, 160) })
     void (async () => {
+      try {
+        const head = await fetch(remote, { method: 'HEAD' }).catch(() => null)
+        const status = head?.status ?? (await fetch(remote, { method: 'GET' }).then((r) => r.status).catch(() => 0))
+        if (!cancelled) {
+          setOrbitUrlHttp(status || null)
+          if (__DEV__) console.log('[smart3d] orbit URL HTTP', { status, remote: remote.slice(0, 120) })
+        }
+      } catch {
+        /* download path reports failures */
+      }
       try {
         const file = await File.downloadFileAsync(remote, new File(Paths.cache, name), { idempotent: true })
         if (!cancelled) {
@@ -261,14 +275,41 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
           setPlaybackUri(file.uri)
         }
       } catch (e) {
-        if (__DEV__) console.warn('[smart3d] orbit download failed, using remote', e)
-        if (!cancelled) setPlaybackUri(remote)
+        const msg = e instanceof Error ? e.message : String(e)
+        if (__DEV__) console.warn('[smart3d] orbit download failed, using remote', msg)
+        if (!cancelled) {
+          setOrbitVideoError(msg)
+          setPlaybackUri(remote)
+        }
       }
     })()
     return () => {
       cancelled = true
     }
   }, [hologram.orbitVideo])
+
+  useEffect(() => {
+    if (!__DEV__) return
+    console.log('[smart3d] orbit paint', {
+      orbitReady,
+      playbackUri: playbackUri ? playbackUri.slice(0, 80) : null,
+      orbitVideo: hologram.orbitVideo ? hologram.orbitVideo.slice(0, 120) : null,
+      orbitUrlHttp,
+      orbitVideoError,
+      orbitStatus: hologram.orbitStatus,
+      orbitError: hologram.orbitError,
+      showStillWouldBe: Boolean(hologram.image) && (!playbackUri || !orbitReady),
+    })
+  }, [
+    orbitReady,
+    playbackUri,
+    hologram.orbitVideo,
+    hologram.orbitStatus,
+    hologram.orbitError,
+    hologram.image,
+    orbitUrlHttp,
+    orbitVideoError,
+  ])
 
   function seekOrbit(index: number) {
     const last = frameCountRef.current - 1
@@ -301,15 +342,23 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   }
 
   function onOrbitStatus(status: AVPlaybackStatus) {
-    if (!status.isLoaded) return
-    if (Platform.OS === 'ios' && !iosPrimed.current) {
-      if (!status.isPlaying || status.positionMillis < 80) return
-      iosPrimed.current = true
-      setOrbitReady(true)
-      void videoRef.current?.setStatusAsync({ shouldPlay: false, positionMillis: scrubMillis() })
+    // Ready as soon as the player has loaded — do not wait for iOS play≥80ms (that left the still stuck).
+    if (!status.isLoaded) {
+      if ('error' in status && status.error && __DEV__) {
+        console.warn('[smart3d] orbit status error', status.error)
+        setOrbitVideoError(String(status.error))
+      }
       return
     }
-    if (!orbitReady && status.isLoaded) setOrbitReady(true)
+    if (!orbitReady) {
+      setOrbitReady(true)
+      if (__DEV__) {
+        console.log('[smart3d] orbitReady via status', {
+          isPlaying: status.isPlaying,
+          positionMillis: status.positionMillis,
+        })
+      }
+    }
   }
 
   const pan = useRef(
@@ -402,8 +451,10 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   }
 
   const pictureUri = showOrbit ? playbackUri : null
-  // Keep the still visible until the orbit clip has painted (iOS especially).
+  // Hide still once Video is loaded (orbitReady). Requiring play≥80ms left the still stuck forever on iOS.
   const showStill = Boolean(holoImage) && (!pictureUri || !orbitReady)
+  const orbitFailed =
+    layer === 'player' && hologram.ready && hologram.orbitStatus === 'failed' && !hologram.orbitVideo
 
   return (
     <View style={styles.screen}>
@@ -450,31 +501,46 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               onLoad={() => {
                 const player = videoRef.current
                 if (!player) return
-                if (__DEV__) console.log('[smart3d] orbit onLoad', { uri: pictureUri.slice(0, 80) })
+                // A1: hide still as soon as the player is loaded — do not wait for prime play.
+                setOrbitReady(true)
+                if (__DEV__) {
+                  console.log('[smart3d] orbit onLoad → orbitReady', {
+                    uri: pictureUri.slice(0, 80),
+                    platform: Platform.OS,
+                  })
+                }
+                const gen = seekGen.current
+                const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
+                const settle = () =>
+                  player
+                    .pauseAsync()
+                    .then(() => {
+                      if (seekGen.current !== gen) return
+                      return player.setPositionAsync(at)
+                    })
+                    .catch(() => {})
                 if (Platform.OS === 'ios') {
-                  iosPrimed.current = false
                   void Audio.setAudioModeAsync({
                     allowsRecordingIOS: false,
                     playsInSilentModeIOS: true,
                     staysActiveInBackground: false,
                     interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-                  }).finally(() => player.playAsync())
+                  })
+                    .then(() => player.playAsync())
+                    .then(() => settle())
+                    .catch(() => settle())
                   return
                 }
-                const gen = seekGen.current
-                const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
                 void player
                   .playAsync()
-                  .then(() => player.pauseAsync())
-                  .then(() => {
-                    if (seekGen.current !== gen) return
-                    return player.setPositionAsync(at)
-                  })
-                  .then(() => setOrbitReady(true))
+                  .then(() => settle())
+                  .catch(() => settle())
               }}
               onPlaybackStatusUpdate={onOrbitStatus}
               onError={(e) => {
-                if (__DEV__) console.warn('[smart3d] orbit video error', e)
+                const msg = typeof e === 'string' ? e : JSON.stringify(e)
+                if (__DEV__) console.warn('[smart3d] orbit video error', msg)
+                setOrbitVideoError(msg)
                 if (pictureUri !== hologram.orbitVideo && hologram.orbitVideo) setPlaybackUri(hologram.orbitVideo)
               }}
               style={
@@ -538,6 +604,20 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               <ActivityIndicator size="small" color="#7AECFF" />
               <Text allowFontScaling={false} style={[styles.buildingLabel, { fontFamily: theme.mediumFont }]}>
                 {t(hologram.status === 'done' ? 'analysis.smart3dOrbitBuilding' : 'analysis.smart3dHologramBuilding')}
+              </Text>
+            </View>
+          ) : null}
+          {orbitFailed ? (
+            <View pointerEvents="none" style={styles.orbitFailed} testID="smart3d-orbit-failed">
+              <Text allowFontScaling={false} style={[styles.orbitFailedLabel, { fontFamily: theme.mediumFont }]}>
+                {hologram.orbitError || t('analysis.smart3dOrbitFailed')}
+              </Text>
+            </View>
+          ) : null}
+          {__DEV__ && showOrbit ? (
+            <View pointerEvents="none" style={styles.debugBadge}>
+              <Text allowFontScaling={false} style={styles.debugText}>
+                {`ready=${orbitReady ? 1 : 0} http=${orbitUrlHttp ?? '-'} err=${orbitVideoError ? 1 : 0}`}
               </Text>
             </View>
           ) : null}
@@ -631,6 +711,29 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   buildingLabel: { color: '#7AECFF', fontSize: 12 },
+  orbitFailed: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 16,
+    zIndex: 30,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(20, 8, 24, 0.88)',
+  },
+  orbitFailedLabel: { color: '#FFB4C0', fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  debugBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 40,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  debugText: { color: '#9FE8FF', fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   proMissing: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',

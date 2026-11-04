@@ -26,6 +26,8 @@ export type HologramState = {
   orbitWidth: number | null
   orbitHeight: number | null
   orbitFrames: HologramOrbitFrame[] | null
+  /** User-facing Seedance / privacy failure when orbitStatus is failed. */
+  orbitError: string | null
   /** Red hologram of the matched pro-library clip. */
   proStatus: HologramStatus
   proImage: string | null
@@ -75,6 +77,7 @@ const EMPTY: HologramState = {
   orbitWidth: null,
   orbitHeight: null,
   orbitFrames: null,
+  orbitError: null,
   proStatus: 'idle',
   proImage: null,
   proKeypoints: null,
@@ -106,6 +109,7 @@ function toState(raw: unknown): HologramState | null {
     orbitWidth: num(body.orbitWidth),
     orbitHeight: num(body.orbitHeight),
     orbitFrames: parseOrbitFrames(body.orbitFrames),
+    orbitError: typeof body.orbitError === 'string' ? body.orbitError : null,
     proStatus:
       proStatus === 'running' || proStatus === 'done' || proStatus === 'failed' ? proStatus : 'idle',
     proImage: resolveUploadUrl(typeof body.proImage === 'string' ? body.proImage : null),
@@ -212,7 +216,8 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
             status: next.status,
             image: Boolean(next.image),
             orbitStatus: next.orbitStatus,
-            orbitVideo: Boolean(next.orbitVideo),
+            orbitVideo: next.orbitVideo ? next.orbitVideo.slice(0, 120) : null,
+            orbitError: next.orbitError,
             orbitFrames: next.orbitFrames?.length ?? 0,
             orbitSize:
               next.orbitWidth && next.orbitHeight ? `${next.orbitWidth}x${next.orbitHeight}` : null,
