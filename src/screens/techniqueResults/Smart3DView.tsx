@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
-import { Audio, InterruptionModeIOS, ResizeMode, Video, type AVPlaybackStatus } from 'expo-av'
+import { ResizeMode, Video, type AVPlaybackStatus } from 'expo-av'
 import { File, Paths } from 'expo-file-system'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
@@ -223,13 +223,10 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const [orbitVideoError, setOrbitVideoError] = useState<string | null>(null)
   const [orbitUrlHttp, setOrbitUrlHttp] = useState<number | null>(null)
   const orbitIndexRef = useRef(0)
-  /** One short iOS prime play, then scrub-only (must stay paused). */
-  const iosPrimeDone = useRef(false)
   const grantIndex = useRef(0)
   const stageWRef = useRef(1)
   const frameCountRef = useRef(2)
   const durationRef = useRef(4000)
-  const seekGen = useRef(0)
   const seekQueue = useRef<{ ms: number | null; running: boolean }>({ ms: null, running: false })
   const showOrbit = layer === 'player' && Boolean(hologram.orbitVideo)
   frameCountRef.current = Math.max(2, hologram.orbitFrameCount ?? 2)
@@ -246,7 +243,6 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitReady(false)
     setOrbitVideoError(null)
     setOrbitUrlHttp(null)
-    iosPrimeDone.current = false
   }, [hologram.orbitVideo])
 
   // Play remote immediately (hides still), then prefer a cached file so iOS AVPlayer paints scrub seeks.
@@ -256,7 +252,6 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitReady(false)
     setOrbitVideoError(null)
     setOrbitUrlHttp(null)
-    iosPrimeDone.current = false
     if (!remote) return
     let cancelled = false
     const name = remote.split('/').pop()?.split('?')[0] || 'orbit.mp4'
@@ -326,9 +321,9 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
       while (q.ms != null) {
         const next = q.ms
         q.ms = null
-        seekGen.current += 1
         try {
-          await videoRef.current?.setPositionAsync(next)
+          // Same frame as the points. Stay paused — a finished clip ignores a bare seek.
+          await videoRef.current?.setStatusAsync({ shouldPlay: false, positionMillis: next })
         } catch {
           /* the next drag sends a fresh position */
         }
@@ -361,8 +356,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         })
       }
     }
-    // Scrub-only: after the brief iOS prime, never let the clip free-run.
-    if (iosPrimeDone.current && status.isPlaying) {
+    // Drag seeks only. If the player starts on its own, stop it where it is.
+    if (status.isPlaying) {
       void videoRef.current?.pauseAsync().catch(() => {})
     }
   }
@@ -515,36 +510,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
                     platform: Platform.OS,
                   })
                 }
-                const gen = seekGen.current
                 const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
-                const freezeAt = () =>
-                  player
-                    .setStatusAsync({ shouldPlay: false, positionMillis: at })
-                    .then(() => {
-                      iosPrimeDone.current = true
-                    })
-                    .catch(() => {
-                      iosPrimeDone.current = true
-                    })
-                // iOS often needs one tiny play to paint frame 0, then we lock scrub-only.
-                if (Platform.OS === 'ios') {
-                  iosPrimeDone.current = false
-                  void Audio.setAudioModeAsync({
-                    allowsRecordingIOS: false,
-                    playsInSilentModeIOS: true,
-                    staysActiveInBackground: false,
-                    interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-                  })
-                    .then(() => player.playAsync())
-                    .then(() => new Promise((r) => setTimeout(r, 50)))
-                    .then(() => {
-                      if (seekGen.current !== gen) return
-                      return freezeAt()
-                    })
-                    .catch(() => freezeAt())
-                  return
-                }
-                void freezeAt()
+                void player.setStatusAsync({ shouldPlay: false, positionMillis: at }).catch(() => {})
               }}
               onPlaybackStatusUpdate={onOrbitStatus}
               onError={(e) => {
