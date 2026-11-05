@@ -13,7 +13,7 @@ export function resolveUploadUrl(path: string | null | undefined): string | null
   const trimmed = path.trim()
   if (!trimmed) return null
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return withNgrokSkip(trimmed)
-  if (trimmed.startsWith('/uploads/')) {
+  if (trimmed.startsWith('/uploads/') || trimmed.startsWith('/pro-library/')) {
     return withNgrokSkip(`${DOMAIN.replace(/\/+$/, '')}${trimmed}`)
   }
   return trimmed

@@ -406,7 +406,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
       },
     })
   ).current
-  /** Player hologram is blue; the pro reference is the red render of the matched library clip. */
+  /** Player hologram is blue and can orbit. The pro reference is the orange contact-frame still. */
   const holoImage = layer === 'pro' ? hologram.proImage : hologram.image
   const holoKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
   const building =
@@ -629,7 +629,11 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
             <View pointerEvents="none" style={styles.building}>
               <ActivityIndicator size="small" color="#7AECFF" />
               <Text allowFontScaling={false} style={[styles.buildingLabel, { fontFamily: theme.mediumFont }]}>
-                {t(hologram.status === 'done' ? 'analysis.smart3dOrbitBuilding' : 'analysis.smart3dHologramBuilding')}
+                {t(
+                  layer === 'player' && hologram.status === 'done'
+                    ? 'analysis.smart3dOrbitBuilding'
+                    : 'analysis.smart3dHologramBuilding'
+                )}
               </Text>
             </View>
           ) : null}

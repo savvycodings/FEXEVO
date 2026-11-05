@@ -28,7 +28,7 @@ export type HologramState = {
   orbitFrames: HologramOrbitFrame[] | null
   /** User-facing Seedance / privacy failure when orbitStatus is failed. */
   orbitError: string | null
-  /** Red hologram of the matched pro-library clip. */
+  /** Orange hologram of the pro's contact frame. Reused once it has been rendered. */
   proStatus: HologramStatus
   proImage: string | null
   proKeypoints: HologramKeypoints | null
