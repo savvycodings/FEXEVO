@@ -656,6 +656,7 @@ export const es = {
     smart3dRacket: "Raqueta",
     smart3dHologramBuilding: "Creando tu holograma…",
     smart3dOrbitBuilding: "Creando la órbita…",
+    smart3dViewBuilding: "Preparando la vista 3D. Aparece cuando el video está guardado.",
     smart3dOrbitHint: "Desliza a la derecha para girar adelante y a la izquierda para volver",
     smart3dOrbitFailed: "No se pudo crear el video de la órbita.",
     smart3dProMissing: "Aún no hay referencia pro para este golpe.",

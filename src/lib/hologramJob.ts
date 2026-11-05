@@ -28,10 +28,20 @@ export type HologramState = {
   orbitFrames: HologramOrbitFrame[] | null
   /** User-facing Seedance / privacy failure when orbitStatus is failed. */
   orbitError: string | null
-  /** Orange hologram of the pro's contact frame. Reused once it has been rendered. */
-  proStatus: HologramStatus
+  /**
+   * Shared orange pro orbit. `unavailable` means this shot has no library clip.
+   * `done` means the Seedance video is saved in the cloud.
+   */
+  proStatus: HologramStatus | 'unavailable'
   proImage: string | null
   proKeypoints: HologramKeypoints | null
+  proOrbitVideo: string | null
+  proOrbitDurationMs: number | null
+  proOrbitFrameCount: number | null
+  proOrbitWidth: number | null
+  proOrbitHeight: number | null
+  proOrbitFrames: HologramOrbitFrame[] | null
+  proError: string | null
   /** False until the first GET returns — avoids a false "building" flash on reopen. */
   ready: boolean
 }
@@ -81,6 +91,13 @@ const EMPTY: HologramState = {
   proStatus: 'idle',
   proImage: null,
   proKeypoints: null,
+  proOrbitVideo: null,
+  proOrbitDurationMs: null,
+  proOrbitFrameCount: null,
+  proOrbitWidth: null,
+  proOrbitHeight: null,
+  proOrbitFrames: null,
+  proError: null,
   ready: false,
 }
 
@@ -90,6 +107,7 @@ function toState(raw: unknown): HologramState | null {
   const status = body.status
   if (status !== 'idle' && status !== 'running' && status !== 'done' && status !== 'failed') return null
   const proStatus = body.proStatus
+  const proOrbitVideo = resolveUploadUrl(typeof body.proOrbitVideo === 'string' ? body.proOrbitVideo : null)
   const orbitVideo = resolveUploadUrl(typeof body.orbitVideo === 'string' ? body.orbitVideo : null)
   let orbitStatus: HologramStatus =
     body.orbitStatus === 'running' || body.orbitStatus === 'done' || body.orbitStatus === 'failed'
@@ -111,9 +129,21 @@ function toState(raw: unknown): HologramState | null {
     orbitFrames: parseOrbitFrames(body.orbitFrames),
     orbitError: typeof body.orbitError === 'string' ? body.orbitError : null,
     proStatus:
-      proStatus === 'running' || proStatus === 'done' || proStatus === 'failed' ? proStatus : 'idle',
+      proStatus === 'running' ||
+      proStatus === 'done' ||
+      proStatus === 'failed' ||
+      proStatus === 'unavailable'
+        ? proStatus
+        : 'idle',
     proImage: resolveUploadUrl(typeof body.proImage === 'string' ? body.proImage : null),
     proKeypoints: parseKeypoints(body.proKeypoints),
+    proOrbitVideo,
+    proOrbitDurationMs: num(body.proOrbitDurationMs),
+    proOrbitFrameCount: num(body.proOrbitFrameCount),
+    proOrbitWidth: num(body.proOrbitWidth),
+    proOrbitHeight: num(body.proOrbitHeight),
+    proOrbitFrames: parseOrbitFrames(body.proOrbitFrames),
+    proError: typeof body.proError === 'string' ? body.proError : null,
     ready: true,
   }
 }
@@ -224,16 +254,16 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
           })
         }
       }
-      // Keep polling while the turn job is running even if a premature orbitVideo appeared
-      // (disk heal can surface the mp4 before MediaPipe frames are written).
+      // Stay on the preparing screen until the player orbit and the pro orbit have
+      // both finished or actually failed. Idle means the server has not started yet.
+      const proSettled =
+        next?.proStatus === 'done' || next?.proStatus === 'failed' || next?.proStatus === 'unavailable'
       const pending =
         !hasContactStill(next) ||
         next?.status === 'running' ||
-        next?.proStatus === 'running' ||
+        !proSettled ||
         next?.orbitStatus === 'running' ||
-        (hasContactStill(next) &&
-          !hasOrbit(next) &&
-          next?.orbitStatus !== 'failed')
+        (hasContactStill(next) && !hasOrbit(next) && next?.orbitStatus !== 'failed')
       if (!pending) stop()
     }
 

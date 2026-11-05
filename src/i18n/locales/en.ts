@@ -656,6 +656,7 @@ export const en = {
     smart3dRacket: "Racket",
     smart3dHologramBuilding: "Building your hologram…",
     smart3dOrbitBuilding: "Building the orbit…",
+    smart3dViewBuilding: "Preparing your 3D view. It appears when the video is saved.",
     smart3dOrbitHint: "Slide right to turn forward, left to turn back",
     smart3dOrbitFailed: "Could not build the orbit video.",
     smart3dProMissing: "No pro reference for this shot yet.",

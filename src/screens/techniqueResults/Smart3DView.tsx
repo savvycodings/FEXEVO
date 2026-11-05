@@ -231,9 +231,15 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const stepGen = useRef(0)
   /** Frame the finger is on. A stray play is stopped here, not at the end of the clip. */
   const holdMs = useRef(0)
-  const showOrbit = layer === 'player' && Boolean(hologram.orbitVideo)
-  frameCountRef.current = Math.max(2, hologram.orbitFrameCount ?? 2)
-  durationRef.current = hologram.orbitDurationMs && hologram.orbitDurationMs > 0 ? hologram.orbitDurationMs : 4000
+  /** Cloud video for the tab the person is looking at. Nothing plays from the network. */
+  const remoteClip = layer === 'pro' ? hologram.proOrbitVideo : layer === 'player' ? hologram.orbitVideo : null
+  const clipFrames = layer === 'pro' ? hologram.proOrbitFrames : hologram.orbitFrames
+  const clipFrameCount = layer === 'pro' ? hologram.proOrbitFrameCount : hologram.orbitFrameCount
+  const clipDurationMs = layer === 'pro' ? hologram.proOrbitDurationMs : hologram.orbitDurationMs
+  const clipWidth = layer === 'pro' ? hologram.proOrbitWidth : hologram.orbitWidth
+  const clipHeight = layer === 'pro' ? hologram.proOrbitHeight : hologram.orbitHeight
+  frameCountRef.current = Math.max(2, clipFrameCount ?? 2)
+  durationRef.current = clipDurationMs && clipDurationMs > 0 ? clipDurationMs : 4000
   const stageWidth = Math.max(1, windowWidth - 32)
   // The visible picture is the square still. The 9:16 file's black bars are cropped off.
   const naturalHeight = stageWidth
@@ -243,14 +249,15 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   useEffect(() => {
     setOrbitIndex(0)
     orbitIndexRef.current = 0
+    holdMs.current = 0
     setOrbitReady(false)
     setOrbitVideoError(null)
     setOrbitUrlHttp(null)
-  }, [hologram.orbitVideo])
+  }, [remoteClip])
 
-  // Play remote immediately (hides still), then prefer a cached file so iOS AVPlayer paints scrub seeks.
+  // Save the cloud video on the phone first. Scrubbing a stream is what made a fresh shot look broken.
   useEffect(() => {
-    const remote = hologram.orbitVideo
+    const remote = remoteClip
     setPlaybackUri(null)
     setOrbitReady(false)
     setOrbitVideoError(null)
@@ -258,42 +265,33 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     if (!remote) return
     let cancelled = false
     const name = remote.split('/').pop()?.split('?')[0] || 'orbit.mp4'
-    setPlaybackUri(remote)
-    if (__DEV__) console.log('[smart3d] orbit play', { remote: remote.slice(0, 160) })
+    if (__DEV__) console.log('[smart3d] orbit save', { remote: remote.slice(0, 160) })
     void (async () => {
       try {
         const head = await fetch(remote, { method: 'HEAD' }).catch(() => null)
-        const status = head?.status ?? (await fetch(remote, { method: 'GET' }).then((r) => r.status).catch(() => 0))
-        if (!cancelled) {
-          setOrbitUrlHttp(status || null)
-          if (__DEV__) console.log('[smart3d] orbit URL HTTP', { status, remote: remote.slice(0, 120) })
-        }
-      } catch {
-        /* download path reports failures */
-      }
-      try {
-        const file = await File.downloadFileAsync(remote, new File(Paths.cache, name), { idempotent: true })
-        if (!cancelled) {
-          if (__DEV__) console.log('[smart3d] orbit local', file.uri)
-          setPlaybackUri(file.uri)
-        }
+        const status = head?.status ?? 0
+        if (!cancelled) setOrbitUrlHttp(status || null)
+        const file = await File.downloadFileAsync(remote, new File(Paths.document, name), { idempotent: true })
+        if (cancelled) return
+        if (__DEV__) console.log('[smart3d] orbit on phone', file.uri)
+        setPlaybackUri(file.uri)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        if (__DEV__) console.warn('[smart3d] orbit download failed, keeping remote', msg)
+        if (__DEV__) console.warn('[smart3d] orbit save failed', msg)
         if (!cancelled) setOrbitVideoError(msg)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [hologram.orbitVideo])
+  }, [remoteClip])
 
   useEffect(() => {
     if (!__DEV__) return
     console.log('[smart3d] orbit paint', {
       orbitReady,
       playbackUri: playbackUri ? playbackUri.slice(0, 80) : null,
-      orbitVideo: hologram.orbitVideo ? hologram.orbitVideo.slice(0, 120) : null,
+      orbitVideo: remoteClip ? remoteClip.slice(0, 120) : null,
       orbitUrlHttp,
       orbitVideoError,
       orbitStatus: hologram.orbitStatus,
@@ -303,7 +301,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   }, [
     orbitReady,
     playbackUri,
-    hologram.orbitVideo,
+    remoteClip,
     hologram.orbitStatus,
     hologram.orbitError,
     hologram.image,
@@ -406,31 +404,22 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
       },
     })
   ).current
-  /** Player hologram is blue and can orbit. The pro reference is the orange contact-frame still. */
-  const holoImage = layer === 'pro' ? hologram.proImage : hologram.image
-  const holoKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
-  const building =
-    hologram.ready &&
-    (layer === 'pro'
-      ? hologram.proStatus === 'running'
-      : hologram.status === 'running' ||
-        (layer === 'player' && hologram.status !== 'done' && !hologram.image) ||
-        // Still ready, no clip yet — show turn progress for running/idle (kick in flight).
-        // Saved orbitVideo hides this; failed stays off so we do not spin forever.
-        (layer === 'player' &&
-          !hologram.orbitVideo &&
-          hologram.status === 'done' &&
-          hologram.orbitStatus !== 'failed') ||
-        (layer === 'overlay' && hologram.proStatus === 'running'))
-  /** Pro tab with nothing to draw: no matched pro clip, or its render failed or never started. */
-  const proMissing = layer === 'pro' && !hologram.proImage && hologram.proStatus !== 'running'
+  /** The orbit is shown only after its file is on the phone and the player has painted a frame. */
+  const reveal = Boolean(playbackUri) && orbitReady && !orbitVideoError
+  const proFailed = hologram.proStatus === 'failed' || hologram.proStatus === 'unavailable'
+  const playerFailed = hologram.ready && hologram.orbitStatus === 'failed' && !hologram.orbitVideo
+  const proMissing = layer === 'pro' && hologram.ready && proFailed && !hologram.proOrbitVideo
+  const clipBroken = Boolean(orbitVideoError) || (layer === 'player' && playerFailed)
+  const preparing = (layer === 'player' || layer === 'pro') && !reveal && !proMissing && !clipBroken
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
-  const markerKeys = showOrbit
-    ? orbitKeypointsAt(hologram.orbitFrames, orbitIndex, frameCountRef.current)
-    : holoKeys
+  const markerKeys = reveal
+    ? orbitKeypointsAt(clipFrames, orbitIndex, frameCountRef.current)
+    : layer === 'overlay'
+      ? hologram.keypoints
+      : null
   const placed =
-    showOrbit && hologram.orbitWidth && hologram.orbitHeight
-      ? orbitPlacement(stageSize.w || stageWidth, stageSize.h || stageHeight, hologram.orbitWidth, hologram.orbitHeight)
+    reveal && clipWidth && clipHeight
+      ? orbitPlacement(stageSize.w || stageWidth, stageSize.h || stageHeight, clipWidth, clipHeight)
       : null
 
   useEffect(() => {
@@ -479,11 +468,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     )
   }
 
-  const pictureUri = showOrbit ? playbackUri : null
-  // Keep the hologram image until the player has actually drawn a frame.
-  const showStill = Boolean(holoImage) && !orbitReady
-  const orbitFailed =
-    layer === 'player' && hologram.ready && hologram.orbitStatus === 'failed' && !hologram.orbitVideo
+  const pictureUri = layer === 'overlay' ? null : playbackUri
 
   return (
     <View style={styles.screen}>
@@ -566,7 +551,6 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
                 const msg = typeof e === 'string' ? e : JSON.stringify(e)
                 if (__DEV__) console.warn('[smart3d] orbit video error', msg)
                 setOrbitVideoError(msg)
-                if (pictureUri !== hologram.orbitVideo && hologram.orbitVideo) setPlaybackUri(hologram.orbitVideo)
               }}
               style={
                 placed
@@ -582,20 +566,19 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               }
             />
           ) : null}
-          {showStill ? (
+          {layer === 'overlay' && hologram.image ? (
             <Image
-              source={{ uri: holoImage! }}
+              source={{ uri: hologram.image }}
               resizeMode="contain"
               pointerEvents="none"
               style={StyleSheet.absoluteFill}
             />
-          ) : !pictureUri ? (
+          ) : layer === 'overlay' && !hologram.image ? (
             <Image
               source={BODY}
               resizeMode="contain"
               pointerEvents="none"
-              // absoluteFill alone leaves a bundled image at its natural size on web.
-              style={[styles.fill, layer === 'pro' && styles.bodyGhost]}
+              style={styles.fill}
             />
           ) : null}
           {layer === 'overlay' && hologram.proImage ? (
@@ -609,7 +592,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
           {markerKeys && stageSize.w ? (
             <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
           ) : null}
-          {showOrbit && pictureUri ? (
+          {reveal && pictureUri ? (
             <View
               style={styles.scrubLayer}
               {...pan.panHandlers}
@@ -621,30 +604,28 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
             <View pointerEvents="none" style={styles.proMissing} testID="smart3d-pro-missing">
               <Ionicons name="ribbon-outline" size={28} color="#7AECFF" />
               <Text allowFontScaling={false} style={[styles.proMissingLabel, { fontFamily: theme.mediumFont }]}>
-                {t('analysis.smart3dProMissing')}
+                {hologram.proError && hologram.proStatus === 'failed'
+                  ? hologram.proError
+                  : t('analysis.smart3dProMissing')}
               </Text>
             </View>
           ) : null}
-          {building ? (
-            <View pointerEvents="none" style={styles.building}>
+          {preparing ? (
+            <View pointerEvents="none" style={styles.preparing} testID="smart3d-preparing">
               <ActivityIndicator size="small" color="#7AECFF" />
-              <Text allowFontScaling={false} style={[styles.buildingLabel, { fontFamily: theme.mediumFont }]}>
-                {t(
-                  layer === 'player' && hologram.status === 'done'
-                    ? 'analysis.smart3dOrbitBuilding'
-                    : 'analysis.smart3dHologramBuilding'
-                )}
+              <Text allowFontScaling={false} style={[styles.preparingLabel, { fontFamily: theme.mediumFont }]}>
+                {t('analysis.smart3dViewBuilding')}
               </Text>
             </View>
           ) : null}
-          {orbitFailed ? (
+          {clipBroken ? (
             <View pointerEvents="none" style={styles.orbitFailed} testID="smart3d-orbit-failed">
               <Text allowFontScaling={false} style={[styles.orbitFailedLabel, { fontFamily: theme.mediumFont }]}>
-                {hologram.orbitError || t('analysis.smart3dOrbitFailed')}
+                {orbitVideoError || hologram.orbitError || t('analysis.smart3dOrbitFailed')}
               </Text>
             </View>
           ) : null}
-          {__DEV__ && showOrbit ? (
+          {__DEV__ && reveal ? (
             <View pointerEvents="none" style={styles.debugBadge}>
               <Text allowFontScaling={false} style={styles.debugText}>
                 {`ready=${orbitReady ? 1 : 0} http=${orbitUrlHttp ?? '-'} err=${orbitVideoError ? 1 : 0}`}
@@ -654,12 +635,12 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         </View>
       </View>
       <ScrollView style={styles.partsScroll} contentContainerStyle={{ paddingBottom: 8 + insets.bottom }}>
-      {showOrbit ? null : (
+      {reveal ? null : (
         <Text allowFontScaling={false} style={[styles.prompt, { fontFamily: theme.mediumFont }]}>
           {t('analysis.smart3dSelectPart')}
         </Text>
       )}
-      <View style={[styles.parts, showOrbit && styles.partsAfterOrbit]}>
+      <View style={[styles.parts, reveal && styles.partsAfterOrbit]}>
         {PART_ROWS.map((row, index) => (
           <View key={index} style={styles.partRow}>
             {row.map((item) => {
@@ -729,19 +710,16 @@ const styles = StyleSheet.create({
   },
   partsScroll: { flex: 1 },
   fill: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
-  bodyGhost: { opacity: 0.42 },
-  building: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 16,
-    zIndex: 30,
-    flexDirection: 'row',
+  preparing: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 25,
+    backgroundColor: '#020A1C',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 12,
+    paddingHorizontal: 28,
   },
-  buildingLabel: { color: '#7AECFF', fontSize: 12 },
+  preparingLabel: { color: '#BFE6FF', fontSize: 15, lineHeight: 21, textAlign: 'center' },
   orbitFailed: {
     position: 'absolute',
     left: 12,
