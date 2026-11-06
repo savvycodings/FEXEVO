@@ -1,5 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react'
 import { BackHandler, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ResizeMode, Video } from 'expo-av'
+import Svg, { Circle, Line } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
@@ -10,11 +12,22 @@ import { ResultSectionPill } from '../../components/ResultSectionPill'
 import { CARD_GLOW, SELECTED_GLOW, UI } from '../../components/ui'
 import type { ContactJoint, JointReading } from '../../lib/jointsApi'
 import type { SegmentTiming } from '../../lib/kineticChain'
+import type { HologramKeypoints, HologramOrbitFrame } from '../../lib/hologramJob'
 import { JOINT_ICON } from './jointIcons'
 import { ChainLegend, KineticChainTimingView, TimingCard } from './KineticChainTiming'
+import { alignKeypoints, orbitFraction, type OrbitPreset } from './orbitPresets'
 
 type Layer = 'player' | 'pro' | 'overlay'
-type ViewPreset = 'view' | 'front' | 'side' | 'top'
+type ViewPreset = OrbitPreset
+
+export type OrbitClip = {
+  image: string | null
+  video: string | null
+  durationMs: number | null
+  frameCount: number | null
+  frames: HologramOrbitFrame[] | null
+  keypoints: HologramKeypoints | null
+}
 
 type Props = {
   joint: ContactJoint
@@ -23,6 +36,11 @@ type Props = {
   hologramImage: string | null
   /** Pro hologram, shown beside the player's on the Pro Reference tab. */
   proHologramImage?: string | null
+  /** Orbit clips, so View / Front / Side seek the turn instead of doing nothing. */
+  playerOrbit?: OrbitClip | null
+  proOrbit?: OrbitClip | null
+  /** Camera the shot was filmed from, so Front and Side land on those sides of the turn. */
+  viewId?: string | null
   /** Kinetic chain timing from the player's pose, for the Pro Reference tab. */
   timing?: SegmentTiming[] | null
   /** Back to the full-body stage ("3D View" goes there too). */
@@ -40,8 +58,21 @@ const VIEW_ICONS: Record<ViewPreset, keyof typeof MaterialCommunityIcons.glyphMa
   view: 'cube-outline',
   front: 'account-outline',
   side: 'head-outline',
-  top: 'account-supervisor-circle-outline',
 }
+const FIGURE_LIMBS: [string, string][] = [
+  ['left_shoulder', 'right_shoulder'],
+  ['left_shoulder', 'left_elbow'],
+  ['left_elbow', 'left_wrist'],
+  ['right_shoulder', 'right_elbow'],
+  ['right_elbow', 'right_wrist'],
+  ['left_shoulder', 'left_hip'],
+  ['right_shoulder', 'right_hip'],
+  ['left_hip', 'right_hip'],
+  ['left_hip', 'left_knee'],
+  ['right_hip', 'right_knee'],
+  ['left_knee', 'left_ankle'],
+  ['right_knee', 'right_ankle'],
+]
 const MAX_ZOOM = 3
 const MESSAGE = {
   good: { colors: ['#06291E', '#0B3A2A'], border: '#1E9E6A', icon: 'checkmark', iconColor: '#34C759' },
@@ -123,7 +154,6 @@ function JointStage({ tag, controls, onFullscreen }: { tag: string | null; contr
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [moving, setMoving] = useState(false)
-  const [preset, setPreset] = useState<ViewPreset>('view')
   const start = useRef({ x: 0, y: 0 })
   const offsetRef = useRef(offset)
   offsetRef.current = offset
@@ -194,9 +224,6 @@ function JointStage({ tag, controls, onFullscreen }: { tag: string | null; contr
               onPress={() => setMoving((m) => !m)}
             />
           </View>
-          <View style={styles.presetColumnRight}>
-            <ViewPresets value={preset} onChange={setPreset} />
-          </View>
         </>
       ) : null}
       <Pressable
@@ -213,40 +240,168 @@ function JointStage({ tag, controls, onFullscreen }: { tag: string | null; contr
   )
 }
 
-/** Pro Reference tab: both holograms side by side with the view presets. */
+function keypointsAt(clip: OrbitClip | null | undefined, fraction: number): HologramKeypoints | null {
+  const frames = clip?.frames
+  if (frames?.length) {
+    const last = Math.max((clip?.frameCount ?? frames.length) - 1, 1)
+    const target =
+      frames.length === 1
+        ? frames[0].frame
+        : frames[0].frame + fraction * (frames[frames.length - 1].frame - frames[0].frame)
+    let best = frames[0]
+    let dist = Math.abs(best.frame - target)
+    for (const row of frames) {
+      const d = Math.abs(row.frame - target)
+      if (d < dist) {
+        best = row
+        dist = d
+      }
+    }
+    return best.keypoints
+  }
+  return clip?.keypoints ?? null
+}
+
+/** Paused orbit frame. Seeking is what View, Front and Side actually do. */
+function HeldOrbit({ uri, fraction, durationMs }: { uri: string; fraction: number; durationMs: number | null }) {
+  const ref = useRef<Video>(null)
+  const seek = () => {
+    const length = durationMs && durationMs > 0 ? durationMs : 4000
+    void ref.current?.setStatusAsync({
+      shouldPlay: false,
+      positionMillis: Math.round(length * fraction),
+      seekMillisToleranceBefore: 0,
+      seekMillisToleranceAfter: 0,
+    })
+  }
+  useEffect(() => {
+    seek()
+  }, [fraction, durationMs, uri])
+  return (
+    <Video
+      ref={ref}
+      source={{ uri }}
+      style={styles.fill}
+      resizeMode={ResizeMode.CONTAIN}
+      isMuted
+      onLoad={seek}
+      onReadyForDisplay={seek}
+    />
+  )
+}
+
+function Figure({
+  keypoints,
+  color,
+}: {
+  keypoints: HologramKeypoints | null
+  color: string
+}) {
+  if (!keypoints) return null
+  return (
+    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+      {FIGURE_LIMBS.map(([a, b]) => {
+        const A = keypoints[a]
+        const B = keypoints[b]
+        if (!A || !B) return null
+        return <Line key={`${a}-${b}`} x1={A.x * 100} y1={A.y * 100} x2={B.x * 100} y2={B.y * 100} stroke={color} strokeWidth={1.4} />
+      })}
+      {Object.entries(keypoints).map(([name, p]) => (
+        <Circle key={name} cx={p.x * 100} cy={p.y * 100} r={1.6} fill={color} />
+      ))}
+    </Svg>
+  )
+}
+
+function ClipPicture({ clip, fraction }: { clip: OrbitClip | null | undefined; fraction: number }) {
+  if (clip?.video) return <HeldOrbit uri={clip.video} fraction={fraction} durationMs={clip.durationMs} />
+  return <Image source={clip?.image ? { uri: clip.image } : BODY} resizeMode="contain" style={styles.fill} />
+}
+
+/** Pro Reference: both orbits, and View / Front / Side seek them to the same angle. */
 function ChainStage({
-  hologramImage,
-  proHologramImage,
+  player,
+  pro,
+  viewId,
+  expanded = false,
   onFullscreen,
 }: {
-  hologramImage: string | null
-  proHologramImage: string | null
+  player: OrbitClip | null
+  pro: OrbitClip | null
+  viewId: string | null
+  expanded?: boolean
   onFullscreen: () => void
 }) {
   const { t } = useTranslation()
   const [preset, setPreset] = useState<ViewPreset>('view')
+  const fraction = orbitFraction(preset, viewId)
   return (
-    <View testID="chain-stage" style={[styles.stage, styles.stageTall]}>
+    <View testID="chain-stage" style={[styles.stage, expanded ? styles.stageFill : styles.stageTall]}>
       <View style={styles.pair}>
         <View style={styles.pairHalf}>
-          <Image source={hologramImage ? { uri: hologramImage } : BODY} resizeMode="contain" style={styles.fill} />
+          <ClipPicture clip={player} fraction={fraction} />
         </View>
         <View style={styles.pairHalf}>
-          <Image source={proHologramImage ? { uri: proHologramImage } : BODY} resizeMode="contain" style={styles.fill} />
+          <ClipPicture clip={pro} fraction={fraction} />
         </View>
       </View>
       <View style={styles.presetColumnLeft}>
         <ViewPresets value={preset} onChange={setPreset} />
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('analysis.fullscreen')}
-        hitSlop={8}
-        onPress={onFullscreen}
-        style={styles.fullscreenBtn}
-      >
-        <MaterialCommunityIcons name="arrow-expand-all" size={16} color={UI.text} />
-      </Pressable>
+      {expanded ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('analysis.fullscreen')}
+          hitSlop={8}
+          onPress={onFullscreen}
+          style={styles.fullscreenBtn}
+        >
+          <MaterialCommunityIcons name="arrow-expand-all" size={16} color={UI.text} />
+        </Pressable>
+      )}
+    </View>
+  )
+}
+
+/** One picture with both skeletons on the same body, at the chosen side of the orbit. */
+function OverlayStage({
+  player,
+  pro,
+  viewId,
+  expanded = false,
+  onFullscreen,
+}: {
+  player: OrbitClip | null
+  pro: OrbitClip | null
+  viewId: string | null
+  expanded?: boolean
+  onFullscreen: () => void
+}) {
+  const { t } = useTranslation()
+  const [preset, setPreset] = useState<ViewPreset>('view')
+  const fraction = orbitFraction(preset, viewId)
+  const yours = keypointsAt(player, fraction)
+  const theirs = keypointsAt(pro, fraction)
+  const aligned = yours && theirs ? alignKeypoints(theirs, yours) : theirs
+  return (
+    <View testID="joint-overlay" style={[styles.stage, expanded ? styles.stageFill : styles.stageTall]}>
+      {yours || aligned ? null : <ClipPicture clip={player} fraction={fraction} />}
+      <Figure keypoints={yours} color={PRO} />
+      <Figure keypoints={aligned} color="#FF8A3D" />
+      <View style={styles.presetColumnRight}>
+        <ViewPresets value={preset} onChange={setPreset} />
+      </View>
+      {expanded ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('analysis.fullscreen')}
+          hitSlop={8}
+          onPress={onFullscreen}
+          style={styles.fullscreenBtn}
+        >
+          <MaterialCommunityIcons name="arrow-expand-all" size={16} color={UI.text} />
+        </Pressable>
+      )}
     </View>
   )
 }
@@ -257,6 +412,9 @@ export function JointDetailView({
   shotLabel,
   hologramImage,
   proHologramImage = null,
+  playerOrbit = null,
+  proOrbit = null,
+  viewId = null,
   timing = null,
   onClose,
 }: Props) {
@@ -269,12 +427,13 @@ export function JointDetailView({
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (chainOpen) setChainOpen(false)
+      if (fullscreen) setFullscreen(false)
+      else if (chainOpen) setChainOpen(false)
       else onClose()
       return true
     })
     return () => sub.remove()
-  }, [onClose, chainOpen])
+  }, [onClose, chainOpen, fullscreen])
 
   if (chainOpen) return <KineticChainTimingView timing={timing} onClose={() => setChainOpen(false)} />
 
@@ -360,8 +519,9 @@ export function JointDetailView({
         <>
           <ChainLegend />
           <ChainStage
-            hologramImage={hologramImage}
-            proHologramImage={proHologramImage}
+            player={playerOrbit ?? { image: hologramImage, video: null, durationMs: null, frameCount: null, frames: null, keypoints: null }}
+            pro={proOrbit ?? { image: proHologramImage, video: null, durationMs: null, frameCount: null, frames: null, keypoints: null }}
+            viewId={viewId}
             onFullscreen={() => setFullscreen(true)}
           />
           <TimingCard timing={timing} onPress={() => setChainOpen(true)} />
@@ -382,7 +542,16 @@ export function JointDetailView({
             ))}
           </View>
 
-          <JointStage tag={you} controls={layer === 'overlay'} onFullscreen={() => setFullscreen(true)} />
+          {layer === 'overlay' ? (
+            <OverlayStage
+              player={playerOrbit ?? { image: hologramImage, video: null, durationMs: null, frameCount: null, frames: null, keypoints: null }}
+              pro={proOrbit ?? { image: proHologramImage, video: null, durationMs: null, frameCount: null, frames: null, keypoints: null }}
+              viewId={viewId}
+              onFullscreen={() => setFullscreen(true)}
+            />
+          ) : (
+            <JointStage tag={you} controls={false} onFullscreen={() => setFullscreen(true)} />
+          )}
 
           <View testID="joint-metrics" style={[styles.metricCard, CARD_GLOW]}>
             <View style={styles.badgeSmall}>
@@ -444,30 +613,44 @@ export function JointDetailView({
         </>
       )}
 
-      <Modal visible={fullscreen} animationType="fade" onRequestClose={() => setFullscreen(false)} supportedOrientations={['portrait', 'landscape']}>
-        <View style={[styles.fullscreen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
-          <Pressable
-            testID="joint-fullscreen-close"
-            accessibilityRole="button"
-            accessibilityLabel={t('analysis.back')}
-            onPress={() => setFullscreen(false)}
-            hitSlop={10}
-            style={styles.fullscreenClose}
-          >
-            <Ionicons name="close" size={24} color={UI.text} />
-          </Pressable>
-          {layer === 'pro' ? (
-            <View style={[styles.pair, styles.pairFull]}>
-              <View style={styles.pairHalf}>
-                <Image source={hologramImage ? { uri: hologramImage } : BODY} resizeMode="contain" style={styles.fill} />
-              </View>
-              <View style={styles.pairHalf}>
-                <Image source={proHologramImage ? { uri: proHologramImage } : BODY} resizeMode="contain" style={styles.fill} />
-              </View>
-            </View>
-          ) : (
-            <Image source={PLACEHOLDER} resizeMode="contain" style={styles.fullscreenImage} />
-          )}
+      <Modal visible={fullscreen} animationType="fade" onRequestClose={() => setFullscreen(false)} supportedOrientations={['portrait']}>
+        <View style={[styles.fullscreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          <View style={styles.fullBar}>
+            <Pressable
+              testID="joint-fullscreen-close"
+              accessibilityRole="button"
+              accessibilityLabel={t('analysis.back')}
+              onPress={() => setFullscreen(false)}
+              hitSlop={8}
+              style={styles.fullBack}
+            >
+              <Ionicons name="chevron-back" size={26} color={UI.text} />
+              <Text allowFontScaling={false} style={[styles.fullBackLabel, { fontFamily: theme.semiBoldFont }]}>
+                {t('analysis.back')}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.fullStage}>
+            {layer === 'pro' ? (
+              <ChainStage
+                player={playerOrbit ?? { image: hologramImage, video: null, durationMs: null, frameCount: null, frames: null, keypoints: null }}
+                pro={proOrbit ?? { image: proHologramImage, video: null, durationMs: null, frameCount: null, frames: null, keypoints: null }}
+                viewId={viewId}
+                expanded
+                onFullscreen={() => setFullscreen(false)}
+              />
+            ) : layer === 'overlay' ? (
+              <OverlayStage
+                player={playerOrbit ?? { image: hologramImage, video: null, durationMs: null, frameCount: null, frames: null, keypoints: null }}
+                pro={proOrbit ?? { image: proHologramImage, video: null, durationMs: null, frameCount: null, frames: null, keypoints: null }}
+                viewId={viewId}
+                expanded
+                onFullscreen={() => setFullscreen(false)}
+              />
+            ) : (
+              <Image source={PLACEHOLDER} resizeMode="contain" style={styles.fullscreenImage} />
+            )}
+          </View>
         </View>
       </Modal>
     </ScrollView>
@@ -525,6 +708,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   stageTall: { height: 330 },
+  stageFill: { flex: 1, height: '100%' },
   tag: {
     position: 'absolute',
     top: 40,
@@ -622,7 +806,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   messageText: { flex: 1, color: UI.text, fontSize: 15, lineHeight: 21 },
-  fullscreen: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
+  fullscreen: { flex: 1, backgroundColor: '#000' },
+  fullBar: { height: 52, justifyContent: 'center', paddingHorizontal: 8 },
+  fullBack: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 8, paddingRight: 16 },
+  fullBackLabel: { color: UI.text, fontSize: 17 },
+  fullStage: { flex: 1 },
   fullscreenClose: { position: 'absolute', top: 16, right: 16, zIndex: 2, padding: 6 },
   fullscreenImage: { width: '100%', flex: 1 },
 })

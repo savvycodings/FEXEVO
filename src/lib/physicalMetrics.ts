@@ -60,6 +60,12 @@ export function physicalMetricsRadarValues(metrics: PhysicalMetricsValues): numb
   return PHYSICAL_METRIC_KEYS.map((k) => metrics[k])
 }
 
+/** Headline score on the analysis screen: the five movement scores, equally weighted. */
+export function averagePhysicalMetrics(metrics: PhysicalMetricsValues): number {
+  const sum = PHYSICAL_METRIC_KEYS.reduce((total, key) => total + metrics[key], 0)
+  return Math.round(sum / PHYSICAL_METRIC_KEYS.length)
+}
+
 /**
  * History is newest-first from the API.
  * Selected session → current (cyan); the next older item → prior (dark blue).

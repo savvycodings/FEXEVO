@@ -30,6 +30,7 @@ import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
 import { JointDetailView } from './JointDetailView'
 import { JOINT_ICON, type BodyPartId } from './jointIcons'
 import { dominantSide } from './movementTimeline'
+import { alignKeypoints } from './orbitPresets'
 
 type Layer = 'player' | 'pro' | 'overlay'
 type BodyPart = BodyPartId
@@ -41,6 +42,8 @@ type Props = {
   poseFrames?: PoseFrameRow[]
   impactFrame?: number | null
   fps?: number | null
+  /** Camera the shot was filmed from, so Front and Side seek the matching side of the orbit. */
+  viewId?: string | null
   onClose: () => void
 }
 
@@ -156,12 +159,17 @@ function JointMarkers({
   h,
   lit,
   video,
+  color = '#FF8A3D',
+  full = false,
 }: {
   keypoints: HologramKeypoints
   w: number
   h: number
   lit: string[]
   video: { x: number; y: number; w: number; h: number } | null
+  color?: string
+  /** Shoulder-to-ankle body, used when two figures share the stage. */
+  full?: boolean
 }) {
   const at = (name: string) => {
     const p = keypoints[name]
@@ -176,11 +184,24 @@ function JointMarkers({
   const names = [...BASE_MARKERS, ...lit.filter((name) => !BASE_MARKERS.includes(name))]
   return (
     <Svg width={w} height={h} style={styles.markersLayer} pointerEvents="none">
-      {LIMBS.map(([a, b]) => {
+      {(full
+        ? [
+            ...LIMBS,
+            ['left_shoulder', 'right_shoulder'],
+            ['left_hip', 'right_hip'],
+            ['left_shoulder', 'left_hip'],
+            ['right_shoulder', 'right_hip'],
+            ['left_hip', 'left_knee'],
+            ['right_hip', 'right_knee'],
+            ['left_knee', 'left_ankle'],
+            ['right_knee', 'right_ankle'],
+          ]
+        : LIMBS
+      ).map(([a, b]) => {
         const A = at(a)
         const B = at(b)
         return A && B ? (
-          <Line key={`${a}-${b}`} x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke="#FFA53D" strokeWidth={3} strokeOpacity={0.8} />
+          <Line key={`${a}-${b}`} x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke={color} strokeWidth={3} strokeOpacity={0.85} />
         ) : null
       })}
       {names.map((name) => {
@@ -189,8 +210,8 @@ function JointMarkers({
         const on = lit.includes(name)
         return (
           <Fragment key={name}>
-            <Circle cx={P.x} cy={P.y} r={on ? 18 : 12} fill="#FF8A3D" fillOpacity={on ? 0.4 : 0.28} />
-            <Circle cx={P.x} cy={P.y} r={on ? 9 : 6} fill="#FFC23D" stroke="#FFF4D6" strokeWidth={2} />
+            <Circle cx={P.x} cy={P.y} r={on ? 18 : 12} fill={color} fillOpacity={on ? 0.4 : 0.28} />
+            <Circle cx={P.x} cy={P.y} r={on ? 9 : 6} fill={color} stroke="#FFF4D6" strokeWidth={2} />
           </Fragment>
         )
       })}
@@ -201,14 +222,15 @@ function JointMarkers({
 /** Stock figure shown until the shot's own hologram is built. */
 const BODY = require('../../../assets/smart3d/body.webp')
 
-export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = null, onClose }: Props) {
+export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = null, viewId = null, onClose }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
   const [layer, setLayer] = useState<Layer>('player')
   const [selected, setSelected] = useState<BodyPart | null>(null)
   const hologram = useHologram(analysisId)
-  const contactJoints = useContactJoints(analysisId)
+  const [jointsReload, setJointsReload] = useState(0)
+  const contactJoints = useContactJoints(analysisId, jointsReload)
   const [detail, setDetail] = useState<ContactJoint | null>(null)
   const timing = useMemo(
     () => (poseFrames?.length ? kineticChainTiming(poseFrames, impactFrame, fps, dominantSide(poseFrames)) : null),
@@ -439,7 +461,10 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   function pressPart(part: BodyPart) {
     setSelected(part)
     const contact = DETAIL_JOINT[part]
-    if (contact) setDetail(contact)
+    if (contact) {
+      setJointsReload((n) => n + 1)
+      setDetail(contact)
+    }
   }
 
   if (detail) {
@@ -462,6 +487,23 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         shotLabel={contactJoints?.shotLabel ?? null}
         hologramImage={hologram.image}
         proHologramImage={hologram.proImage}
+        viewId={viewId}
+        playerOrbit={{
+          image: hologram.image,
+          video: hologram.orbitVideo,
+          durationMs: hologram.orbitDurationMs,
+          frameCount: hologram.orbitFrameCount,
+          frames: hologram.orbitFrames,
+          keypoints: hologram.keypoints,
+        }}
+        proOrbit={{
+          image: hologram.proImage,
+          video: hologram.proOrbitVideo,
+          durationMs: hologram.proOrbitDurationMs,
+          frameCount: hologram.proOrbitFrameCount,
+          frames: hologram.proOrbitFrames,
+          keypoints: hologram.proKeypoints,
+        }}
         timing={timing}
         onClose={() => setDetail(null)}
       />
@@ -566,30 +608,41 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               }
             />
           ) : null}
-          {layer === 'overlay' && hologram.image ? (
-            <Image
-              source={{ uri: hologram.image }}
-              resizeMode="contain"
-              pointerEvents="none"
-              style={StyleSheet.absoluteFill}
-            />
-          ) : layer === 'overlay' && !hologram.image ? (
-            <Image
-              source={BODY}
-              resizeMode="contain"
-              pointerEvents="none"
-              style={styles.fill}
-            />
+          {layer === 'overlay' && !hologram.keypoints && (hologram.image || hologram.proImage) ? (
+            <>
+              {hologram.image ? (
+                <Image source={{ uri: hologram.image }} resizeMode="contain" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.9 }]} />
+              ) : null}
+              {hologram.proImage ? (
+                <Image source={{ uri: hologram.proImage }} resizeMode="contain" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.45 }]} />
+              ) : null}
+            </>
           ) : null}
-          {layer === 'overlay' && hologram.proImage ? (
-            <Image
-              source={{ uri: hologram.proImage }}
-              resizeMode="cover"
-              pointerEvents="none"
-              style={[StyleSheet.absoluteFill, { opacity: 0.72, zIndex: 5 }]}
-            />
+          {layer === 'overlay' && hologram.keypoints && stageSize.w ? (
+            <>
+              <JointMarkers
+                keypoints={hologram.keypoints}
+                w={stageSize.w}
+                h={stageSize.h}
+                lit={lit}
+                video={null}
+                color="#5CE1FF"
+                full
+              />
+              {hologram.proKeypoints ? (
+                <JointMarkers
+                  keypoints={alignKeypoints(hologram.proKeypoints, hologram.keypoints)}
+                  w={stageSize.w}
+                  h={stageSize.h}
+                  lit={lit}
+                  video={null}
+                  color="#FF8A3D"
+                  full
+                />
+              ) : null}
+            </>
           ) : null}
-          {markerKeys && stageSize.w ? (
+          {markerKeys && layer !== 'overlay' && stageSize.w ? (
             <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
           ) : null}
           {reveal && pictureUri ? (

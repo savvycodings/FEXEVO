@@ -45,7 +45,7 @@ function toJoints(raw: unknown): ContactJoints | null {
 }
 
 /** Contact-frame joint angles for a saved shot; null until loaded or when the shot has no pose data. */
-export function useContactJoints(analysisId: string | null | undefined): ContactJoints | null {
+export function useContactJoints(analysisId: string | null | undefined, reloadKey = 0): ContactJoints | null {
   const [state, setState] = useState<ContactJoints | null>(null)
   useEffect(() => {
     if (!analysisId) return
@@ -59,6 +59,6 @@ export function useContactJoints(analysisId: string | null | undefined): Contact
     return () => {
       cancelled = true
     }
-  }, [analysisId])
+  }, [analysisId, reloadKey])
   return state
 }
