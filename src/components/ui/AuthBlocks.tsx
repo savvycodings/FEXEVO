@@ -12,11 +12,11 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg'
 import { LocalSvgAsset, prefetchSvgAssets } from '../LocalSvgAsset'
 import { ThemeContext } from '../../context'
 import type { SocialProvider } from '../../lib/socialAuth'
-import { UI, CARD_GLOW } from './tokens'
+import { UI, CARD, GLOW_SURFACE } from './tokens'
 
 /** Rounded glass card used for grouped content (setup questions, sign-up prompt). */
 export function GlassCard({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[styles.card, CARD_GLOW, style]}>{children}</View>
+  return <View style={[styles.card, style]}>{children}</View>
 }
 
 /** Faint radial wash at the top of auth screens. `id` must be unique per mounted screen (web SVG ids are global). */
@@ -137,8 +137,7 @@ export function TextLink({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: UI.cardBg,
-    borderRadius: UI.radiusCard,
+    ...CARD,
     paddingVertical: 24,
     paddingHorizontal: 19,
     gap: 10,
@@ -158,7 +157,8 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: UI.divider,
+    /** Design: 1px stroke, rgba(255,255,255,0.25). */
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   dividerText: {
     fontSize: 14,
@@ -168,13 +168,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  /** Design: `#041641`, radius 29 (a pill at 58pt), inset Frame Glow, 20px side padding, equal thirds. */
   socialButton: {
     flex: 1,
-    height: 54,
-    borderRadius: UI.radiusPill,
-    backgroundColor: UI.surface,
-    borderWidth: 1,
-    borderColor: UI.surfaceBorder,
+    height: 58,
+    borderRadius: 29,
+    paddingHorizontal: 20,
+    ...GLOW_SURFACE,
+    flexDirection: 'row',
+    gap: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

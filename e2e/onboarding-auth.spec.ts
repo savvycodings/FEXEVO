@@ -55,8 +55,6 @@ test.describe('onboarding and auth', () => {
     await page.getByTestId(T.setupHeight).fill('180')
     await page.getByTestId(T.setupWeight).fill('75')
     await page.getByTestId(T.setupStep1Next).click()
-    await page.getByTestId(T.setupRankingNo).click()
-    await page.getByTestId(T.setupRankingNext).click()
     await page.locator('[data-testid^="setup-level-"]').first().click()
     await page.getByTestId(T.setupFinish).click()
     await page.waitForFunction(() => (globalThis as any).__xevoNav?.ready?.() === true, null, { timeout: 45_000 })

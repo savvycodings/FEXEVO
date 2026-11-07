@@ -8,6 +8,7 @@ import { ThemeContext } from '../../context'
 import { useHologram } from '../../lib/hologramJob'
 import { type CompareMetric, buildCompareMetrics, useShotHistory } from './shotHistory'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
+import { PrimaryFill, UI } from '../../components/ui'
 
 type Segment = 'before' | 'after' | 'progress'
 
@@ -279,17 +280,13 @@ export function ProReferenceCompare({ videoUri, analysisId, referenceImageUri, m
       ) : null}
 
       <TouchableOpacity accessibilityRole="button" activeOpacity={0.85} onPress={onSave}>
-        <LinearGradient
-          colors={['#00C2FF', '#2454FF']}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={styles.saveBtn}
-        >
+        <View style={styles.saveBtn}>
+          <PrimaryFill radius={UI.btnRadius} />
           <Text allowFontScaling={false} style={[styles.saveText, { fontFamily: theme.semiBoldFont }]}>
             {t('analysis.saveToProgress')}
           </Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-        </LinearGradient>
+          <Ionicons name="arrow-forward" size={18} color={UI.btnPrimaryText} />
+        </View>
       </TouchableOpacity>
     </View>
   )
@@ -349,12 +346,14 @@ const styles = StyleSheet.create({
   scoreDelta: { fontSize: 13 },
   scoreValue: { color: '#FFFFFF', fontSize: 22 },
   saveBtn: {
-    height: 52,
-    borderRadius: 16,
+    height: UI.buttonHeight,
+    borderRadius: UI.btnRadius,
+    overflow: 'hidden',
+    paddingHorizontal: UI.btnPaddingX,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
   },
-  saveText: { color: '#FFFFFF', fontSize: 16 },
+  saveText: { color: UI.btnPrimaryText, fontSize: 18 },
 })

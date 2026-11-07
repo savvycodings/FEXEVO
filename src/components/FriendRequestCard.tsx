@@ -1,13 +1,12 @@
 import React, { useContext } from 'react'
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import type { FriendRequest } from '../lib/friendsApi'
 import { AvatarWithFlag } from './AvatarWithFlag'
 import { MutualFriendsStack } from './MutualFriendsStack'
-import { CARD_GLOW, PRIMARY_GLOW, UI } from './ui'
+import { CARD_GLOW, PrimaryFill, UI } from './ui'
 
 export type FriendRequestCardState = 'pending' | 'busy' | 'accepted'
 
@@ -91,14 +90,8 @@ export function FriendRequestCard({
             accessibilityLabel={t('friends.accept')}
             testID={`friend-request-accept-${request.id}`}
           >
-            <LinearGradient
-              colors={UI.gradient}
-              locations={UI.gradientLocations}
-              start={UI.gradientStart}
-              end={UI.gradientEnd}
-              style={[StyleSheet.absoluteFill, styles.round]}
-            />
-            <Ionicons name="checkmark" size={22} color="#FFFFFF" />
+            <PrimaryFill radius={ACTION / 2} />
+            <Ionicons name="checkmark" size={22} color={UI.btnPrimaryText} />
           </TouchableOpacity>
         </View>
       )}
@@ -143,7 +136,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    ...PRIMARY_GLOW,
   },
   acceptedPill: {
     flexDirection: 'row',

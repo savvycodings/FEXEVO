@@ -8,7 +8,7 @@ import {
   StyleSheet,
   type LayoutChangeEvent,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { PrimaryFill, SECONDARY_BUTTON, UI } from './ui'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from './LocalSvgAsset'
@@ -124,17 +124,12 @@ export function MagicShotCard({
         style={styles.buttonWrap}
         accessibilityRole="button"
       >
-        <LinearGradient
-          colors={['#00B8FF', '#0022FF']}
-          locations={[0.09, 0.91]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.button}
-        >
+        <View style={styles.button}>
+          <PrimaryFill radius={UI.btnRadius} />
           <Text style={styles.buttonText} allowFontScaling={false}>
             {t('technique.magicShot.mismatch.invite')}
           </Text>
-        </LinearGradient>
+        </View>
       </TouchableOpacity>
       <TouchableOpacity
         activeOpacity={0.8}
@@ -143,7 +138,7 @@ export function MagicShotCard({
         style={[styles.secondaryButton, switchingHand && styles.buttonBusy]}
         accessibilityRole="button"
       >
-        {switchingHand ? <ActivityIndicator size="small" color="#00B8FF" /> : null}
+        {switchingHand ? <ActivityIndicator size="small" color={UI.btnSecondaryText} /> : null}
         <Text style={styles.secondaryButtonText} allowFontScaling={false}>
           {t('technique.magicShot.mismatch.switchHand', {
             videoHanded: t(`technique.magicShot.mismatch.handed.${m.videoHand}`),
@@ -163,16 +158,11 @@ export function MagicShotCard({
       style={[styles.buttonWrap, busy && styles.buttonBusy]}
       accessibilityRole="button"
     >
-      <LinearGradient
-        colors={['#00B8FF', '#0022FF']}
-        locations={[0.09, 0.91]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.button}
-      >
+      <View style={styles.button}>
+        <PrimaryFill radius={UI.btnRadius} />
         {busy ? (
           <>
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={UI.btnPrimaryText} />
             <Text style={styles.buttonText} allowFontScaling={false}>
               {t('technique.magicShot.generating')}
             </Text>
@@ -189,10 +179,10 @@ export function MagicShotCard({
                 </>
               )}
             </Text>
-            <LocalSvgAsset assetModule={SPARKLE_ICON} width={24} height={24} />
+            <LocalSvgAsset assetModule={SPARKLE_ICON} width={24} height={24} strokeColor={UI.btnPrimaryText} />
           </>
         )}
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   )
 
@@ -276,20 +266,20 @@ function getStyles(theme: any) {
       padding: 20,
       gap: 10,
     },
-    buttonWrap: { width: '100%', borderRadius: 20, overflow: 'hidden' },
+    buttonWrap: { width: '100%', borderRadius: UI.btnRadius, overflow: 'hidden' },
     buttonBusy: { opacity: 0.85 },
     button: {
-      height: 60,
-      paddingHorizontal: 20,
+      height: UI.buttonHeight,
+      paddingHorizontal: UI.btnPaddingX,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 10,
     },
     buttonText: {
-      fontFamily: theme.mediumFont,
+      fontFamily: theme.semiBoldFont,
       fontSize: 18,
-      color: '#FFFFFF',
+      color: UI.btnPrimaryText,
       textAlign: 'center',
       flexShrink: 1,
     },
@@ -306,12 +296,11 @@ function getStyles(theme: any) {
     },
     mismatchTitle: { fontFamily: theme.mediumFont, fontSize: 18, color: '#FFFFFF' },
     secondaryButton: {
+      ...SECONDARY_BUTTON,
       width: '100%',
-      minHeight: 52,
-      borderRadius: 20,
-      borderWidth: 2,
-      borderColor: '#00B8FF',
-      paddingHorizontal: 16,
+      minHeight: UI.buttonHeight,
+      borderRadius: UI.btnRadius,
+      paddingHorizontal: UI.btnPaddingX,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -319,8 +308,8 @@ function getStyles(theme: any) {
     },
     secondaryButtonText: {
       fontFamily: theme.mediumFont,
-      fontSize: 16,
-      color: '#00B8FF',
+      fontSize: 18,
+      color: UI.btnSecondaryText,
       textAlign: 'center',
       flexShrink: 1,
     },

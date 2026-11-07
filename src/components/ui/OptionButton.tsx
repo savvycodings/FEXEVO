@@ -1,8 +1,8 @@
 import React, { useContext } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { StyleSheet, Text, TouchableOpacity, type StyleProp, type ViewStyle } from 'react-native'
+import { PrimaryFill } from './GlowButton'
 import { ThemeContext } from '../../context'
-import { UI, SELECTED_GLOW } from './tokens'
+import { UI } from './tokens'
 
 /** One choice in a vertical list (e.g. "Set your Level"): outlined when idle, gradient + glow when selected. */
 export function OptionButton({
@@ -28,22 +28,12 @@ export function OptionButton({
       accessibilityRole="radio"
       accessibilityState={{ selected }}
     >
-      {selected ? (
-        <>
-          <LinearGradient
-            colors={UI.gradient}
-            locations={UI.gradientLocations}
-            start={UI.gradientStart}
-            end={UI.gradientEnd}
-            style={[StyleSheet.absoluteFill, styles.fill]}
-          />
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fill, SELECTED_GLOW]} />
-        </>
-      ) : null}
+      {/* Selected = the shared primary button fill (GlowButton), so the look stays in one place. */}
+      {selected ? <PrimaryFill radius={9} /> : null}
       <Text
         allowFontScaling={false}
         numberOfLines={1}
-        style={[styles.label, { fontFamily: theme.mediumFont }, selected ? styles.labelSelected : styles.labelIdle]}
+        style={[styles.label, { fontFamily: selected ? theme.semiBoldFont : theme.regularFont }, selected ? styles.labelSelected : styles.labelIdle]}
       >
         {label}
       </Text>
@@ -52,13 +42,13 @@ export function OptionButton({
 }
 
 const styles = StyleSheet.create({
+  /** Design (Set your Level): 40pt rows, radius 10, Inter 14. */
   option: {
-    minHeight: 40,
-    borderRadius: UI.radius,
+    height: 40,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
     paddingHorizontal: 8,
   },
   optionIdle: {
@@ -66,17 +56,13 @@ const styles = StyleSheet.create({
     backgroundColor: UI.cardBg,
   },
   optionSelected: {
-    borderColor: 'rgba(53, 199, 255, 0.55)',
-    boxShadow: '0px 0px 10px 0px #00B8FF',
-  },
-  fill: {
-    borderRadius: UI.radius - 1,
+    borderColor: 'transparent',
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
   },
   labelSelected: {
-    color: UI.text,
+    color: UI.btnPrimaryText,
   },
   labelIdle: {
     color: UI.textMuted,

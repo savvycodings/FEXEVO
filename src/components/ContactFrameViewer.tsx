@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Image, Modal, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
+import { GestureDetector } from 'react-native-gesture-handler'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
-import { PG, glow } from '../screens/progress/progressTheme'
+import { GLOW_SURFACE, PrimaryFill, UI } from './ui'
 import { type FrameView, useFrameZoomGesture, zoomedImageStyle } from './contactFrameZoom'
 import { ZoomChips } from './ContactFrameZoomChips'
 
 type Props = {
-  /** Frame to open on; null keeps the viewer closed. */
-  openIndex: number | null
-  contactFrame: number
+  /** Frame to open on. */
+  initialIndex: number
   firstFrame: number
   lastFrame: number
   /** Width / height of the video picture. */
@@ -21,21 +20,27 @@ type Props = {
   getFrame: (index: number) => Promise<string>
   view: FrameView
   onViewChange: (v: FrameView) => void
+  /** "Next": confirm `index` as the contact. */
   onUse: (index: number) => void
   onClose: () => void
   fonts: { regular?: string; medium?: string; semiBold?: string }
 }
 
-/** Space reserved above and below the picture for the header, stepper and button. */
-const CHROME_H = 250
+/** Design: 2px G2 border around the picture. */
+const FRAME_BORDER = 2
+const FRAME_RADIUS = 20
+/**
+ * Height taken by everything that isn't the picture: app header, tab bar, the chip row,
+ * the frame stepper, Next and the gaps between them.
+ */
+const CHROME_H = 400
 
 /**
- * Full-screen look at one contact frame, with the grid's shared zoom, ‹ › stepping through the
- * trimmed clip, and "Use this frame" to make it the contact.
+ * The "Contact" step of Set Clip, shown in place of the Set Clip content (the app header and tab bar
+ * stay): one frame with the shared zoom, ‹ › stepping through the trimmed clip, and Next to confirm it.
  */
 export function ContactFrameViewer({
-  openIndex,
-  contactFrame,
+  initialIndex,
   firstFrame,
   lastFrame,
   aspect,
@@ -48,16 +53,12 @@ export function ContactFrameViewer({
 }: Props) {
   const { t } = useTranslation()
   const insets = useSafeAreaInsets()
-  const { width: winW, height: winH } = useWindowDimensions()
-  const [index, setIndex] = useState(openIndex ?? contactFrame)
+  const { height: winH } = useWindowDimensions()
+  const [index, setIndex] = useState(initialIndex)
   const [uri, setUri] = useState<string | null>(null)
+  const [boxW, setBoxW] = useState(0)
 
   useEffect(() => {
-    if (openIndex != null) setIndex(openIndex)
-  }, [openIndex])
-
-  useEffect(() => {
-    if (openIndex == null) return
     let cancelled = false
     setUri(null)
     getFrame(index)
@@ -66,139 +67,157 @@ export function ContactFrameViewer({
     return () => {
       cancelled = true
     }
-  }, [index, openIndex, getFrame])
+  }, [index, getFrame])
 
-  // Fit the picture in the space left after the controls, keeping its aspect.
-  const maxW = winW - 32
-  const maxH = Math.max(160, winH - insets.top - insets.bottom - CHROME_H)
-  const boxW = Math.min(maxW, maxH * aspect)
-  const boxH = boxW / aspect
+  // Design: the frame is full content width; a tall picture is capped so Next stays on screen and covers the box.
+  const maxH = Math.max(200, winH - insets.top - insets.bottom - CHROME_H)
+  const innerW = Math.max(0, boxW - FRAME_BORDER * 2)
+  const innerH = Math.min(maxH, innerW / aspect)
+  const picW = Math.max(innerW, innerH * aspect)
+  const picH = picW / aspect
 
-  const gesture = useFrameZoomGesture({ view, onViewChange, width: boxW, height: boxH })
-
-  const offset = index - contactFrame
-  const label = offset === 0 ? t('technique.contactLabel') : offset > 0 ? `+${offset}` : `${offset}`
+  const gesture = useFrameZoomGesture({ view, onViewChange, width: picW, height: picH })
 
   return (
-    <Modal visible={openIndex != null} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <GestureHandlerRootView style={styles.root} testID="contact-frame-viewer">
-        <View style={[styles.top, { paddingTop: insets.top + 12 }]}>
-          <View style={styles.badge}>
-            <Text allowFontScaling={false} style={[styles.badgeText, { fontFamily: fonts.medium }]}>
-              {label}
-            </Text>
-          </View>
-          <ZoomChips view={view} onViewChange={onViewChange} font={fonts.medium} testIDPrefix="contact-frame-viewer-zoom" />
-          <TouchableOpacity
-            onPress={onClose}
-            style={styles.iconBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel={t('technique.setClipScreen.closeViewer')}
-            testID="contact-frame-viewer-close"
-          >
-            <Ionicons name="close" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
+    <View style={styles.root} testID="contact-frame-viewer">
+      <View style={styles.top}>
+        <View style={styles.badge}>
+          <Text allowFontScaling={false} style={[styles.badgeText, { fontFamily: fonts.medium }]}>
+            {t('technique.contactLabel')}
+          </Text>
         </View>
+        <ZoomChips view={view} onViewChange={onViewChange} font={fonts.semiBold} testIDPrefix="contact-frame-viewer-zoom" />
+        <TouchableOpacity
+          onPress={onClose}
+          style={styles.closeBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('technique.setClipScreen.closeViewer')}
+          testID="contact-frame-viewer-close"
+        >
+          <Ionicons name="close" size={26} color="#86A7D2" />
+        </TouchableOpacity>
+      </View>
 
-        <View style={styles.stage}>
-          <GestureDetector gesture={gesture}>
-            <View style={[styles.picture, { width: boxW, height: boxH }]}>
-              {uri ? (
-                <Image source={{ uri }} style={zoomedImageStyle(view, boxW, boxH)} resizeMode="stretch" />
-              ) : (
-                <ActivityIndicator color={PG.labelBlue} />
-              )}
-            </View>
-          </GestureDetector>
-        </View>
-
-        <View style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.stepRow}>
-            <TouchableOpacity
-              style={[styles.stepBtn, index <= firstFrame && styles.disabled]}
-              onPress={() => setIndex((i) => Math.max(firstFrame, i - 1))}
-              disabled={index <= firstFrame}
-              accessibilityRole="button"
-              accessibilityLabel={t('technique.setClipScreen.previousFrame')}
-              testID="contact-frame-viewer-prev"
-            >
-              <Ionicons name="chevron-back" size={22} color={PG.labelBlue} />
-            </TouchableOpacity>
-            <Text allowFontScaling={false} style={[styles.frameText, { fontFamily: fonts.regular }]}>
-              {t('technique.setClipScreen.frameN', { n: index })}
-            </Text>
-            <TouchableOpacity
-              style={[styles.stepBtn, index >= lastFrame && styles.disabled]}
-              onPress={() => setIndex((i) => Math.min(lastFrame, i + 1))}
-              disabled={index >= lastFrame}
-              accessibilityRole="button"
-              accessibilityLabel={t('technique.setClipScreen.nextFrame')}
-              testID="contact-frame-viewer-next"
-            >
-              <Ionicons name="chevron-forward" size={22} color={PG.labelBlue} />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => onUse(index)}
-            accessibilityRole="button"
-            testID="contact-frame-viewer-use"
-            style={[styles.useWrap, glow(14, 0.6)]}
+      <View style={styles.stage} onLayout={(e) => setBoxW(e.nativeEvent.layout.width)}>
+        {innerW > 0 ? (
+          <LinearGradient
+            colors={UI.gradient}
+            locations={UI.gradientLocations}
+            start={UI.gradientStart}
+            end={UI.gradientEnd}
+            style={[styles.frame, { width: boxW, height: innerH + FRAME_BORDER * 2 }]}
           >
-            <LinearGradient
-              colors={['#5BB8FF', '#2C6BFF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.useBtn}
-            >
-              <Text allowFontScaling={false} style={[styles.useText, { fontFamily: fonts.semiBold }]}>
-                {t('technique.setClipScreen.useFrame')}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      </GestureHandlerRootView>
-    </Modal>
+            <GestureDetector gesture={gesture}>
+              <View style={[styles.picture, { width: innerW, height: innerH }]}>
+                {uri ? (
+                  <View
+                    style={{ position: 'absolute', width: picW, height: picH, left: (innerW - picW) / 2, top: (innerH - picH) / 2 }}
+                  >
+                    <Image source={{ uri }} style={zoomedImageStyle(view, picW, picH)} resizeMode="stretch" />
+                  </View>
+                ) : (
+                  <ActivityIndicator color={UI.accent} />
+                )}
+              </View>
+            </GestureDetector>
+          </LinearGradient>
+        ) : null}
+      </View>
+
+      <View style={styles.stepRow}>
+        <TouchableOpacity
+          style={[styles.stepBtn, index <= firstFrame && styles.disabled]}
+          onPress={() => setIndex((i) => Math.max(firstFrame, i - 1))}
+          disabled={index <= firstFrame}
+          accessibilityRole="button"
+          accessibilityLabel={t('technique.setClipScreen.previousFrame')}
+          testID="contact-frame-viewer-prev"
+        >
+          <Ionicons name="chevron-back" size={30} color="#86A7D2" />
+        </TouchableOpacity>
+        <Text allowFontScaling={false} style={[styles.frameText, { fontFamily: fonts.medium }]}>
+          {t('technique.setClipScreen.frameN', { n: index })}
+        </Text>
+        <TouchableOpacity
+          style={[styles.stepBtn, index >= lastFrame && styles.disabled]}
+          onPress={() => setIndex((i) => Math.min(lastFrame, i + 1))}
+          disabled={index >= lastFrame}
+          accessibilityRole="button"
+          accessibilityLabel={t('technique.setClipScreen.nextFrame')}
+          testID="contact-frame-viewer-next"
+        >
+          <Ionicons name="chevron-forward" size={30} color="#86A7D2" />
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => onUse(index)}
+        accessibilityRole="button"
+        testID="contact-frame-viewer-use"
+        style={styles.useBtn}
+      >
+        <PrimaryFill radius={UI.btnRadius} />
+        <Text allowFontScaling={false} style={[styles.useText, { fontFamily: fonts.semiBold }]}>
+          {t('technique.setClipScreen.next')}
+        </Text>
+      </TouchableOpacity>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#020814' },
-  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, gap: 12 },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#2A88F4' },
-  badgeText: { fontSize: 14, color: '#FFFFFF' },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  picture: {
-    overflow: 'hidden',
-    borderRadius: 16,
-    backgroundColor: '#0A1E5C',
+  root: { gap: 20 },
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 15 },
+  badge: {
+    height: 44,
+    paddingHorizontal: 22,
+    borderRadius: 10,
+    backgroundColor: '#4C8DF6',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bottom: { paddingHorizontal: 16, gap: 14 },
-  stepRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 },
-  stepBtn: {
+  badgeText: { fontSize: 18, color: '#FFFFFF' },
+  closeBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    /** Design: solid #041641, 1px #07256D, soft outer + inset blue glow. */
+    borderRadius: 20,
+    backgroundColor: '#041641',
+    borderWidth: 1,
+    borderColor: '#07256D',
+    boxShadow: '0px 0px 15px 0px rgba(0, 72, 255, 0.25), 0px 0px 16px 0px rgba(0, 72, 255, 0.25) inset',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  stage: { alignSelf: 'stretch' },
+  frame: { borderRadius: FRAME_RADIUS, padding: FRAME_BORDER },
+  picture: {
+    overflow: 'hidden',
+    borderRadius: FRAME_RADIUS - FRAME_BORDER,
     backgroundColor: '#0A1E5C',
-    borderWidth: 1.5,
-    borderColor: PG.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stepBtn: {
+    width: 54,
+    height: 54,
+    borderRadius: 20,
+    ...GLOW_SURFACE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   disabled: { opacity: 0.35 },
-  frameText: { fontSize: 14, color: PG.muted, minWidth: 90, textAlign: 'center' },
-  useWrap: { borderRadius: 16 },
-  useBtn: { height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  useText: { fontSize: 17, color: '#FFFFFF' },
+  frameText: { fontSize: 20, color: '#FFFFFF', textAlign: 'center' },
+  useBtn: {
+    height: UI.buttonHeight,
+    borderRadius: UI.btnRadius,
+    overflow: 'hidden',
+    paddingHorizontal: UI.btnPaddingX,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  useText: { fontSize: 18, color: UI.btnPrimaryText },
 })

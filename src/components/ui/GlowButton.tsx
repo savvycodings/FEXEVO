@@ -10,8 +10,9 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
+import Svg, { Path } from 'react-native-svg'
 import { ThemeContext } from '../../context'
-import { UI } from './tokens'
+import { SECONDARY_BUTTON, UI } from './tokens'
 
 type BaseProps = {
   label: string
@@ -21,9 +22,46 @@ type BaseProps = {
   testID?: string
   style?: StyleProp<ViewStyle>
   accessibilityLabel?: string
+  /** Side padding. Defaults to the spec's 35px; pass less when two buttons share a row (e.g. a confirm dialog). */
+  paddingX?: number
 }
 
-/** Primary action: #00BBFF → #0022FF gradient with the spec glow, optional arrow badge on the right. */
+/** Arrow after the primary label (design SVG, 32×32, navy stroke). */
+function ArrowIcon() {
+  return (
+    <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
+      <Path
+        d="M24.6695 16L6.66943 16"
+        stroke={UI.btnPrimaryText}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M17.3359 8C17.3359 8 25.3358 13.8919 25.3359 16C25.3359 18.1083 17.3359 24 17.3359 24"
+        stroke={UI.btnPrimaryText}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
+/** The primary-button gradient as an absolute fill. Use it for any custom-shaped primary control (pills, round icon buttons). */
+export function PrimaryFill({ radius }: { radius?: number }) {
+  return (
+    <LinearGradient
+      colors={UI.btnPrimaryGradient}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, radius != null && { borderRadius: radius }]}
+    />
+  )
+}
+
+/** Primary action: `#A9D8FF → #4DA6FF` vertical gradient with a dark navy label, optional arrow badge on the right. */
 export function GlowButton({
   label,
   onPress,
@@ -35,7 +73,8 @@ export function GlowButton({
   arrow = false,
   leadingIcon,
   height = UI.buttonHeight,
-  radius = UI.radius,
+  radius = UI.btnRadius,
+  paddingX = UI.btnPaddingX,
 }: BaseProps & {
   arrow?: boolean
   /** Icon in a dark circle on the left (e.g. `play` for "See the Correct Movement"). */
@@ -58,44 +97,45 @@ export function GlowButton({
       style={[styles.outer, { height, borderRadius: radius }, disabled && styles.disabled, style]}
     >
       <LinearGradient
-        colors={UI.gradient}
-        locations={UI.gradientLocations}
-        start={UI.gradientStart}
-        end={UI.gradientEnd}
-        style={[styles.fill, { paddingHorizontal: arrow || leadingIcon ? 56 : 16, borderRadius: radius - 1 }]}
+        colors={UI.btnPrimaryGradient}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={[styles.fill, { paddingHorizontal: leadingIcon ? 56 : paddingX, borderRadius: radius }]}
       >
         {loading ? (
-          <ActivityIndicator color={UI.text} />
+          <ActivityIndicator color={UI.btnPrimaryText} />
         ) : (
           <Text
             allowFontScaling={false}
             numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.8}
-            style={[styles.label, { fontFamily: theme.mediumFont }]}
+            style={[styles.label, styles.primaryLabel, { fontFamily: theme.semiBoldFont }]}
           >
             {label}
           </Text>
         )}
+        {/* Design: the arrow sits right after the label (10px gap), centred together, no badge. */}
+        {arrow && !loading ? <ArrowIcon /> : null}
         {leadingIcon && !loading ? (
           <View style={[styles.leadingBadge, { left: (height - 36) / 2 }]} pointerEvents="none">
             <Ionicons name={leadingIcon} size={18} color={UI.text} style={styles.leadingIcon} />
           </View>
         ) : null}
-        {arrow && !loading ? (
-          <View style={[styles.arrowBadge, { right: (height - 40) / 2 }]} pointerEvents="none">
-            <Ionicons name="arrow-forward" size={18} color={UI.text} />
-          </View>
-        ) : null}
       </LinearGradient>
-      {/* Inset glow sits above the gradient (an inset boxShadow on the button itself would be covered by it). */}
-      <View pointerEvents="none" style={[styles.innerGlow, { borderRadius: radius - 1 }]} />
     </TouchableOpacity>
   )
 }
 
 /** Secondary action on the dark navy surface (e.g. "Coach Signup"). */
-export function SurfaceButton({ label, onPress, disabled, loading, testID, style, accessibilityLabel }: BaseProps) {
+export function SurfaceButton({
+  label,
+  onPress,
+  disabled,
+  loading,
+  testID,
+  style,
+  accessibilityLabel,
+  paddingX = UI.btnPaddingX,
+}: BaseProps) {
   const { theme } = useContext(ThemeContext)
   return (
     <TouchableOpacity
@@ -105,7 +145,7 @@ export function SurfaceButton({ label, onPress, disabled, loading, testID, style
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      style={[styles.surface, disabled && styles.disabled, style]}
+      style={[styles.surface, { paddingHorizontal: paddingX }, disabled && styles.disabled, style]}
     >
       {loading ? (
         <ActivityIndicator color={UI.text} />
@@ -114,6 +154,26 @@ export function SurfaceButton({ label, onPress, disabled, loading, testID, style
           {label}
         </Text>
       )}
+    </TouchableOpacity>
+  )
+}
+
+/** Text-only action (e.g. welcome "Login"): full width, radius 20, 35px side padding, `#86A7D2` Inter 500 18px. */
+export function TextButton({ label, onPress, disabled, testID, style, accessibilityLabel }: BaseProps) {
+  const { theme } = useContext(ThemeContext)
+  return (
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={onPress}
+      disabled={disabled}
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      style={[styles.textBtn, disabled && styles.disabled, style]}
+    >
+      <Text allowFontScaling={false} numberOfLines={1} style={[styles.textBtnLabel, { fontFamily: theme.mediumFont }]}>
+        {label}
+      </Text>
     </TouchableOpacity>
   )
 }
@@ -149,25 +209,24 @@ export function SurfaceIconButton({
 const styles = StyleSheet.create({
   outer: {
     alignSelf: 'stretch',
-    borderRadius: UI.radius,
-    borderWidth: 1,
-    borderColor: 'rgba(53, 199, 255, 0.55)',
-    boxShadow: '0px 0px 10px 0px #00B8FF, 0px 0px 15px 0px #0015D4',
+    borderRadius: UI.btnRadius,
+    overflow: 'hidden',
   },
   fill: {
     flex: 1,
-    borderRadius: UI.radius - 1,
+    borderRadius: UI.btnRadius,
+    flexDirection: 'row',
+    gap: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  innerGlow: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: UI.radius - 1,
-    boxShadow: '0px 0px 16px 0px #35C7FF inset',
-  },
   label: {
-    color: UI.text,
-    fontSize: 17,
+    color: UI.btnSecondaryText,
+    fontSize: 18,
+    flexShrink: 1,
+  },
+  primaryLabel: {
+    color: UI.btnPrimaryText,
   },
   leadingBadge: {
     position: 'absolute',
@@ -179,34 +238,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   leadingIcon: { marginLeft: 2 },
-  arrowBadge: {
-    position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: UI.arrowBadge,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   surface: {
     alignSelf: 'stretch',
     height: UI.buttonHeight,
-    borderRadius: UI.radius,
-    backgroundColor: UI.surface,
-    borderWidth: 1,
-    borderColor: UI.surfaceBorder,
+    borderRadius: UI.btnRadius,
+    ...SECONDARY_BUTTON,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 8,
+    paddingHorizontal: UI.btnPaddingX,
   },
   iconBtn: {
-    borderRadius: UI.radius,
-    backgroundColor: UI.surface,
-    borderWidth: 1,
-    borderColor: UI.surfaceBorder,
+    borderRadius: UI.btnRadius,
+    ...SECONDARY_BUTTON,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  textBtn: {
+    alignSelf: 'stretch',
+    minHeight: 44,
+    borderRadius: UI.btnRadius,
+    paddingHorizontal: UI.btnPaddingX,
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textBtnLabel: {
+    color: UI.btnTextColor,
+    fontSize: 18,
+    textAlign: 'center',
   },
   disabled: {
     opacity: 0.45,

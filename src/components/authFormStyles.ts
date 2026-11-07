@@ -1,9 +1,11 @@
 import { Platform, StyleSheet } from 'react-native'
-import { UI } from './ui/tokens'
+import { FIELD_BOX, FIELD_BOX_ACTIVE, FIELD_BORDER_WIDTH, FIELD_PLACEHOLDER_COLOR, FIELD_PLACEHOLDER_SIZE, UI } from './ui/tokens'
 
-export const AUTH_INPUT_FOCUS_BORDER = UI.accent
-export const AUTH_INPUT_FOCUS_BORDER_WIDTH = 1.5
-export const AUTH_INPUT_ERROR_BORDER_WIDTH = 1.5
+export const AUTH_INPUT_FOCUS_BORDER = '#00B8FF'
+export const AUTH_PLACEHOLDER_COLOR = FIELD_PLACEHOLDER_COLOR
+/** Same width as the resting (transparent) border, so focus/error never shift the layout. */
+export const AUTH_INPUT_FOCUS_BORDER_WIDTH = FIELD_BORDER_WIDTH
+export const AUTH_INPUT_ERROR_BORDER_WIDTH = FIELD_BORDER_WIDTH
 export const AUTH_ICON_COLOR = UI.accent
 
 export function createAuthFormStyles(theme: {
@@ -14,30 +16,25 @@ export function createAuthFormStyles(theme: {
 }) {
   return StyleSheet.create({
     input: {
-      borderWidth: 1,
-      borderColor: UI.surfaceBorder,
-      borderRadius: UI.radius,
-      paddingHorizontal: 18,
-      paddingVertical: 12,
-      minHeight: UI.fieldHeight,
+      ...FIELD_BOX,
+      paddingVertical: 0,
       fontSize: 15,
       fontFamily: theme.regularFont,
       color: theme.textColor,
-      backgroundColor: UI.surface,
-      marginBottom: 12,
     },
-    inputFocused: {
-      borderWidth: AUTH_INPUT_FOCUS_BORDER_WIDTH,
-      borderColor: AUTH_INPUT_FOCUS_BORDER,
+    inputFocused: FIELD_BOX_ACTIVE,
+    /** Applied to the TextInput while it is empty, so the placeholder renders Inter 500 11px. */
+    placeholderText: {
+      fontSize: FIELD_PLACEHOLDER_SIZE,
+      fontFamily: theme.mediumFont,
     },
     inputError: {
-      borderWidth: AUTH_INPUT_ERROR_BORDER_WIDTH,
       borderColor: '#FF5A6A',
       backgroundColor: 'rgba(70, 12, 20, 0.35)',
       marginBottom: 6,
     },
     passwordWrap: {
-      marginBottom: 12,
+      marginBottom: 10,
     },
     passwordField: {
       flexDirection: 'row',
@@ -51,10 +48,10 @@ export function createAuthFormStyles(theme: {
       borderWidth: 0,
       backgroundColor: 'transparent',
       marginBottom: 0,
-      paddingVertical: 12,
-      paddingLeft: 16,
+      paddingVertical: 0,
+      paddingLeft: 15,
       paddingRight: 8,
-      minHeight: UI.fieldHeight - 2,
+      alignSelf: 'stretch',
       fontSize: 15,
       fontFamily: theme.regularFont,
       color: theme.textColor,
@@ -63,20 +60,20 @@ export function createAuthFormStyles(theme: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 0,
-      paddingLeft: 18,
+      paddingLeft: 15,
       paddingRight: 0,
     },
     leftIcon: {
-      marginRight: 12,
+      marginRight: 10,
     },
     iconInput: {
       flex: 1,
       minWidth: 0,
       borderWidth: 0,
       backgroundColor: 'transparent',
-      paddingVertical: 12,
-      paddingRight: 16,
-      minHeight: UI.fieldHeight - 2,
+      paddingVertical: 0,
+      paddingRight: 15,
+      alignSelf: 'stretch',
       fontSize: 15,
       fontFamily: theme.regularFont,
       color: theme.textColor,
@@ -92,16 +89,13 @@ export function createAuthFormStyles(theme: {
     /** Floating-label field: small label above the value, both inside the box. */
     floatField: {
       justifyContent: 'center',
-      paddingVertical: 8,
-      paddingHorizontal: 18,
-      minHeight: UI.fieldHeight + 2,
+      paddingVertical: 0,
     },
     floatColumn: {
       flex: 1,
       minWidth: 0,
       justifyContent: 'center',
-      paddingVertical: 8,
-      paddingLeft: 18,
+      paddingLeft: 15,
     },
     floatLabel: {
       fontSize: 12,

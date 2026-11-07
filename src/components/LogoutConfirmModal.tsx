@@ -57,11 +57,13 @@ export function LogoutConfirmModal({ visible, onCancel, onConfirm }: LogoutConfi
                 <SurfaceButton
                   label={t('profileSettingsUi.logoutCancel')}
                   onPress={onCancel}
+                  paddingX={12}
                   style={styles.actionButton}
                 />
                 <GlowButton
                   label={t('profileSettingsUi.logoutConfirm')}
                   onPress={onConfirm}
+                  paddingX={12}
                   style={styles.actionButton}
                 />
               </View>

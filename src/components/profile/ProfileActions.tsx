@@ -9,10 +9,9 @@ import {
   type AccessibilityState,
   type GestureResponderEvent,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { PrimaryFill, SECONDARY_BUTTON, UI } from '../ui'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { ThemeContext } from '../../context'
-import { PG, glow } from '../../screens/progress/progressTheme'
 
 type IconName = React.ComponentProps<typeof Ionicons>['name']
 
@@ -43,7 +42,7 @@ export function ProfileActionButton({
 }) {
   const { theme } = useContext(ThemeContext)
   const primary = variant === 'primary'
-  const color = primary ? PG.pillText : PG.pillIdleText
+  const color = primary ? UI.btnPrimaryText : UI.btnSecondaryText
   return (
     <Pressable
       onPress={onPress}
@@ -55,18 +54,12 @@ export function ProfileActionButton({
       testID={testID}
       style={({ pressed }) => [
         styles.btn,
-        primary ? [styles.primary, glow(10, 0.7)] : styles.outline,
+        primary ? styles.primary : styles.outline,
         pressed && { opacity: 0.85 },
       ]}
     >
       {primary ? (
-        <LinearGradient
-          pointerEvents="none"
-          colors={[PG.pillTop, PG.pillBottom]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={[StyleSheet.absoluteFill, styles.fill]}
-        />
+        <PrimaryFill radius={18} />
       ) : null}
       {loading ? (
         <ActivityIndicator color={color} />
@@ -130,9 +123,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  primary: { borderWidth: 1, borderColor: 'transparent' },
-  outline: { borderWidth: 1, borderColor: PG.border, backgroundColor: PG.cardTop },
-  fill: { borderRadius: 18 },
+  primary: { overflow: 'hidden' },
+  outline: SECONDARY_BUTTON,
   label: { fontSize: 15 },
   // Negative margin + padding: room for the primary glow, which a scroll view would clip.
   rowScroll: { marginHorizontal: -12, marginTop: 10, flexGrow: 0 },

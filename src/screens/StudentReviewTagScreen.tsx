@@ -12,7 +12,7 @@ import {
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { LinearGradient } from 'expo-linear-gradient'
+import { PrimaryFill, SECONDARY_BUTTON, UI } from '../components/ui'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import * as ImagePicker from 'expo-image-picker'
 import { useTranslation } from 'react-i18next'
@@ -282,30 +282,21 @@ export function StudentReviewTagScreen() {
             accessibilityState={{ disabled: !canUpload }}
           >
             {canUpload ? (
-              <LinearGradient
-                colors={['#00B8FF', '#1848BA']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={styles.uploadGradient}
-              >
-                <Text allowFontScaling={false} style={[styles.uploadText, { fontFamily: fonts.mediumFont }]}>
+              <View style={styles.uploadGradient}>
+                <PrimaryFill radius={UI.btnRadius} />
+                <Text allowFontScaling={false} style={[styles.uploadText, { fontFamily: fonts.semiBoldFont }]}>
                   {t('studentProfile.continueToSetClip')}
                 </Text>
-              </LinearGradient>
+              </View>
             ) : (
-              <LinearGradient
-                colors={['rgba(0, 57, 132, 0.55)', 'rgba(4, 22, 65, 0.75)']}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={styles.uploadGradient}
-              >
+              <View style={[styles.uploadGradient, SECONDARY_BUTTON]}>
                 <Text
                   allowFontScaling={false}
                   style={[styles.uploadTextDisabled, { fontFamily: fonts.mediumFont }]}
                 >
                   {t('studentProfile.continueToSetClip')}
                 </Text>
-              </LinearGradient>
+              </View>
             )}
           </TouchableOpacity>
         </EntranceView>
@@ -421,24 +412,15 @@ export function StudentReviewTagScreen() {
             accessibilityState={{ disabled: !canUpload }}
           >
             {canUpload ? (
-              <LinearGradient
-                colors={['#00B8FF', '#1848BA']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={styles.uploadGradient}
-              >
-                <LocalSvgAsset assetModule={UPLOAD_ICON} width={26} height={26} />
-                <Text allowFontScaling={false} style={[styles.uploadText, { fontFamily: fonts.mediumFont }]}>
+              <View style={styles.uploadGradient}>
+                <PrimaryFill radius={UI.btnRadius} />
+                <LocalSvgAsset assetModule={UPLOAD_ICON} width={26} height={26} strokeColor={UI.btnPrimaryText} />
+                <Text allowFontScaling={false} style={[styles.uploadText, { fontFamily: fonts.semiBoldFont }]}>
                   {t('studentProfile.uploadVideo')}
                 </Text>
-              </LinearGradient>
+              </View>
             ) : (
-              <LinearGradient
-                colors={['rgba(0, 57, 132, 0.55)', 'rgba(4, 22, 65, 0.75)']}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={styles.uploadGradient}
-              >
+              <View style={[styles.uploadGradient, SECONDARY_BUTTON]}>
                 <LocalSvgAsset
                   assetModule={UPLOAD_ICON}
                   width={26}
@@ -451,7 +433,7 @@ export function StudentReviewTagScreen() {
                 >
                   {uploading ? t('coachFlow.videoSending') : t('studentProfile.uploadVideo')}
                 </Text>
-              </LinearGradient>
+              </View>
             )}
           </TouchableOpacity>
         </EntranceView>
@@ -622,7 +604,7 @@ const styles = StyleSheet.create({
   },
   uploadOuter: {
     marginTop: 22,
-    borderRadius: 18,
+    borderRadius: UI.btnRadius,
     overflow: 'hidden',
     width: '100%',
   },
@@ -631,19 +613,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 28,
-    borderRadius: 18,
+    minHeight: UI.buttonHeight,
+    paddingHorizontal: UI.btnPaddingX,
+    borderRadius: UI.btnRadius,
+    overflow: 'hidden',
   },
   uploadText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    lineHeight: 20,
+    color: UI.btnPrimaryText,
+    fontSize: 18,
   },
   uploadTextDisabled: {
     color: UPLOAD_DISABLED_FG,
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 18,
   },
   headerBoxPanel: {
     backgroundColor: PANEL_BG,

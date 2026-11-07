@@ -16,11 +16,10 @@ import {
 } from 'react-native'
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { ProLibraryGradientFrame } from './ProLibraryGradientFrame'
-import { proLibraryChrome } from '../theme/proLibraryChrome'
 import { useTranslation } from 'react-i18next'
+import { GLOW_SURFACE } from './ui'
 
-const CONTROL_BG = '#0A1E5C'
+
 const CONTROL_ICON = '#2A88F4'
 
 /** "Preview Clip (0.5x)" speed; the play button uses normal speed. */
@@ -270,16 +269,8 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
     return (
       <View style={[styles.outer, style]}>
         <View style={[styles.playerSlot, { height }]}>
-          <ProLibraryGradientFrame
-            borderRadius={proLibraryChrome.radii.frameOuter}
-            innerBorderRadius={proLibraryChrome.radii.frameInner}
-            strokeWidth={2.5}
-            gradientVariant="accent"
-            innerShadow={false}
-            stretchInner
-            style={styles.frame}
-            innerStyle={styles.frameInner}
-          >
+          {/* Design: radius 20, 2px solid #0BF border. */}
+          <View style={styles.frame}>
             <View style={styles.mediaStack}>
               <Video
                 ref={videoRef}
@@ -309,7 +300,7 @@ export const TrimClipPreview = forwardRef<TrimClipPreviewHandle, TrimClipPreview
                 </View>
               ) : null}
             </View>
-          </ProLibraryGradientFrame>
+          </View>
         </View>
 
         <View style={styles.controls}>
@@ -375,10 +366,10 @@ const styles = StyleSheet.create({
   frame: {
     flex: 1,
     width: '100%',
-  },
-  frameInner: {
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#00BBFF',
     backgroundColor: '#000000',
-    padding: 0,
     overflow: 'hidden',
   },
   mediaStack: {
@@ -406,8 +397,8 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: 48,
     height: 52,
-    borderRadius: 18,
-    backgroundColor: CONTROL_BG,
+    borderRadius: 20,
+    ...GLOW_SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -415,8 +406,8 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 4,
     height: 52,
-    borderRadius: 18,
-    backgroundColor: CONTROL_BG,
+    borderRadius: 20,
+    ...GLOW_SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,

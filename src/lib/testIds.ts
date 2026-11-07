@@ -100,6 +100,7 @@ export const TEST_IDS = {
   viewAngleConfirm: 'view-angle-confirm',
   setClipContinue: 'set-clip-continue',
   setClipBack: 'set-clip-back',
+  setClipNext: 'set-clip-next',
   coachHomeAnalyze: 'coach-home-analyze',
   // Follows and coach specialties
   coachCard: (id: string) => `coach-card-${id}`,

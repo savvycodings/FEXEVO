@@ -9,7 +9,7 @@ import {
   Alert,
   type LayoutChangeEvent,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { PrimaryFill, UI } from '../../components/ui'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated'
 import Ionicons from '@expo/vector-icons/Ionicons'
@@ -281,16 +281,12 @@ export function MyCoachSwipeableStudentCard({
                 style={styles.makeCoachOuter}
                 accessibilityLabel="Make this person a coach"
               >
-                <LinearGradient
-                  colors={['#0022FF', '#00BBFF']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.makeCoachInner}
-                >
+                <View style={styles.makeCoachInner}>
+                  <PrimaryFill radius={12} />
                   <Text allowFontScaling={false} style={[styles.makeCoachText, { fontFamily: fonts.semiBoldFont }]}>
                     Make coach
                   </Text>
-                </LinearGradient>
+                </View>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -384,7 +380,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   makeCoachText: {
-    color: '#FFFFFF',
+    color: UI.btnPrimaryText,
     fontSize: 11,
     letterSpacing: 0.2,
   },

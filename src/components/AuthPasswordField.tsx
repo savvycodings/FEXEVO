@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react'
 import { Pressable, Text, View, TextInput, TouchableOpacity, type TextInputProps, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LocalSvgAsset } from './LocalSvgAsset'
-import { createAuthFormStyles, AUTH_ICON_COLOR } from './authFormStyles'
+import { createAuthFormStyles, AUTH_ICON_COLOR, AUTH_PLACEHOLDER_COLOR } from './authFormStyles'
 
 const SHOW_PASSWORD_ICON = require('../../assets/sighnin/showpassword.svg')
 const HIDE_PASSWORD_ICON = require('../../assets/sighnin/hidepassword.svg')
@@ -17,8 +17,8 @@ type AuthPasswordFieldProps = Omit<TextInputProps, 'secureTextEntry'> & {
   hasError?: boolean
   fieldStyle?: StyleProp<TextStyle>
   wrapStyle?: StyleProp<ViewStyle>
-  /** Ionicons name shown before the text. */
-  leftIcon?: React.ComponentProps<typeof Ionicons>['name']
+  /** Ionicons name, or a custom icon element, shown before the text. */
+  leftIcon?: React.ComponentProps<typeof Ionicons>['name'] | React.ReactElement
   /** Visibility toggle art: the scan-frame SVG (default) or an eye icon. */
   toggleIcon?: 'scan' | 'eye'
   /** Floating label shown inside the box above the value (login design). */
@@ -53,8 +53,9 @@ export function AuthPasswordField({
         leftIcon && { paddingLeft: 0 },
         fieldStyle,
         style,
+        !rest.value && styles.placeholderText,
       ]}
-      placeholderTextColor={placeholderTextColor ?? theme.placeholderTextColor}
+      placeholderTextColor={placeholderTextColor ?? AUTH_PLACEHOLDER_COLOR}
       secureTextEntry={!visible}
       editable={editable}
       onFocus={(e) => {
@@ -80,8 +81,10 @@ export function AuthPasswordField({
           leftIcon && styles.iconField,
         ]}
       >
-        {leftIcon ? (
+        {typeof leftIcon === 'string' ? (
           <Ionicons name={leftIcon} size={24} color={AUTH_ICON_COLOR} style={styles.leftIcon} />
+        ) : leftIcon ? (
+          <View style={styles.leftIcon}>{leftIcon}</View>
         ) : null}
         {label ? (
           <Pressable style={styles.floatColumn} onPress={() => inputRef.current?.focus()}>

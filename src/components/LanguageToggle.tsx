@@ -64,28 +64,30 @@ export function LanguageToggle({ style }: Props) {
   );
 }
 
-function getStyles(theme: { mediumFont?: string; semiBoldFont?: string }) {
+function getStyles(theme: { regularFont?: string; mediumFont?: string; semiBoldFont?: string }) {
   return StyleSheet.create({
     wrap: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 40,
+      gap: 20,
       paddingVertical: 16,
       marginTop: 8,
     },
+    /** Design: `#336AB3`, Inter 400 12px; the selected language is `#00B8FF`. */
     link: {
-      fontFamily: theme.mediumFont,
-      fontSize: 15,
-      color: "rgba(123, 140, 230, 0.7)",
+      fontFamily: theme.regularFont ?? theme.mediumFont,
+      fontSize: 12,
+      color: "#336AB3",
+      textAlign: "center",
     },
     linkActive: {
-      color: UI.accent,
+      color: "#00B8FF",
     },
     sep: {
-      fontFamily: (theme as { regularFont?: string }).regularFont ?? theme.mediumFont,
-      fontSize: 14,
-      color: "rgba(123, 140, 230, 0.7)",
+      fontFamily: theme.regularFont ?? theme.mediumFont,
+      fontSize: 12,
+      color: "#336AB3",
     },
   });
 }

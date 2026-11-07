@@ -25,10 +25,11 @@ import { LanguageToggle } from "../components/LanguageToggle";
 import { CountryPickerModal } from "../components/CountryPickerModal";
 import { AuthFormField } from "../components/AuthFormField";
 import { AuthPasswordField } from "../components/AuthPasswordField";
-import { AUTH_INPUT_FOCUS_BORDER, AUTH_INPUT_FOCUS_BORDER_WIDTH, AUTH_INPUT_ERROR_BORDER_WIDTH, AUTH_ICON_COLOR, createAuthFormStyles } from "../components/authFormStyles";
+import { AUTH_ICON_COLOR, createAuthFormStyles } from "../components/authFormStyles";
 import { findCountry, type Country } from "../lib/countries";
 import { TEST_IDS } from '../lib/testIds'
-import { AuthBackdrop, GlowButton, OrDivider, SocialAuthRow, UI } from "../components/ui";
+import { CaretDownIcon, CountryFieldIcon, EmailFieldIcon, NameFieldIcon, PasswordFieldIcon } from "../components/AuthFieldIcons";
+import { AuthBackdrop, FIELD_BOX, FIELD_BOX_ACTIVE, FIELD_PLACEHOLDER_COLOR, FIELD_PLACEHOLDER_SIZE, GlowButton, GradientText, OrDivider, SocialAuthRow, UI } from "../components/ui";
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -167,10 +168,7 @@ export function SignUp(props?: SignUpProps) {
           <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
         </View>
         <View style={styles.header}>
-          <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.heroTitleTechniqueWeb}>
-            {t("auth.signUpHeroTitleLead")}
-            <Text style={styles.heroTitleAccent}>{t("auth.signUpHeroTitleAccent")}</Text>
-          </Text>
+          <GradientText style={styles.heroTitleTechniqueWeb}>{t("auth.signUpHeroTitle")}</GradientText>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.subtitle}>
             {t("auth.signUpHeroSubtitle")}
           </Text>
@@ -188,7 +186,7 @@ export function SignUp(props?: SignUpProps) {
           }}
           autoComplete="name"
           editable={!loading && !socialLoading}
-          leftIcon="person-outline"
+          leftIcon={<NameFieldIcon />}
         />
         {errors.name ? <Text style={fieldStyles.errorText}>{errors.name}</Text> : null}
         <AuthFormField
@@ -205,7 +203,7 @@ export function SignUp(props?: SignUpProps) {
           keyboardType="email-address"
           autoComplete="email"
           editable={!loading && !socialLoading}
-          leftIcon="mail-outline"
+          leftIcon={<EmailFieldIcon />}
         />
         {errors.email ? <Text style={fieldStyles.errorText}>{errors.email}</Text> : null}
         <AuthPasswordField
@@ -220,7 +218,7 @@ export function SignUp(props?: SignUpProps) {
           }}
           autoComplete="password-new"
           editable={!loading && !socialLoading}
-          leftIcon="lock-closed-outline"
+          leftIcon={<PasswordFieldIcon />}
         />
         {errors.password ? <Text style={fieldStyles.errorText}>{errors.password}</Text> : null}
         <AuthPasswordField
@@ -235,8 +233,7 @@ export function SignUp(props?: SignUpProps) {
           }}
           autoComplete="password-new"
           editable={!loading && !socialLoading}
-          leftIcon="lock-closed-outline"
-          toggleIcon="eye"
+          leftIcon={<PasswordFieldIcon />}
         />
         {errors.confirmPassword ? <Text style={fieldStyles.errorText}>{errors.confirmPassword}</Text> : null}
 
@@ -262,13 +259,13 @@ export function SignUp(props?: SignUpProps) {
             </>
           ) : (
             <>
-              <Ionicons name="globe-outline" size={24} color={AUTH_ICON_COLOR} />
+              <CountryFieldIcon />
               <Text allowFontScaling={false} style={styles.countryTriggerPlaceholder} numberOfLines={1}>
                 {t("auth.selectYourCountry")}
               </Text>
             </>
           )}
-          <Ionicons name="chevron-down" size={20} color={UI.accent} />
+          <CaretDownIcon />
         </TouchableOpacity>
         {errors.country ? <Text style={fieldStyles.errorText}>{errors.country}</Text> : null}
 
@@ -348,41 +345,27 @@ function getStyles(theme: any) {
       alignItems: "center",
       marginBottom: 22,
     },
+    /** Design spec: brand gradient text (`GradientText`), Inter 500 24px. */
     heroTitleTechniqueWeb: {
-      fontSize: 34,
+      fontSize: 24,
       fontFamily: theme.mediumFont,
       textAlign: "center",
       marginBottom: 8,
-      color: UI.text,
-    },
-    heroTitleAccent: {
-      color: UI.accentStrong,
     },
     subtitle: {
-      fontSize: 15,
+      fontSize: 12,
       fontFamily: theme.regularFont,
-      color: UI.textMuted,
+      color: UI.btnTextColor,
       textAlign: "center",
     },
     countryTrigger: {
+      ...FIELD_BOX,
       flexDirection: "row",
       alignItems: "center",
-      gap: 12,
-      borderWidth: 1,
-      borderColor: UI.surfaceBorder,
-      borderRadius: UI.radius,
-      paddingHorizontal: 18,
-      paddingVertical: 12,
-      minHeight: UI.fieldHeight,
-      backgroundColor: UI.surface,
-      marginBottom: 12,
+      gap: 10,
     },
-    countryTriggerFocused: {
-      borderWidth: AUTH_INPUT_FOCUS_BORDER_WIDTH,
-      borderColor: AUTH_INPUT_FOCUS_BORDER,
-    },
+    countryTriggerFocused: FIELD_BOX_ACTIVE,
     countryTriggerError: {
-      borderWidth: AUTH_INPUT_ERROR_BORDER_WIDTH,
       borderColor: "#FF5A6A",
       backgroundColor: "rgba(70, 12, 20, 0.35)",
       marginBottom: 6,
@@ -401,9 +384,9 @@ function getStyles(theme: any) {
     },
     countryTriggerPlaceholder: {
       flex: 1,
-      fontSize: 15,
-      fontFamily: theme.regularFont,
-      color: theme.placeholderTextColor,
+      fontSize: FIELD_PLACEHOLDER_SIZE,
+      fontFamily: theme.mediumFont,
+      color: FIELD_PLACEHOLDER_COLOR,
     },
     divider: {
       marginTop: 10,
@@ -416,14 +399,17 @@ function getStyles(theme: any) {
       alignItems: "center",
       paddingTop: 4,
     },
+    /** Same size as the link so the line reads as one (the mock shows them matching). */
     switchText: {
-      fontSize: 15,
+      fontSize: 12,
       fontFamily: theme.regularFont,
-      color: UI.textMuted,
+      color: UI.btnTextColor,
     },
+    /** Design: `#00B8FF`, Inter 700 12px. */
     switchTextBold: {
-      fontFamily: theme.semiBoldFont,
-      color: UI.accent,
+      fontSize: 12,
+      fontFamily: theme.boldFont,
+      color: "#00B8FF",
     },
   });
 }

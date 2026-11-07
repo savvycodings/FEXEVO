@@ -1,14 +1,11 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import Ionicons from '@expo/vector-icons/Ionicons'
+import { ActivityIndicator, Image, StyleSheet, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { PG, glow } from '../screens/progress/progressTheme'
 import { ThemeContext } from '../context'
 import { vercel as defaultTheme } from '../theme'
 import { createFrameGrabber, type FrameGrabber } from '../lib/videoFrameGrab'
 import { GestureDetector } from 'react-native-gesture-handler'
 import { FRAME_VIEW_RESET, type FrameView, useFrameZoomGesture, zoomedImageStyle } from './contactFrameZoom'
-import { ZoomChips } from './ContactFrameZoomChips'
 import { ContactFrameViewer } from './ContactFrameViewer'
 
 /** Frames shown around the contact: four before, the contact, four after. */
@@ -20,6 +17,8 @@ const DEFAULT_FPS = 30
 const GRAB_DEBOUNCE_MS = 150
 const ACCENT = '#2A88F4'
 const CELL_BG = '#0A1E5C'
+/** Design: rounded square frames. */
+const CELL_RADIUS = 20
 
 type Props = {
   videoUri: string
@@ -32,6 +31,12 @@ type Props = {
   onChangeContactMs: (ms: number) => void
   /** File frame index of the cell the player is on, once fps is known. */
   onChangeContactFrame?: (frame: number) => void
+  /** Set Clip's "Contact" step: show one frame (stepper, zoom, Next) in place of the grid. */
+  contactStep?: boolean
+  /** X on the Contact step: back to the grid. */
+  onCloseContactStep?: () => void
+  /** Next on the Contact step, after the shown frame became the contact. */
+  onConfirm?: () => void
 }
 
 /** Frame that is on screen at `ms`; 1 ms of slack absorbs player position rounding. */
@@ -39,10 +44,6 @@ function frameAt(ms: number, frameMs: number) {
   return Math.floor((ms + 1) / frameMs)
 }
 
-/** Start time of a frame, rounded up so it maps back to the same frame here and on the backend. */
-function frameStartMs(index: number, frameMs: number) {
-  return Math.ceil(index * frameMs)
-}
 
 /**
  * Real frames around the marked contact, one per captured frame, so the player can tap the exact
@@ -56,8 +57,10 @@ export function ContactFrameGrid({
   clipEndMs,
   onChangeContactMs,
   onChangeContactFrame,
+  contactStep = false,
+  onCloseContactStep,
+  onConfirm,
 }: Props) {
-  const { t } = useTranslation()
   const ctx = useContext(ThemeContext)?.theme
   const theme = ctx?.backgroundColor != null ? ctx : defaultTheme
 
@@ -68,7 +71,6 @@ export function ContactFrameGrid({
   const [gridW, setGridW] = useState(0)
   /** One zoom/pan for every frame, shared with the viewer. */
   const [view, setView] = useState<FrameView>(FRAME_VIEW_RESET)
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const grabberRef = useRef<FrameGrabber | null>(null)
   const onFrameRef = useRef(onChangeContactFrame)
   onFrameRef.current = onChangeContactFrame
@@ -105,7 +107,6 @@ export function ContactFrameGrid({
     cacheRef.current = new Map()
     setFrames({})
     setView(FRAME_VIEW_RESET)
-    setViewerIndex(null)
     let cancelled = false
     void grabber
       .detectFps()
@@ -175,84 +176,15 @@ export function ContactFrameGrid({
 
   // Floor (minus a px) so Android's pixel rounding can't push the third cell onto the next row.
   const cellW = gridW > 0 ? Math.floor((gridW - GAP * (COLS - 1)) / COLS) - 1 : 0
-  const cellH = cellW / aspect
+  /** Design: square cells; the frame covers the square. */
+  const cellH = cellW
   // Same instant the thumbnail was decoded at, so the stored contact is that picture.
   const pick = (index: number) => onChangeContactMs(Math.round((index + 0.25) * frameMs))
-  const contactSec = (frameStartMs(contactFrame, frameMs) / 1000).toFixed(3)
 
-  return (
-    <View style={styles.root} testID="contact-frame-grid">
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.semiBoldFont }]}>
-            {t('technique.setClipScreen.contactFrameTitle')}
-          </Text>
-        </View>
-        <View style={styles.stepper}>
-          <TouchableOpacity
-            style={styles.stepBtn}
-            onPress={() => pick(Math.max(firstFrame, contactFrame - 1))}
-            disabled={contactFrame <= firstFrame}
-            accessibilityRole="button"
-            accessibilityLabel={t('technique.setClipScreen.previousFrame')}
-            testID="contact-frame-prev"
-          >
-            <Ionicons name="chevron-back" size={20} color={PG.labelBlue} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.stepBtn}
-            onPress={() => pick(Math.min(lastFrame, contactFrame + 1))}
-            disabled={contactFrame >= lastFrame}
-            accessibilityRole="button"
-            accessibilityLabel={t('technique.setClipScreen.nextFrame')}
-            testID="contact-frame-next"
-          >
-            <Ionicons name="chevron-forward" size={20} color={PG.labelBlue} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.zoomRow}>
-        <Text allowFontScaling={false} style={[styles.zoomLabel, { fontFamily: theme.mediumFont }]}>
-          {t('technique.setClipScreen.zoom')}
-        </Text>
-        <ZoomChips view={view} onViewChange={setView} font={theme.mediumFont} testIDPrefix="contact-frame-zoom" />
-      </View>
-
-      <View style={styles.grid} onLayout={(e) => setGridW(e.nativeEvent.layout.width)}>
-        {cellW > 0
-          ? windowFrames.map((index) => {
-              const active = index === contactFrame
-              const offset = index - contactFrame
-              return (
-                <FrameCell
-                  key={index}
-                  index={index}
-                  uri={frames[index]}
-                  active={active}
-                  label={active ? t('technique.contactLabel') : offset > 0 ? `+${offset}` : `${offset}`}
-                  width={cellW}
-                  height={cellH}
-                  view={view}
-                  onViewChange={setView}
-                  // Tapping the current contact opens it large; picking it again would do nothing.
-                  onTap={() => (active ? setViewerIndex(index) : pick(index))}
-                  onExpand={() => setViewerIndex(index)}
-                  font={theme.mediumFont}
-                />
-              )
-            })
-          : null}
-      </View>
-
-      <Text allowFontScaling={false} style={[styles.footer, { fontFamily: theme.regularFont }]}>
-        {t('technique.setClipScreen.contactFrameInfo', { frame: contactFrame, sec: contactSec, fps })}
-        {fpsMeasured ? '' : ` ${t('technique.setClipScreen.fpsAssumed')}`}
-      </Text>
-
+  if (contactStep) {
+    return (
       <ContactFrameViewer
-        openIndex={viewerIndex}
-        contactFrame={contactFrame}
+        initialIndex={contactFrame}
         firstFrame={firstFrame}
         lastFrame={lastFrame}
         aspect={aspect}
@@ -260,12 +192,42 @@ export function ContactFrameGrid({
         view={view}
         onViewChange={setView}
         onUse={(index) => {
-          setViewerIndex(null)
           pick(index)
+          // Report the frame now: the next step unmounts this grid before its effect would run.
+          if (fpsMeasured) onFrameRef.current?.(index)
+          onConfirm?.()
         }}
-        onClose={() => setViewerIndex(null)}
+        onClose={() => onCloseContactStep?.()}
         fonts={{ regular: theme.regularFont, medium: theme.mediumFont, semiBold: theme.semiBoldFont }}
       />
+    )
+  }
+
+  return (
+    <View style={styles.root} testID="contact-frame-grid">
+      <View style={styles.grid} onLayout={(e) => setGridW(e.nativeEvent.layout.width)}>
+        {cellW > 0
+          ? windowFrames.map((index) => {
+              const active = index === contactFrame
+              return (
+                <FrameCell
+                  key={index}
+                  index={index}
+                  uri={frames[index]}
+                  active={active}
+                  size={cellW}
+                  aspect={aspect}
+                  view={view}
+                  onViewChange={setView}
+                  // Tap only selects; Set Clip's "Next" opens the Contact step.
+                  onTap={() => {
+                    if (!active) pick(index)
+                  }}
+                />
+              )
+            })
+          : null}
+      </View>
     </View>
   )
 }
@@ -274,116 +236,59 @@ type CellProps = {
   index: number
   uri: string | undefined
   active: boolean
-  label: string
-  width: number
-  height: number
+  /** Square cell side. */
+  size: number
+  /** Width / height of the video picture. */
+  aspect: number
   view: FrameView
   onViewChange: (v: FrameView) => void
   onTap: () => void
-  onExpand: () => void
-  font?: string
 }
 
-/** One frame: shared zoom crop, tap to pick, drag/pinch to zoom, corner button to enlarge. */
-function FrameCell({ index, uri, active, label, width, height, view, onViewChange, onTap, onExpand, font }: CellProps) {
+/** Design: the contact cell has a 2px solid #0BF border. */
+const RING = 2
+
+/** One frame: square, picture covers it; shared zoom crop, tap to pick, drag/pinch to zoom. */
+function FrameCell({ index, uri, active, size, aspect, view, onViewChange, onTap }: CellProps) {
   const { t } = useTranslation()
-  const gesture = useFrameZoomGesture({ view, onViewChange, width, height, onTap })
+  const inner = active ? size - RING * 2 : size
+  // Cover: the picture's short side fills the square.
+  const picW = aspect >= 1 ? inner * aspect : inner
+  const picH = aspect >= 1 ? inner : inner / aspect
+  const gesture = useFrameZoomGesture({ view, onViewChange, width: picW, height: picH, onTap })
   return (
-    <View style={{ width, height }}>
-      <GestureDetector gesture={gesture}>
-        <View
-          style={[styles.cell, { width, height }, active && styles.cellActive]}
-          accessibilityRole="button"
-          accessibilityState={{ selected: active }}
-          aria-selected={active}
-          accessibilityLabel={t('technique.setClipScreen.frameN', { n: index })}
-          testID={`contact-frame-${index}`}
-        >
-          {uri ? (
-            <Image source={{ uri }} style={zoomedImageStyle(view, width - 4, height - 4)} resizeMode="stretch" />
-          ) : (
-            <ActivityIndicator size="small" color={ACCENT} />
-          )}
-          <View style={[styles.badge, active && styles.badgeActive]}>
-            <Text allowFontScaling={false} style={[styles.badgeText, { fontFamily: font }]}>
-              {label}
-            </Text>
-          </View>
-        </View>
-      </GestureDetector>
-      <TouchableOpacity
-        onPress={onExpand}
-        style={styles.expandBtn}
-        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+    <GestureDetector gesture={gesture}>
+      <View
+        style={[styles.cell, { width: size, height: size }, active && styles.cellActive]}
         accessibilityRole="button"
-        accessibilityLabel={t('technique.setClipScreen.expandFrame', { n: index })}
-        testID={`contact-frame-expand-${index}`}
+        accessibilityState={{ selected: active }}
+        aria-selected={active}
+        accessibilityLabel={t('technique.setClipScreen.frameN', { n: index })}
+        testID={`contact-frame-${index}`}
       >
-        <Ionicons name="expand-outline" size={14} color="#FFFFFF" />
-      </TouchableOpacity>
-    </View>
+        {uri ? (
+          <View
+            style={{ position: 'absolute', width: picW, height: picH, left: (inner - picW) / 2, top: (inner - picH) / 2 }}
+          >
+            <Image source={{ uri }} style={zoomedImageStyle(view, picW, picH)} resizeMode="stretch" />
+          </View>
+        ) : (
+          <ActivityIndicator size="small" color={ACCENT} />
+        )}
+      </View>
+    </GestureDetector>
   )
 }
 
 const styles = StyleSheet.create({
-  root: {
-    marginTop: 16,
-    gap: 12,
-    backgroundColor: PG.cardPlain,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: PG.borderSoft,
-    padding: 14,
-  },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerText: { flex: 1, gap: 2 },
-  title: { fontSize: 16, color: '#FFFFFF' },
-  subtitle: { fontSize: 14, lineHeight: 19, color: '#A9B8D6' },
-  stepper: { flexDirection: 'row', gap: 8 },
-  stepBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: CELL_BG,
-    borderWidth: 1.5,
-    borderColor: PG.border,
-  },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
+  root: { marginTop: 16 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: GAP },
   cell: {
-    borderRadius: 12,
+    borderRadius: CELL_RADIUS,
     overflow: 'hidden',
     backgroundColor: CELL_BG,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
   },
-  cellActive: { borderColor: '#3D8BFF', ...glow(10, 0.7) },
-  badge: {
-    position: 'absolute',
-    left: 6,
-    bottom: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: 'rgba(5, 12, 35, 0.75)',
-  },
-  badgeActive: { backgroundColor: ACCENT },
-  expandBtn: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(5, 12, 35, 0.75)',
-  },
-  zoomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  zoomLabel: { fontSize: 14, color: PG.muted },
-  badgeText: { fontSize: 12, color: '#FFFFFF' },
-  footer: { fontSize: 13, color: PG.muted },
+  cellActive: { borderWidth: RING, borderColor: '#00BBFF' },
 })

@@ -2,7 +2,7 @@ import { useContext, useMemo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { LinearGradient } from 'expo-linear-gradient'
+import { PrimaryFill, UI } from '../../components/ui'
 import Svg, { Circle, Defs, G, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import {
@@ -245,12 +245,13 @@ export function MetricsPage({
 
       {onCompare ? (
         <Pressable accessibilityRole="button" onPress={onCompare}>
-          <LinearGradient colors={['#3EC8FF', '#2454FF']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.compareBtn}>
+          <View style={styles.compareBtn}>
+            <PrimaryFill radius={UI.btnRadius} />
             <Text allowFontScaling={false} style={[styles.compareBtnText, { fontFamily: theme.semiBoldFont }]}>
               {t('technique.metrics.seeComparison')}
             </Text>
-            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-          </LinearGradient>
+            <Ionicons name="arrow-forward" size={18} color={UI.btnPrimaryText} />
+          </View>
         </Pressable>
       ) : null}
     </View>
@@ -319,12 +320,14 @@ const styles = StyleSheet.create({
   legendText: { color: '#C5D4F5', fontSize: 11 },
   emptyChart: { color: '#86A7D2', fontSize: 13, lineHeight: 18 },
   compareBtn: {
-    height: 52,
-    borderRadius: 16,
+    height: UI.buttonHeight,
+    borderRadius: UI.btnRadius,
+    overflow: 'hidden',
+    paddingHorizontal: UI.btnPaddingX,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
   },
-  compareBtnText: { color: '#FFFFFF', fontSize: 16 },
+  compareBtnText: { color: UI.btnPrimaryText, fontSize: 18 },
 })

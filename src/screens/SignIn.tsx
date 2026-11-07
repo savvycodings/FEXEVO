@@ -24,7 +24,8 @@ import { LanguageToggle } from "../components/LanguageToggle";
 import { AuthFormField } from "../components/AuthFormField";
 import { AuthPasswordField } from "../components/AuthPasswordField";
 import { TEST_IDS } from '../lib/testIds'
-import { AuthBackdrop, GlassCard, GlowButton, OrDivider, SocialAuthRow, SurfaceIconButton, TextLink, UI } from "../components/ui";
+import { AuthBackdrop, GlassCard, GlowButton, OrDivider, SocialAuthRow, TextLink, UI } from "../components/ui";
+import { AddUserIcon, EmailFieldIcon, PasswordFieldIcon } from "../components/AuthFieldIcons";
 
 const APP_LOGO = require("../../assets/logo.png");
 
@@ -36,7 +37,7 @@ type SignInProps = {
   onRestart?: () => void;
 };
 
-export function SignIn({ onForgotPassword, onSignUp, onRestart }: SignInProps) {
+export function SignIn({ onForgotPassword, onSignUp }: SignInProps) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { theme } = useContext(ThemeContext);
@@ -136,11 +137,10 @@ export function SignIn({ onForgotPassword, onSignUp, onRestart }: SignInProps) {
           <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
         </View>
 
-        <Text allowFontScaling={false} style={styles.title}>{t("auth.signIn")}</Text>
-
         <AuthFormField
           theme={theme}
-          label={t("auth.email")}
+          placeholder={t("auth.email")}
+          leftIcon={<EmailFieldIcon />}
           testID={TEST_IDS.signinEmail}
           value={email}
           onChangeText={setEmail}
@@ -151,12 +151,31 @@ export function SignIn({ onForgotPassword, onSignUp, onRestart }: SignInProps) {
         />
         <AuthPasswordField
           theme={theme}
-          label={t("auth.password")}
+          placeholder={t("auth.password")}
+          leftIcon={<PasswordFieldIcon />}
           testID={TEST_IDS.signinPassword}
           value={password}
           onChangeText={setPassword}
           autoComplete="password"
           editable={!busy}
+        />
+
+        <GlowButton
+          label={t("auth.signIn")}
+          arrow
+          onPress={handleSignIn}
+          loading={loading}
+          disabled={!!socialLoading}
+          testID={TEST_IDS.signinSubmit}
+          style={styles.submit}
+        />
+
+        <TextLink
+          label={t("auth.forgotPassword")}
+          onPress={onForgotPassword}
+          testID={TEST_IDS.signinForgot}
+          disabled={busy}
+          style={styles.forgot}
         />
 
         {enabledSocialProviders.length > 0 ? (
@@ -171,38 +190,11 @@ export function SignIn({ onForgotPassword, onSignUp, onRestart }: SignInProps) {
           </>
         ) : null}
 
-        <View style={styles.actionRow}>
-          {onRestart ? (
-            <SurfaceIconButton
-              icon="chevron-back"
-              onPress={onRestart}
-              accessibilityLabel={t("auth.restart")}
-              testID={TEST_IDS.signinRestart}
-            />
-          ) : null}
-          <GlowButton
-            label={t("auth.signIn")}
-            onPress={handleSignIn}
-            loading={loading}
-            disabled={!!socialLoading}
-            testID={TEST_IDS.signinSubmit}
-            style={styles.submit}
-          />
-        </View>
-
-        <TextLink
-          label={t("auth.forgotPassword")}
-          onPress={onForgotPassword}
-          testID={TEST_IDS.signinForgot}
-          disabled={busy}
-          style={styles.forgot}
-        />
-
         <LanguageToggle />
 
         {onSignUp ? (
           <GlassCard style={styles.signUpCard}>
-            <Ionicons name="person-add-outline" size={36} color={UI.accent} />
+            <AddUserIcon />
             <Text allowFontScaling={false} style={styles.signUpCardText} numberOfLines={2}>
               {t("auth.noAccount")}
             </Text>
@@ -237,42 +229,30 @@ function getStyles(theme: any) {
     },
     logoWrap: {
       alignItems: "center",
-      marginBottom: 56,
+      marginBottom: 40,
     },
     logoImage: {
       width: 190,
       height: 100,
     },
-    title: {
-      color: UI.text,
-      fontSize: 24,
-      fontFamily: theme.regularFont,
-      marginBottom: 20,
-    },
-    divider: {
-      marginTop: 18,
-      marginBottom: 22,
-    },
-    actionRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      marginTop: 28,
-    },
     submit: {
-      flex: 1,
+      marginTop: 20,
     },
     forgot: {
-      alignSelf: "flex-end",
-      marginTop: 18,
+      alignSelf: "center",
+      marginTop: 20,
+    },
+    divider: {
+      marginTop: 20,
+      marginBottom: 20,
     },
     signUpCard: {
       alignItems: "center",
       marginTop: 24,
     },
     signUpCardText: {
-      color: UI.textMuted,
-      fontSize: 15,
+      color: UI.btnTextColor,
+      fontSize: 12,
       fontFamily: theme.regularFont,
       marginBottom: 4,
     },

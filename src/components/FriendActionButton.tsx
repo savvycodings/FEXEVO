@@ -11,7 +11,7 @@ import {
   unfriend,
   type RelationshipStatus,
 } from '../lib/friendsApi'
-import { UI } from './ui'
+import { SECONDARY_BUTTON, UI } from './ui'
 import { ProfileActionButton } from './profile/ProfileActions'
 
 type Confirm = 'cancel' | 'remove' | null
@@ -144,7 +144,7 @@ export function FriendActionButton({ userId, name }: { userId: string; name: str
 const styles = StyleSheet.create({
   /** Sits in a ProfileActionRow; the error line shows under the button. */
   wrap: {},
-  btnOutline: { borderWidth: 1, borderColor: UI.trackBorder, backgroundColor: UI.surface },
+  btnOutline: SECONDARY_BUTTON,
   label: { fontSize: 15, color: '#FFFFFF' },
   error: { marginTop: 6, fontSize: 13, color: UI.error },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },

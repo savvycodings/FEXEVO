@@ -29,11 +29,10 @@ import {
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LocalSvgAsset } from "../components/LocalSvgAsset";
 import { CourtSideGraphic } from "../components/CourtSideGraphic";
-import { PAGE_TOP_EXTRA_PADDING } from "../../constants";
+import { CaretDownIcon } from "../components/AuthFieldIcons";
 import { TEST_IDS } from '../lib/testIds'
-import { CARD_GLOW, GlowButton, OptionButton, SegmentedToggle, SurfaceIconButton, UI } from "../components/ui";
+import { CARD, FIELD_BOX, FIELD_BOX_ACTIVE, FIELD_PLACEHOLDER_COLOR, GlowButton, OptionButton, SegmentedToggle, SurfaceIconButton, UI } from "../components/ui";
 
-const APP_LOGO = require("../../assets/logo.png");
 const SELECTION_BOX_BG = "#041641";
 const RANK_LOGO_BOX_H = 80;
 const RANK_LOGO_BOX_W = 200;
@@ -87,14 +86,25 @@ type ProfileSetupProps = {
   onRestart?: () => void;
 };
 
-export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onBack, onRestart }: ProfileSetupProps) {
+export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onBack }: ProfileSetupProps) {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const insets = useSafeAreaInsets();
   const screenBg = theme.backgroundColor ?? "#030A17";
   const styles = getStyles(theme);
   const [step, setStep] = useState(1);
-  const [rankingSetupPhase, setRankingSetupPhase] = useState<"choose" | "configure">("choose");
+  /** Which stacked anthropometric field is focused (drives the active field border). */
+  const [anthroFocus, setAnthroFocus] = useState<"height" | "weight" | null>(null);
+  const [levelOtherFocused, setLevelOtherFocused] = useState(false);
+  /** Height unit shown in the field; the profile always stores centimetres. */
+  const [heightUnit, setHeightUnit] = useState<"cm" | "ft">("cm");
+  const [heightUnitMenuOpen, setHeightUnitMenuOpen] = useState(false);
+  const [heightFt, setHeightFt] = useState("");
+  /** Weight unit shown in the field; the profile always stores kilograms. */
+  const [weightUnit, setWeightUnit] = useState<"kg" | "lb">("kg");
+  const [weightUnitMenuOpen, setWeightUnitMenuOpen] = useState(false);
+  const [weightLbInput, setWeightLbInput] = useState("");
+  const [heightIn, setHeightIn] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submittingOverlay, setSubmittingOverlay] = useState(false);
@@ -105,6 +115,50 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
   const [dominantHand, setDominantHand] = useState<"left" | "right" | null>(null);
   const [courtSide, setCourtSide] = useState<"left" | "right" | null>(null);
   const [heightCmInput, setHeightCmInput] = useState("");
+
+  /** Feet + inches → centimetres (rounded), kept in `heightCmInput` so validation and saving stay in cm. */
+  const setImperialHeight = (part: "ft" | "in", v: string) => {
+    const ft = part === "ft" ? v : heightFt;
+    const inch = part === "in" ? v : heightIn;
+    if (part === "ft") setHeightFt(v);
+    else setHeightIn(v);
+    const totalIn = Number(ft || 0) * 12 + Number(inch || 0);
+    setHeightCmInput(ft || inch ? String(Math.round(totalIn * 2.54)) : "");
+  };
+
+  /** Pounds → kilograms (1 decimal), kept in `weightKgInput` so validation and saving stay in kg. */
+  const setWeightLb = (v: string) => {
+    setWeightLbInput(v);
+    const lb = Number(v);
+    setWeightKgInput(v && lb > 0 ? String(Math.round(lb * 0.45359237 * 10) / 10) : "");
+  };
+
+  const chooseWeightUnit = (u: "kg" | "lb") => {
+    setWeightUnitMenuOpen(false);
+    if (u === weightUnit) return;
+    if (u === "lb") {
+      const kg = Number(weightKgInput);
+      setWeightLbInput(kg > 0 ? String(Math.round(kg / 0.45359237)) : "");
+    }
+    setWeightUnit(u);
+  };
+
+  const chooseHeightUnit = (u: "cm" | "ft") => {
+    setHeightUnitMenuOpen(false);
+    if (u === heightUnit) return;
+    if (u === "ft") {
+      const cm = Number(heightCmInput);
+      if (cm > 0) {
+        const totalIn = Math.round(cm / 2.54);
+        setHeightFt(String(Math.floor(totalIn / 12)));
+        setHeightIn(String(totalIn % 12));
+      } else {
+        setHeightFt("");
+        setHeightIn("");
+      }
+    }
+    setHeightUnit(u);
+  };
   const [weightKgInput, setWeightKgInput] = useState("");
   const [hasRanking, setHasRanking] = useState<boolean | null>(null);
   const [level, setLevel] = useState<string | null>(null);
@@ -113,6 +167,10 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
   const [rankingValue, setRankingValue] = useState("");
 
   const standardLevelOptions = LEVEL_OPTION_VALUES.filter((opt) => opt !== "Other");
+
+  /** Out-of-range hints, shown only once something has been typed (empty fields just keep the button disabled). */
+  const heightOutOfRange = heightCmInput !== "" && !(Number(heightCmInput) >= 100 && Number(heightCmInput) <= 250);
+  const weightOutOfRange = weightKgInput !== "" && !(Number(weightKgInput) >= 30 && Number(weightKgInput) <= 250);
 
   const canContinueStep1 =
     !!dominantHand &&
@@ -201,12 +259,6 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
       mounted = false;
     };
   }, [signUpDraft]);
-
-  useEffect(() => {
-    if (step === 2 && mode !== "edit") {
-      setRankingSetupPhase("choose");
-    }
-  }, [step, mode]);
 
   async function pickAvatar() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -370,8 +422,6 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
   }
 
   const isEditMode = mode === "edit";
-  const onboardingHeaderPadH = Math.max(24, insets.left, insets.right);
-  const onboardingHeaderPadTop = PAGE_TOP_EXTRA_PADDING + 16;
 
   return (
     <View style={styles.screen}>
@@ -382,51 +432,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
         end={{ x: 0.5, y: 0.4 }}
         style={StyleSheet.absoluteFillObject}
       />
-      {isEditMode ? <Header /> : null}
-      {!isEditMode ? (
-        <SafeAreaView edges={["top"]} style={styles.onboardingHeaderSafe}>
-          <View
-            style={[
-              styles.onboardingHeader,
-              {
-                paddingTop: onboardingHeaderPadTop,
-                paddingLeft: onboardingHeaderPadH,
-                paddingRight: onboardingHeaderPadH,
-              },
-            ]}
-          >
-            <View style={styles.onboardingHeaderInner}>
-              {onRestart ? (
-                <TouchableOpacity
-                  style={styles.restartTouch}
-                  onPress={onRestart}
-                  activeOpacity={0.85}
-                  accessibilityLabel={t("profileSetup.restart")}
-                >
-                  <Text allowFontScaling={false} style={styles.restartText}>
-                    {t("profileSetup.restart")}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-              {step === 1 ? (
-                <View style={styles.detailsHead}>
-                  <Text allowFontScaling={false} style={styles.detailsTitle}>
-                    {t("profileSetup.playerDetailsLead")}
-                    <Text style={styles.detailsTitleAccent}>{t("profileSetup.playerDetailsAccent")}</Text>
-                  </Text>
-                  <Text allowFontScaling={false} style={styles.detailsSubtitle}>
-                    {t("profileSetup.playerDetailsSubtitle")}
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.logoWrap}>
-                  <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" />
-                </View>
-              )}
-            </View>
-          </View>
-        </SafeAreaView>
-      ) : null}
+      {/* Design: every setup step (Player details, Set your Level) uses the app header. */}
+      <Header />
       {isEditMode ? (
         <View style={styles.progressSection}>
           <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.stepTitle}>
@@ -444,7 +451,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             paddingBottom:
               40 +
               insets.bottom +
-              (step === 2 && (isEditMode || rankingSetupPhase === "configure") ? 72 : 0),
+              (step === 2 ? 72 : 0),
           },
         ]}
         keyboardShouldPersistTaps="handled"
@@ -552,8 +559,8 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
           <CourtSideGraphic courtSide={courtSide} />
           </View>
 
-          <View style={styles.selectionBox}>
-            {isEditMode ? (
+          {isEditMode ? (
+            <View style={styles.selectionBox}>
               <>
               <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.boxTitle}>
                 {t("profileSetup.heightTitle")}
@@ -596,51 +603,202 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                 </Text>
               </View>
               </>
-            ) : (
-              <View style={styles.anthroPair}>
-                <View style={styles.anthroCol}>
-                  <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.anthroColTitle}>
-                    {t("profileSetup.heightTitle")}
+            </View>
+          ) : (
+            <>
+              {/* Height: value + cm/ft unit dropdown. Centimetres stay the source of truth (heightCmInput). */}
+              <View
+                style={[
+                  styles.measureField,
+                  anthroFocus === "height" && FIELD_BOX_ACTIVE,
+                  heightUnitMenuOpen && styles.measureFieldRaised,
+                ]}
+              >
+                <View style={styles.measureCol}>
+                  <Text allowFontScaling={false} style={styles.measureLabel}>
+                    {t("profileSetup.heightLabel")}
                   </Text>
-                  <View style={styles.anthroField}>
-                    <TextInput
-                      allowFontScaling={false}
-                      value={heightCmInput}
-                      onChangeText={(v) => setHeightCmInput(v.replace(/[^0-9.]/g, ""))}
-                      keyboardType="decimal-pad"
-                      placeholder={t("profileSetup.heightPlaceholder")}
-                      testID={TEST_IDS.setupHeight}
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                      style={styles.anthroFieldInput}
-                    />
-                    <Text allowFontScaling={false} style={styles.anthroFieldUnit}>
-                      {t("profileSetup.cm")}
-                    </Text>
-                  </View>
+                  {heightUnit === "cm" ? (
+                    <View style={styles.valueRow}>
+                      <TextInput
+                        allowFontScaling={false}
+                        value={heightCmInput}
+                        onChangeText={(v) => setHeightCmInput(v.replace(/[^0-9.]/g, ""))}
+                        onFocus={() => setAnthroFocus("height")}
+                        onBlur={() => setAnthroFocus((cur) => (cur === "height" ? null : cur))}
+                        keyboardType="decimal-pad"
+                        placeholder={t("profileSetup.heightPlaceholder")}
+                        testID={TEST_IDS.setupHeight}
+                        placeholderTextColor={FIELD_PLACEHOLDER_COLOR}
+                        style={styles.measureInput}
+                      />
+                      {/* Design shows the unit after the number ("170 cm"). */}
+                      {heightCmInput ? (
+                        <Text allowFontScaling={false} style={styles.valueSuffix}>
+                          {t("profileSetup.cm")}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : (
+                    <View style={styles.imperialRow}>
+                      {(
+                        [
+                          { key: "ft" as const, value: heightFt, placeholder: "5", suffix: t("profileSetup.ft") },
+                          { key: "in" as const, value: heightIn, placeholder: "11", suffix: t("profileSetup.in") },
+                        ]
+                      ).map((part) => (
+                        <View key={part.key} style={styles.imperialPart}>
+                          <TextInput
+                            allowFontScaling={false}
+                            value={part.value}
+                            onChangeText={(v) => setImperialHeight(part.key, v.replace(/[^0-9]/g, "").slice(0, 2))}
+                            onFocus={() => setAnthroFocus("height")}
+                            onBlur={() => setAnthroFocus((cur) => (cur === "height" ? null : cur))}
+                            keyboardType="number-pad"
+                            placeholder={part.placeholder}
+                            testID={`${TEST_IDS.setupHeight}-${part.key}`}
+                            placeholderTextColor={FIELD_PLACEHOLDER_COLOR}
+                            style={[styles.measureInput, styles.imperialInput]}
+                          />
+                          <Text allowFontScaling={false} style={styles.imperialSuffix}>
+                            {part.suffix}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
-                <View style={styles.anthroCol}>
-                  <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.anthroColTitle}>
-                    {t("profileSetup.weightTitle")}
+                <TouchableOpacity
+                  style={styles.unitTrigger}
+                  onPress={() => {
+                    setWeightUnitMenuOpen(false);
+                    setHeightUnitMenuOpen((o) => !o);
+                  }}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("profileSetup.heightUnit")}
+                  accessibilityState={{ expanded: heightUnitMenuOpen }}
+                  testID={`${TEST_IDS.setupHeight}-unit`}
+                >
+                  <Text allowFontScaling={false} style={styles.measureUnit}>
+                    {heightUnit === "cm" ? t("profileSetup.cm") : t("profileSetup.ft")}
                   </Text>
-                  <View style={styles.anthroField}>
-                    <TextInput
-                      allowFontScaling={false}
-                      value={weightKgInput}
-                      onChangeText={(v) => setWeightKgInput(v.replace(/[^0-9.]/g, ""))}
-                      keyboardType="decimal-pad"
-                      placeholder={t("profileSetup.weightPlaceholder")}
-                      testID={TEST_IDS.setupWeight}
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                      style={styles.anthroFieldInput}
-                    />
-                    <Text allowFontScaling={false} style={styles.anthroFieldUnit}>
-                      {t("profileSetup.kg")}
-                    </Text>
+                  <CaretDownIcon size={20} color="#86A7D2" />
+                </TouchableOpacity>
+                {heightUnitMenuOpen ? (
+                  <View style={styles.unitMenu} accessibilityRole="menu">
+                    {(["cm", "ft"] as const).map((u) => (
+                      <TouchableOpacity
+                        key={u}
+                        style={[styles.unitOption, heightUnit === u && styles.unitOptionActive]}
+                        onPress={() => chooseHeightUnit(u)}
+                        activeOpacity={0.8}
+                        accessibilityRole="menuitem"
+                        accessibilityState={{ selected: heightUnit === u }}
+                        testID={`${TEST_IDS.setupHeight}-unit-${u}`}
+                      >
+                        <Text
+                          allowFontScaling={false}
+                          style={[styles.unitOptionText, heightUnit === u && styles.unitOptionTextActive]}
+                        >
+                          {u === "cm" ? t("profileSetup.cm") : t("profileSetup.ftIn")}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                </View>
+                ) : null}
               </View>
-            )}
-          </View>
+
+              {heightOutOfRange ? (
+                <Text allowFontScaling={false} style={styles.measureError} testID={`${TEST_IDS.setupHeight}-error`}>
+                  {heightUnit === "cm" ? t("profileSetup.heightRangeCm") : t("profileSetup.heightRangeFt")}
+                </Text>
+              ) : null}
+
+              <View
+                style={[
+                  styles.measureField,
+                  anthroFocus === "weight" && FIELD_BOX_ACTIVE,
+                  weightUnitMenuOpen && styles.measureFieldRaised,
+                ]}
+              >
+                <View style={styles.measureCol}>
+                  <Text allowFontScaling={false} style={styles.measureLabel}>
+                    {t("profileSetup.weightLabel")}
+                  </Text>
+                  <View style={styles.valueRow}>
+                    <TextInput
+                      allowFontScaling={false}
+                      value={weightUnit === "kg" ? weightKgInput : weightLbInput}
+                      onChangeText={(v) => {
+                        const clean = v.replace(/[^0-9.]/g, "");
+                        if (weightUnit === "kg") setWeightKgInput(clean);
+                        else setWeightLb(clean);
+                      }}
+                      onFocus={() => setAnthroFocus("weight")}
+                      onBlur={() => setAnthroFocus((cur) => (cur === "weight" ? null : cur))}
+                      keyboardType="decimal-pad"
+                      placeholder={weightUnit === "kg" ? t("profileSetup.weightPlaceholder") : t("profileSetup.weightPlaceholderLb")}
+                      testID={weightUnit === "kg" ? TEST_IDS.setupWeight : `${TEST_IDS.setupWeight}-lb`}
+                      placeholderTextColor={FIELD_PLACEHOLDER_COLOR}
+                      style={styles.measureInput}
+                    />
+                    {(weightUnit === "kg" ? weightKgInput : weightLbInput) ? (
+                      <Text allowFontScaling={false} style={styles.valueSuffix}>
+                        {weightUnit === "kg" ? t("profileSetup.kg") : t("profileSetup.lb")}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.unitTrigger}
+                  onPress={() => {
+                    setHeightUnitMenuOpen(false);
+                    setWeightUnitMenuOpen((o) => !o);
+                  }}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("profileSetup.weightUnit")}
+                  accessibilityState={{ expanded: weightUnitMenuOpen }}
+                  testID={`${TEST_IDS.setupWeight}-unit`}
+                >
+                  <Text allowFontScaling={false} style={styles.measureUnit}>
+                    {weightUnit === "kg" ? t("profileSetup.kg") : t("profileSetup.lb")}
+                  </Text>
+                  <CaretDownIcon size={20} color="#86A7D2" />
+                </TouchableOpacity>
+                {weightUnitMenuOpen ? (
+                  <View style={styles.unitMenu} accessibilityRole="menu">
+                    {(["kg", "lb"] as const).map((u) => (
+                      <TouchableOpacity
+                        key={u}
+                        style={[styles.unitOption, weightUnit === u && styles.unitOptionActive]}
+                        onPress={() => chooseWeightUnit(u)}
+                        activeOpacity={0.8}
+                        accessibilityRole="menuitem"
+                        accessibilityState={{ selected: weightUnit === u }}
+                        testID={`${TEST_IDS.setupWeight}-unit-${u}`}
+                      >
+                        <Text
+                          allowFontScaling={false}
+                          style={[styles.unitOptionText, weightUnit === u && styles.unitOptionTextActive]}
+                        >
+                          {u === "kg" ? t("profileSetup.kg") : t("profileSetup.lb")}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+              {weightOutOfRange ? (
+                <Text allowFontScaling={false} style={styles.measureError} testID={`${TEST_IDS.setupWeight}-error`}>
+                  {weightUnit === "kg" ? t("profileSetup.weightRangeKg") : t("profileSetup.weightRangeLb")}
+                </Text>
+              ) : null}
+            </>
+          )}
 
           <View style={styles.actionRow}>
             <SurfaceIconButton
@@ -651,8 +809,11 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
             <GlowButton
               style={styles.actionPrimary}
               label={t("profileSetup.setYourRankingBtn")}
-              arrow
-              onPress={() => setStep(2)}
+              onPress={() => {
+                // Onboarding skips the "Do you have a ranking?" screen and goes straight to the level picker.
+                chooseHasRanking("no");
+                setStep(2);
+              }}
               testID={TEST_IDS.setupStep1Next}
               disabled={!canContinueStep1}
             />
@@ -660,47 +821,7 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
           </>
         )}
 
-        {step === 2 && !isEditMode && rankingSetupPhase === "choose" && (
-          <>
-            <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.rankingTitle}>
-              {t("profileSetup.setRanking")}
-            </Text>
-            <View style={styles.rankingSubtitleBlock}>
-              <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.rankingSubtitle}>
-                {t("profileSetup.hasRankingHint")}
-              </Text>
-              <Text allowFontScaling={false} maxFontSizeMultiplier={1.05} style={styles.rankingSubtitle}>
-                {t("profileSetup.hasRankingHintSources")}
-              </Text>
-            </View>
-            <View style={styles.selectionBox}>
-              <SegmentedToggle
-                value={hasRanking === null ? null : hasRanking ? "yes" : "no"}
-                onChange={chooseHasRanking}
-                options={[
-                  { value: "no", label: t("common.no"), testID: TEST_IDS.setupRankingNo },
-                  { value: "yes", label: t("common.yes") },
-                ]}
-              />
-            </View>
-            <View style={styles.actionRow}>
-              <SurfaceIconButton
-                icon="chevron-back"
-                onPress={() => setStep(1)}
-                accessibilityLabel={t("profileSetup.goBack")}
-              />
-              <GlowButton
-                style={styles.actionPrimary}
-                label={t("profileSetup.setYourLevelBtn")}
-                onPress={() => setRankingSetupPhase("configure")}
-                testID={TEST_IDS.setupRankingNext}
-                disabled={hasRanking === null}
-              />
-            </View>
-          </>
-        )}
-
-        {step === 2 && (isEditMode || rankingSetupPhase === "configure") && (
+        {step === 2 && (
           <>
             {!isEditMode ? (
               <>
@@ -748,27 +869,32 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
                       />
                     );
                   })}
-                  <TextInput
-                    value={customLevelText}
-                    onChangeText={(text) => {
-                      setCustomLevelText(text);
-                      const trimmed = text.trim();
-                      setLevel(trimmed.length > 0 ? trimmed : null);
-                    }}
-                    onFocus={() => {
-                      if (
-                        level &&
-                        (standardLevelOptions as readonly string[]).includes(level)
-                      ) {
-                        setLevel(customLevelText.trim() || null);
-                      }
-                    }}
-                    style={styles.levelOtherInput}
-                    placeholder={t(levelTranslationKey("Other"))}
-                    placeholderTextColor={UI.textMuted}
-                    allowFontScaling={false}
-                    underlineColorAndroid="transparent"
-                  />
+                  <View style={[styles.levelOtherBox, levelOtherFocused && FIELD_BOX_ACTIVE]}>
+                    <TextInput
+                      value={customLevelText}
+                      onChangeText={(text) => {
+                        setCustomLevelText(text);
+                        const trimmed = text.trim();
+                        setLevel(trimmed.length > 0 ? trimmed : null);
+                      }}
+                      onFocus={() => {
+                        setLevelOtherFocused(true);
+                        if (
+                          level &&
+                          (standardLevelOptions as readonly string[]).includes(level)
+                        ) {
+                          setLevel(customLevelText.trim() || null);
+                        }
+                      }}
+                      onBlur={() => setLevelOtherFocused(false)}
+                      style={styles.levelOtherInput}
+                      testID="setup-level-other"
+                      placeholder={t(levelTranslationKey("Other"))}
+                      placeholderTextColor={UI.textMuted}
+                      allowFontScaling={false}
+                      underlineColorAndroid="transparent"
+                    />
+                  </View>
                 </View>
               )}
 
@@ -830,17 +956,13 @@ export function ProfileSetup({ onComplete, signUpDraft, mode = "onboarding", onB
               <SurfaceIconButton
                 icon="chevron-back"
                 onPress={() => {
-                  if (!isEditMode && rankingSetupPhase === "configure") {
-                    setRankingSetupPhase("choose");
-                    return;
-                  }
                   setStep(1);
                 }}
                 accessibilityLabel={t("profileSetup.goBack")}
               />
               <GlowButton
                 style={styles.actionPrimary}
-                label={isEditMode ? t("common.done") : t("profileSetup.finishSetup")}
+                label={t("common.done")}
                 onPress={saveProfile}
                 testID={TEST_IDS.setupFinish}
                 disabled={!canContinueStep2}
@@ -865,16 +987,17 @@ function getStyles(theme: any) {
     container: { flex: 1, backgroundColor: "transparent" },
     content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40, gap: 14 },
     contentStep1: {
-      paddingTop: 0,
+      paddingTop: 20,
       paddingBottom: 28,
     },
     contentStep2: {
-      paddingTop: 0,
+      paddingTop: 20,
       paddingBottom: 28,
       gap: 18,
     },
+    /** Design: "Set your Level" — #FFF, Inter 500 20px (matches the Player details questions). */
     rankingTitle: {
-      fontFamily: theme.semiBoldFont,
+      fontFamily: theme.mediumFont,
       fontSize: 20,
       color: "#FFFFFF",
       textAlign: "center",
@@ -893,60 +1016,6 @@ function getStyles(theme: any) {
       marginTop: -6,
       marginBottom: 4,
       gap: 2,
-    },
-    onboardingHeaderSafe: {
-      backgroundColor: "transparent",
-    },
-    onboardingHeader: {
-      marginBottom: 28,
-    },
-    onboardingHeaderInner: {
-      position: "relative",
-      alignItems: "center",
-      justifyContent: "center",
-      minHeight: 108,
-      paddingTop: 10,
-    },
-    restartTouch: {
-      position: "absolute",
-      right: 0,
-      top: 10,
-      zIndex: 2,
-      paddingVertical: 6,
-      paddingHorizontal: 2,
-    },
-    restartText: {
-      color: "#86A7D2",
-      fontFamily: theme.mediumFont,
-      fontSize: 14,
-    },
-    logoWrap: {
-      alignItems: "center",
-      paddingTop: 10,
-    },
-    detailsHead: {
-      alignItems: "center",
-      paddingTop: 40,
-      gap: 8,
-    },
-    detailsTitle: {
-      fontFamily: theme.semiBoldFont,
-      fontSize: 32,
-      color: "#FFFFFF",
-      textAlign: "center",
-    },
-    detailsTitleAccent: {
-      color: "#18C0FF",
-    },
-    detailsSubtitle: {
-      fontFamily: theme.regularFont,
-      fontSize: 15,
-      color: "rgba(165,196,235,0.92)",
-      textAlign: "center",
-    },
-    logoImage: {
-      width: 172,
-      height: 92,
     },
     loadingWrap: {
       flex: 1,
@@ -1015,17 +1084,16 @@ function getStyles(theme: any) {
       fontSize: 13,
     },
     selectionBox: {
-      borderRadius: UI.radiusCard,
-      backgroundColor: UI.cardBg,
-      ...CARD_GLOW,
+      ...CARD,
       paddingHorizontal: 19,
       paddingVertical: 24,
       gap: 16,
     },
+    /** Design: "Are you:" / court question — #FFF, Inter 500 20px. */
     boxTitle: {
       fontFamily: theme.mediumFont,
-      fontSize: 22,
-      color: UI.text,
+      fontSize: 20,
+      color: "#FFFFFF",
       textAlign: "center",
     },
     actionPrimary: {
@@ -1056,6 +1124,114 @@ function getStyles(theme: any) {
       fontSize: 18,
       paddingHorizontal: 14,
       textAlign: "center",
+    },
+    /** Stacked Height / Weight fields: shared field box, label above the value, unit on the right. */
+    measureField: {
+      ...FIELD_BOX,
+      height: 64,
+      marginBottom: 0,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    measureCol: {
+      flex: 1,
+      minWidth: 0,
+      justifyContent: "center",
+    },
+    measureLabel: {
+      fontFamily: theme.regularFont,
+      fontSize: 12,
+      color: "#86A7D2",
+    },
+    measureInput: {
+      color: "#FFFFFF",
+      fontFamily: theme.mediumFont,
+      fontSize: 18,
+      padding: 0,
+      margin: 0,
+      ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
+    },
+    measureUnit: {
+      fontFamily: theme.regularFont,
+      fontSize: 18,
+      color: "#86A7D2",
+    },
+    /** Number + unit on one line ("170 cm"); the input sizes to its text so the unit follows it. */
+    valueRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    valueSuffix: {
+      fontFamily: theme.mediumFont,
+      fontSize: 18,
+      color: "#FFFFFF",
+    },
+    measureError: {
+      fontFamily: theme.mediumFont,
+      fontSize: 12,
+      color: UI.error,
+      marginTop: -8,
+      paddingHorizontal: 4,
+    },
+    /** Lifts the height field (and its open unit menu) above the weight field. */
+    measureFieldRaised: {
+      zIndex: 10,
+      elevation: 10,
+    },
+    unitTrigger: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    unitMenu: {
+      position: "absolute",
+      right: 10,
+      top: 58,
+      minWidth: 120,
+      borderRadius: 16,
+      backgroundColor: "#041641",
+      borderWidth: 1,
+      borderColor: "rgba(0, 184, 255, 0.35)",
+      boxShadow: "0px 8px 24px 0px rgba(0, 0, 0, 0.45), 0px 0px 30px 0px rgba(0, 72, 255, 0.5) inset",
+      paddingVertical: 6,
+      zIndex: 20,
+      elevation: 20,
+    },
+    unitOption: {
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+    },
+    unitOptionActive: {
+      backgroundColor: "rgba(0, 184, 255, 0.12)",
+    },
+    unitOptionText: {
+      fontFamily: theme.regularFont,
+      fontSize: 16,
+      color: "#86A7D2",
+    },
+    unitOptionTextActive: {
+      fontFamily: theme.mediumFont,
+      color: "#00B8FF",
+    },
+    imperialRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      gap: 14,
+    },
+    imperialPart: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      gap: 4,
+    },
+    imperialInput: {
+      minWidth: 24,
+    },
+    imperialSuffix: {
+      fontFamily: theme.regularFont,
+      fontSize: 14,
+      color: "#86A7D2",
     },
     anthroPair: {
       flexDirection: "row",
@@ -1112,7 +1288,7 @@ function getStyles(theme: any) {
     },
     cardTitle: { fontFamily: theme.semiBoldFont, fontSize: 21, color: "#fff", textAlign: "center" },
     levelList: {
-      gap: 8,
+      gap: 6,
     },
     rankingForm: {
       gap: 14,
@@ -1183,18 +1359,23 @@ function getStyles(theme: any) {
       alignItems: "center",
       justifyContent: "center",
     },
-    levelOtherInput: {
-      marginTop: 10,
-      minHeight: UI.fieldHeight,
-      borderRadius: UI.radius,
+    /** Box carries border/background/glow so focus (FIELD_BOX_ACTIVE) never shifts the text. */
+    levelOtherBox: {
+      marginTop: 14,
+      height: 44,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: UI.trackBorder,
       backgroundColor: UI.surface,
+      justifyContent: "center",
+    },
+    levelOtherInput: {
+      flex: 1,
       color: UI.text,
       fontFamily: theme.mediumFont,
-      fontSize: 17,
+      fontSize: 14,
       paddingHorizontal: 18,
-      paddingVertical: 12,
+      paddingVertical: 0,
       textAlignVertical: "center",
     },
     chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },

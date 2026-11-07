@@ -14,6 +14,7 @@ import {
   Share,
   StatusBar,
   Pressable,
+  BackHandler,
   useWindowDimensions,
   type ImageSourcePropType,
 } from 'react-native'
@@ -100,7 +101,7 @@ import { PaddlePongGame } from '../components/PaddlePongGame'
 import { AnalyzingDashSpinner } from '../components/AnalyzingDashSpinner'
 import { CorrectionRegenerateModal } from '../components/CorrectionRegenerateModal'
 import { SentToSupportModal } from '../components/SentToSupportModal'
-import { GlowButton, UI } from '../components/ui'
+import { GlowButton, PrimaryFill, SECONDARY_BUTTON, UI } from '../components/ui'
 import { CorrectionImageWithLoader } from '../components/CorrectionImageWithLoader'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
 import {
@@ -157,7 +158,8 @@ const UPLOAD_PROGRESS_TRACK_WIDTH = 92
 const STROKE_WIDTH = 4
 const FRAME_RADIUS = 24
 /** Set Clip hint card thumbnail. */
-const STEP2_THUMB = 56
+/** Design: 42×42 thumbnail, radius 10, 2px #0BF border. */
+const STEP2_THUMB = 42
 const STEP2_TRASH_ICON = '#0A1E5C'
 const GRADIENT_COLORS = ['#0022FF', '#00BBFF', '#00BBFF', '#0022FF']
 const GRADIENT_STOPS = ['0%', '30%', '70%', '100%']
@@ -286,6 +288,8 @@ const RANKING_ORG_OPTIONS = [
   'Play by Point',
 ]
 const FRAME_SNAP_POINTS = 31
+/** Saved-clips list under Set Clip; off per design (kept for a possible multi-clip return). */
+const SHOW_CLIPS_LIST = false
 const CAROUSEL_FRAMES_EVERY = 5
 const CAROUSEL_FPS = 30
 type TechniqueClip = {
@@ -517,6 +521,33 @@ export function Technique() {
   const [shotPickerOpen, setShotPickerOpen] = useState(false)
   /** Set Clip's Back reopens the picker on Camera with the declared shot restored. */
   const [shotPickerStart, setShotPickerStart] = useState<'shot' | 'camera'>('shot')
+  /** Set Clip's "Contact" step (after Next): one frame with a stepper, shown in place of the Set Clip content. */
+  const [contactStepOpen, setContactStepOpen] = useState(false)
+  const step2ScrollRef = useRef<any>(null)
+  useEffect(() => {
+    if (!contactStepOpen) return
+    // The step replaces the content the user scrolled through to reach Next.
+    // Next frame: Android clamps the offset when the content shrinks, after this effect runs.
+    const raf = requestAnimationFrame(() => step2ScrollRef.current?.scrollTo?.({ y: 0, animated: false }))
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setContactStepOpen(false)
+      return true
+    })
+    return () => {
+      cancelAnimationFrame(raf)
+      sub.remove()
+    }
+  }, [contactStepOpen])
+  /** Set when the shot picker finishes; the effect below starts the analysis with the new shot. */
+  const [analyzeAfterShot, setAnalyzeAfterShot] = useState(false)
+  useEffect(() => {
+    if (!analyzeAfterShot || shotPickerOpen) return
+    setAnalyzeAfterShot(false)
+    setContactStepOpen(false)
+    // Runs after the render that stored the shot, so the request carries it.
+    void runAnalysis(undefined, { navigateOnDone: true, resetState: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyzeAfterShot, shotPickerOpen])
   const [sendVideoToCoach, setSendVideoToCoach] = useState(false)
   const [userShot, setUserShot] = useState<UserShotDeclaration | null>(null)
   const pickVideoRef = useRef<(() => Promise<void>) | null>(null)
@@ -1430,6 +1461,7 @@ export function Technique() {
   }
 
   const resetToNewVideo = useCallback(() => {
+    setContactStepOpen(false)
     setUploadedVideoUrl(null)
     setLocalVideoUri(null)
     setUploadedVideoId(null)
@@ -1710,8 +1742,7 @@ export function Technique() {
       setCompareSplit(0.5)
       setCorrectionViewMode('drag')
       setUserShot(null)
-      setShotPickerStart('shot')
-      setShotPickerOpen(true)
+      // Flow: Set Clip → Contact (frame viewer) → Shot / Type / Camera → analysis.
       setStep(2)
     } catch (err) {
       console.error('[Technique] Upload error', err)
@@ -2511,19 +2542,20 @@ export function Technique() {
         {shotPickerOpen ? (
           <ShotDetailsPicker
             videoUri={localVideoUri ?? uploadedVideoUrl}
-            initialShot={shotPickerStart === 'camera' ? userShot : null}
+            initialShot={userShot}
             initialStep={shotPickerStart}
-            onBack={() => {
-              setShotPickerOpen(false)
-              resetToNewVideo()
-            }}
+            doneLabel={t('technique.setClipScreen.analyzeVideo')}
+            // Back returns to Set Clip (the picker now comes after it).
+            onBack={() => setShotPickerOpen(false)}
             onDone={(shot) => {
               setUserShot(shot)
               setShotPickerOpen(false)
+              setAnalyzeAfterShot(true)
             }}
           />
         ) : step === 2 ? (
           <KeyboardAwareScrollView
+            ref={step2ScrollRef}
             style={styles.stepContent}
             contentContainerStyle={[
               styles.stepContentInner,
@@ -2540,13 +2572,14 @@ export function Technique() {
             bottomOffset={insets.bottom + 12}
           >
             <View style={styles.step2}>
-                <View style={styles.step2VideoSummaryCard}>
+                {/* Contact step: everything but the grid (which shows the frame) stays mounted but hidden, so Back keeps the player and timeline. */}
+                <View style={[styles.step2VideoSummaryCard, contactStepOpen && styles.hidden]}>
                   {/* Back lives in the instruction card (design), not in a title row above it. */}
                   <TouchableOpacity
                     onPress={() => {
                       void trimPreviewRef.current?.pause()
-                      setShotPickerStart('camera')
-                      setShotPickerOpen(true)
+                      // Set Clip is the first step after upload, so back leaves the flow.
+                      resetToNewVideo()
                     }}
                     testID={TEST_IDS.setClipBack}
                     accessibilityRole="button"
@@ -2559,26 +2592,6 @@ export function Technique() {
                     {t('technique.setClipScreen.impactHint')}
                   </Text>
                   <View style={styles.step2SummaryThumbOuter}>
-                    <Svg width={STEP2_THUMB} height={STEP2_THUMB} style={StyleSheet.absoluteFill}>
-                      <Defs>
-                        <SvgLinearGradient id="step2SummaryThumbStroke" x1="0%" y1="0%" x2="100%" y2="100%">
-                          {GRADIENT_COLORS.map((color, i) => (
-                            <Stop key={`s2thumb-${color}-${i}`} offset={GRADIENT_STOPS[i]} stopColor={color} />
-                          ))}
-                        </SvgLinearGradient>
-                      </Defs>
-                      <Rect
-                        x={2}
-                        y={2}
-                        width={STEP2_THUMB - 4}
-                        height={STEP2_THUMB - 4}
-                        rx={12}
-                        ry={12}
-                        fill="#041641"
-                        stroke="url(#step2SummaryThumbStroke)"
-                        strokeWidth={3}
-                      />
-                    </Svg>
                     <View style={styles.step2SummaryThumbInner}>
                       {step2CenterFrameUri ? (
                         <Image
@@ -2604,6 +2617,7 @@ export function Technique() {
                 </View>
 
                 {trimPreviewUri ? (
+                  <View style={contactStepOpen ? styles.hidden : undefined}>
                   <TrimClipPreview
                     ref={trimPreviewRef}
                     videoUri={trimPreviewUri}
@@ -2623,9 +2637,11 @@ export function Technique() {
                     }}
                     onPositionMsChange={handleTrimPreviewPositionMs}
                   />
+                  </View>
                 ) : null}
 
                 <View style={styles.trimCard}>
+                  <View style={contactStepOpen ? styles.hidden : undefined}>
                   {uploadedVideoUrl != null ? (
                     videoDurationSeconds != null && videoDurationSeconds > 0 ? (
                       <VideoFrameCarousel
@@ -2671,7 +2687,6 @@ export function Technique() {
                           }, 120)
                         }}
                         onCenterFrameImageUriChange={setStep2CenterFrameUri}
-                        playheadLabel={t('technique.contactLabel')}
                       />
                     ) : (
                       <View style={styles.step2CarouselLoading}>
@@ -2698,6 +2713,7 @@ export function Technique() {
                       })()}
                     </Text>
                   ) : null}
+                  </View>
 
                   {uploadedVideoUrl != null && videoDurationSeconds != null && videoDurationSeconds > 0 && currentTrimClip ? (
                     <ContactFrameGrid
@@ -2715,9 +2731,17 @@ export function Technique() {
                       onChangeContactFrame={(frame) => {
                         contactFrameRef.current = frame
                       }}
+                      contactStep={contactStepOpen}
+                      onCloseContactStep={() => setContactStepOpen(false)}
+                      onConfirm={() => {
+                        setShotPickerStart('shot')
+                        setShotPickerOpen(true)
+                      }}
                     />
                   ) : null}
 
+                  {/* Design: Set Clip no longer lists saved clips; analysis uses the blue-handle range. */}
+                  {SHOW_CLIPS_LIST ? (
                   <View style={styles.clipsList}>
                     {/* Current blue-handle range, not yet set. */}
                     <View style={styles.clipRow}>
@@ -2765,8 +2789,9 @@ export function Technique() {
                       </View>
                     ))}
                   </View>
+                  ) : null}
                 </View>
-              <View style={styles.step2BottomBar}>
+              <View style={[styles.step2BottomBar, contactStepOpen && styles.hidden]}>
                 <View style={styles.step2BottomBarHalf}>
                   <TouchableOpacity
                     style={[styles.step2TryNewVideoBtn, styles.step2BottomBarBtnFill]}
@@ -2783,13 +2808,20 @@ export function Technique() {
                 <View style={styles.step2BottomBarHalf}>
                   <TouchableOpacity
                     style={[styles.analyseButton, styles.step2BottomBarBtnFill]}
-                    testID={TEST_IDS.techniqueAnalyse}
+                    testID={TEST_IDS.setClipNext}
                     onPress={() => {
                       if (analysisReady) {
                         setStep(3)
                         return
                       }
-                      void runAnalysis(undefined, { navigateOnDone: true, resetState: false })
+                      void trimPreviewRef.current?.pause()
+                      // Contact step: the frame viewer on the current contact; without one, go straight to the shot.
+                      if (contactMs != null) {
+                        setContactStepOpen(true)
+                      } else {
+                        setShotPickerStart('shot')
+                        setShotPickerOpen(true)
+                      }
                     }}
                     activeOpacity={0.9}
                     disabled={
@@ -2799,27 +2831,23 @@ export function Technique() {
                       currentTrimClip.endMs <= currentTrimClip.startMs
                     }
                   >
-                    <LinearGradient
-                      colors={['#5BC0FF', '#0A2BFF']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.analyseButtonInner}
-                    >
+                    <View style={styles.analyseButtonInner}>
+                      <PrimaryFill radius={UI.btnRadius} />
                       {analysisLoading ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <ActivityIndicator size="small" color={UI.btnPrimaryText} />
                       ) : analysisReady ? (
                         <>
                           <Text style={styles.analyseButtonText} numberOfLines={1}>
                             View Results
                           </Text>
-                          <FeatherIcon name="arrow-right" size={20} color="#fff" />
+                          <FeatherIcon name="arrow-right" size={20} color={UI.btnPrimaryText} />
                         </>
                       ) : (
                         <Text style={styles.analyseButtonText} numberOfLines={2}>
-                          Analyse Video
+                          {t('technique.setClipScreen.next')}
                         </Text>
                       )}
-                    </LinearGradient>
+                    </View>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -3775,17 +3803,13 @@ export function Technique() {
                                   onPress={() => void generateCorrectionImages()}
                                   activeOpacity={0.9}
                                 >
-                                  <LinearGradient
-                                    colors={['#0022FF', '#00BBFF']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.correctionGenerateButtonInner}
-                                  >
-                                    <FeatherIcon name="zap" size={16} color="#fff" />
+                                  <View style={styles.correctionGenerateButtonInner}>
+                                    <PrimaryFill radius={UI.btnRadius} />
+                                    <FeatherIcon name="zap" size={16} color={UI.btnPrimaryText} />
                                     <Text style={styles.correctionGenerateButtonText}>
                                       {t('technique.generateImages')}
                                     </Text>
-                                  </LinearGradient>
+                                  </View>
                                 </TouchableOpacity>
                               )}
 
@@ -3890,17 +3914,13 @@ export function Technique() {
                                   onPress={generateComfyCorrectionImages}
                                   activeOpacity={0.9}
                                 >
-                                  <LinearGradient
-                                    colors={['#0022FF', '#00BBFF']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.correctionGenerateButtonInner}
-                                  >
-                                    <FeatherIcon name="zap" size={16} color="#fff" />
+                                  <View style={styles.correctionGenerateButtonInner}>
+                                    <PrimaryFill radius={UI.btnRadius} />
+                                    <FeatherIcon name="zap" size={16} color={UI.btnPrimaryText} />
                                     <Text style={styles.correctionGenerateButtonText}>
                                       {t('technique.generateCorrectedPoses')}
                                     </Text>
-                                  </LinearGradient>
+                                  </View>
                                 </TouchableOpacity>
                               ))}
 
@@ -4654,6 +4674,7 @@ function getStyles(theme: any) {
       textAlign: 'center',
     },
     step2: { position: 'relative' as const, flexShrink: 0, gap: 20 },
+    hidden: { display: 'none' as const },
     analysisTitleRow: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
@@ -4687,7 +4708,7 @@ function getStyles(theme: any) {
       flex: 1,
       alignSelf: 'stretch',
       width: '100%',
-      minHeight: 64,
+      minHeight: UI.buttonHeight,
     },
     step2ThumbnailContainer: {
       marginTop: 8,
@@ -4788,41 +4809,41 @@ function getStyles(theme: any) {
       justifyContent: 'center',
       zIndex: 2,
     },
+    /** Design: 20px padding all round, 15px between back / text / thumbnail. */
     step2VideoSummaryCard: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 10,
-      paddingVertical: 16,
-      paddingLeft: 12,
-      paddingRight: 16,
+      gap: 15,
+      padding: 20,
       borderRadius: 24,
       borderWidth: 0,
       backgroundColor: UI.surface,
       marginTop: 4,
       marginBottom: 4,
     },
+    /** Design: #FFF, Inter 400 16px, normal line-height. */
     step2HintText: {
       flex: 1,
       fontFamily: theme.regularFont,
       fontSize: 16,
-      lineHeight: 21,
       color: '#FFFFFF',
     },
     step2SummaryThumbOuter: {
       position: 'relative' as const,
       width: STEP2_THUMB,
       height: STEP2_THUMB,
-      borderRadius: 14,
+      borderRadius: 10,
+      borderWidth: 2,
+      borderColor: '#00BBFF',
+      backgroundColor: '#041641',
       overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     step2SummaryThumbInner: {
-      position: 'absolute',
-      left: 3,
-      top: 3,
-      right: 3,
-      bottom: 3,
-      borderRadius: 6,
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 8,
       overflow: 'hidden',
     },
     step2SummaryThumbLoading: {
@@ -4887,20 +4908,18 @@ function getStyles(theme: any) {
       color: '#E8F0FF',
     },
     step2TryNewVideoBtn: {
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: 'rgba(0, 102, 255, 0.28)',
-      backgroundColor: '#0A1E5C',
-      paddingVertical: 15,
+      ...SECONDARY_BUTTON,
+      borderRadius: UI.btnRadius,
       paddingHorizontal: 12,
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: 52,
+      minHeight: UI.buttonHeight,
     },
+    /** Design: #FFF, Inter 500 18px, centred, normal line-height. */
     step2TryNewVideoText: {
-      fontFamily: theme.regularFont,
+      fontFamily: theme.mediumFont,
       fontSize: 18,
-      color: '#2A88F4',
+      color: '#FFFFFF',
       textAlign: 'center',
     },
     step2InstructionMain: {
@@ -4977,7 +4996,7 @@ function getStyles(theme: any) {
       borderColor: 'rgba(255,255,255,0.4)',
     },
     analyseButton: {
-      borderRadius: 24,
+      borderRadius: UI.btnRadius,
       overflow: 'hidden',
       marginTop: 0,
     },
@@ -4986,16 +5005,15 @@ function getStyles(theme: any) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 16,
-      paddingHorizontal: 16,
-      borderRadius: 24,
-      minHeight: 64,
+      gap: 10,
+      paddingHorizontal: 12,
+      borderRadius: UI.btnRadius,
+      minHeight: UI.buttonHeight,
     },
     analyseButtonText: {
-      fontFamily: theme.regularFont,
+      fontFamily: theme.semiBoldFont,
       fontSize: 18,
-      color: '#fff',
+      color: UI.btnPrimaryText,
       textAlign: 'center',
     },
     step3: { flexShrink: 1, gap: 20, minHeight: 0, marginTop: 0, width: '100%' },
@@ -5782,7 +5800,7 @@ function getStyles(theme: any) {
       marginTop: 2,
     },
     correctionGenerateButton: {
-      borderRadius: 14,
+      borderRadius: UI.btnRadius,
       overflow: 'hidden',
       marginTop: 4,
     },
@@ -5796,15 +5814,16 @@ function getStyles(theme: any) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
+      gap: 10,
       paddingVertical: 14,
-      paddingHorizontal: 20,
-      borderRadius: 14,
+      paddingHorizontal: UI.btnPaddingX,
+      borderRadius: UI.btnRadius,
+      overflow: 'hidden',
     },
     correctionGenerateButtonText: {
       fontFamily: theme.semiBoldFont,
       fontSize: 14,
-      color: '#fff',
+      color: UI.btnPrimaryText,
     },
     correctionSourceRow: {
       flexDirection: 'row',

@@ -90,6 +90,7 @@ export const T = {
   viewAngleConfirm: 'view-angle-confirm',
   setClipContinue: 'set-clip-continue',
   setClipBack: 'set-clip-back',
+  setClipNext: 'set-clip-next',
   coachHomeAnalyze: 'coach-home-analyze',
   // Follows and coach specialties
   coachCard: (id: string) => `coach-card-${id}`,
@@ -191,7 +192,7 @@ export async function openScreen(page: Page, name: string, params: object | unde
   return bodies
 }
 
-/** From the AI Coach home: Choose File → how-to → upload the fixture clip → Net Play / Forehand volley / Front → analyse. */
+/** From the AI Coach home: Choose File → how-to → upload → Set Clip → Contact → Net Play / Forehand volley / Front → analyse. */
 export async function uploadAndAnalyze(page: Page, fixturePath: string): Promise<string> {
   await nav(page, 'Main', { screen: 'AICoach', params: { screen: 'AICoachMain' } })
   // The AI Coach home's "Analyze a New Shot" opens the how-to; accepting it opens the file picker.
@@ -200,13 +201,16 @@ export async function uploadAndAnalyze(page: Page, fixturePath: string): Promise
   const chooser = page.waitForEvent('filechooser')
   await page.getByTestId(T.howToAccept).click()
   await (await chooser).setFiles(fixturePath)
+  // Set Clip → Next → Contact viewer → Next → Shot / Type / Camera → Analyze.
+  await page.getByTestId(T.setClipNext).click()
+  const contactNext = page.getByTestId('contact-frame-viewer-use')
+  if (await contactNext.isVisible({ timeout: 15_000 }).catch(() => false)) await contactNext.click()
   await page.getByTestId(T.shotCategory('net_play')).click()
   await page.getByTestId(T.shotOption('forehand_volley')).click()
   await page.getByTestId(T.viewAngle('front')).click()
   await page.getByTestId(T.viewAngleConfirm).click()
-  await page.getByTestId(T.setClipContinue).click()
   const analyzed = page.waitForResponse((r) => r.url().includes('/technique/analyze') && r.request().method() === 'POST', { timeout: 90_000 })
-  await page.getByTestId(T.techniqueAnalyse).click()
+  await page.getByTestId(T.setClipContinue).click()
   const res = await analyzed
   expect(res.status()).toBe(200)
   const { analysisId } = (await res.json()) as { analysisId: string }

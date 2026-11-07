@@ -16,7 +16,8 @@ import Svg, {
   Stop,
 } from 'react-native-svg'
 import { ThemeContext } from '../../context'
-import { CARD_GLOW, UI } from '../../components/ui'
+import { LocalSvgAsset } from '../../components/LocalSvgAsset'
+import { CARD_GLOW, GradientText, UI } from '../../components/ui'
 import { glow } from '../progress/progressTheme'
 import { TEST_IDS } from '../../lib/testIds'
 import type { PhysicalHistoryItem, PhysicalMetricsValues } from '../../lib/physicalMetrics'
@@ -29,8 +30,7 @@ const HERO = require('../../../assets/aicoach/home/new-user-hero.jpg')
 /** Matches the AI Coach scroll inset so the new-user hero can bleed edge to edge. */
 const PAGE_INSET = 14
 const GREETING_WASH = require('../../../assets/aicoach/home/greeting-card.jpg')
-const ICON_CAMERA = require('../../../assets/aicoach/home/icon-camera.svg')
-const ICON_ARROW = require('../../../assets/aicoach/home/icon-arrow-btn.svg')
+const ICON_CAMERA_TILE = require('../../../assets/aicoach/home/analyze-camera-tile.svg')
 const ICON_ARROW_GLYPH = require('../../../assets/aicoach/home/icon-arrow-glyph.svg')
 const ANALYZE_HALO = require('../../../assets/aicoach/home/analyze-halo.png')
 const PERF_BAR_STREAK = require('../../../assets/aicoach/home/perf-bar-streak.svg')
@@ -224,8 +224,13 @@ export function CoachHome({
           <Image
             source={HERO}
             contentFit="cover"
-            contentPosition="bottom"
+            contentPosition="top"
             style={styles.heroImage}
+          />
+          <LinearGradient
+            pointerEvents="none"
+            colors={['#030A17', 'rgba(3,10,23,0)']}
+            style={styles.heroTopFade}
           />
           <LinearGradient
             pointerEvents="none"
@@ -234,18 +239,12 @@ export function CoachHome({
             style={styles.heroScrim}
           />
           <View style={[styles.headline, styles.heroOverlay]}>
-            <Text
-              allowFontScaling={false}
-              style={[styles.headlineLine, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
-            >
+            <GradientText style={[styles.headlineLine, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}>
               {t('technique.home.headline1')}
-            </Text>
-            <Text
-              allowFontScaling={false}
-              style={[styles.headlineLine, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
-            >
+            </GradientText>
+            <GradientText style={[styles.headlineLine, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}>
               {t('technique.home.headline2')}
-            </Text>
+            </GradientText>
             <Text
               allowFontScaling={false}
               numberOfLines={1}
@@ -333,12 +332,8 @@ function GreetingCard({
         contentPosition="top"
         style={styles.greetingWash}
       />
-      <LinearGradient
-        pointerEvents="none"
-        colors={['rgba(0,72,255,0.5)', 'rgba(0,72,255,0)', 'rgba(0,72,255,0.22)']}
-        locations={[0, 0.42, 1]}
-        style={styles.greetingEdge}
-      />
+      {/* Design: dark centre, blue glow around the edges (drawn above the wash). */}
+      <View pointerEvents="none" style={styles.greetingEdge} />
       <View style={styles.greetingRow}>
         <View style={styles.greetingText}>
           <Text allowFontScaling={false} style={[styles.greetingHello, { fontFamily: fonts.regularFont }]}>
@@ -347,7 +342,7 @@ function GreetingCard({
           <Text
             allowFontScaling={false}
             numberOfLines={1}
-            style={[styles.greetingName, { fontFamily: fonts.semiBoldFont, fontSize: nameSize }]}
+            style={[styles.greetingName, { fontFamily: fonts.boldFont, fontSize: nameSize, lineHeight: Math.round(nameSize * 1.15) }]}
           >
             {name}
           </Text>
@@ -363,15 +358,15 @@ function GreetingCard({
           ) : null}
           <View style={styles.sessionRow}>
             <View style={styles.sessionBars}>
-              <View style={[styles.sessionBar, { height: 8 }]} />
               <View style={[styles.sessionBar, { height: 13 }]} />
-              <View style={[styles.sessionBar, { height: 18 }]} />
+              <View style={[styles.sessionBar, { height: 19 }]} />
+              <View style={[styles.sessionBar, { height: 26 }]} />
             </View>
             <View>
               <Text allowFontScaling={false} style={[styles.sessionCount, { fontFamily: fonts.mediumFont }]}>
                 {sessions}
               </Text>
-              <Text allowFontScaling={false} style={[styles.sessionWeek, { fontFamily: fonts.regularFont }]}>
+              <Text allowFontScaling={false} style={[styles.sessionWeek, { fontFamily: fonts.mediumFont }]}>
                 {thisWeek}
               </Text>
             </View>
@@ -411,24 +406,12 @@ function AnalyzeBlock({
           style={({ pressed }) => [styles.analyzeCard, pressed && styles.pressed]}
         >
           <AnalyzeFill />
+          {/* Design: inset glow `0 0 20px #00FFEA`, drawn above the fill. */}
+          <View pointerEvents="none" style={styles.analyzeInset} />
           <AnalyzeShine />
           <View style={styles.analyzeRow}>
-            <LinearGradient
-              colors={['#5BB0FF', '#2D6BFF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.cameraTile}
-            >
-              <LinearGradient
-                pointerEvents="none"
-                colors={['rgba(255,255,255,0.34)', 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <Image source={ICON_CAMERA} style={styles.cameraIcon} contentFit="contain" />
-              <View style={styles.recordDot} />
-            </LinearGradient>
+            {/* Design: 60×60 camera tile (gradient square, white camera, red record dot) from the spec SVG. */}
+            <LocalSvgAsset assetModule={ICON_CAMERA_TILE} width={60} height={60} />
             <View style={styles.analyzeCopy}>
               <Text allowFontScaling={false} style={[styles.analyzeTitle, { fontFamily: fonts.boldFont }]}>
                 {t('technique.home.analyzeTitle')}
@@ -444,7 +427,16 @@ function AnalyzeBlock({
               </Text>
             </View>
             <View style={styles.arrowBtn}>
-              <Image source={ICON_ARROW} style={styles.arrowArt} contentFit="contain" />
+              {/* Design: G2 gradient disc; inset ring drawn above the fill so it shows. */}
+              <LinearGradient
+                pointerEvents="none"
+                colors={UI.gradient}
+                locations={UI.gradientLocations}
+                start={UI.gradientStart}
+                end={UI.gradientEnd}
+                style={styles.arrowFill}
+              />
+              <View pointerEvents="none" style={styles.arrowInset} />
               <Image source={ICON_ARROW_GLYPH} style={styles.arrowGlyph} contentFit="contain" />
             </View>
           </View>
@@ -596,27 +588,21 @@ function AnalyzeFill() {
         <Svg width={box.w} height={box.h}>
           <Defs>
             <SvgLinearGradient id="analyzeFill" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor="#1D4FE6" />
-              <Stop offset="0.55" stopColor="#2C6BFF" />
-              <Stop offset="1" stopColor="#5BB8FF" />
-            </SvgLinearGradient>
-            <SvgLinearGradient id="analyzeRim" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor="#9FDBFF" />
-              <Stop offset="0.5" stopColor="#FFFFFF" />
-              <Stop offset="1" stopColor="#C8ECFF" />
+              {/* Design: linear-gradient(270deg, #00A1FF 0%, #0C00B5 100%) → deep violet-blue left, cyan-blue right. */}
+              <Stop offset="0" stopColor="#0C00B5" />
+              <Stop offset="1" stopColor="#00A1FF" />
             </SvgLinearGradient>
           </Defs>
           <Rect x="0" y="0" width={box.w} height={box.h} rx={20} ry={20} fill="url(#analyzeFill)" />
           <Rect
-            x={0.75}
-            y={0.75}
-            width={box.w - 1.5}
-            height={box.h - 1.5}
-            rx={19.25}
-            ry={19.25}
-            stroke="url(#analyzeRim)"
-            strokeOpacity={0.8}
-            strokeWidth={1.25}
+            x={0.5}
+            y={0.5}
+            width={box.w - 1}
+            height={box.h - 1}
+            rx={19.5}
+            ry={19.5}
+            stroke="#00B8FF"
+            strokeWidth={1}
             fill="none"
           />
         </Svg>
@@ -1139,59 +1125,71 @@ function LatestCard({
 
 const styles = StyleSheet.create({
   page: { width: '100%', gap: 20, paddingBottom: 12 },
+  /** Design: dark navy card, faint wave, blue edge glow, 1px blue stroke. */
   greeting: {
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: '#071433',
+    backgroundColor: '#030B2C',
     minHeight: 116,
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0, 72, 255, 0.35)',
+    borderColor: 'rgba(0, 72, 255, 0.6)',
   },
   greetingTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 34, 255, 0.18)',
+    backgroundColor: 'rgba(0, 20, 80, 0.25)',
   },
-  greetingWash: { ...StyleSheet.absoluteFillObject, opacity: 0.55 },
-  greetingEdge: { ...StyleSheet.absoluteFillObject },
+  greetingWash: { ...StyleSheet.absoluteFillObject, opacity: 0.3 },
+  greetingEdge: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 19,
+    boxShadow: '0px 0px 30px 0px rgba(0, 72, 255, 0.7) inset',
+  },
   greetingRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
     justifyContent: 'space-between',
     paddingLeft: 20,
-    paddingRight: 16,
-    paddingVertical: 20,
+    paddingRight: 20,
+    paddingVertical: 22,
     gap: 12,
     minHeight: 116,
   },
-  greetingText: { flex: 1, minWidth: 0 },
-  greetingHello: { color: '#FFFFFF', fontSize: 13, lineHeight: 16 },
-  greetingName: { color: '#00C2FF', marginTop: 1, letterSpacing: -0.3 },
-  greetingReady: { color: '#9BB4D6', fontSize: 13, marginTop: 2 },
-  greetingMeta: { alignItems: 'flex-end', justifyContent: 'center' },
+  greetingText: { flex: 1, minWidth: 0, justifyContent: 'center' },
+  /** Design: #FFF, Inter 400 12px, normal line-height. */
+  greetingHello: { color: '#FFFFFF', fontSize: 12 },
+  greetingName: { color: '#4DB5FF', marginTop: 2, letterSpacing: -0.5 },
+  /** Design: #86A7D2, Inter 400 13px, normal line-height. */
+  greetingReady: { color: '#86A7D2', fontSize: 13, marginTop: 2 },
+  /** Sessions stat sits bottom-right, level with "Ready for your session?". */
+  greetingMeta: { alignItems: 'flex-end', justifyContent: 'flex-end' },
   greetingMetaSpread: { alignSelf: 'stretch', justifyContent: 'space-between' },
   greetingDate: { color: '#FFFFFF', fontSize: 12 },
-  sessionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sessionBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 18 },
-  sessionBar: { width: 3.5, borderRadius: 4, backgroundColor: '#00C2FF' },
-  sessionCount: { color: '#E7F2FF', fontSize: 13, lineHeight: 16 },
-  sessionWeek: { color: '#86A7D2', fontSize: 12, lineHeight: 15 },
+  sessionRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  sessionBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 26, marginBottom: 3 },
+  sessionBar: { width: 5, borderRadius: 3, backgroundColor: '#4DB5FF' },
+  /** Design: "0 sessions / this week" — #86A7D2, Inter 500 12px, normal line-height. */
+  sessionCount: { color: '#86A7D2', fontSize: 12 },
+  sessionWeek: { color: '#86A7D2', fontSize: 12 },
   // Responsive hero: fills whatever height is left between the greeting card and the
   // Analyze section, full width. No fixed crop/zoom — cover adapts to the slot.
-  heroSlot: { width: '100%', overflow: 'hidden', backgroundColor: '#030A17' },
-  // Pull the player up so the headline lands on the court, clear of the shoes.
+  /** No fixed width: with the negative side margins it stretches edge to edge. */
+  heroSlot: { alignSelf: 'stretch', overflow: 'hidden', backgroundColor: '#030A17' },
+  /** Blends the photo's black top into the page navy. */
+  heroTopFade: { position: 'absolute', left: 0, right: 0, top: 0, height: '22%' },
   heroImage: {
     position: 'absolute',
     left: 0,
     right: 0,
     top: 0,
     bottom: 0,
-    transform: [{ translateY: -72 }],
   },
   heroFlex: { flex: 1, minHeight: 180, alignSelf: 'stretch' },
-  headline: { gap: 2 },
+  /** Design: lines sit flush (line-height 100%). */
+  headline: { gap: 0 },
   /** Both lines share the greeting name's blue (design). */
-  headlineLine: { color: '#00C2FF', fontSize: 26, lineHeight: 30, letterSpacing: -0.4 },
+  /** Design: G2 gradient text (102deg #0BF → #02F), Inter 700 28/28. */
+  headlineLine: { fontSize: 28, lineHeight: 30, alignSelf: 'flex-start' },
   /** Web has no `adjustsFontSizeToFit`, so it starts a size smaller to keep the full line. */
   headlineSub: { color: '#9BB0D0', fontSize: Platform.OS === 'web' ? 11 : 12, marginTop: 8, lineHeight: 16 },
   heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '58%' },
@@ -1200,20 +1198,26 @@ const styles = StyleSheet.create({
   analyzeFrame: {
     overflow: 'visible',
     borderRadius: 20,
-    backgroundColor: '#1D4FE6',
+    backgroundColor: '#0650DA',
   },
   /** Pulsing outer glow behind the card (see AnalyzeLiveGlow). */
+  /** Design: outer glow `0 0 20px #0090FF`. */
   analyzeGlow: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 20,
-    backgroundColor: '#1D4FE6',
-    ...glow(26, 0.95),
+    backgroundColor: '#0650DA',
+    boxShadow: '0px 0px 20px 0px #0090FF',
+  },
+  analyzeInset: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+    boxShadow: '0px 0px 20px 0px #00FFEA inset',
   },
   shine: { position: 'absolute', top: -10, bottom: -10, left: 0, width: SHINE_W },
   analyzeShell: {
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: '#1D4FE6',
+    backgroundColor: '#0650DA',
   },
   analyzeRim: {
     position: 'absolute',
@@ -1238,38 +1242,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     minHeight: 85,
   },
-  cameraTile: {
-    width: 60,
-    height: 60,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.35)',
-  },
-  cameraIcon: { width: 26.667, height: 22.667 },
-  /** Red "record" dot on the camera, as in the mockup. */
-  recordDot: {
-    position: 'absolute',
-    top: 21,
-    left: 35,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#FF3B47',
-  },
   analyzeCopy: { flex: 1, minWidth: 0, gap: 2 },
   analyzeTitle: { color: '#FFFFFF', fontSize: 16, lineHeight: 20 },
   analyzeSub: { color: 'rgba(255, 255, 255, 0.62)', fontSize: Platform.OS === 'web' ? 11 : 12, lineHeight: 16 },
+  /** Design: radius 48 (a circle), G2 gradient, glow `0 0 15px #0015D4, 0 0 10px #00B8FF`, inset `0 0 5px 2px #00B8FF`. */
   arrowBtn: {
     width: 48,
     height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
+    boxShadow: '0px 0px 15px 0px #0015D4, 0px 0px 10px 0px #00B8FF',
   },
-  arrowArt: { position: 'absolute', width: 68, height: 68 },
+  arrowFill: { ...StyleSheet.absoluteFillObject, borderRadius: 24 },
+  arrowInset: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+    boxShadow: '0px 0px 5px 2px #00B8FF inset',
+  },
   arrowGlyph: { width: 13.1385, height: 14.9946, transform: [{ rotate: '-90deg' }] },
   sourceRow: { flexDirection: 'row', gap: 5, width: '100%' },
   sourceBtnWrap: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, height: 44 },

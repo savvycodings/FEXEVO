@@ -1,10 +1,9 @@
 import React, { useContext, useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
-import { SELECTED_GLOW, UI } from './ui'
+import { PrimaryFill, SECONDARY_BUTTON, UI } from './ui'
 import { authClient } from '../lib/auth-client'
 import { showAlert } from '../lib/showAlert'
 import { followTarget, unfollowTarget, type FollowTargetType } from '../lib/followsApi'
@@ -108,16 +107,7 @@ export function FollowButton({
       ]}
     >
       {following ? null : (
-        <>
-          <LinearGradient
-            colors={UI.gradient}
-            locations={UI.gradientLocations}
-            start={UI.gradientStart}
-            end={UI.gradientEnd}
-            style={[StyleSheet.absoluteFill, styles.fill]}
-          />
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fill, SELECTED_GLOW]} />
-        </>
+        <PrimaryFill radius={UI.radiusPill} />
       )}
       {following ? <Ionicons name="checkmark" size={sm ? 13 : 16} color={UI.textMuted} /> : null}
       <Text
@@ -125,7 +115,7 @@ export function FollowButton({
         numberOfLines={1}
         style={[
           sm ? styles.labelSm : styles.labelMd,
-          { fontFamily: theme.semiBoldFont, color: following ? UI.textMuted : '#FFFFFF' },
+          { fontFamily: theme.semiBoldFont, color: following ? UI.textMuted : UI.btnPrimaryText },
         ]}
       >
         {label}
@@ -146,7 +136,7 @@ const styles = StyleSheet.create({
   },
   sm: { height: 32, paddingHorizontal: 10, minWidth: 76, gap: 3 },
   md: { height: 50, paddingHorizontal: 18, minWidth: 110 },
-  outlined: { backgroundColor: UI.cardBg, borderColor: UI.trackBorder },
+  outlined: SECONDARY_BUTTON,
   fill: { borderRadius: UI.radiusPill },
   labelSm: { fontSize: 13 },
   labelMd: { fontSize: 16 },

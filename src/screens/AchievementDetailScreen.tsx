@@ -8,12 +8,11 @@ import {
   Image,
   Share,
   useWindowDimensions,
-  ActivityIndicator,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { LinearGradient } from 'expo-linear-gradient'
+import { GlowButton, SurfaceButton } from '../components/ui'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import { ShieldProportionalFrame } from '../components/ShieldProportionalFrame'
@@ -225,27 +224,11 @@ function AchievementDetailScreen() {
           },
         ]}
       >
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => void onPrimaryPress()}
-          style={styles.claimOuter}
-          disabled={claiming}
-        >
-          <LinearGradient
-            colors={isClaimable ? ['#006EFF', '#00B8FF'] : ['#1A3A6B', '#243B6E']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.claimBtn}
-          >
-            {claiming ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text allowFontScaling={false} style={[styles.claimTxt, { fontFamily: theme.semiBoldFont }]}>
-                {t(primaryLabelKey)}
-              </Text>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
+        {isClaimable ? (
+          <GlowButton label={t(primaryLabelKey)} loading={claiming} onPress={() => void onPrimaryPress()} />
+        ) : (
+          <SurfaceButton label={t(primaryLabelKey)} loading={claiming} onPress={() => void onPrimaryPress()} />
+        )}
       </View>
     </View>
   )
@@ -330,21 +313,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingTop: 12,
     backgroundColor: PG.bg,
-  },
-  claimOuter: {
-    width: '100%',
-  },
-  claimBtn: {
-    borderRadius: 999,
-    paddingVertical: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 50,
-  },
-  claimTxt: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    lineHeight: 20,
   },
   fallbackText: {
     color: PG.muted,

@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { LinearGradient } from 'expo-linear-gradient'
+import { SurfaceButton } from '../components/ui'
 import { ThemeContext } from '../context'
 import { LocalSvgAsset } from '../components/LocalSvgAsset'
 import {
@@ -226,22 +226,11 @@ export function AllAchievementsScreen() {
         </View>
 
         {showExpandToggle ? (
-          <TouchableOpacity
-            activeOpacity={0.9}
+          <SurfaceButton
+            label={expanded ? t('progress.viewLess') : t('progress.viewAll')}
             style={styles.viewAllBtnOuter}
             onPress={() => setExpanded((v) => !v)}
-          >
-            <LinearGradient
-              colors={['#006EFF', '#00B8FF']}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={styles.viewAllBtn}
-            >
-              <Text allowFontScaling={false} style={[styles.viewAllTxt, { fontFamily: theme.semiBoldFont }]}>
-                {expanded ? t('progress.viewLess') : t('progress.viewAll')}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          />
         ) : null}
       </ScrollView>
     </View>
@@ -364,17 +353,5 @@ const styles = StyleSheet.create({
   },
   viewAllBtnOuter: {
     marginTop: 28,
-    width: '100%',
-  },
-  viewAllBtn: {
-    borderRadius: 999,
-    paddingVertical: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  viewAllTxt: {
-    fontSize: 15,
-    color: '#FFFFFF',
-    lineHeight: 19,
   },
 })

@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ScrollView,
   StyleSheet,
@@ -42,9 +42,14 @@ export type ShotDetailsPickerProps = {
   /** Reopening from Set Clip: restore these choices. */
   initialShot?: UserShotDeclaration | null
   initialStep?: ShotPickerStep
+  /** Label of the final button (camera step); defaults to "Continue to set clip". */
+  doneLabel?: string
 }
 
 /** Finds the analysis group + shot item for a declaration made earlier. */
+/** How long a picked tile shows as active before moving to the next step. */
+const ADVANCE_DELAY_MS = 300
+
 function restoreChoice(shot: UserShotDeclaration | null | undefined): {
   coreGroup: AnalysisCoreGroup | null
   item: CoachUploadShotItem | null
@@ -62,7 +67,7 @@ function restoreChoice(shot: UserShotDeclaration | null | undefined): {
  * After upload/record: declare the shot one step per page (category → type → camera angle)
  * before Set Clip. Uses the analysis-supported shot list, so every pick is one the analyser scores.
  */
-export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initialStep }: ShotDetailsPickerProps) {
+export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initialStep, doneLabel }: ShotDetailsPickerProps) {
   const { t } = useTranslation()
   const { theme: ctx } = useContext(ThemeContext)
   const theme = ctx?.backgroundColor != null ? ctx : defaultTheme
@@ -94,7 +99,23 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
   const stepEnabled = (key: ShotPickerStep) =>
     key === 'shot' || (key === 'type' && coreGroup != null) || (key === 'camera' && shot != null)
 
+  /** A pick shows its tile selected for a moment before the next step slides in. */
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelAdvance = () => {
+    if (advanceTimer.current) clearTimeout(advanceTimer.current)
+    advanceTimer.current = null
+  }
+  const advanceTo = (next: ShotPickerStep) => {
+    cancelAdvance()
+    advanceTimer.current = setTimeout(() => {
+      advanceTimer.current = null
+      setStep(next)
+    }, ADVANCE_DELAY_MS)
+  }
+  useEffect(() => cancelAdvance, [])
+
   const goBack = () => {
+    cancelAdvance()
     if (step === 'camera') setStep('type')
     else if (step === 'type') setStep('shot')
     else onBack()
@@ -106,12 +127,12 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
       setViewId(null)
     }
     setCoreGroup(next)
-    setStep('type')
+    advanceTo('type')
   }
 
   const pickShot = (next: CoachUploadShotItem) => {
     setShot(next)
-    setStep('camera')
+    advanceTo('camera')
   }
 
   const finish = () => {
@@ -146,7 +167,10 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
           ]}
           current={step}
           enabled={stepEnabled}
-          onPress={setStep}
+          onPress={(key) => {
+            cancelAdvance()
+            setStep(key)
+          }}
           fontFamily={fonts.regular}
           thumbnail={
             videoUri ? (
@@ -253,7 +277,7 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
             </View>
             {canContinue ? (
               <GlowButton
-                label={t('studentProfile.continueToSetClip')}
+                label={doneLabel ?? t('studentProfile.continueToSetClip')}
                 onPress={finish}
                 testID={TEST_IDS.setClipContinue}
               />

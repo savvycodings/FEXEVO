@@ -1,6 +1,5 @@
 import React, { useContext, useState } from 'react'
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
@@ -13,7 +12,7 @@ import {
   setMainClub,
   type MyClubMembership,
 } from '../lib/clubsApi'
-import { PRIMARY_GLOW, UI } from './ui'
+import { PrimaryFill, SECONDARY_BUTTON, UI } from './ui'
 
 type Sheet = 'requested' | 'member' | 'confirmLeave' | null
 
@@ -139,7 +138,7 @@ export function ClubMembershipButton({
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity
-          style={[styles.btn, styles.main, primary ? PRIMARY_GLOW : styles.outline, busy && styles.disabled]}
+          style={[styles.btn, styles.main, primary ? null : styles.outline, busy && styles.disabled]}
           onPress={onPress}
           disabled={busy}
           activeOpacity={0.85}
@@ -149,20 +148,14 @@ export function ClubMembershipButton({
           testID={`club-membership-${state}`}
         >
           {primary ? (
-            <LinearGradient
-              colors={UI.gradient}
-              locations={UI.gradientLocations}
-              start={UI.gradientStart}
-              end={UI.gradientEnd}
-              style={[StyleSheet.absoluteFill, styles.fill]}
-            />
+            <PrimaryFill radius={UI.radiusPill} />
           ) : null}
           {busy ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={primary ? UI.btnPrimaryText : '#FFFFFF'} />
           ) : (
             <>
-              <Ionicons name={icon} size={18} color="#FFFFFF" />
-              <Text allowFontScaling={false} style={[styles.label, font]}>
+              <Ionicons name={icon} size={18} color={primary ? UI.btnPrimaryText : '#FFFFFF'} />
+              <Text allowFontScaling={false} style={[styles.label, font, primary && { color: UI.btnPrimaryText }]}>
                 {label}
               </Text>
               {state === 'member' && membership.isMain ? (
@@ -275,7 +268,7 @@ const styles = StyleSheet.create({
   },
   main: { flex: 1 },
   secondary: { flexBasis: 110, flexGrow: 0 },
-  outline: { borderWidth: 1, borderColor: UI.trackBorder, backgroundColor: UI.surface },
+  outline: SECONDARY_BUTTON,
   disabled: { opacity: 0.7 },
   fill: { borderRadius: UI.radiusPill },
   label: { fontSize: 15, color: '#FFFFFF' },

@@ -18,6 +18,8 @@ import Svg, {
 } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { TEST_IDS } from '../../lib/testIds'
+import { PrimaryFill, UI } from '../../components/ui'
+import { LocalSvgAsset } from '../../components/LocalSvgAsset'
 import {
   PHYSICAL_METRIC_KEYS,
   type PhysicalMetricKey,
@@ -38,6 +40,9 @@ import {
 } from '../../lib/techniquePose'
 
 type Detail = 'overview' | 'mistakes' | 'pose'
+
+const ICON_SMART_3D = require('../../../assets/aicoach/analysis/smart-3d.svg')
+const ICON_ARROW_RIGHT = require('../../../assets/aicoach/analysis/arrow-right.svg')
 
 type Props = {
   videoUri: string | null
@@ -121,9 +126,6 @@ function ratingTone(rating: string | null, score: number | null) {
  * CSS `linear-gradient(102.5deg, A 9.07%, B 90.93%)` mapped to expo-linear-gradient points for the
  * ~343x52 action buttons (102.5deg runs left→right, tilting slightly downward).
  */
-const CSS_102_5_START = { x: 0.007, y: -0.21 }
-const CSS_102_5_END = { x: 0.993, y: 1.21 }
-const CSS_102_5_LOCATIONS = [0.0907, 0.9093] as const
 
 const STATUS_INTERVAL_MS = 100
 /** Seek at most this often while dragging, so the decoder keeps up. */
@@ -562,8 +564,8 @@ export function AnalysisOverview({
           const value = metrics?.[key]
           return (
             <View key={key} style={styles.metric}>
-                <Ionicons name={spec.icon} size={18} color={spec.color} />
-                <Text allowFontScaling={false} style={[styles.metricValue, { fontFamily: theme.semiBoldFont }]}>
+                <Ionicons name={spec.icon} size={24} color={spec.color} />
+                <Text allowFontScaling={false} style={[styles.metricValue, { fontFamily: theme.mediumFont }]}>
                   {value ?? '—'}
                 </Text>
                 <Text allowFontScaling={false} numberOfLines={1} style={[styles.metricLabel, { fontFamily: theme.regularFont }]}>
@@ -580,33 +582,31 @@ export function AnalysisOverview({
         style={styles.btnRadius}
         testID="overview-biggest-mistakes"
       >
-        <LinearGradient
-          colors={['#00BBFF', '#0022FF']}
-          locations={CSS_102_5_LOCATIONS}
-          start={CSS_102_5_START}
-          end={CSS_102_5_END}
-          style={styles.primaryBtn}
-        >
+        <View style={styles.primaryBtn}>
+          <PrimaryFill radius={UI.btnRadius} />
           <Text allowFontScaling={false} style={[styles.primaryLabel, { fontFamily: theme.semiBoldFont }]}>
             {t('analysis.viewBiggestMistakes')}
           </Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-        </LinearGradient>
+          <LocalSvgAsset assetModule={ICON_ARROW_RIGHT} width={32} height={32} />
+        </View>
       </Pressable>
 
-      <Pressable onPress={onSmart3d} accessibilityRole="button" style={styles.btnRadius}>
-        <LinearGradient
-          colors={['#041641', '#0022FF']}
-          locations={CSS_102_5_LOCATIONS}
-          start={CSS_102_5_START}
-          end={CSS_102_5_END}
-          style={styles.secondaryBtn}
-        >
-          <Ionicons name="cube-outline" size={18} color="#3EC8FF" />
-          <Text allowFontScaling={false} style={[styles.secondaryLabel, { fontFamily: theme.semiBoldFont }]}>
+      <Pressable onPress={onSmart3d} accessibilityRole="button" style={styles.smart3dBtn}>
+        <View style={styles.smart3dInner}>
+          {/* Design: G2-style navy → blue fill, 2px #00B8FF rim, inset glow (overlay so Android draws it above the fill). */}
+          <LinearGradient
+            colors={['#041641', '#0022FF']}
+            locations={UI.gradientLocations}
+            start={UI.gradientStart}
+            end={UI.gradientEnd}
+            style={StyleSheet.absoluteFill}
+          />
+          <View pointerEvents="none" style={styles.smart3dInset} />
+          <LocalSvgAsset assetModule={ICON_SMART_3D} width={32} height={32} />
+          <Text allowFontScaling={false} style={[styles.smart3dLabel, { fontFamily: theme.mediumFont }]}>
             {t('analysis.smart3d')}
           </Text>
-        </LinearGradient>
+        </View>
       </Pressable>
     </View>
   )
@@ -714,29 +714,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 8,
   },
-  metricValue: { color: '#FFFFFF', fontSize: 18 },
-  metricLabel: { color: '#D5E4FF', fontSize: 9, textAlign: 'center' },
-  btnRadius: { borderRadius: 16 },
+  /** Design: #FFF, Inter 500 24px, centered. */
+  metricValue: { color: '#FFFFFF', fontSize: 24, textAlign: 'center' },
+  /** Design: #FFF, Inter 400 9px, centered. */
+  metricLabel: { color: '#FFFFFF', fontSize: 9, textAlign: 'center' },
+  btnRadius: { borderRadius: UI.btnRadius },
   primaryBtn: {
-    height: 52,
-    borderRadius: 16,
+    height: UI.buttonHeight,
+    borderRadius: UI.btnRadius,
+    overflow: 'hidden',
+    paddingHorizontal: UI.btnPaddingX,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    boxShadow: '0px 0px 16px 0px #35C7FF inset, 0px 0px 10px 0px #00B8FF, 0px 0px 15px 0px #0015D4',
+    gap: 10,
   },
-  primaryLabel: { color: '#FFFFFF', fontSize: 16 },
-  secondaryBtn: {
-    height: 52,
-    borderRadius: 16,
+  primaryLabel: { color: UI.btnPrimaryText, fontSize: 18 },
+  /** Design: #00B8FF, Inter 500 18px. */
+  smart3dLabel: { color: '#00B8FF', fontSize: 18, textAlign: 'center' },
+  /** Smart 3D View: radius 20, 2px #00B8FF border, outer glow `0 0 15px rgba(0,72,255,0.25)`. */
+  smart3dBtn: {
+    borderRadius: UI.btnRadius,
+    boxShadow: '0px 0px 15px 0px rgba(0, 72, 255, 0.25)',
+  },
+  smart3dInner: {
+    height: UI.buttonHeight,
+    borderRadius: UI.btnRadius,
     borderWidth: 2,
     borderColor: '#00B8FF',
+    overflow: 'hidden',
+    paddingHorizontal: UI.btnPaddingX,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    boxShadow: '0px 0px 16px 0px #0048FF40 inset, 0px 0px 15px 0px #0048FF40',
+    gap: 10,
   },
-  secondaryLabel: { color: '#FFFFFF', fontSize: 16 },
+  smart3dInset: {
+    ...StyleSheet.absoluteFillObject,
+    boxShadow: '0px 0px 16px 0px rgba(0, 72, 255, 0.25) inset',
+  },
 })
