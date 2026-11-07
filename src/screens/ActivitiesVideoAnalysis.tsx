@@ -47,7 +47,7 @@ import { CorrectMovementView } from './techniqueResults/CorrectMovementView'
 import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { useNavigation } from '@react-navigation/native'
 import { useFavoriteIds } from '../lib/activitiesFavorites'
-import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
+import { averagePhysicalMetrics, parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
 import {
   parseBiomechanicsSummary,
   type BiomechanicsSummary,
@@ -606,6 +606,7 @@ export function ActivitiesVideoAnalysis({
     uncertaintyPlusMinus: number | null
     physicalMetrics: ReturnType<typeof parsePhysicalMetricsFromAnalysis>
     biomechanicsSummary: BiomechanicsSummary | null
+    viewId: string | null
   } | null>(null)
   const [fullFeedbackText, setFullFeedbackText] = useState<string | null>(null)
   const [aiSections, setAiSections] = useState<{
@@ -749,6 +750,10 @@ export function ActivitiesVideoAnalysis({
           uncertaintyPlusMinus: confidence.uncertaintyPlusMinus,
           physicalMetrics: parsePhysicalMetricsFromAnalysis(ai),
           biomechanicsSummary: parseBiomechanicsSummary(metrics),
+          viewId:
+            typeof (metrics?.user_shot as { viewId?: unknown } | undefined)?.viewId === 'string'
+              ? String((metrics?.user_shot as { viewId?: string }).viewId)
+              : null,
         })
         setPoseFrames(rows)
         setTotalVidFrames(tf)
@@ -1022,6 +1027,9 @@ export function ActivitiesVideoAnalysis({
     </View>
   ) : null
 
+  const headlineScore = aiSnapshot?.physicalMetrics
+    ? averagePhysicalMetrics(aiSnapshot.physicalMetrics)
+    : aiSnapshot?.scorePercent ?? (typeof session.score === 'number' ? Math.round(session.score) : null)
   const metricsSummary = useMemo(() => {
     const raw = aiSections?.diagnosis?.trim() || aiSections?.strengths[0] || ''
     const text = stripCoachRichMarkers(raw)
@@ -1040,6 +1048,7 @@ export function ActivitiesVideoAnalysis({
               : null
           }
           fps={aiSnapshot?.biomechanicsSummary?.timing?.fps ?? null}
+          viewId={aiSnapshot?.viewId ?? null}
           onClose={() => setOverviewDetail(poseReturn)}
         />
       </View>
@@ -1171,10 +1180,7 @@ export function ActivitiesVideoAnalysis({
         {analysisTab === 'metrics' ? (
           <MetricsPage
             visible
-            score={
-              aiSnapshot?.scorePercent ??
-              (typeof session.score === 'number' ? Math.round(session.score) : null)
-            }
+            score={headlineScore}
             rating={aiSnapshot?.rating ?? session.rating ?? null}
             summary={metricsSummary}
             shotLabel={session.shotLabel ?? shotTitle}
@@ -1215,10 +1221,7 @@ export function ActivitiesVideoAnalysis({
             analysisId={session.analysisId}
             referenceImageUri={correctionPairs[0]?.correctedImage ?? null}
             metrics={proCompareMetrics}
-            score={
-              aiSnapshot?.scorePercent ??
-              (typeof session.score === 'number' ? Math.round(session.score) : null)
-            }
+            score={headlineScore}
             onSave={() => navigation.getParent()?.navigate('Progress' as never)}
           />
         ) : null}
@@ -1231,10 +1234,7 @@ export function ActivitiesVideoAnalysis({
             videoKey={session.analysisId}
             poseFrames={poseFrames}
             totalFrames={totalVidFrames}
-            score={
-              aiSnapshot?.scorePercent ??
-              (typeof session.score === 'number' ? Math.round(session.score) : null)
-            }
+            score={headlineScore}
             rating={aiSnapshot?.rating ?? session.rating ?? null}
             summary={metricsSummary}
             metrics={aiSnapshot?.physicalMetrics ?? null}

@@ -110,6 +110,7 @@ import {
 } from '../components/bodyMobility/BodyMobilitySection'
 import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidenceSection'
 import {
+  averagePhysicalMetrics,
   parsePhysicalMetricsFromAnalysis,
   type PhysicalHistoryItem,
 } from '../lib/physicalMetrics'
@@ -881,6 +882,8 @@ export function Technique() {
     () => parsePhysicalMetricsFromAnalysis(aiAnalysis as Record<string, unknown> | null),
     [aiAnalysis]
   )
+  /** The ring next to stability / power / agility / reactions / acceleration is their average. */
+  const headlineScore = physicalMetrics ? averagePhysicalMetrics(physicalMetrics) : score
   const metricsBlurb = useMemo(() => {
     const diagnosis =
       typeof localeAnalysis?.diagnosis === 'string' ? localeAnalysis.diagnosis.trim() : ''
@@ -2863,6 +2866,7 @@ export function Technique() {
                 : null
             }
             fps={biomechanicsSummary?.timing?.fps ?? null}
+            viewId={userShot?.viewId ?? null}
             onClose={() => setResultsDetail(poseReturn)}
           />
         ) : step === 3 && resultsDetail === 'drills' ? (
@@ -3347,7 +3351,7 @@ export function Technique() {
               section={resultSection}
               onSectionChange={onResultSectionChange}
               tabs={resultSectionTabs}
-              score={score}
+              score={headlineScore}
               rating={typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null}
               summary={metricsBlurb}
               shotLabel={userShot?.shotLabel ?? proReferenceShot}
@@ -3386,7 +3390,7 @@ export function Technique() {
               videoKey={analysisId ?? 'technique-step3'}
               poseFrames={step3PoseFrames}
               totalFrames={overlayTotalFrames}
-              score={score}
+              score={headlineScore}
               rating={typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null}
               summary={metricsBlurb}
               metrics={physicalMetrics}

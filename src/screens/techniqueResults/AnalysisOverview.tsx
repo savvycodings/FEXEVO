@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -81,12 +82,29 @@ const JOINT_DOTS = [
   'RIGHT_ANKLE',
 ]
 
-function coverPx(nx: number, ny: number, boxW: number, boxH: number, natW: number, natH: number) {
+/** Landmark in the video box. Cover crops like the card; contain shows the whole frame, as in fullscreen. */
+function fitPx(
+  nx: number,
+  ny: number,
+  boxW: number,
+  boxH: number,
+  natW: number,
+  natH: number,
+  fit: 'cover' | 'contain'
+) {
   const videoAR = natW / natH
   const boxAR = boxW / boxH
-  const scale = videoAR > boxAR ? boxH / natH : boxW / natW
-  const ox = videoAR > boxAR ? (boxW - natW * scale) / 2 : 0
-  const oy = videoAR > boxAR ? 0 : (boxH - natH * scale) / 2
+  const wider = videoAR > boxAR
+  const scale =
+    fit === 'cover'
+      ? wider
+        ? boxH / natH
+        : boxW / natW
+      : wider
+        ? boxW / natW
+        : boxH / natH
+  const ox = (boxW - natW * scale) / 2
+  const oy = (boxH - natH * scale) / 2
   return { x: nx * natW * scale + ox, y: ny * natH * scale + oy }
 }
 
@@ -140,6 +158,278 @@ function clock(ms: number) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
+/** Pose dots, bones and angle labels, fitted the same way as the video under them. */
+function PoseSvg({
+  pose,
+  angles,
+  width,
+  height,
+  natural,
+  fit,
+}: {
+  pose: PoseFrameRow
+  angles: ComputedJointAngle[]
+  width: number
+  height: number
+  natural: { w: number; h: number }
+  fit: 'cover' | 'contain'
+}) {
+  const pt = (x: number, y: number) => fitPx(x, y, width, height, natural.w, natural.h, fit)
+  return (
+    <Svg pointerEvents="none" width={width} height={height} style={StyleSheet.absoluteFill}>
+      {MEDIAPIPE_POSE_CONNECTIONS.map(([a, b]) => {
+        const pa = pose.landmarks[a]
+        const pb = pose.landmarks[b]
+        if (!pa || !pb) return null
+        if ((pa.visibility ?? 1) < 0.35 || (pb.visibility ?? 1) < 0.35) return null
+        const A = pt(pa.x, pa.y)
+        const B = pt(pb.x, pb.y)
+        return (
+          <Line
+            key={`${a}-${b}`}
+            x1={A.x}
+            y1={A.y}
+            x2={B.x}
+            y2={B.y}
+            stroke={poseSegmentColor(a, b, '#3DDC97', '#FF4D8D')}
+            strokeWidth={2.5}
+            strokeLinecap="round"
+          />
+        )
+      })}
+      {JOINT_DOTS.map((name) => {
+        const p = pose.landmarks[name]
+        if (!p || (p.visibility ?? 1) < 0.35) return null
+        const at = pt(p.x, p.y)
+        return <Circle key={name} cx={at.x} cy={at.y} r={3.5} fill="#7AECFF" />
+      })}
+      {angles.map((j) => {
+        const arcR = Math.max(10, Math.min(20, width * 0.035))
+        const arc = jointArcSvgPath(j.b, j.a, j.c, arcR)
+        const labelAt = jointLabelOffset(j.b, j.a, j.c, arcR + 10)
+        return (
+          <Fragment key={`ang-${j.id}`}>
+            {arc ? <Path d={arc} fill="none" stroke={j.color} strokeWidth={1.6} strokeOpacity={0.9} /> : null}
+            <SvgText
+              x={labelAt.x}
+              y={labelAt.y + 4}
+              fill={j.color}
+              fontSize={Math.max(10, Math.min(13, width * 0.032))}
+              fontWeight="700"
+              textAnchor="middle"
+            >
+              {`${Math.round(j.deg)}°`}
+            </SvgText>
+          </Fragment>
+        )
+      })}
+      {(() => {
+        const box = normBox(pose.racket_bbox)
+        if (!box) return null
+        const a = pt(box[0], box[1])
+        const b = pt(box[2], box[3])
+        return (
+          <Rect
+            x={Math.min(a.x, b.x)}
+            y={Math.min(a.y, b.y)}
+            width={Math.abs(b.x - a.x)}
+            height={Math.abs(b.y - a.y)}
+            stroke="#FFE14A"
+            strokeWidth={2}
+            fill="transparent"
+          />
+        )
+      })()}
+      {(() => {
+        const box = normBox(pose.ball_bbox)
+        if (!box) return null
+        const a = pt(box[0], box[1])
+        const b = pt(box[2], box[3])
+        return (
+          <Rect
+            x={Math.min(a.x, b.x)}
+            y={Math.min(a.y, b.y)}
+            width={Math.abs(b.x - a.x)}
+            height={Math.abs(b.y - a.y)}
+            stroke="#FF8A00"
+            strokeWidth={2}
+            fill="rgba(255,138,0,0.25)"
+          />
+        )
+      })()}
+    </Svg>
+  )
+}
+
+/** In-app fullscreen so the pose stays on the picture and Back always returns. */
+function AnalysisFullscreen({
+  visible,
+  uri,
+  videoKey,
+  startMs,
+  poseFrames,
+  totalFrames,
+  naturalHint,
+  onClose,
+}: {
+  visible: boolean
+  uri: string | null
+  videoKey: string
+  startMs: number
+  poseFrames?: PoseFrameRow[]
+  totalFrames: number | null
+  naturalHint: { w: number; h: number } | null
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const { theme } = useContext(ThemeContext)
+  const insets = useSafeAreaInsets()
+  const ref = useRef<Video>(null)
+  const [box, setBox] = useState({ w: 0, h: 0 })
+  const [natural, setNatural] = useState(naturalHint)
+  const [position, setPosition] = useState(startMs)
+  const [duration, setDuration] = useState(0)
+  const [playing, setPlaying] = useState(true)
+  const anchor = useRef({ pos: startMs, at: Date.now(), playing: true })
+
+  useEffect(() => {
+    if (!visible) return
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose()
+      return true
+    })
+    return () => sub.remove()
+  }, [visible, onClose])
+
+  useEffect(() => {
+    if (!playing) return
+    let raf = 0
+    let last = -1
+    const tick = () => {
+      const a = anchor.current
+      if (a.playing) {
+        const est = a.pos + (Date.now() - a.at)
+        const frame = Math.floor(est / 33)
+        if (frame !== last) {
+          last = frame
+          setPosition(est)
+        }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing])
+
+  const pose = useMemo(() => {
+    if (!poseFrames?.length || duration <= 0) return null
+    const last = poseFrames.reduce((max, row) => Math.max(max, row.frame), 0)
+    const total = totalFrames && totalFrames > 1 ? totalFrames : last + 1
+    const idx = Math.round((Math.min(position, duration) / duration) * Math.max(0, total - 1))
+    return nearestPoseByFrame(poseFrames, idx)
+  }, [poseFrames, totalFrames, position, duration])
+
+  const angles = useMemo(() => {
+    if (!pose || !natural || box.w <= 0) return []
+    const getPx = (name: string) => {
+      const p = pose.landmarks[name]
+      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null
+      return fitPx(p.x, p.y, box.w, box.h, natural.w, natural.h, 'contain')
+    }
+    return computeOverlayJointAngles(getPx, pose.landmarks)
+  }, [pose, natural, box])
+
+  function hold(ms: number, play: boolean) {
+    const at = duration > 0 ? Math.min(Math.max(0, ms), Math.max(0, duration - 40)) : Math.max(0, ms)
+    const restart = play && duration > 0 && at >= duration - 120
+    const next = restart ? 0 : at
+    anchor.current = { pos: next, at: Date.now(), playing: play }
+    setPlaying(play)
+    setPosition(next)
+    void ref.current?.setStatusAsync({
+      shouldPlay: play,
+      positionMillis: next,
+      seekMillisToleranceBefore: 0,
+      seekMillisToleranceAfter: 80,
+    })
+  }
+
+  return (
+    <Modal visible={visible} animationType="fade" onRequestClose={onClose} supportedOrientations={['portrait']}>
+      <View style={[styles.fullScreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <View style={styles.fullBar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('analysis.back')}
+            onPress={onClose}
+            hitSlop={8}
+            style={styles.fullBack}
+          >
+            <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
+            <Text allowFontScaling={false} style={[styles.fullBackLabel, { fontFamily: theme.semiBoldFont }]}>
+              {t('analysis.back')}
+            </Text>
+          </Pressable>
+        </View>
+        <View
+          style={styles.fullStage}
+          onLayout={(e) => setBox({ w: Math.floor(e.nativeEvent.layout.width), h: Math.floor(e.nativeEvent.layout.height) })}
+        >
+          {uri && box.w > 0 ? (
+            <Video
+              key={`${videoKey}-full`}
+              ref={ref}
+              source={{ uri }}
+              style={StyleSheet.absoluteFill}
+              resizeMode={ResizeMode.CONTAIN}
+              progressUpdateIntervalMillis={STATUS_INTERVAL_MS}
+              onReadyForDisplay={(event) => {
+                const n = event.naturalSize
+                if (n?.width > 0 && n?.height > 0) setNatural({ w: n.width, h: n.height })
+              }}
+              onLoad={(status) => {
+                const length = status.isLoaded ? status.durationMillis ?? 0 : 0
+                if (length > 0) setDuration(length)
+                const at = Math.min(startMs, Math.max(0, length - 40))
+                anchor.current = { pos: at, at: Date.now(), playing: true }
+                setPosition(at)
+                void ref.current?.setStatusAsync({
+                  shouldPlay: true,
+                  positionMillis: at,
+                  seekMillisToleranceBefore: 0,
+                  seekMillisToleranceAfter: 80,
+                })
+              }}
+              onPlaybackStatusUpdate={(status) => {
+                if (!status.isLoaded) return
+                anchor.current = { pos: status.positionMillis, at: Date.now(), playing: status.isPlaying }
+                setPosition(status.positionMillis)
+                setDuration(status.durationMillis ?? 0)
+                setPlaying(status.isPlaying)
+              }}
+            />
+          ) : null}
+          {pose && natural && box.w > 0 ? (
+            <PoseSvg pose={pose} angles={angles} width={box.w} height={box.h} natural={natural} fit="contain" />
+          ) : null}
+        </View>
+        <View style={styles.fullControls}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => hold(position, !playing)}
+            style={styles.play}
+          >
+            <Ionicons name={playing ? 'pause' : 'play'} size={18} color="#FFFFFF" style={playing ? undefined : styles.playIcon} />
+          </Pressable>
+          <Text allowFontScaling={false} style={[styles.time, { fontFamily: theme.mediumFont }]}>
+            {clock(position)}/{clock(duration)}
+          </Text>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
 export function AnalysisOverview({
   videoUri,
   videoKey,
@@ -166,6 +456,7 @@ export function AnalysisOverview({
   const [duration, setDuration] = useState(0)
   /** Slider position while the finger is on it; overrides playback. */
   const [scrubMs, setScrubMs] = useState<number | null>(null)
+  const [fullscreen, setFullscreen] = useState(false)
   const anchor = useRef({ pos: 0, at: 0, rate: 1, playing: false })
   const scrub = useRef({ wasPlaying: false, lastSeek: 0 })
   const tone = ratingTone(rating, score)
@@ -202,7 +493,7 @@ export function AnalysisOverview({
     const getPx = (name: string) => {
       const p = pose.landmarks[name]
       if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null
-      return coverPx(p.x, p.y, frameW, frameH, natural.w, natural.h)
+      return fitPx(p.x, p.y, frameW, frameH, natural.w, natural.h, 'cover')
     }
     const raw = computeOverlayJointAngles(getPx, pose.landmarks)
     setJointAngles(
@@ -253,13 +544,19 @@ export function AnalysisOverview({
   function togglePlay() {
     const video = videoRef.current
     if (!video) return
-    if (playing) {
-      void video.pauseAsync()
-      return
-    }
-    // At the end, play starts over instead of doing nothing.
-    if (duration > 0 && position >= duration - 100) void video.replayAsync()
-    else void video.playAsync()
+    // The frame clock can run a little past the clip. Seeking there makes the next play do nothing.
+    const at = duration > 0 ? Math.min(Math.max(0, position), Math.max(0, duration - 40)) : Math.max(0, position)
+    const restart = duration > 0 && at >= duration - 120
+    const next = restart ? 0 : at
+    anchor.current = { ...anchor.current, playing: !playing, pos: next, at: Date.now() }
+    setPlaying(!playing)
+    setPosition(next)
+    void video.setStatusAsync({
+      shouldPlay: !playing,
+      positionMillis: next,
+      seekMillisToleranceBefore: 0,
+      seekMillisToleranceAfter: 80,
+    })
   }
 
   const msAt = useCallback(
@@ -358,100 +655,11 @@ export function AnalysisOverview({
               <View style={{ width: '100%', height: frameH, backgroundColor: '#000' }} />
             )}
             {pose && natural && frameW > 0 ? (
-              <Svg pointerEvents="none" width={frameW} height={frameH} style={StyleSheet.absoluteFill}>
-                {MEDIAPIPE_POSE_CONNECTIONS.map(([a, b]) => {
-                  const pa = pose.landmarks[a]
-                  const pb = pose.landmarks[b]
-                  if (!pa || !pb) return null
-                  if ((pa.visibility ?? 1) < 0.35 || (pb.visibility ?? 1) < 0.35) return null
-                  const A = coverPx(pa.x, pa.y, frameW, frameH, natural.w, natural.h)
-                  const B = coverPx(pb.x, pb.y, frameW, frameH, natural.w, natural.h)
-                  return (
-                    <Line
-                      key={`${a}-${b}`}
-                      x1={A.x}
-                      y1={A.y}
-                      x2={B.x}
-                      y2={B.y}
-                      stroke={poseSegmentColor(a, b, '#3DDC97', '#FF4D8D')}
-                      strokeWidth={2.5}
-                      strokeLinecap="round"
-                    />
-                  )
-                })}
-                {JOINT_DOTS.map((name) => {
-                  const p = pose.landmarks[name]
-                  if (!p || (p.visibility ?? 1) < 0.35) return null
-                  const pt = coverPx(p.x, p.y, frameW, frameH, natural.w, natural.h)
-                  return <Circle key={name} cx={pt.x} cy={pt.y} r={3.5} fill="#7AECFF" />
-                })}
-                {jointAngles.map((j) => {
-                  const arcR = Math.max(10, Math.min(20, frameW * 0.035))
-                  const arc = jointArcSvgPath(j.b, j.a, j.c, arcR)
-                  const labelAt = jointLabelOffset(j.b, j.a, j.c, arcR + 10)
-                  return (
-                    <Fragment key={`ang-${j.id}`}>
-                      {arc ? (
-                        <Path
-                          d={arc}
-                          fill="none"
-                          stroke={j.color}
-                          strokeWidth={1.6}
-                          strokeOpacity={0.9}
-                        />
-                      ) : null}
-                      <SvgText
-                        x={labelAt.x}
-                        y={labelAt.y + 4}
-                        fill={j.color}
-                        fontSize={Math.max(10, Math.min(13, frameW * 0.032))}
-                        fontWeight="700"
-                        textAnchor="middle"
-                      >
-                        {`${Math.round(j.deg)}°`}
-                      </SvgText>
-                    </Fragment>
-                  )
-                })}
-                {(() => {
-                  const box = normBox(pose.racket_bbox)
-                  if (!box) return null
-                  const a = coverPx(box[0], box[1], frameW, frameH, natural.w, natural.h)
-                  const b = coverPx(box[2], box[3], frameW, frameH, natural.w, natural.h)
-                  return (
-                    <Rect
-                      x={Math.min(a.x, b.x)}
-                      y={Math.min(a.y, b.y)}
-                      width={Math.abs(b.x - a.x)}
-                      height={Math.abs(b.y - a.y)}
-                      stroke="#FFE14A"
-                      strokeWidth={2}
-                      fill="transparent"
-                    />
-                  )
-                })()}
-                {(() => {
-                  const box = normBox(pose.ball_bbox)
-                  if (!box) return null
-                  const a = coverPx(box[0], box[1], frameW, frameH, natural.w, natural.h)
-                  const b = coverPx(box[2], box[3], frameW, frameH, natural.w, natural.h)
-                  return (
-                    <Rect
-                      x={Math.min(a.x, b.x)}
-                      y={Math.min(a.y, b.y)}
-                      width={Math.abs(b.x - a.x)}
-                      height={Math.abs(b.y - a.y)}
-                      stroke="#FF8A00"
-                      strokeWidth={2}
-                      fill="rgba(255,138,0,0.25)"
-                    />
-                  )
-                })()}
-              </Svg>
+              <PoseSvg pose={pose} angles={jointAngles} width={frameW} height={frameH} natural={natural} fit="cover" />
             ) : null}
             <Pressable
               style={styles.fullscreen}
-              onPress={() => void videoRef.current?.presentFullscreenPlayer()}
+              onPress={() => setFullscreen(true)}
               hitSlop={10}
               accessibilityRole="button"
               accessibilityLabel={t('analysis.fullscreen')}
@@ -608,6 +816,16 @@ export function AnalysisOverview({
           </Text>
         </View>
       </Pressable>
+      <AnalysisFullscreen
+        visible={fullscreen}
+        uri={videoUri}
+        videoKey={videoKey}
+        startMs={shownMs}
+        poseFrames={poseFrames}
+        totalFrames={totalFrames ?? null}
+        naturalHint={natural}
+        onClose={() => setFullscreen(false)}
+      />
     </View>
   )
 }
@@ -634,6 +852,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 10,
+    zIndex: 6,
     width: 32,
     height: 32,
     borderRadius: 10,
@@ -648,6 +867,7 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     bottom: 12,
+    zIndex: 5,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -663,6 +883,18 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.92)',
   },
   playIcon: { marginLeft: 2 },
+  fullScreen: { flex: 1, backgroundColor: '#000' },
+  fullBar: { height: 52, justifyContent: 'center', paddingHorizontal: 8 },
+  fullBack: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 8, paddingRight: 16 },
+  fullBackLabel: { color: '#FFFFFF', fontSize: 17 },
+  fullStage: { flex: 1, backgroundColor: '#000' },
+  fullControls: {
+    height: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+  },
   trackHit: { flex: 1, justifyContent: 'center', height: 28 },
   track: {
     height: 6,

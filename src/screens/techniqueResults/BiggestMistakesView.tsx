@@ -7,7 +7,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
 import { ThemeContext } from '../../context'
-import { GlowButton, SELECTED_GLOW, UI } from '../../components/ui'
+import { SELECTED_GLOW, UI } from '../../components/ui'
 import { useContactJoints } from '../../lib/jointsApi'
 import { landmarkVisOk, poseAngle } from '../../lib/poseJointAngles'
 import { nearestPoseByFrame, type LandmarkPoint, type PoseFrameRow } from '../../lib/techniquePose'
@@ -69,7 +69,6 @@ const OFF = '#FF7A6B'
 const GOOD = '#34C759'
 /** Assumed shoulder-to-hip length, to turn the elbow gap into centimetres. */
 const TORSO_CM = 50
-const ELBOW_GAP_MIN_CM = 15
 
 /** Where each joint sits in assets/smart3d/body.webp (0–1), for the stat-card art. */
 const BODY_ART = require('../../../assets/smart3d/body.webp')
@@ -212,9 +211,10 @@ type Stat = {
   label: string
   value: string
   color: string
-  target: string
-  diff: string
-  diffOff: boolean
+  /** Pro-library band. Omitted when this shot has no matched contact pose. */
+  target?: string
+  diff?: string
+  diffOff?: boolean
   art: keyof typeof ART_SPOT
 }
 
@@ -250,9 +250,7 @@ export function BiggestMistakesView({
   totalFrames,
   errors,
   elbowDeg,
-  torsoDeg,
   onClose,
-  onSeeCorrect,
   impactFrame = null,
   fps = null,
 }: Props) {
@@ -309,9 +307,10 @@ export function BiggestMistakesView({
     const side = contactPose ? racketSide(contactPose) : 'RIGHT'
     const deg = (v: number) => `${Math.round(v)}°`
     const rangeText = (r: [number, number]) => t('analysis.mistakeTargetRange', { low: r[0], high: r[1] })
-    const servedRange = (joint: 'wrist' | 'knee'): [number, number] | null => {
+    const proRange = (joint: 'elbow' | 'wrist' | 'torso' | 'knee'): [number, number] | null => {
       const r = contact?.joints[joint]
-      return r?.idealMin != null && r.idealMax != null ? [Math.round(r.idealMin), Math.round(r.idealMax)] : null
+      if (!contact?.hasPro || r?.pro == null || r.idealMin == null || r.idealMax == null) return null
+      return [Math.round(r.idealMin), Math.round(r.idealMax)]
     }
     const angleStat = (label: string, v: number, r: [number, number], art: keyof typeof ART_SPOT): Stat => {
       const d = rangeDiff(v, r[0], r[1])
@@ -333,28 +332,31 @@ export function BiggestMistakesView({
       let range: [number, number] | null = null
       const stats: Stat[] = []
       if (def.id === 'elbow') {
-        v = finite(elbowDeg) ?? finite(contact?.joints.elbow.you)
-        range = [65, 95]
-        if (v != null) stats.push(angleStat(t('analysis.elbowAngle'), v, range, 'elbow'))
+        v = finite(contact?.joints.elbow.you) ?? finite(elbowDeg)
+        range = proRange('elbow')
+        if (v != null && range) stats.push(angleStat(t('analysis.elbowAngle'), v, range, 'elbow'))
+        else if (v != null) {
+          stats.push({ label: t('analysis.elbowAngle'), value: deg(v), color: UI.text, art: 'elbow' })
+        }
         if (gapCm != null) {
-          const d = gapCm < ELBOW_GAP_MIN_CM ? gapCm - ELBOW_GAP_MIN_CM : 0
           stats.push({
             label: t('analysis.mistakeDistance'),
             value: `${gapCm.toFixed(1)} cm`,
-            color: UI.accent,
-            target: t('analysis.mistakeDistanceTarget'),
-            diff: `${d > 0 ? '+' : ''}${d.toFixed(1)} cm`,
-            diffOff: d !== 0,
+            color: UI.text,
             art: 'shoulder',
           })
         }
       } else if (def.id === 'torso') {
-        v = finite(torsoDeg)
-        range = [20, 45]
-        if (v != null) stats.push(angleStat(t('analysis.torsoRotation'), v, range, 'torso'))
+        v = finite(contact?.joints.torso.you)
+        range = proRange('torso')
+        if (v != null && range) stats.push(angleStat(t('analysis.torsoRotation'), v, range, 'torso'))
+        else if (v != null) {
+          stats.push({ label: t('analysis.torsoRotation'), value: deg(v), color: UI.text, art: 'torso' })
+        }
+        if (v == null && !mentioned) continue
       } else if (def.id === 'wrist' || def.id === 'knee') {
         v = finite(contact?.joints[def.id].you) ?? poseAngle(contactPose, def.id, side)
-        range = servedRange(def.id)
+        range = proRange(def.id)
         if (v != null && range) {
           stats.push(angleStat(t(`analysis.viewAnglesPage.reading.${def.id}`), v, range, def.id))
         }
@@ -376,7 +378,7 @@ export function BiggestMistakesView({
     }
     out.sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
     return out.map((item, i) => ({ ...item, n: i + 1 }))
-  }, [errors, elbowDeg, torsoDeg, contact, contactPose, gapCm, t])
+  }, [errors, elbowDeg, contact, contactPose, gapCm, t])
 
   const open = items.find((item) => item.def.id === openId) ?? null
   const highlight = open?.def.id ?? selected
@@ -646,13 +648,6 @@ export function BiggestMistakesView({
         ))
       )}
 
-      <GlowButton
-        label={t('analysis.seeCorrectMovement')}
-        onPress={onSeeCorrect ?? (() => void videoRef.current?.replayAsync())}
-        testID="see-correct-movement"
-        leadingIcon="play"
-        arrow
-      />
     </ScrollView>
   )
 }
@@ -778,13 +773,17 @@ function MistakeDetail({ item }: { item: Item }) {
                   >
                     {stat.value}
                   </Text>
-                  <Text allowFontScaling={false} style={[styles.statMeta, { fontFamily: theme.regularFont }]}>
-                    {stat.target}
-                  </Text>
-                  <Text allowFontScaling={false} style={[styles.statMeta, { fontFamily: theme.regularFont }]}>
-                    {t('analysis.mistakeDiffLabel')}
-                    <Text style={{ color: stat.diffOff ? OFF : GOOD }}>{stat.diff}</Text>
-                  </Text>
+                  {stat.target ? (
+                    <Text allowFontScaling={false} style={[styles.statMeta, { fontFamily: theme.regularFont }]}>
+                      {stat.target}
+                    </Text>
+                  ) : null}
+                  {stat.diff ? (
+                    <Text allowFontScaling={false} style={[styles.statMeta, { fontFamily: theme.regularFont }]}>
+                      {t('analysis.mistakeDiffLabel')}
+                      <Text style={{ color: stat.diffOff ? OFF : GOOD }}>{stat.diff}</Text>
+                    </Text>
+                  ) : null}
                 </View>
                 <JointArt spot={stat.art} size={item.stats.length > 1 ? 44 : 64} />
               </View>
@@ -832,7 +831,7 @@ const KNOB = 16
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 12 },
+  content: { paddingHorizontal: 20, paddingTop: 12, gap: 16 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   back: { padding: 2 },
   title: { color: UI.text, fontSize: 24, flex: 1 },
@@ -966,40 +965,39 @@ const styles = StyleSheet.create({
     borderRadius: UI.radiusCard,
     borderWidth: 1,
     borderColor: UI.trackBorder,
-    paddingTop: 12,
-    gap: 12,
+    padding: 16,
+    gap: 16,
     overflow: 'hidden',
   },
-  detailHead: { flexDirection: 'row', gap: 12, paddingHorizontal: 10 },
+  detailHead: { flexDirection: 'row', gap: 12 },
   detailCopy: { flex: 1, gap: 4 },
   detailTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, minHeight: 40 },
   detailTitle: { color: UI.text, fontSize: 18, flex: 1, paddingTop: 6 },
   detailBody: { color: UI.textMuted, fontSize: 13, lineHeight: 17 },
-  statRow: { flexDirection: 'row', gap: 6 },
+  statRow: { flexDirection: 'row', gap: 12 },
   statCard: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 12,
     borderRadius: UI.radiusCard,
     borderWidth: 1,
     borderColor: UI.trackBorder,
-    paddingVertical: 10,
-    paddingLeft: 12,
-    paddingRight: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
   },
-  statCopy: { flex: 1, gap: 1 },
+  statCopy: { flex: 1, gap: 4 },
   statLabel: { color: UI.text, fontSize: 12 },
   statValue: { fontSize: 26, lineHeight: 32 },
   statValueLong: { fontSize: 20 },
   statMeta: { color: UI.text, fontSize: 11, lineHeight: 14 },
   why: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 14,
     borderRadius: UI.radiusCard,
     borderWidth: 1,
     borderColor: UI.trackBorder,
-    padding: 12,
+    padding: 16,
   },
   whyIcon: {
     width: 38,
