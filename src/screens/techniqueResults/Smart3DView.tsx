@@ -31,7 +31,7 @@ import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
 import { JointDetailView } from './JointDetailView'
 import { JOINT_ICON, type BodyPartId } from './jointIcons'
 import { dominantSide } from './movementTimeline'
-import { alignKeypoints } from './orbitPresets'
+import { alignKeypoints, orbitFraction, type OrbitPreset } from './orbitPresets'
 
 type Layer = 'player' | 'pro' | 'overlay'
 type BodyPart = BodyPartId
@@ -199,6 +199,39 @@ function JointMarkers({
 /** Stock figure shown until the shot's own hologram is built. */
 const BODY = require('../../../assets/smart3d/body.webp')
 
+const VIEW_ICONS: Record<OrbitPreset, keyof typeof MaterialCommunityIcons.glyphMap> = {
+  view: 'cube-outline',
+  front: 'account-outline',
+  side: 'head-outline',
+}
+
+function SmartViewPresets({ value, onChange }: { value: OrbitPreset; onChange: (v: OrbitPreset) => void }) {
+  const { t } = useTranslation()
+  const { theme } = useContext(ThemeContext)
+  return (
+    <View style={styles.presets}>
+      {(Object.keys(VIEW_ICONS) as OrbitPreset[]).map((id) => {
+        const on = id === value
+        return (
+          <Pressable
+            key={id}
+            testID={`smart3d-view-${id}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
+            onPress={() => onChange(id)}
+            style={[styles.preset, on && styles.presetOn]}
+          >
+            <MaterialCommunityIcons name={VIEW_ICONS[id]} size={18} color={UI.text} />
+            <Text allowFontScaling={false} numberOfLines={1} style={[styles.presetLabel, { fontFamily: theme.regularFont }]}>
+              {t(`analysis.smart3dViews.${id}`)}
+            </Text>
+          </Pressable>
+        )
+      })}
+    </View>
+  )
+}
+
 export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = null, viewId = null, onClose }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -221,6 +254,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const [orbitReady, setOrbitReady] = useState(false)
   const [orbitVideoError, setOrbitVideoError] = useState<string | null>(null)
   const [orbitUrlHttp, setOrbitUrlHttp] = useState<number | null>(null)
+  const [viewPreset, setViewPreset] = useState<OrbitPreset>('view')
   const orbitIndexRef = useRef(0)
   const grantIndex = useRef(0)
   const stageWRef = useRef(1)
@@ -230,8 +264,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const stepGen = useRef(0)
   /** Frame the finger is on. A stray play is stopped here, not at the end of the clip. */
   const holdMs = useRef(0)
-  /** Cloud video for the tab the person is looking at. Nothing plays from the network. */
-  const remoteClip = layer === 'pro' ? hologram.proOrbitVideo : layer === 'player' ? hologram.orbitVideo : null
+  /** Cloud video for the tab. Overlay reuses the player orbit so View 1/2/3 still seek. */
+  const remoteClip = layer === 'pro' ? hologram.proOrbitVideo : hologram.orbitVideo
   const clipFrames = layer === 'pro' ? hologram.proOrbitFrames : hologram.orbitFrames
   const clipFrameCount = layer === 'pro' ? hologram.proOrbitFrameCount : hologram.orbitFrameCount
   const clipDurationMs = layer === 'pro' ? hologram.proOrbitDurationMs : hologram.orbitDurationMs
@@ -505,7 +539,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     )
   }
 
-  const pictureUri = layer === 'overlay' ? null : playbackUri
+  const pictureUri = playbackUri
 
   return (
     <View style={styles.screen}>
@@ -603,42 +637,58 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               }
             />
           ) : null}
-          {layer === 'overlay' && (hologram.image || hologram.proImage) ? (
+          {layer === 'overlay' && !pictureUri && (hologram.image || hologram.proImage) ? (
             <>
               {hologram.image ? (
-                <Image source={{ uri: hologram.image }} resizeMode="cover" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: hologram.keypoints ? 0.9 : 0.9 }]} />
+                <Image source={{ uri: hologram.image }} resizeMode="cover" pointerEvents="none" style={StyleSheet.absoluteFill} />
               ) : null}
               {hologram.proImage ? (
                 <Image source={{ uri: hologram.proImage }} resizeMode="cover" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.42 }]} />
               ) : null}
             </>
           ) : null}
-          {layer === 'overlay' && hologram.keypoints && stageSize.w ? (
+          {layer === 'overlay' && hologram.proImage && pictureUri ? (
+            <Image source={{ uri: hologram.proImage }} resizeMode="cover" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.38, zIndex: 2 }]} />
+          ) : null}
+          {layer === 'overlay' && stageSize.w ? (
             <>
-              <JointMarkers
-                keypoints={hologram.keypoints}
-                w={stageSize.w}
-                h={stageSize.h}
-                lit={lit}
-                video={null}
-                color="#5CE1FF"
-                full
-              />
-              {hologram.proKeypoints ? (
+              {(markerKeys ?? hologram.keypoints) ? (
                 <JointMarkers
-                  keypoints={alignKeypoints(hologram.proKeypoints, hologram.keypoints)}
+                  keypoints={(markerKeys ?? hologram.keypoints)!}
                   w={stageSize.w}
                   h={stageSize.h}
                   lit={lit}
-                  video={null}
+                  video={placed}
+                  color="#5CE1FF"
+                />
+              ) : null}
+              {hologram.proKeypoints && (markerKeys ?? hologram.keypoints) ? (
+                <JointMarkers
+                  keypoints={alignKeypoints(hologram.proKeypoints, (markerKeys ?? hologram.keypoints)!)}
+                  w={stageSize.w}
+                  h={stageSize.h}
+                  lit={lit}
+                  video={placed}
                   color="#FF8A3D"
-                  full
                 />
               ) : null}
             </>
           ) : null}
           {markerKeys && layer !== 'overlay' && stageSize.w ? (
             <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
+          ) : null}
+          {(reveal || layer === 'overlay') && hologram.orbitVideo ? (
+            <View style={styles.presetColumn} pointerEvents="box-none">
+              <SmartViewPresets
+                value={viewPreset}
+                onChange={(next) => {
+                  setViewPreset(next)
+                  const frac = orbitFraction(next, viewId)
+                  const last = Math.max(0, frameCountRef.current - 1)
+                  seekOrbit(frac * last)
+                }}
+              />
+            </View>
           ) : null}
           {reveal && pictureUri ? (
             <View
@@ -745,6 +795,27 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
   },
+  presetColumn: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    zIndex: 6,
+  },
+  presets: { gap: 8 },
+  preset: {
+    width: 72,
+    height: 56,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(91, 108, 255, 0.55)',
+    backgroundColor: 'rgba(5, 14, 40, 0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingHorizontal: 4,
+  },
+  presetOn: { borderColor: '#7AECFF', backgroundColor: 'rgba(20, 60, 160, 0.9)' },
+  presetLabel: { color: UI.text, fontSize: 10, textAlign: 'center' },
   markersLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 10,

@@ -408,7 +408,8 @@ export function ProReferenceCompare({ videoUri, analysisId, proVideoUri, metrics
 }
 
 const styles = StyleSheet.create({
-  page: { alignSelf: 'stretch', paddingHorizontal: 22, gap: 12, paddingBottom: 12 },
+  /** No extra side pad — parent screens already inset; extra pad made Save & Track look cramped. */
+  page: { alignSelf: 'stretch', paddingHorizontal: 0, gap: 12, paddingBottom: 12 },
   title: { color: '#FFFFFF', fontSize: 22, textAlign: 'center' },
   subtitle: { color: '#3DB7FF', fontSize: 14, textAlign: 'center', marginTop: -8 },
   compareCard: {

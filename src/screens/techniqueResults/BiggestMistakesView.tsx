@@ -7,7 +7,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
 import { ThemeContext } from '../../context'
-import { GlowButton, SELECTED_GLOW, UI } from '../../components/ui'
+import { SELECTED_GLOW, UI } from '../../components/ui'
 import type { ReactNode } from 'react'
 import { useContactJoints } from '../../lib/jointsApi'
 import { landmarkVisOk, poseAngle } from '../../lib/poseJointAngles'
@@ -258,7 +258,6 @@ export function BiggestMistakesView({
   errors,
   elbowDeg,
   onClose,
-  onSeeCorrect,
   impactFrame = null,
   fps = null,
   magicShot = null,
@@ -674,13 +673,6 @@ export function BiggestMistakesView({
         ))
       )}
 
-      <GlowButton
-        label={t('analysis.seeCorrectMovement')}
-        onPress={onSeeCorrect ?? (() => void videoRef.current?.replayAsync())}
-        testID="see-correct-movement"
-        leadingIcon="play"
-        arrow
-      />
       {magicShot ? (
         <View style={styles.magicShotSection} testID="create-magic-shot-section">
           <Text

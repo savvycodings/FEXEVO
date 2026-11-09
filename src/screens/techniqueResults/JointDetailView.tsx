@@ -69,19 +69,20 @@ const VIEW_ICONS: Record<ViewPreset, keyof typeof MaterialCommunityIcons.glyphMa
   front: 'account-outline',
   side: 'head-outline',
 }
+/** Match Smart 3D player markers — arm chain only, not a dense full-body wireframe. */
 const FIGURE_LIMBS: [string, string][] = [
-  ['left_shoulder', 'right_shoulder'],
   ['left_shoulder', 'left_elbow'],
   ['left_elbow', 'left_wrist'],
   ['right_shoulder', 'right_elbow'],
   ['right_elbow', 'right_wrist'],
-  ['left_shoulder', 'left_hip'],
-  ['right_shoulder', 'right_hip'],
-  ['left_hip', 'right_hip'],
-  ['left_hip', 'left_knee'],
-  ['right_hip', 'right_knee'],
-  ['left_knee', 'left_ankle'],
-  ['right_knee', 'right_ankle'],
+]
+const FIGURE_MARKERS = [
+  'left_shoulder',
+  'right_shoulder',
+  'left_elbow',
+  'right_elbow',
+  'left_wrist',
+  'right_wrist',
 ]
 const MAX_ZOOM = 3
 const MESSAGE = {
@@ -162,11 +163,15 @@ function JointStage({
   tag,
   controls,
   imageUri,
+  keypoints = null,
+  focus = null,
   onFullscreen,
 }: {
   tag: string | null
   controls: boolean
   imageUri?: string | null
+  keypoints?: HologramKeypoints | null
+  focus?: string[] | null
   onFullscreen: () => void
 }) {
   const { t } = useTranslation()
@@ -209,6 +214,17 @@ function JointStage({
             { transform: [{ translateX: offset.x }, { translateY: offset.y }, { scale: zoom }] },
           ]}
         />
+        {keypoints ? (
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              { transform: [{ translateX: offset.x }, { translateY: offset.y }, { scale: zoom }] },
+            ]}
+          >
+            <Figure keypoints={keypoints} color={PRO} focus={focus} />
+          </View>
+        ) : null}
       </View>
       {tag && !controls ? (
         <View pointerEvents="none" style={styles.tag}>
@@ -301,24 +317,61 @@ function HeldOrbit({ uri, fraction, durationMs }: { uri: string; fraction: numbe
 function Figure({
   keypoints,
   color,
+  focus = null,
 }: {
   keypoints: HologramKeypoints | null
   color: string
+  /** Light up these joints (e.g. shoulder) when inspecting a body part. */
+  focus?: string[] | null
 }) {
   if (!keypoints) return null
+  const names = [
+    ...FIGURE_MARKERS,
+    ...(focus ?? []).filter((n) => !FIGURE_MARKERS.includes(n)),
+  ]
   return (
     <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
       {FIGURE_LIMBS.map(([a, b]) => {
         const A = keypoints[a]
         const B = keypoints[b]
         if (!A || !B) return null
-        return <Line key={`${a}-${b}`} x1={A.x * 100} y1={A.y * 100} x2={B.x * 100} y2={B.y * 100} stroke={color} strokeWidth={1.4} />
+        return <Line key={`${a}-${b}`} x1={A.x * 100} y1={A.y * 100} x2={B.x * 100} y2={B.y * 100} stroke={color} strokeWidth={1.1} strokeOpacity={0.85} />
       })}
-      {Object.entries(keypoints).map(([name, p]) => (
-        <Circle key={name} cx={p.x * 100} cy={p.y * 100} r={1.6} fill={color} />
-      ))}
+      {names.map((name) => {
+        const p = keypoints[name]
+        if (!p) return null
+        const on = focus?.includes(name)
+        return (
+          <Circle
+            key={name}
+            cx={p.x * 100}
+            cy={p.y * 100}
+            r={on ? 2.8 : 1.5}
+            fill={color}
+            stroke={on ? '#FFF4D6' : undefined}
+            strokeWidth={on ? 0.5 : 0}
+          />
+        )
+      })}
     </Svg>
   )
+}
+
+function jointFocusKeys(joint: ContactJoint): string[] {
+  switch (joint) {
+    case 'shoulder':
+      return ['left_shoulder', 'right_shoulder']
+    case 'elbow':
+      return ['left_elbow', 'right_elbow']
+    case 'wrist':
+      return ['left_wrist', 'right_wrist']
+    case 'torso':
+      return ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip', 'neck']
+    case 'knee':
+      return ['left_knee', 'right_knee']
+    default:
+      return []
+  }
 }
 
 function ClipPicture({ clip, fraction }: { clip: OrbitClip | null | undefined; fraction: number }) {
@@ -350,11 +403,11 @@ function ChainStage({
       <View style={styles.pair}>
         <View style={styles.pairHalf}>
           <ClipPicture clip={player} fraction={fraction} />
-          <Figure keypoints={keypointsAt(player, fraction)} color={PRO} />
+          <Figure keypoints={keypointsAt(player, fraction)} color={PRO} focus={null} />
         </View>
         <View style={styles.pairHalf}>
           <ClipPicture clip={pro} fraction={fraction} />
-          <Figure keypoints={keypointsAt(pro, fraction)} color="#FF8A3D" />
+          <Figure keypoints={keypointsAt(pro, fraction)} color="#FF8A3D" focus={null} />
         </View>
       </View>
       <View style={styles.presetColumnLeft}>
@@ -576,6 +629,8 @@ export function JointDetailView({
               tag={you}
               controls={false}
               imageUri={partImage ?? hologramImage}
+              keypoints={playerOrbit?.keypoints ?? null}
+              focus={jointFocusKeys(joint)}
               onFullscreen={() => setFullscreen(true)}
             />
           )}

@@ -1,7 +1,7 @@
 import { useContext, useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { ThemeContext } from '../../context'
-import { CoachRichText } from '../../components/CoachRichText'
+import { stripCoachRichMarkers } from '../../lib/coachRichText'
 import { type DialCaptionModel, type DialPearlTone, buildDialCaption } from './dialCaption'
 
 type Props = {
@@ -67,17 +67,16 @@ export function DialCaption({
       ) : null}
 
       {model.blurb ? (
-        <CoachRichText
-          text={model.blurb}
+        <Text
+          allowFontScaling={false}
           numberOfLines={3}
-          style={{
-            fontFamily: theme.mediumFont ?? theme.regularFont,
-            fontSize: 13,
-            lineHeight: 18,
-            color: 'rgba(231,242,255,0.92)',
-          }}
-          containerStyle={styles.blurb}
-        />
+          style={[
+            styles.blurbText,
+            { fontFamily: theme.mediumFont ?? theme.regularFont },
+          ]}
+        >
+          {stripCoachRichMarkers(model.blurb)}
+        </Text>
       ) : null}
 
       {model.pearls.length ? (
@@ -93,6 +92,8 @@ export function DialCaption({
                 <Text
                   allowFontScaling={false}
                   numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
                   style={[styles.pearlText, { color: c.text, fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
                 >
                   {pearl.label}
@@ -117,14 +118,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
   toneText: { fontSize: 14, textAlign: 'center' },
-  blurb: { gap: 4 },
+  blurbText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(231,242,255,0.92)',
+  },
   pearlRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   pearl: {
     borderWidth: 1.5,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    maxWidth: '100%',
   },
   pearlText: { fontSize: 12, lineHeight: 15, textAlign: 'center' },
 })

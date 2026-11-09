@@ -1627,7 +1627,7 @@ function getDetailStyles(theme: any, winW: number) {
       flexDirection: 'row',
       borderRadius: 12,
       overflow: 'hidden',
-      marginBottom: 18,
+      marginBottom: 28,
       backgroundColor: '#000',
       alignItems: 'stretch',
     },

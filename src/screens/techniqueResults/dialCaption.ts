@@ -1,4 +1,4 @@
-import { enrichCoachRichMarkers, stripCoachRichMarkers } from '../../lib/coachRichText'
+import { stripCoachRichMarkers } from '../../lib/coachRichText'
 
 export type DialPearlTone = 'strength' | 'weakness' | 'cue'
 
@@ -15,7 +15,8 @@ export type DialCaptionModel = {
 }
 
 const MAX_BLURB = 110
-const MAX_PEARL = 26
+/** Pearls are single keywords — never long ellipsized phrases. */
+const MAX_PEARL = 14
 
 function firstSentence(text: string): string {
   const clean = text.replace(/\s+/g, ' ').trim()
@@ -32,23 +33,25 @@ function shorten(text: string, max: number): string {
   return `${(at > 40 ? slice.slice(0, at) : slice).trimEnd()}…`
 }
 
-/** Pull a short keyword from a coach line (marked chip wins, else a short lead phrase). */
+/** One keyword for a pearl pill (marked chip wins; otherwise first meaningful word). */
 export function pearlLabel(line: string, max = MAX_PEARL): string | null {
   const marked = line.match(/\[\[([^\]]{2,48})\]\]|\*\*([^*]{2,48})\*\*/)
   if (marked) {
     const chip = String(marked[1] ?? marked[2] ?? '')
       .replace(/\s+/g, ' ')
       .trim()
-    return chip ? chip.slice(0, max) : null
+    if (!chip) return null
+    // Prefer a single token from multi-word chips ("racket face" → "racket").
+    const first = chip.split(/\s+/)[0]?.replace(/[^a-zA-ZÀ-ÿ0-9'-]/g, '') ?? ''
+    const word = first.length >= 3 ? first : chip.replace(/\s+/g, ' ').trim()
+    return word ? word.slice(0, max) : null
   }
   const clean = stripCoachRichMarkers(line)
   if (!clean) return null
-  const lead = clean.match(
-    /^(.{3,36}?)(?:\s+(?:is|are|was|were|looks|feels|needs|could|should|seems|stays|gets)\b|,|\.|$)/i
-  )
-  const raw = (lead?.[1] ?? clean).replace(/\s+/g, ' ').trim()
+  const word = clean.match(/\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]{2,})\b/)
+  const raw = (word?.[1] ?? '').trim()
   if (raw.length < 3) return null
-  return raw.length > max ? `${raw.slice(0, max - 1).trimEnd()}…` : raw
+  return raw.slice(0, max)
 }
 
 function pushPearl(out: DialPearl[], label: string | null, tone: DialPearlTone, seen: Set<string>) {
@@ -83,9 +86,8 @@ export function buildDialCaption(input: {
   if (!blurbSource && plainWeakness) {
     blurbSource = firstSentence(plainWeakness)
   }
-  const blurbPlain = blurbSource ? shorten(blurbSource, MAX_BLURB) : null
-  // Re-mark coaching keywords so the line stays conversational with pearl highlights inline.
-  const blurb = blurbPlain ? enrichCoachRichMarkers(blurbPlain) : null
+  // Plain sentence only — keyword pearls sit in the pills beside the dial, not spaced chips in the line.
+  const blurb = blurbSource ? shorten(blurbSource, MAX_BLURB) : null
 
   const pearls: DialPearl[] = []
   const seen = new Set<string>()
