@@ -10,8 +10,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://bexevo-production.up.railway.app/",
-        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://bexevo-production.up.railway.app/",
+        "EXPO_PUBLIC_BACKEND_URL": "https://bexevo-production-32f1.up.railway.app/",
+        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://bexevo-production-32f1.up.railway.app/",
         "EXPO_PUBLIC_SHOW_COMFY_CORRECTIONS": "true",
         "EXPO_PUBLIC_ENABLE_LEGACY_CORRECTIONS": "false"
       }
@@ -21,8 +21,8 @@
       "pnpm": "9.15.0",
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://bexevo-production.up.railway.app/",
-        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://bexevo-production.up.railway.app/",
+        "EXPO_PUBLIC_BACKEND_URL": "https://bexevo-production-32f1.up.railway.app/",
+        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://bexevo-production-32f1.up.railway.app/",
         "EXPO_PUBLIC_SHOW_COMFY_CORRECTIONS": "true",
         "EXPO_PUBLIC_ENABLE_LEGACY_CORRECTIONS": "false"
       }
@@ -32,8 +32,8 @@
       "pnpm": "9.15.0",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://bexevo-production.up.railway.app/",
-        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://bexevo-production.up.railway.app/",
+        "EXPO_PUBLIC_BACKEND_URL": "https://bexevo-production-32f1.up.railway.app/",
+        "EXPO_PUBLIC_BETTER_AUTH_URL": "https://bexevo-production-32f1.up.railway.app/",
         "EXPO_PUBLIC_SHOW_COMFY_CORRECTIONS": "true",
         "EXPO_PUBLIC_ENABLE_LEGACY_CORRECTIONS": "false"
       }
