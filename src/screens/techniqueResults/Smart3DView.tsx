@@ -13,7 +13,6 @@ import {
   View,
 } from 'react-native'
 import { ResizeMode, Video, type AVPlaybackStatus } from 'expo-av'
-import { File, Paths } from 'expo-file-system'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
@@ -22,6 +21,7 @@ import Svg, { Circle, Line } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
 import { useHologram, type HologramKeypoints, type HologramOrbitFrame } from '../../lib/hologramJob'
+import { cacheOrbitVideo } from '../../lib/orbitCache'
 import { useContactJoints, type ContactJoint, type JointReading } from '../../lib/jointsApi'
 import { SELECTED_GLOW, UI } from '../../components/ui'
 import { kineticChainTiming } from '../../lib/kineticChain'
@@ -278,6 +278,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   }, [remoteClip])
 
   // Save the cloud video on the phone first. Scrubbing a stream is what made a fresh shot look broken.
+  // cacheOrbitVideo keeps the download alive if the user leaves Smart 3D mid-save.
   useEffect(() => {
     const remote = remoteClip
     setPlaybackUri(null)
@@ -286,17 +287,16 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitUrlHttp(null)
     if (!remote) return
     let cancelled = false
-    const name = remote.split('/').pop()?.split('?')[0] || 'orbit.mp4'
     if (__DEV__) console.log('[smart3d] orbit save', { remote: remote.slice(0, 160) })
     void (async () => {
       try {
         const head = await fetch(remote, { method: 'HEAD' }).catch(() => null)
         const status = head?.status ?? 0
         if (!cancelled) setOrbitUrlHttp(status || null)
-        const file = await File.downloadFileAsync(remote, new File(Paths.document, name), { idempotent: true })
+        const uri = await cacheOrbitVideo(remote)
         if (cancelled) return
-        if (__DEV__) console.log('[smart3d] orbit on phone', file.uri)
-        setPlaybackUri(file.uri)
+        if (__DEV__) console.log('[smart3d] orbit on phone', uri)
+        setPlaybackUri(uri)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         if (__DEV__) console.warn('[smart3d] orbit save failed', msg)
@@ -434,8 +434,11 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const clipBroken = Boolean(orbitVideoError) || (layer === 'player' && playerFailed)
   const preparing = (layer === 'player' || layer === 'pro') && !reveal && !proMissing && !clipBroken
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
+  // Prefer per-frame orbit pose; fall back to the contact still when Modal never wrote orbitFrames
+  // (that is why the player layer looked bare while the pro library still had lines).
+  const stillKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
   const markerKeys = reveal
-    ? orbitKeypointsAt(clipFrames, orbitIndex, frameCountRef.current)
+    ? orbitKeypointsAt(clipFrames, orbitIndex, frameCountRef.current) ?? stillKeys
     : layer === 'overlay'
       ? hologram.keypoints
       : null
@@ -480,13 +483,16 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         }
       }
     }
+    const partKey = selected ?? detail
     return (
       <JointDetailView
         joint={detail}
         reading={reading}
         shotLabel={contactJoints?.shotLabel ?? null}
         hologramImage={hologram.image}
+        partImage={hologram.parts?.[partKey] ?? hologram.image}
         proHologramImage={hologram.proImage}
+        proPartImage={hologram.proParts?.[partKey] ?? hologram.proImage}
         viewId={viewId}
         playerOrbit={{
           image: hologram.image,

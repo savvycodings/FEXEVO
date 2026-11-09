@@ -34,8 +34,15 @@ type Props = {
   reading: JointReading | null
   shotLabel: string | null
   hologramImage: string | null
+  /**
+   * Holographic close-up for this body part (from the 3×3 Nano Banana board).
+   * Falls back to the placeholder when the grid cell is not ready yet.
+   */
+  partImage?: string | null
   /** Pro hologram, shown beside the player's on the Pro Reference tab. */
   proHologramImage?: string | null
+  /** Pro close-up for this body part when the orange board was sliced. */
+  proPartImage?: string | null
   /** Orbit clips, so View / Front / Side seek the turn instead of doing nothing. */
   playerOrbit?: OrbitClip | null
   proOrbit?: OrbitClip | null
@@ -145,10 +152,20 @@ function ControlButton({
 }
 
 /**
- * Joint close-up. Player shows the picture with the angle tag; Overlay adds zoom, move and view
- * controls. The picture is a placeholder for now.
+ * Joint close-up. Player shows the holographic part cell (or the placeholder until it exists).
+ * Overlay adds zoom, move and view controls.
  */
-function JointStage({ tag, controls, onFullscreen }: { tag: string | null; controls: boolean; onFullscreen: () => void }) {
+function JointStage({
+  tag,
+  controls,
+  imageUri,
+  onFullscreen,
+}: {
+  tag: string | null
+  controls: boolean
+  imageUri?: string | null
+  onFullscreen: () => void
+}) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const [zoom, setZoom] = useState(1)
@@ -181,8 +198,8 @@ function JointStage({ tag, controls, onFullscreen }: { tag: string | null; contr
     <View testID="joint-stage" style={[styles.stage, controls && styles.stageTall]}>
       <View style={StyleSheet.absoluteFill} {...pan.panHandlers}>
         <Image
-          source={PLACEHOLDER}
-          resizeMode="cover"
+          source={imageUri ? { uri: imageUri } : PLACEHOLDER}
+          resizeMode={imageUri ? 'contain' : 'cover'}
           style={[
             styles.fill,
             { transform: [{ translateX: offset.x }, { translateY: offset.y }, { scale: zoom }] },
@@ -411,7 +428,9 @@ export function JointDetailView({
   reading,
   shotLabel,
   hologramImage,
+  partImage = null,
   proHologramImage = null,
+  proPartImage = null,
   playerOrbit = null,
   proOrbit = null,
   viewId = null,
@@ -550,7 +569,12 @@ export function JointDetailView({
               onFullscreen={() => setFullscreen(true)}
             />
           ) : (
-            <JointStage tag={you} controls={false} onFullscreen={() => setFullscreen(true)} />
+            <JointStage
+              tag={you}
+              controls={false}
+              imageUri={partImage ?? hologramImage}
+              onFullscreen={() => setFullscreen(true)}
+            />
           )}
 
           <View testID="joint-metrics" style={[styles.metricCard, CARD_GLOW]}>
@@ -648,7 +672,15 @@ export function JointDetailView({
                 onFullscreen={() => setFullscreen(false)}
               />
             ) : (
-              <Image source={PLACEHOLDER} resizeMode="contain" style={styles.fullscreenImage} />
+              <Image
+                source={
+                  (layer === 'player' ? partImage ?? hologramImage : proPartImage ?? proHologramImage)
+                    ? { uri: (layer === 'player' ? partImage ?? hologramImage : proPartImage ?? proHologramImage)! }
+                    : PLACEHOLDER
+                }
+                resizeMode="contain"
+                style={styles.fullscreenImage}
+              />
             )}
           </View>
         </View>

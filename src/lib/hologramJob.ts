@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { authClient } from './auth-client'
 import { resolveUploadUrl } from './mediaUrl'
+import { prefetchOrbitVideo } from './orbitCache'
 
 export type HologramStatus = 'idle' | 'running' | 'done' | 'failed'
 
@@ -11,12 +12,27 @@ export type HologramKeypoints = Record<string, HologramKeypoint>
 /** MediaPipe joints for one frame of the orbit clip. */
 export type HologramOrbitFrame = { frame: number; keypoints: HologramKeypoints }
 
+/** Body-part close-ups from the Nano Banana 3×3 board (full body is `image`). */
+export type HologramPartId =
+  | 'head'
+  | 'shoulder'
+  | 'elbow'
+  | 'wrist'
+  | 'torso'
+  | 'knee'
+  | 'feet'
+  | 'racket'
+
+export type HologramParts = Partial<Record<HologramPartId, string>>
+
 export type HologramState = {
   status: HologramStatus
   /** Absolute URL of the hologram PNG once it is done. */
   image: string | null
   /** Contact skeleton in the image's framing; null for holograms built before keypoints existed. */
   keypoints: HologramKeypoints | null
+  /** Holographic close-ups per body part when the 3×3 board was used. */
+  parts: HologramParts | null
   error: string | null
   /** Seedance orbit. Finger forward/back scrubs this clip. */
   orbitStatus: HologramStatus
@@ -35,6 +51,7 @@ export type HologramState = {
   proStatus: HologramStatus | 'unavailable'
   proImage: string | null
   proKeypoints: HologramKeypoints | null
+  proParts: HologramParts | null
   proOrbitVideo: string | null
   proOrbitDurationMs: number | null
   proOrbitFrameCount: number | null
@@ -73,12 +90,34 @@ function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null
 }
 
+const PART_IDS: HologramPartId[] = [
+  'head',
+  'shoulder',
+  'elbow',
+  'wrist',
+  'torso',
+  'knee',
+  'feet',
+  'racket',
+]
+
+function parseParts(raw: unknown): HologramParts | null {
+  if (!raw || typeof raw !== 'object') return null
+  const out: HologramParts = {}
+  for (const id of PART_IDS) {
+    const url = resolveUploadUrl(typeof (raw as Record<string, unknown>)[id] === 'string' ? ((raw as Record<string, unknown>)[id] as string) : null)
+    if (url) out[id] = url
+  }
+  return Object.keys(out).length ? out : null
+}
+
 const POLL_MS = 5_000
 
 const EMPTY: HologramState = {
   status: 'idle',
   image: null,
   keypoints: null,
+  parts: null,
   error: null,
   orbitStatus: 'idle',
   orbitVideo: null,
@@ -91,6 +130,7 @@ const EMPTY: HologramState = {
   proStatus: 'idle',
   proImage: null,
   proKeypoints: null,
+  proParts: null,
   proOrbitVideo: null,
   proOrbitDurationMs: null,
   proOrbitFrameCount: null,
@@ -119,6 +159,7 @@ function toState(raw: unknown): HologramState | null {
     status,
     image: resolveUploadUrl(typeof body.image === 'string' ? body.image : null),
     keypoints: parseKeypoints(body.keypoints),
+    parts: parseParts(body.parts),
     error: typeof body.error === 'string' ? body.error : null,
     orbitStatus,
     orbitVideo,
@@ -137,6 +178,7 @@ function toState(raw: unknown): HologramState | null {
         : 'idle',
     proImage: resolveUploadUrl(typeof body.proImage === 'string' ? body.proImage : null),
     proKeypoints: parseKeypoints(body.proKeypoints),
+    proParts: parseParts(body.proParts),
     proOrbitVideo,
     proOrbitDurationMs: num(body.proOrbitDurationMs),
     proOrbitFrameCount: num(body.proOrbitFrameCount),
@@ -239,12 +281,17 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
         if (cancelled) return
       }
       if (next) {
+        // Start saving the mp4 as soon as the URL appears — before Smart 3D mounts —
+        // so leaving/re-entering is not required for the clip to land on disk.
+        prefetchOrbitVideo(next.orbitVideo)
+        prefetchOrbitVideo(next.proOrbitVideo)
         setState(next)
         if (__DEV__) {
           console.log('[hologram] poll', {
             analysisId,
             status: next.status,
             image: Boolean(next.image),
+            parts: next.parts ? Object.keys(next.parts).length : 0,
             orbitStatus: next.orbitStatus,
             orbitVideo: next.orbitVideo ? next.orbitVideo.slice(0, 120) : null,
             orbitError: next.orbitError,
