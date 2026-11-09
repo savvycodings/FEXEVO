@@ -232,6 +232,58 @@ function SmartViewPresets({ value, onChange }: { value: OrbitPreset; onChange: (
   )
 }
 
+/** Second orbit for Overlay — same View angle as the player clip, no drag. */
+function OverlayProOrbit({
+  uri,
+  fraction,
+  durationMs,
+  placed,
+}: {
+  uri: string
+  fraction: number
+  durationMs: number | null
+  placed: { x: number; y: number; w: number; h: number } | null
+}) {
+  const ref = useRef<Video>(null)
+  const seek = () => {
+    const length = durationMs && durationMs > 0 ? durationMs : 4000
+    void ref.current?.setStatusAsync({
+      shouldPlay: false,
+      positionMillis: Math.round(length * fraction),
+      seekMillisToleranceBefore: 0,
+      seekMillisToleranceAfter: 0,
+    })
+  }
+  useEffect(() => {
+    seek()
+  }, [fraction, durationMs, uri])
+  return (
+    <Video
+      ref={ref}
+      source={{ uri }}
+      pointerEvents="none"
+      resizeMode={placed ? ResizeMode.STRETCH : ResizeMode.COVER}
+      isMuted
+      shouldPlay={false}
+      onLoad={seek}
+      onReadyForDisplay={seek}
+      style={
+        placed
+          ? {
+              position: 'absolute',
+              left: placed.x,
+              top: placed.y,
+              width: placed.w,
+              height: placed.h,
+              opacity: 0.42,
+              zIndex: 2,
+            }
+          : [StyleSheet.absoluteFillObject, { opacity: 0.42, zIndex: 2 }]
+      }
+    />
+  )
+}
+
 export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = null, viewId = null, onClose }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -264,13 +316,17 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const stepGen = useRef(0)
   /** Frame the finger is on. A stray play is stopped here, not at the end of the clip. */
   const holdMs = useRef(0)
-  /** Cloud video for the tab. Overlay reuses the player orbit so View 1/2/3 still seek. */
+  /**
+   * Player / Pro scrub their own orbit. Overlay drives both from View 1/2/3 (no drag),
+   * so it reuses the player orbit clip for seeking and shows the pro on top.
+   */
   const remoteClip = layer === 'pro' ? hologram.proOrbitVideo : hologram.orbitVideo
   const clipFrames = layer === 'pro' ? hologram.proOrbitFrames : hologram.orbitFrames
   const clipFrameCount = layer === 'pro' ? hologram.proOrbitFrameCount : hologram.orbitFrameCount
   const clipDurationMs = layer === 'pro' ? hologram.proOrbitDurationMs : hologram.orbitDurationMs
   const clipWidth = layer === 'pro' ? hologram.proOrbitWidth : hologram.orbitWidth
   const clipHeight = layer === 'pro' ? hologram.proOrbitHeight : hologram.orbitHeight
+  const overlayFraction = orbitFraction(viewPreset, viewId)
   frameCountRef.current = Math.max(2, clipFrameCount ?? 2)
   durationRef.current = clipDurationMs && clipDurationMs > 0 ? clipDurationMs : 4000
   const stageWidth = Math.max(1, windowWidth - 32)
@@ -286,7 +342,15 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitReady(false)
     setOrbitVideoError(null)
     setOrbitUrlHttp(null)
-  }, [remoteClip])
+    if (layer === 'overlay') setViewPreset('view')
+  }, [remoteClip, layer])
+
+  // Overlay: snap both orbits to the active View preset (no free scrub).
+  useEffect(() => {
+    if (layer !== 'overlay' || !reveal) return
+    const last = Math.max(0, frameCountRef.current - 1)
+    seekOrbit(overlayFraction * last)
+  }, [layer, reveal, overlayFraction, viewPreset])
 
   // Save the cloud video on the phone first. Scrubbing a stream is what made a fresh shot look broken.
   // cacheOrbitVideo keeps the download alive if the user leaves Smart 3D mid-save.
@@ -539,7 +603,9 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     )
   }
 
-  const pictureUri = playbackUri
+  /** Overlay only shows orbit when ready; Player/Pro keep scrubbing their own clip. */
+  const pictureUri = layer === 'overlay' ? (reveal ? playbackUri : null) : playbackUri
+  const canOverlayViews = layer === 'overlay' && Boolean(hologram.orbitVideo || hologram.image)
 
   return (
     <View style={styles.screen}>
@@ -647,8 +713,20 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               ) : null}
             </>
           ) : null}
-          {layer === 'overlay' && hologram.proImage && pictureUri ? (
-            <Image source={{ uri: hologram.proImage }} resizeMode="cover" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.38, zIndex: 2 }]} />
+          {layer === 'overlay' && hologram.proOrbitVideo ? (
+            <OverlayProOrbit
+              uri={hologram.proOrbitVideo}
+              fraction={overlayFraction}
+              durationMs={hologram.proOrbitDurationMs}
+              placed={placed}
+            />
+          ) : layer === 'overlay' && hologram.proImage ? (
+            <Image
+              source={{ uri: hologram.proImage }}
+              resizeMode="cover"
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { opacity: 0.4, zIndex: 2 }]}
+            />
           ) : null}
           {layer === 'overlay' && stageSize.w ? (
             <>
@@ -677,20 +755,8 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
           {markerKeys && layer !== 'overlay' && stageSize.w ? (
             <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
           ) : null}
-          {(reveal || layer === 'overlay') && hologram.orbitVideo ? (
-            <View style={styles.presetColumn} pointerEvents="box-none">
-              <SmartViewPresets
-                value={viewPreset}
-                onChange={(next) => {
-                  setViewPreset(next)
-                  const frac = orbitFraction(next, viewId)
-                  const last = Math.max(0, frameCountRef.current - 1)
-                  seekOrbit(frac * last)
-                }}
-              />
-            </View>
-          ) : null}
-          {reveal && pictureUri ? (
+          {/* Drag-to-orbit only on Player / Pro — Overlay is discrete View 1/2/3. */}
+          {reveal && pictureUri && layer !== 'overlay' ? (
             <View
               style={styles.scrubLayer}
               {...pan.panHandlers}
@@ -731,6 +797,20 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
             </View>
           ) : null}
         </View>
+        {/* Sibling of the video clip so AVPlayerLayer / markers cannot sit above the View buttons. */}
+        {canOverlayViews ? (
+          <View style={styles.presetColumn} pointerEvents="box-none">
+            <SmartViewPresets
+              value={viewPreset}
+              onChange={(next) => {
+                setViewPreset(next)
+                const frac = orbitFraction(next, viewId)
+                const last = Math.max(0, frameCountRef.current - 1)
+                seekOrbit(frac * last)
+              }}
+            />
+          </View>
+        ) : null}
       </View>
       <ScrollView style={styles.partsScroll} contentContainerStyle={{ paddingBottom: 8 + insets.bottom }}>
       {reveal ? null : (
@@ -799,7 +879,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 10,
     top: 10,
-    zIndex: 6,
+    zIndex: 50,
+    elevation: 50,
   },
   presets: { gap: 8 },
   preset: {
@@ -813,6 +894,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
     paddingHorizontal: 4,
+    zIndex: 51,
+    elevation: 51,
   },
   presetOn: { borderColor: '#7AECFF', backgroundColor: 'rgba(20, 60, 160, 0.9)' },
   presetLabel: { color: UI.text, fontSize: 10, textAlign: 'center' },

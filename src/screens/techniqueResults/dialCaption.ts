@@ -86,21 +86,7 @@ export function buildDialCaption(input: {
   if (!blurbSource && plainWeakness) {
     blurbSource = firstSentence(plainWeakness)
   }
-  // Plain sentence only — keyword pearls sit in the pills beside the dial, not spaced chips in the line.
+  // Plain sentence only — keyword / tone pills are off for now.
   const blurb = blurbSource ? shorten(blurbSource, MAX_BLURB) : null
-
-  const pearls: DialPearl[] = []
-  const seen = new Set<string>()
-  pushPearl(pearls, pearlLabel(strengths[0] ?? ''), 'strength', seen)
-  pushPearl(pearls, pearlLabel(weaknesses[0] ?? ''), 'weakness', seen)
-  // Extra cue from diagnosis markers / auto terms, if different.
-  if (diagnosis) {
-    const chip = diagnosis.match(/\[\[([^\]]{2,48})\]\]|\*\*([^*]{2,48})\*\*/)
-    if (chip) pushPearl(pearls, String(chip[1] ?? chip[2] ?? '').trim(), 'cue', seen)
-  }
-  // Second strength / weakness if we still have room.
-  pushPearl(pearls, pearlLabel(strengths[1] ?? ''), 'strength', seen)
-  pushPearl(pearls, pearlLabel(weaknesses[1] ?? ''), 'weakness', seen)
-
-  return { blurb, pearls: pearls.slice(0, 3) }
+  return { blurb, pearls: [] }
 }

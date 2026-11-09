@@ -43,7 +43,6 @@ import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { MetricsPage } from './techniqueResults/MetricsPage'
 import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
 import { ViewAnglesPage } from './techniqueResults/ViewAnglesPage'
-import { CorrectMovementView } from './techniqueResults/CorrectMovementView'
 import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { useNavigation } from '@react-navigation/native'
 import { useFavoriteIds } from '../lib/activitiesFavorites'
@@ -642,7 +641,7 @@ export function ActivitiesVideoAnalysis({
   const [correctionCompareW, setCorrectionCompareW] = useState(0)
 
   const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'viewAngles'>('overview')
-  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'correct'>('overview')
+  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare'>('overview')
   const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
 
   const styles = useMemo(() => getStyles(theme), [theme])
@@ -695,7 +694,20 @@ export function ActivitiesVideoAnalysis({
           rows
         )
         if (cancelled) return
-        setProVideoUrl(proLibraryVideoUrl(retrievalBlock))
+        const userShotBlock = metrics?.user_shot as
+          | { strokePreset?: unknown; viewId?: unknown }
+          | undefined
+        setProVideoUrl(
+          proLibraryVideoUrl(retrievalBlock, {
+            strokePreset:
+              typeof userShotBlock?.strokePreset === 'string'
+                ? userShotBlock.strokePreset
+                : typeof shotHyp?.stroke_preset === 'string'
+                  ? shotHyp.stroke_preset
+                  : null,
+            viewId: typeof userShotBlock?.viewId === 'string' ? userShotBlock.viewId : null,
+          })
+        )
         setFullFeedbackText(
           typeof body?.feedbackText === 'string' && body.feedbackText.trim().length > 0
             ? body.feedbackText.trim()
@@ -1027,7 +1039,7 @@ export function ActivitiesVideoAnalysis({
   const headlineScore =
     aiSnapshot?.scorePercent ?? (typeof session.score === 'number' ? Math.round(session.score) : null)
   const metricsSummary = useMemo(() => {
-    // Keep markers — DialCaption turns keywords into strength / weakness pearls.
+    // Plain dial copy — keyword pills are off; markers are stripped in DialCaption.
     return aiSections?.diagnosis?.trim() || aiSections?.strengths[0] || null
   }, [aiSections])
 
@@ -1083,18 +1095,6 @@ export function ActivitiesVideoAnalysis({
     )
   }
 
-  if (overviewDetail === 'correct') {
-    return (
-      <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
-        <CorrectMovementView
-          analysisId={session.analysisId}
-          originalUri={videoUri(session.videoPath)}
-          onClose={() => setOverviewDetail('mistakes')}
-        />
-      </View>
-    )
-  }
-
   if (overviewDetail === 'mistakes') {
     const angles = aiSnapshot?.biomechanicsSummary?.angles_deg_proxy
     const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
@@ -1110,7 +1110,6 @@ export function ActivitiesVideoAnalysis({
           elbowDeg={typeof angles?.elbow_impact_deg === 'number' ? angles.elbow_impact_deg : null}
           torsoDeg={typeof torso === 'number' ? torso : null}
           onClose={() => setOverviewDetail('overview')}
-          onSeeCorrect={() => setOverviewDetail('correct')}
           footer={
             <ProReferenceCompare
               videoUri={videoUri(session.videoPath)}

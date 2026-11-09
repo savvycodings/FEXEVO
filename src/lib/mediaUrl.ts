@@ -46,12 +46,39 @@ export function resolveMediaUrl(path: string | null | undefined): string | null 
   return resolveUploadUrl(trimmed)
 }
 
-/** Playback URL for the pro-library clip matched to this analysis, when one was stored. */
-export function proLibraryVideoUrl(retrieval: unknown): string | null {
+type ProShotHint = {
+  strokePreset?: string | null
+  viewId?: string | null
+} | null | undefined
+
+/**
+ * Playback URL for the matched pro clip (physical filmed video — not the orange hologram).
+ * Prefer the curated pro-library source (same files hologram reads), then train_video neighbors.
+ */
+export function proLibraryVideoUrl(retrieval: unknown, shot?: ProShotHint): string | null {
   const block = retrieval as {
     neighbors?: Array<{ train_video_id?: unknown; train_sample_id?: unknown }>
     train_video_id?: unknown
+    shot_hypothesis?: { stroke_preset?: unknown }
   } | null
+
+  const presetFromShot =
+    typeof shot?.strokePreset === 'string' && shot.strokePreset.trim() ? shot.strokePreset.trim() : ''
+  const presetFromHyp =
+    typeof block?.shot_hypothesis?.stroke_preset === 'string' && block.shot_hypothesis.stroke_preset.trim()
+      ? block.shot_hypothesis.stroke_preset.trim()
+      : ''
+  const preset = presetFromShot || presetFromHyp
+  const view =
+    typeof shot?.viewId === 'string' && shot.viewId.trim() ? shot.viewId.trim() : 'front'
+
+  // Same curated filmed clip hologram uses — raw mp4, never the orange `/pro-library/*.mp4` render.
+  if (preset) {
+    return resolveMediaUrl(
+      `/pro-library/source/${encodeURIComponent(preset)}/${encodeURIComponent(view)}`
+    )
+  }
+
   const fromNeighbor = block?.neighbors?.[0]?.train_video_id
   const topLevel = block?.train_video_id
   const id =

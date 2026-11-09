@@ -8,42 +8,37 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { ThemeContext } from '../context'
-import { parseCoachRichText } from '../lib/coachRichText'
+import { stripCoachRichMarkers } from '../lib/coachRichText'
 
-const CHIP_BORDER = 'rgba(0, 184, 255, 0.75)'
-const CHIP_TEXT = '#00B8FF'
 const BODY_COLOR = '#FFFFFF'
 
 export type CoachRichTextProps = {
   text: string
   style?: StyleProp<TextStyle>
-  /** Layout-only style for the chip wrap View (e.g. flex:1 in a bullet row). Never put color here. */
+  /** Layout-only style for the wrap View (e.g. flex:1 in a bullet row). Never put color here. */
   containerStyle?: StyleProp<ViewStyle>
   numberOfLines?: number
-  /** Soften chip look for muted body copy (e.g. insight cards). */
+  /** Kept for callers; chip styling is currently unused (pills hidden). */
   muted?: boolean
-  /** Override cyan chip border/text (e.g. red errors / green corrections). */
+  /** Kept for callers; chip styling is currently unused (pills hidden). */
   accentColor?: string
 }
 
 /**
- * Renders coach narrative with [[key phrase]] / **key phrase** (or auto-enriched
- * coaching terms) as cyan ghost-outline chips.
- * View chips (not nested Text borders) so the stroke actually paints on RN.
+ * Coach narrative as plain text. Keyword chip pills are hidden for now —
+ * [[markers]] / **bold** are stripped so the description wraps normally.
  */
 export function CoachRichText({
   text,
   style,
   containerStyle,
   numberOfLines,
-  muted = false,
-  accentColor,
 }: CoachRichTextProps) {
   const { theme } = useContext(ThemeContext)
   const styles = useMemo(() => getStyles(theme), [theme])
-  const segments = useMemo(() => parseCoachRichText(text), [text])
+  const plain = useMemo(() => stripCoachRichMarkers(text), [text])
 
-  if (!text.trim()) return null
+  if (!plain.trim()) return null
 
   const flatStyle = StyleSheet.flatten(style) as TextStyle | undefined
   const textColor = (flatStyle?.color as string | undefined) ?? BODY_COLOR
@@ -52,122 +47,26 @@ export function CoachRichText({
   const fontFamily =
     typeof flatStyle?.fontFamily === 'string' ? flatStyle.fontFamily : theme.regularFont
 
-  const chipBorder = accentColor
-    ? accentColor.startsWith('#')
-      ? `${accentColor}BF`
-      : accentColor
-    : muted
-      ? 'rgba(0, 184, 255, 0.55)'
-      : CHIP_BORDER
-  const chipText = accentColor ?? CHIP_TEXT
-
-  const hasChips = segments.some((s) => s.type === 'chip')
-  if (!hasChips) {
-    return (
+  return (
+    <View style={containerStyle} accessible accessibilityRole="text">
       <Text
         allowFontScaling={false}
         style={[styles.body, { color: textColor, fontSize, lineHeight, fontFamily }, style]}
         numberOfLines={numberOfLines}
       >
-        {text}
+        {plain}
       </Text>
-    )
-  }
-
-  const wordTextStyle: TextStyle = {
-    fontFamily,
-    fontSize,
-    lineHeight,
-    color: textColor,
-  }
-
-  // View + flexWrap so chip borders render; split text on whitespace for wrapping.
-  // Do NOT cast TextStyle onto the View (color/flex on View breaks contrast/layout).
-  return (
-    <View style={[styles.wrap, containerStyle]} accessible accessibilityRole="text">
-      {segments.map((seg, idx) => {
-        if (seg.type === 'chip') {
-          return (
-            <View
-              key={`c-${idx}-${seg.value}`}
-              style={[
-                muted ? styles.chipWrapMuted : styles.chipWrap,
-                { borderColor: chipBorder },
-              ]}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[
-                  muted ? styles.chipTextMuted : styles.chipText,
-                  { color: chipText },
-                ]}
-              >
-                {seg.value}
-              </Text>
-            </View>
-          )
-        }
-        const parts = seg.value.split(/(\s+)/)
-        return parts.map((part, pIdx) => {
-          if (!part) return null
-          return (
-            <Text key={`t-${idx}-${pIdx}`} allowFontScaling={false} style={wordTextStyle}>
-              {part}
-            </Text>
-          )
-        })
-      })}
     </View>
   )
 }
 
-function getStyles(theme: { regularFont?: string; semiBoldFont?: string; mediumFont?: string }) {
+function getStyles(theme: { regularFont?: string }) {
   return StyleSheet.create({
-    wrap: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      alignItems: 'center',
-      alignSelf: 'stretch',
-      flexShrink: 1,
-      minWidth: 0,
-    },
     body: {
       fontFamily: theme.regularFont,
       fontSize: 14,
-      color: BODY_COLOR,
       lineHeight: 22,
-    },
-    chipWrap: {
-      borderWidth: 1.5,
-      borderColor: CHIP_BORDER,
-      borderRadius: 999,
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      backgroundColor: 'rgba(0, 184, 255, 0.08)',
-      marginHorizontal: 2,
-      marginVertical: 2,
-    },
-    chipWrapMuted: {
-      borderWidth: 1,
-      borderColor: 'rgba(0, 184, 255, 0.55)',
-      borderRadius: 999,
-      paddingHorizontal: 6,
-      paddingVertical: 1,
-      backgroundColor: 'transparent',
-      marginHorizontal: 2,
-      marginVertical: 1,
-    },
-    chipText: {
-      fontFamily: theme.semiBoldFont ?? theme.mediumFont ?? theme.regularFont,
-      fontSize: 13,
-      lineHeight: 18,
-      color: CHIP_TEXT,
-    },
-    chipTextMuted: {
-      fontFamily: theme.semiBoldFont ?? theme.mediumFont ?? theme.regularFont,
-      fontSize: 12,
-      lineHeight: 16,
-      color: CHIP_TEXT,
+      color: BODY_COLOR,
     },
   })
 }

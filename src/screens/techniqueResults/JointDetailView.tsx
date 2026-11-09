@@ -1,7 +1,6 @@
 import { useContext, useEffect, useRef, useState } from 'react'
 import { BackHandler, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { ResizeMode, Video } from 'expo-av'
-import Svg, { Circle, Line } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
@@ -13,10 +12,9 @@ import { CARD_GLOW, SELECTED_GLOW, UI } from '../../components/ui'
 import type { ContactJoint, JointReading } from '../../lib/jointsApi'
 import type { SegmentTiming } from '../../lib/kineticChain'
 import type { HologramKeypoints, HologramOrbitFrame } from '../../lib/hologramJob'
-import { orbitKeypointsAtFraction } from '../../lib/orbitKeypoints'
 import { JOINT_ICON } from './jointIcons'
 import { ChainLegend, KineticChainTimingView, TimingCard } from './KineticChainTiming'
-import { alignKeypoints, orbitFraction, type OrbitPreset } from './orbitPresets'
+import { orbitFraction, type OrbitPreset } from './orbitPresets'
 
 type Layer = 'player' | 'pro' | 'overlay'
 type ViewPreset = OrbitPreset
@@ -69,21 +67,6 @@ const VIEW_ICONS: Record<ViewPreset, keyof typeof MaterialCommunityIcons.glyphMa
   front: 'account-outline',
   side: 'head-outline',
 }
-/** Match Smart 3D player markers — arm chain only, not a dense full-body wireframe. */
-const FIGURE_LIMBS: [string, string][] = [
-  ['left_shoulder', 'left_elbow'],
-  ['left_elbow', 'left_wrist'],
-  ['right_shoulder', 'right_elbow'],
-  ['right_elbow', 'right_wrist'],
-]
-const FIGURE_MARKERS = [
-  'left_shoulder',
-  'right_shoulder',
-  'left_elbow',
-  'right_elbow',
-  'left_wrist',
-  'right_wrist',
-]
 const MAX_ZOOM = 3
 const MESSAGE = {
   good: { colors: ['#06291E', '#0B3A2A'], border: '#1E9E6A', icon: 'checkmark', iconColor: '#34C759' },
@@ -163,15 +146,11 @@ function JointStage({
   tag,
   controls,
   imageUri,
-  keypoints = null,
-  focus = null,
   onFullscreen,
 }: {
   tag: string | null
   controls: boolean
   imageUri?: string | null
-  keypoints?: HologramKeypoints | null
-  focus?: string[] | null
   onFullscreen: () => void
 }) {
   const { t } = useTranslation()
@@ -214,17 +193,7 @@ function JointStage({
             { transform: [{ translateX: offset.x }, { translateY: offset.y }, { scale: zoom }] },
           ]}
         />
-        {keypoints ? (
-          <View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              { transform: [{ translateX: offset.x }, { translateY: offset.y }, { scale: zoom }] },
-            ]}
-          >
-            <Figure keypoints={keypoints} color={PRO} focus={focus} />
-          </View>
-        ) : null}
+        {/* Part crops are Nano Banana cells — never map full-body MediaPipe onto them. */}
       </View>
       {tag && !controls ? (
         <View pointerEvents="none" style={styles.tag}>
@@ -277,15 +246,6 @@ function JointStage({
   )
 }
 
-function keypointsAt(clip: OrbitClip | null | undefined, fraction: number): HologramKeypoints | null {
-  const fromOrbit = orbitKeypointsAtFraction(clip?.frames, fraction, clip?.frameCount)
-  if (fromOrbit) return fromOrbit
-  // Sparse orbit pose (Modal often skips the back of the turn): keep the contact still pose
-  // only at the filmed side of the orbit, not stretched across the whole 360°.
-  if (fraction <= 0.02 || fraction >= 0.98) return clip?.keypoints ?? null
-  return null
-}
-
 /** Paused orbit frame. Seeking is what View 1 / 2 / 3 actually do. */
 function HeldOrbit({ uri, fraction, durationMs }: { uri: string; fraction: number; durationMs: number | null }) {
   const ref = useRef<Video>(null)
@@ -314,66 +274,6 @@ function HeldOrbit({ uri, fraction, durationMs }: { uri: string; fraction: numbe
   )
 }
 
-function Figure({
-  keypoints,
-  color,
-  focus = null,
-}: {
-  keypoints: HologramKeypoints | null
-  color: string
-  /** Light up these joints (e.g. shoulder) when inspecting a body part. */
-  focus?: string[] | null
-}) {
-  if (!keypoints) return null
-  const names = [
-    ...FIGURE_MARKERS,
-    ...(focus ?? []).filter((n) => !FIGURE_MARKERS.includes(n)),
-  ]
-  return (
-    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
-      {FIGURE_LIMBS.map(([a, b]) => {
-        const A = keypoints[a]
-        const B = keypoints[b]
-        if (!A || !B) return null
-        return <Line key={`${a}-${b}`} x1={A.x * 100} y1={A.y * 100} x2={B.x * 100} y2={B.y * 100} stroke={color} strokeWidth={1.1} strokeOpacity={0.85} />
-      })}
-      {names.map((name) => {
-        const p = keypoints[name]
-        if (!p) return null
-        const on = focus?.includes(name)
-        return (
-          <Circle
-            key={name}
-            cx={p.x * 100}
-            cy={p.y * 100}
-            r={on ? 2.8 : 1.5}
-            fill={color}
-            stroke={on ? '#FFF4D6' : undefined}
-            strokeWidth={on ? 0.5 : 0}
-          />
-        )
-      })}
-    </Svg>
-  )
-}
-
-function jointFocusKeys(joint: ContactJoint): string[] {
-  switch (joint) {
-    case 'shoulder':
-      return ['left_shoulder', 'right_shoulder']
-    case 'elbow':
-      return ['left_elbow', 'right_elbow']
-    case 'wrist':
-      return ['left_wrist', 'right_wrist']
-    case 'torso':
-      return ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip', 'neck']
-    case 'knee':
-      return ['left_knee', 'right_knee']
-    default:
-      return []
-  }
-}
-
 function ClipPicture({ clip, fraction }: { clip: OrbitClip | null | undefined; fraction: number }) {
   // Prefer the holographic orbit video; otherwise the Nano Banana still — never the stock body art.
   if (clip?.video) return <HeldOrbit uri={clip.video} fraction={fraction} durationMs={clip.durationMs} />
@@ -381,7 +281,11 @@ function ClipPicture({ clip, fraction }: { clip: OrbitClip | null | undefined; f
   return <Image source={BODY} resizeMode="cover" style={styles.fill} />
 }
 
-/** Pro Reference: blue + orange holographics side by side; View 1 / 2 / 3 seek both to the same angle. */
+/**
+ * Joint Pro Reference: side-by-side holographics.
+ * View 1/2/3 are allowed here (joint only) so both figures share an angle —
+ * full-body Smart 3D still keeps Views on Overlay only.
+ */
 function ChainStage({
   player,
   pro,
@@ -403,11 +307,9 @@ function ChainStage({
       <View style={styles.pair}>
         <View style={styles.pairHalf}>
           <ClipPicture clip={player} fraction={fraction} />
-          <Figure keypoints={keypointsAt(player, fraction)} color={PRO} focus={null} />
         </View>
         <View style={styles.pairHalf}>
           <ClipPicture clip={pro} fraction={fraction} />
-          <Figure keypoints={keypointsAt(pro, fraction)} color="#FF8A3D" focus={null} />
         </View>
       </View>
       <View style={styles.presetColumnLeft}>
@@ -428,7 +330,7 @@ function ChainStage({
   )
 }
 
-/** Blue + orange holographics at the same orbit angle, with MediaPipe on top when pose exists. */
+/** Overlay: dual holographics at View 1 / 2 / 3 — no MediaPipe points. */
 function OverlayStage({
   player,
   pro,
@@ -445,9 +347,6 @@ function OverlayStage({
   const { t } = useTranslation()
   const [preset, setPreset] = useState<ViewPreset>('view')
   const fraction = orbitFraction(preset, viewId)
-  const yours = keypointsAt(player, fraction)
-  const theirs = keypointsAt(pro, fraction)
-  const aligned = yours && theirs ? alignKeypoints(theirs, yours) : theirs
   return (
     <View testID="joint-overlay" style={[styles.stage, expanded ? styles.stageFill : styles.stageTall]}>
       <ClipPicture clip={player} fraction={fraction} />
@@ -456,8 +355,6 @@ function OverlayStage({
           <ClipPicture clip={pro} fraction={fraction} />
         </View>
       ) : null}
-      <Figure keypoints={yours} color={PRO} />
-      <Figure keypoints={aligned} color="#FF8A3D" />
       <View style={styles.presetColumnRight}>
         <ViewPresets value={preset} onChange={setPreset} />
       </View>
@@ -629,8 +526,6 @@ export function JointDetailView({
               tag={you}
               controls={false}
               imageUri={partImage ?? hologramImage}
-              keypoints={playerOrbit?.keypoints ?? null}
-              focus={jointFocusKeys(joint)}
               onFullscreen={() => setFullscreen(true)}
             />
           )}

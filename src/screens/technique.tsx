@@ -11,7 +11,6 @@ import {
   Image,
   Platform,
   Alert,
-  Share,
   StatusBar,
   Pressable,
   BackHandler,
@@ -91,13 +90,11 @@ import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { DrillsView } from './techniqueResults/DrillsView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { ViewAnglesPage } from './techniqueResults/ViewAnglesPage'
-import { CorrectMovementView } from './techniqueResults/CorrectMovementView'
 import { CoachHome } from './coachHome/CoachHome'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientProgressBar } from '../components'
 import { TechniqueAnalysisVideoPanel } from '../components/TechniqueAnalysisVideoPanel'
 import { CorrectionVideoCompare } from '../components/CorrectionVideoCompare'
-import { MagicShotCard } from '../components/MagicShotCard'
 import { useMagicShotJob } from '../lib/magicShotJob'
 import { PaddlePongGame } from '../components/PaddlePongGame'
 import { AnalyzingDashSpinner } from '../components/AnalyzingDashSpinner'
@@ -567,7 +564,7 @@ export function Technique() {
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   /** Which results sub-page is showing. Does not reload analysis. */
   const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
-  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'correct' | 'drills'>('overview')
+  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'drills'>('overview')
   const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
   const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
   const resultsScrollRef = useRef<ScrollView>(null)
@@ -647,34 +644,9 @@ export function Technique() {
     shortSide: number
     minimum: number
   } | null>(null)
-  /** Magic Shot is its own product path (Fun Control / correction-videos), not gated on the Comfy image-toggle. */
-  const magicShot = useMagicShotJob(analysisId, analysisJson?.status === 'completed')
+  // Magic Shot UI is parked; keep the job hook only for optional Comfy correction video playback.
+  const magicShot = useMagicShotJob(analysisId, SHOW_COMFY_CORRECTIONS && analysisJson?.status === 'completed')
   const correctionVideo: CorrectionVideoRow | null = magicShot.video
-  const [switchingHand, setSwitchingHand] = useState(false)
-  const [switchHandError, setSwitchHandError] = useState<string | null>(null)
-  const inviteFriendToMagicShot = useCallback(() => {
-    void Share.share({ message: t('technique.magicShot.mismatch.shareMessage') }).catch(() => {})
-  }, [t])
-  const switchHandAndRegenerate = useCallback(async () => {
-    const videoHand = magicShot.mismatch?.videoHand
-    if (!videoHand || switchingHand) return
-    setSwitchingHand(true)
-    setSwitchHandError(null)
-    const res = await authClient
-      .$fetch('/profile/hand', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ dominantHand: videoHand }),
-      })
-      .catch((err: unknown) => ({ error: err }))
-    setSwitchingHand(false)
-    if ((res as { error?: unknown })?.error) {
-      setSwitchHandError(t('technique.magicShot.mismatch.switchFailed'))
-      return
-    }
-    invalidateSessionData()
-    void magicShot.start({ forceRegenerate: true })
-  }, [magicShot, switchingHand, invalidateSessionData, t])
   const [correctionsTestError, setCorrectionsTestError] = useState<string | null>(null)
   /** Server-extracted video frames paired with bundled testimgegen PNGs (no AI gen) */
   const [testPoseCorrectionImages, setTestPoseCorrectionImages] = useState<CorrectionPairRow[]>([])
@@ -886,7 +858,7 @@ export function Technique() {
   const metricsBlurb = useMemo(() => {
     const diagnosis =
       typeof localeAnalysis?.diagnosis === 'string' ? localeAnalysis.diagnosis.trim() : ''
-    // Keep markers — DialCaption turns them into keyword pearls.
+    // Plain dial copy — keyword pills are off; markers are stripped in DialCaption.
     return diagnosis || strengthsList[0] || null
   }, [localeAnalysis?.diagnosis, strengthsList])
   const dialDiagnosis =
@@ -2889,7 +2861,7 @@ export function Technique() {
                 ? { uri: correctionImages[0].correctedImage }
                 : correctionImages[0]?.correctedImage ?? null
             }
-            referenceVideoUri={proLibraryVideoUrl(retrieval)}
+            referenceVideoUri={proLibraryVideoUrl(retrieval, userShot)}
             elbowDeg={
               typeof biomechanicsSummary?.angles_deg_proxy?.elbow_impact_deg === 'number'
                 ? biomechanicsSummary.angles_deg_proxy.elbow_impact_deg
@@ -2927,18 +2899,6 @@ export function Technique() {
                 : null
             }
           />
-        ) : step === 3 && resultsDetail === 'correct' ? (
-          <CorrectMovementView
-            analysisId={analysisId}
-            originalUri={uploadedVideoUrl}
-            originalAspect={
-              trimPreviewNaturalSize && trimPreviewNaturalSize.w > 0
-                ? trimPreviewNaturalSize.h / trimPreviewNaturalSize.w
-                : null
-            }
-            onProfileChanged={invalidateSessionData}
-            onClose={() => setResultsDetail('mistakes')}
-          />
         ) : step === 3 && resultsDetail === 'mistakes' ? (
           <BiggestMistakesView
             videoUri={uploadedVideoUrl}
@@ -2960,51 +2920,17 @@ export function Technique() {
                   : null
             }
             onClose={() => setResultsDetail('overview')}
-            onSeeCorrect={() => setResultsDetail('correct')}
             impactFrame={
               typeof biomechanicsSummary?.timing?.impact_frame === 'number'
                 ? biomechanicsSummary.timing.impact_frame
                 : null
             }
             fps={biomechanicsSummary?.timing?.fps ?? null}
-            magicShot={
-              <View style={{ gap: 12 }} testID={TEST_IDS.magicShotResult}>
-                {correctionVideo?.video && uploadedVideoUrl ? (
-                  <CorrectionVideoCompare
-                    originalUri={uploadedVideoUrl}
-                    correctedUri={
-                      resolveMediaUrl(correctionVideo.video) || toMediaUri(correctionVideo.video)
-                    }
-                    videoKey={`mistakes-magic-${analysisId ?? 'video'}`}
-                    width={Math.max(280, Math.floor(winW - 40))}
-                    originalAspect={
-                      trimPreviewNaturalSize && trimPreviewNaturalSize.w > 0
-                        ? trimPreviewNaturalSize.h / trimPreviewNaturalSize.w
-                        : null
-                    }
-                    windowStartMs={correctionVideo.windowStartMs}
-                    windowEndMs={correctionVideo.windowEndMs}
-                  />
-                ) : (
-                  <MagicShotCard
-                    status={magicShot.status}
-                    startedAt={magicShot.startedAt}
-                    error={magicShot.error}
-                    onGenerate={() => void magicShot.start()}
-                    mismatch={magicShot.mismatch}
-                    onInviteFriend={inviteFriendToMagicShot}
-                    onSwitchHand={() => void switchHandAndRegenerate()}
-                    switchingHand={switchingHand}
-                    switchHandError={switchHandError}
-                  />
-                )}
-              </View>
-            }
             footer={
               <ProReferenceCompare
                 videoUri={uploadedVideoUrl ?? ''}
                 analysisId={analysisId}
-                proVideoUri={proLibraryVideoUrl(retrieval)}
+                proVideoUri={proLibraryVideoUrl(retrieval, userShot)}
                 metrics={compareMetricsFromSummary(biomechanicsSummary, t)}
                 score={headlineScore}
                 onSave={() => navigation.getParent()?.navigate('Progress' as never)}

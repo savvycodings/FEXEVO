@@ -58,14 +58,10 @@ type Props = {
   elbowDeg: number | null
   torsoDeg: number | null
   onClose: () => void
-  /** Opens the Correct Movement of this shot done right; without it the button replays the clip. */
-  onSeeCorrect?: () => void
   /** Contact frame and fps, for the strip thumbnails and the elbow distance. */
   impactFrame?: number | null
   fps?: number | null
-  /** Magic Shot create / progress / result block under See Correct Movement. */
-  magicShot?: ReactNode
-  /** Save & Track (Pro Reference) and anything else below Correct Movement. */
+  /** Save & Track (Pro Reference) below the mistake cards. */
   footer?: ReactNode
 }
 
@@ -260,7 +256,6 @@ export function BiggestMistakesView({
   onClose,
   impactFrame = null,
   fps = null,
-  magicShot = null,
   footer = null,
 }: Props) {
   const { t } = useTranslation()
@@ -673,17 +668,6 @@ export function BiggestMistakesView({
         ))
       )}
 
-      {magicShot ? (
-        <View style={styles.magicShotSection} testID="create-magic-shot-section">
-          <Text
-            allowFontScaling={false}
-            style={[styles.magicShotHeading, { fontFamily: theme.semiBoldFont ?? theme.mediumFont }]}
-          >
-            {t('analysis.createMagicShot')}
-          </Text>
-          {magicShot}
-        </View>
-      ) : null}
       {footer}
     </ScrollView>
   )
@@ -1047,6 +1031,4 @@ const styles = StyleSheet.create({
   whyCopy: { flex: 1, gap: 4 },
   whyTitle: { color: UI.text, fontSize: 18 },
   whyBody: { color: UI.textMuted, fontSize: 13, lineHeight: 18 },
-  magicShotSection: { gap: 12, marginTop: 4 },
-  magicShotHeading: { color: UI.text, fontSize: 20 },
 })
