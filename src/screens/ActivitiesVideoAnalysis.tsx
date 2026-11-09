@@ -36,18 +36,18 @@ import { CorrectionVideoCompare } from '../components/CorrectionVideoCompare'
 import { PhysicalMetricsSection } from '../components/physicalMetrics/PhysicalMetricsSection'
 import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidenceSection'
 import { ResultSectionPill } from '../components/ResultSectionPill'
-import { stripCoachRichMarkers } from '../lib/coachRichText'
 import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
 import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { MetricsPage } from './techniqueResults/MetricsPage'
 import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
+import { ViewAnglesPage } from './techniqueResults/ViewAnglesPage'
 import { CorrectMovementView } from './techniqueResults/CorrectMovementView'
 import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { useNavigation } from '@react-navigation/native'
 import { useFavoriteIds } from '../lib/activitiesFavorites'
-import { averagePhysicalMetrics, parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
+import { parsePhysicalMetricsFromAnalysis } from '../lib/physicalMetrics'
 import {
   parseBiomechanicsSummary,
   type BiomechanicsSummary,
@@ -641,7 +641,7 @@ export function ActivitiesVideoAnalysis({
   } | null>(null)
   const [correctionCompareW, setCorrectionCompareW] = useState(0)
 
-  const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'proReference'>('overview')
+  const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'viewAngles'>('overview')
   const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'correct'>('overview')
   const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
 
@@ -757,12 +757,8 @@ export function ActivitiesVideoAnalysis({
         })
         setPoseFrames(rows)
         setTotalVidFrames(tf)
-        // Reopen a shot that already has a 3D orbit — land on Smart 3D, don't rebuild.
-        const savedHologram = metrics?.hologram as { orbitVideo?: unknown } | undefined
-        if (typeof savedHologram?.orbitVideo === 'string' && savedHologram.orbitVideo.trim()) {
-          setPoseReturn('overview')
-          setOverviewDetail('pose')
-        }
+        // Always land on Your Analysis (overview), not Smart 3D.
+        setOverviewDetail('overview')
         const expectsCorrections = metrics?.has_correction_images === true
         setHasCorrectionImagesFlag(expectsCorrections)
         const expectsVideo =
@@ -1027,13 +1023,12 @@ export function ActivitiesVideoAnalysis({
     </View>
   ) : null
 
-  const headlineScore = aiSnapshot?.physicalMetrics
-    ? averagePhysicalMetrics(aiSnapshot.physicalMetrics)
-    : aiSnapshot?.scorePercent ?? (typeof session.score === 'number' ? Math.round(session.score) : null)
+  /** Match homepage / history — use calibrated AI score, not the physical-metrics average. */
+  const headlineScore =
+    aiSnapshot?.scorePercent ?? (typeof session.score === 'number' ? Math.round(session.score) : null)
   const metricsSummary = useMemo(() => {
-    const raw = aiSections?.diagnosis?.trim() || aiSections?.strengths[0] || ''
-    const text = stripCoachRichMarkers(raw)
-    return text || null
+    // Keep markers — DialCaption turns keywords into strength / weakness pearls.
+    return aiSections?.diagnosis?.trim() || aiSections?.strengths[0] || null
   }, [aiSections])
 
   if (overviewDetail === 'pose') {
@@ -1115,7 +1110,17 @@ export function ActivitiesVideoAnalysis({
           elbowDeg={typeof angles?.elbow_impact_deg === 'number' ? angles.elbow_impact_deg : null}
           torsoDeg={typeof torso === 'number' ? torso : null}
           onClose={() => setOverviewDetail('overview')}
-          onSeeCorrect={SHOW_COMFY_CORRECTIONS ? () => setOverviewDetail('correct') : undefined}
+          onSeeCorrect={() => setOverviewDetail('correct')}
+          footer={
+            <ProReferenceCompare
+              videoUri={videoUri(session.videoPath)}
+              analysisId={session.analysisId}
+              proVideoUri={proVideoUrl}
+              metrics={proCompareMetrics}
+              score={headlineScore}
+              onSave={() => navigation.getParent()?.navigate('Progress' as never)}
+            />
+          }
         />
       </View>
     )
@@ -1170,7 +1175,7 @@ export function ActivitiesVideoAnalysis({
           tabs={[
             { id: 'overview' as const, label: t('analysis.overview') },
             { id: 'metrics' as const, label: t('analysis.metrics') },
-            { id: 'proReference' as const, label: t('analysis.proReference') },
+            { id: 'viewAngles' as const, label: t('analysis.viewAngles') },
           ]}
           value={analysisTab}
           onChange={setAnalysisTab}
@@ -1183,6 +1188,9 @@ export function ActivitiesVideoAnalysis({
             score={headlineScore}
             rating={aiSnapshot?.rating ?? session.rating ?? null}
             summary={metricsSummary}
+            diagnosis={aiSections?.diagnosis ?? null}
+            strengths={aiSections?.strengths ?? null}
+            weaknesses={aiSections?.technicalErrors ?? null}
             shotLabel={session.shotLabel ?? shotTitle}
             metrics={aiSnapshot?.physicalMetrics ?? null}
             poseFrames={poseFrames}
@@ -1195,35 +1203,24 @@ export function ActivitiesVideoAnalysis({
           />
         ) : null}
 
-        {analysisTab === 'shotInfo' ? (
-          <View style={styles.extraCard}>
-            <Text allowFontScaling={false} style={styles.aiSubTitle}>
-              {t('analysis.session')}
-            </Text>
-            <Text allowFontScaling={false} style={styles.commentBody}>
-              {t('analysis.stroke')}: {shotTitle}
-              {'\n'}
-              {t('analysis.category')}: {aiSections?.category || '—'}
-              {'\n'}
-              {t('analysis.level')}: {aiSections?.level || '—'}
-            </Text>
-            {aiSections?.shotContext ? (
-              <Text allowFontScaling={false} style={[styles.commentBody, { marginTop: 8 }]}>
-                {stripCoachRichMarkers(aiSections.shotContext)}
-              </Text>
-            ) : null}
+        {analysisTab === 'viewAngles' ? (
+          <View style={{ paddingHorizontal: SCREEN_GUTTER }}>
+            <ViewAnglesPage
+              videoUri={videoUri(session.videoPath)}
+              videoKey={session.analysisId}
+              analysisId={session.analysisId}
+              shotLabel={session.shotLabel ?? shotTitle}
+              poseFrames={poseFrames}
+              totalFrames={totalVidFrames}
+              impactFrame={
+                typeof aiSnapshot?.biomechanicsSummary?.timing?.impact_frame === 'number'
+                  ? aiSnapshot.biomechanicsSummary.timing.impact_frame
+                  : null
+              }
+              fps={aiSnapshot?.biomechanicsSummary?.timing?.fps ?? null}
+              framesPrepToImpact={aiSnapshot?.biomechanicsSummary?.timing?.frames_prep_to_impact ?? null}
+            />
           </View>
-        ) : null}
-
-        {analysisTab === 'proReference' ? (
-          <ProReferenceCompare
-            videoUri={videoUri(session.videoPath)}
-            analysisId={session.analysisId}
-            referenceImageUri={correctionPairs[0]?.correctedImage ?? null}
-            metrics={proCompareMetrics}
-            score={headlineScore}
-            onSave={() => navigation.getParent()?.navigate('Progress' as never)}
-          />
         ) : null}
 
         {analysisTab === 'overview' ? (
@@ -1237,6 +1234,9 @@ export function ActivitiesVideoAnalysis({
             score={headlineScore}
             rating={aiSnapshot?.rating ?? session.rating ?? null}
             summary={metricsSummary}
+            diagnosis={aiSections?.diagnosis ?? null}
+            strengths={aiSections?.strengths ?? null}
+            weaknesses={aiSections?.technicalErrors ?? null}
             metrics={aiSnapshot?.physicalMetrics ?? null}
             detail={overviewDetail}
             onBiggestMistakes={() => setOverviewDetail('mistakes')}

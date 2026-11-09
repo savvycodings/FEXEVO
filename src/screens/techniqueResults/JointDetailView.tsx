@@ -13,6 +13,7 @@ import { CARD_GLOW, SELECTED_GLOW, UI } from '../../components/ui'
 import type { ContactJoint, JointReading } from '../../lib/jointsApi'
 import type { SegmentTiming } from '../../lib/kineticChain'
 import type { HologramKeypoints, HologramOrbitFrame } from '../../lib/hologramJob'
+import { orbitKeypointsAtFraction } from '../../lib/orbitKeypoints'
 import { JOINT_ICON } from './jointIcons'
 import { ChainLegend, KineticChainTimingView, TimingCard } from './KineticChainTiming'
 import { alignKeypoints, orbitFraction, type OrbitPreset } from './orbitPresets'
@@ -43,11 +44,13 @@ type Props = {
   proHologramImage?: string | null
   /** Pro close-up for this body part when the orange board was sliced. */
   proPartImage?: string | null
-  /** Orbit clips, so View / Front / Side seek the turn instead of doing nothing. */
+  /** Orbit clips, so View 1 / 2 / 3 seek the turn instead of doing nothing. */
   playerOrbit?: OrbitClip | null
   proOrbit?: OrbitClip | null
-  /** Camera the shot was filmed from, so Front and Side land on those sides of the turn. */
+  /** Camera the shot was filmed from, so View 2 / 3 land on those sides of the turn. */
   viewId?: string | null
+  /** Open on the same Smart 3D layer the person was looking at (Player / Pro / Overlay). */
+  initialLayer?: Layer
   /** Kinetic chain timing from the player's pose, for the Pro Reference tab. */
   timing?: SegmentTiming[] | null
   /** Back to the full-body stage ("3D View" goes there too). */
@@ -199,7 +202,8 @@ function JointStage({
       <View style={StyleSheet.absoluteFill} {...pan.panHandlers}>
         <Image
           source={imageUri ? { uri: imageUri } : PLACEHOLDER}
-          resizeMode={imageUri ? 'contain' : 'cover'}
+          // Square cells in a tall stage — cover so the hologram fills the whole card.
+          resizeMode="cover"
           style={[
             styles.fill,
             { transform: [{ translateX: offset.x }, { translateY: offset.y }, { scale: zoom }] },
@@ -258,28 +262,15 @@ function JointStage({
 }
 
 function keypointsAt(clip: OrbitClip | null | undefined, fraction: number): HologramKeypoints | null {
-  const frames = clip?.frames
-  if (frames?.length) {
-    const last = Math.max((clip?.frameCount ?? frames.length) - 1, 1)
-    const target =
-      frames.length === 1
-        ? frames[0].frame
-        : frames[0].frame + fraction * (frames[frames.length - 1].frame - frames[0].frame)
-    let best = frames[0]
-    let dist = Math.abs(best.frame - target)
-    for (const row of frames) {
-      const d = Math.abs(row.frame - target)
-      if (d < dist) {
-        best = row
-        dist = d
-      }
-    }
-    return best.keypoints
-  }
-  return clip?.keypoints ?? null
+  const fromOrbit = orbitKeypointsAtFraction(clip?.frames, fraction, clip?.frameCount)
+  if (fromOrbit) return fromOrbit
+  // Sparse orbit pose (Modal often skips the back of the turn): keep the contact still pose
+  // only at the filmed side of the orbit, not stretched across the whole 360°.
+  if (fraction <= 0.02 || fraction >= 0.98) return clip?.keypoints ?? null
+  return null
 }
 
-/** Paused orbit frame. Seeking is what View, Front and Side actually do. */
+/** Paused orbit frame. Seeking is what View 1 / 2 / 3 actually do. */
 function HeldOrbit({ uri, fraction, durationMs }: { uri: string; fraction: number; durationMs: number | null }) {
   const ref = useRef<Video>(null)
   const seek = () => {
@@ -299,7 +290,7 @@ function HeldOrbit({ uri, fraction, durationMs }: { uri: string; fraction: numbe
       ref={ref}
       source={{ uri }}
       style={styles.fill}
-      resizeMode={ResizeMode.CONTAIN}
+      resizeMode={ResizeMode.COVER}
       isMuted
       onLoad={seek}
       onReadyForDisplay={seek}
@@ -316,7 +307,7 @@ function Figure({
 }) {
   if (!keypoints) return null
   return (
-    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
       {FIGURE_LIMBS.map(([a, b]) => {
         const A = keypoints[a]
         const B = keypoints[b]
@@ -331,11 +322,13 @@ function Figure({
 }
 
 function ClipPicture({ clip, fraction }: { clip: OrbitClip | null | undefined; fraction: number }) {
+  // Prefer the holographic orbit video; otherwise the Nano Banana still — never the stock body art.
   if (clip?.video) return <HeldOrbit uri={clip.video} fraction={fraction} durationMs={clip.durationMs} />
-  return <Image source={clip?.image ? { uri: clip.image } : BODY} resizeMode="contain" style={styles.fill} />
+  if (clip?.image) return <Image source={{ uri: clip.image }} resizeMode="cover" style={styles.fill} />
+  return <Image source={BODY} resizeMode="cover" style={styles.fill} />
 }
 
-/** Pro Reference: both orbits, and View / Front / Side seek them to the same angle. */
+/** Pro Reference: blue + orange holographics side by side; View 1 / 2 / 3 seek both to the same angle. */
 function ChainStage({
   player,
   pro,
@@ -357,9 +350,11 @@ function ChainStage({
       <View style={styles.pair}>
         <View style={styles.pairHalf}>
           <ClipPicture clip={player} fraction={fraction} />
+          <Figure keypoints={keypointsAt(player, fraction)} color={PRO} />
         </View>
         <View style={styles.pairHalf}>
           <ClipPicture clip={pro} fraction={fraction} />
+          <Figure keypoints={keypointsAt(pro, fraction)} color="#FF8A3D" />
         </View>
       </View>
       <View style={styles.presetColumnLeft}>
@@ -380,7 +375,7 @@ function ChainStage({
   )
 }
 
-/** One picture with both skeletons on the same body, at the chosen side of the orbit. */
+/** Blue + orange holographics at the same orbit angle, with MediaPipe on top when pose exists. */
 function OverlayStage({
   player,
   pro,
@@ -402,7 +397,12 @@ function OverlayStage({
   const aligned = yours && theirs ? alignKeypoints(theirs, yours) : theirs
   return (
     <View testID="joint-overlay" style={[styles.stage, expanded ? styles.stageFill : styles.stageTall]}>
-      {yours || aligned ? null : <ClipPicture clip={player} fraction={fraction} />}
+      <ClipPicture clip={player} fraction={fraction} />
+      {pro?.video || pro?.image ? (
+        <View pointerEvents="none" style={[styles.fill, { opacity: 0.48 }]}>
+          <ClipPicture clip={pro} fraction={fraction} />
+        </View>
+      ) : null}
       <Figure keypoints={yours} color={PRO} />
       <Figure keypoints={aligned} color="#FF8A3D" />
       <View style={styles.presetColumnRight}>
@@ -434,13 +434,14 @@ export function JointDetailView({
   playerOrbit = null,
   proOrbit = null,
   viewId = null,
+  initialLayer = 'player',
   timing = null,
   onClose,
 }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
-  const [layer, setLayer] = useState<Layer>('player')
+  const [layer, setLayer] = useState<Layer>(initialLayer)
   const [fullscreen, setFullscreen] = useState(false)
   const [chainOpen, setChainOpen] = useState(false)
 
@@ -459,13 +460,15 @@ export function JointDetailView({
   const jointName = t(`analysis.jointName.${joint}`)
   const title = layer === 'pro' ? t('analysis.kineticChain') : t('analysis.jointAngleTitle', { joint: jointName })
   const good = reading?.status === 'good'
+  /** Pro reference exists when the orange library clip is on the phone or the joint has a pro angle. */
+  const hasProRef = Boolean(proHologramImage || proOrbit?.image || proOrbit?.video || reading?.pro != null)
   /** No pro to compare against: say so plainly, not as a warning. */
   const tone: 'good' | 'bad' | 'info' = good ? 'good' : reading?.messageKey ? 'bad' : 'info'
   const deg = reading?.deltaDeg != null ? Math.abs(Math.round(reading.deltaDeg)) : null
   const message =
     reading?.messageKey != null
       ? t(`analysis.${reading.messageKey}`, { deg: deg ?? 0 })
-      : reading?.you != null
+      : reading?.you != null && reading?.pro == null && !hasProRef
         ? t('analysis.jointNoPro')
         : null
   const you = reading?.you != null ? `${Math.round(reading.you)}°` : null
@@ -521,7 +524,7 @@ export function JointDetailView({
           <Text allowFontScaling={false} numberOfLines={1} style={[styles.title, { fontFamily: theme.regularFont }]}>
             {title}
           </Text>
-          <Text allowFontScaling={false} numberOfLines={1} style={[styles.subtitle, { fontFamily: theme.regularFont }]}>
+          <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: theme.regularFont }]}>
             {shotLabel ? `${shotLabel} | ` : ''}
             {t('analysis.contactPhase')}
           </Text>
@@ -678,7 +681,7 @@ export function JointDetailView({
                     ? { uri: (layer === 'player' ? partImage ?? hologramImage : proPartImage ?? proHologramImage)! }
                     : PLACEHOLDER
                 }
-                resizeMode="contain"
+                resizeMode="cover"
                 style={styles.fullscreenImage}
               />
             )}

@@ -8,14 +8,15 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
 import { ThemeContext } from '../../context'
 import { GlowButton, SELECTED_GLOW, UI } from '../../components/ui'
+import type { ReactNode } from 'react'
 import { useContactJoints } from '../../lib/jointsApi'
 import { landmarkVisOk, poseAngle } from '../../lib/poseJointAngles'
 import { nearestPoseByFrame, type LandmarkPoint, type PoseFrameRow } from '../../lib/techniquePose'
 import { getThumbnailAsync } from '../../lib/videoThumbnails'
 
 export type MistakeId = 'elbow' | 'racket' | 'torso' | 'foot'
-/** Everything the list can show. Wrist and knee only appear when measured off target or named by the coach. */
-type ItemId = MistakeId | 'wrist' | 'knee'
+/** Everything the list can show. Shoulder / wrist / knee appear whenever measured or named by the coach. */
+type ItemId = MistakeId | 'shoulder' | 'wrist' | 'knee'
 type Severity = 'high' | 'medium' | 'ok'
 
 type Mistake = {
@@ -29,6 +30,7 @@ type Mistake = {
 
 const MISTAKES: Mistake[] = [
   { id: 'elbow', key: 'Elbow', words: ['elbow', 'codo'], marker: { left: '38%', top: '30%' } },
+  { id: 'shoulder', key: 'Shoulder', words: ['shoulder', 'hombro'], marker: { left: '44%', top: '24%' } },
   { id: 'racket', key: 'Racket', words: ['racket', 'raqueta', 'pala'], marker: { left: '46%', top: '22%' } },
   { id: 'wrist', key: 'Wrist', words: ['wrist', 'muñeca'], marker: { left: '42%', top: '38%' } },
   { id: 'torso', key: 'Torso', words: ['torso', 'rotation', 'rotación'], marker: { left: '52%', top: '48%' } },
@@ -56,11 +58,15 @@ type Props = {
   elbowDeg: number | null
   torsoDeg: number | null
   onClose: () => void
-  /** Opens the Magic Shot of this shot done right; without it the button replays the clip. */
+  /** Opens the Correct Movement of this shot done right; without it the button replays the clip. */
   onSeeCorrect?: () => void
   /** Contact frame and fps, for the strip thumbnails and the elbow distance. */
   impactFrame?: number | null
   fps?: number | null
+  /** Magic Shot create / progress / result block under See Correct Movement. */
+  magicShot?: ReactNode
+  /** Save & Track (Pro Reference) and anything else below Correct Movement. */
+  footer?: ReactNode
 }
 
 /** Stage height over width, from the design (770 × 540). */
@@ -194,8 +200,9 @@ function matchError(errors: string[], words: string[]) {
 
 /** Mistake ids, the ones the coach's error lines mention first, then the rest in the usual order. */
 export function mistakeFocusOrder(errors: string[]): MistakeId[] {
-  // Wrist drills live under racket, knee drills under foot.
-  const focus = (id: ItemId): MistakeId => (id === 'wrist' ? 'racket' : id === 'knee' ? 'foot' : id)
+  // Shoulder drills live under elbow; wrist under racket; knee under foot.
+  const focus = (id: ItemId): MistakeId =>
+    id === 'shoulder' ? 'elbow' : id === 'wrist' ? 'racket' : id === 'knee' ? 'foot' : id
   const all: MistakeId[] = ['elbow', 'racket', 'torso', 'foot']
   const hit = [...new Set(MISTAKES.filter((m) => matchError(errors, m.words)).map((m) => focus(m.id)))]
   return [...hit, ...all.filter((id) => !hit.includes(id))]
@@ -254,6 +261,8 @@ export function BiggestMistakesView({
   onSeeCorrect,
   impactFrame = null,
   fps = null,
+  magicShot = null,
+  footer = null,
 }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -308,7 +317,7 @@ export function BiggestMistakesView({
     const side = contactPose ? racketSide(contactPose) : 'RIGHT'
     const deg = (v: number) => `${Math.round(v)}°`
     const rangeText = (r: [number, number]) => t('analysis.mistakeTargetRange', { low: r[0], high: r[1] })
-    const proRange = (joint: 'elbow' | 'wrist' | 'torso' | 'knee'): [number, number] | null => {
+    const proRange = (joint: 'shoulder' | 'elbow' | 'wrist' | 'torso' | 'knee'): [number, number] | null => {
       const r = contact?.joints[joint]
       if (!contact?.hasPro || r?.pro == null || r.idealMin == null || r.idealMax == null) return null
       return [Math.round(r.idealMin), Math.round(r.idealMax)]
@@ -347,6 +356,14 @@ export function BiggestMistakesView({
             art: 'shoulder',
           })
         }
+      } else if (def.id === 'shoulder') {
+        v = finite(contact?.joints.shoulder.you) ?? poseAngle(contactPose, 'shoulder', side)
+        range = proRange('shoulder')
+        if (v != null && range) stats.push(angleStat(t('analysis.jointName.shoulder'), v, range, 'shoulder'))
+        else if (v != null) {
+          stats.push({ label: t('analysis.jointName.shoulder'), value: deg(v), color: UI.text, art: 'shoulder' })
+        }
+        if (v == null && !mentioned) continue
       } else if (def.id === 'torso') {
         v = finite(contact?.joints.torso.you)
         range = proRange('torso')
@@ -360,9 +377,16 @@ export function BiggestMistakesView({
         range = proRange(def.id)
         if (v != null && range) {
           stats.push(angleStat(t(`analysis.viewAnglesPage.reading.${def.id}`), v, range, def.id))
+        } else if (v != null) {
+          stats.push({
+            label: t(`analysis.viewAnglesPage.reading.${def.id}`),
+            value: deg(v),
+            color: UI.text,
+            art: def.id,
+          })
         }
-        // Without a target we can't call it a mistake; show it only when the coach did.
-        if (!range && !mentioned) continue
+        // Show every measured joint; coach mention still lists it without a number.
+        if (v == null && !mentioned) continue
       } else if (!mentioned) {
         // Racket and feet aren't measured yet: listed only when the coach names them.
         continue
@@ -419,6 +443,7 @@ export function BiggestMistakesView({
       leftFoot && rightFoot ? (leftFoot.y >= rightFoot.y ? leftFoot : rightFoot) : (leftFoot ?? rightFoot)
     return spreadMarkers<ItemId>({
       elbow: lm(`${side}_ELBOW`),
+      shoulder: lm(`${side}_SHOULDER`),
       racket,
       wrist: lm(`${side}_WRIST`),
       torso: mid(['LEFT_SHOULDER', 'RIGHT_SHOULDER', 'LEFT_HIP', 'RIGHT_HIP']),
@@ -656,6 +681,18 @@ export function BiggestMistakesView({
         leadingIcon="play"
         arrow
       />
+      {magicShot ? (
+        <View style={styles.magicShotSection} testID="create-magic-shot-section">
+          <Text
+            allowFontScaling={false}
+            style={[styles.magicShotHeading, { fontFamily: theme.semiBoldFont ?? theme.mediumFont }]}
+          >
+            {t('analysis.createMagicShot')}
+          </Text>
+          {magicShot}
+        </View>
+      ) : null}
+      {footer}
     </ScrollView>
   )
 }
@@ -1018,4 +1055,6 @@ const styles = StyleSheet.create({
   whyCopy: { flex: 1, gap: 4 },
   whyTitle: { color: UI.text, fontSize: 18 },
   whyBody: { color: UI.textMuted, fontSize: 13, lineHeight: 18 },
+  magicShotSection: { gap: 12, marginTop: 4 },
+  magicShotHeading: { color: UI.text, fontSize: 20 },
 })

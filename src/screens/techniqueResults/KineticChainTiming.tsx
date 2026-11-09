@@ -143,10 +143,14 @@ export function TimingCard({ timing, onPress }: { timing: SegmentTiming[] | null
   const { theme } = useContext(ThemeContext)
   const body = (
     <>
-      <Text allowFontScaling={false} style={[styles.cardTitle, { fontFamily: theme.regularFont }]}>
-        {t('analysis.chain.vizTitle')}
-        <Text style={[styles.cardTitleSub, { fontFamily: theme.regularFont }]}>{`  ${t('analysis.chain.vizRel')}`}</Text>
-      </Text>
+      <View style={styles.cardTitleBlock}>
+        <Text allowFontScaling={false} style={[styles.cardTitle, { fontFamily: theme.regularFont }]}>
+          {t('analysis.chain.vizTitle')}
+        </Text>
+        <Text allowFontScaling={false} style={[styles.cardTitleSub, { fontFamily: theme.regularFont }]}>
+          {t('analysis.chain.vizRel')}
+        </Text>
+      </View>
       <ChainLegend />
       {timing ? (
         <TimingChart timing={timing} />
@@ -230,7 +234,10 @@ export function KineticChainTimingView({ timing, onClose }: { timing: SegmentTim
               <Ionicons name="alert-circle-outline" size={24} color={UI.text} />
             </Pressable>
           </View>
-          <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: theme.regularFont }]}>
+          <Text
+            allowFontScaling={false}
+            style={[styles.subtitle, { fontFamily: theme.regularFont }]}
+          >
             {t('analysis.chain.subtitle')}
           </Text>
         </View>
@@ -275,7 +282,7 @@ export function KineticChainTimingView({ timing, onClose }: { timing: SegmentTim
                 <Text allowFontScaling={false} numberOfLines={1} style={[styles.th, { fontFamily: theme.regularFont }]}>
                   {t(`analysis.chain.${k}`)}
                 </Text>
-                <Text allowFontScaling={false} numberOfLines={1} style={[styles.thSub, { fontFamily: theme.regularFont }]}>
+                <Text allowFontScaling={false} style={[styles.thSub, { fontFamily: theme.regularFont }]}>
                   {t('analysis.chain.relContact')}
                 </Text>
                 <View style={styles.subHead}>
@@ -348,7 +355,8 @@ const styles = StyleSheet.create({
   titleCopy: { flex: 1, gap: 4 },
   titleLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: { color: UI.text, fontSize: 24, flexShrink: 1 },
-  subtitle: { color: UI.accent, fontSize: 14, lineHeight: 19 },
+  // Full subtitle — never clip with an ellipsis on narrow phones.
+  subtitle: { color: UI.accent, fontSize: 14, lineHeight: 19, flexShrink: 1, flexWrap: 'wrap' },
   info: {
     color: UI.textMuted,
     fontSize: 13,
@@ -412,8 +420,9 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
   },
+  cardTitleBlock: { gap: 2 },
   cardTitle: { color: UI.text, fontSize: 18 },
-  cardTitleSub: { color: UI.accent, fontSize: 13 },
+  cardTitleSub: { color: UI.accent, fontSize: 13, lineHeight: 18 },
   note: { color: UI.textMuted, fontSize: 12, lineHeight: 16 },
   openRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2 },
   openText: { color: UI.accent, fontSize: 13 },

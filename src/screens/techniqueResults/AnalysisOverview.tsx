@@ -39,6 +39,7 @@ import {
   poseSegmentColor,
   type PoseFrameRow,
 } from '../../lib/techniquePose'
+import { DialCaption } from './DialCaption'
 
 type Detail = 'overview' | 'mistakes' | 'pose'
 
@@ -52,7 +53,11 @@ type Props = {
   totalFrames?: number | null
   score: number | null
   rating: string | null
+  /** Fallback dial copy when diagnosis / strengths are empty. */
   summary: string | null
+  diagnosis?: string | null
+  strengths?: string[] | null
+  weaknesses?: string[] | null
   metrics: PhysicalMetricsValues | null
   detail: Detail
   onBiggestMistakes: () => void
@@ -438,6 +443,9 @@ export function AnalysisOverview({
   score,
   rating,
   summary,
+  diagnosis = null,
+  strengths = null,
+  weaknesses = null,
   metrics,
   detail,
   onBiggestMistakes,
@@ -752,18 +760,14 @@ export function AnalysisOverview({
             </Text>
           </View>
         </View>
-        <View style={styles.scoreCopy}>
-          {toneLabel ? (
-            <Text allowFontScaling={false} style={[styles.tone, { color: toneColor, fontFamily: theme.semiBoldFont }]}>
-              {toneLabel}
-            </Text>
-          ) : null}
-          {summary ? (
-            <Text allowFontScaling={false} style={[styles.summary, { fontFamily: theme.regularFont }]}>
-              {summary}
-            </Text>
-          ) : null}
-        </View>
+        <DialCaption
+          toneLabel={toneLabel}
+          toneColor={toneColor}
+          diagnosis={diagnosis}
+          strengths={strengths}
+          weaknesses={weaknesses}
+          summary={summary}
+        />
       </View>
 
       <View style={styles.metricRow}>
@@ -931,9 +935,6 @@ const styles = StyleSheet.create({
   },
   scoreNum: { color: '#FFFFFF', fontSize: 28, lineHeight: 30 },
   scoreDenom: { color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: -2 },
-  scoreCopy: { flex: 1, gap: 4 },
-  tone: { fontSize: 18 },
-  summary: { color: 'rgba(231,242,255,0.78)', fontSize: 14, lineHeight: 20 },
   metricRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
   metric: {
     flex: 1,

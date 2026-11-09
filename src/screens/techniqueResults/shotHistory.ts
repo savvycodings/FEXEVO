@@ -5,7 +5,7 @@ import { authClient } from '../../lib/auth-client'
 import { type BiomechanicsSummary, parseBiomechanicsSummary } from '../../lib/biomechanicsSummary'
 import { type ActivityItem, listFromFetch } from '../coachHome/coachHomeData'
 
-export type CompareMetricKey = 'elbow' | 'torso'
+export type CompareMetricKey = 'shoulder' | 'elbow' | 'wrist' | 'torso' | 'knee'
 
 export type CompareMetric = {
   key: CompareMetricKey
@@ -13,7 +13,15 @@ export type CompareMetric = {
   deg: number
 }
 
-/** Elbow and torso angles at impact, the two numbers the Pro Reference tab tracks over time. */
+const METRIC_ORDER: CompareMetricKey[] = ['shoulder', 'elbow', 'wrist', 'torso', 'knee']
+
+function pushDeg(out: CompareMetric[], key: CompareMetricKey, label: string, deg: unknown) {
+  if (typeof deg === 'number' && Number.isFinite(deg)) {
+    out.push({ key, label, deg })
+  }
+}
+
+/** Contact angles for Save & Track — same joints the Biggest Mistakes / View Angles lists use. */
 export function buildCompareMetrics(
   metrics: Record<string, unknown> | null | undefined,
   t: TFunction
@@ -27,15 +35,41 @@ export function compareMetricsFromSummary(
 ): CompareMetric[] {
   const angles = summary?.angles_deg_proxy
   const out: CompareMetric[] = []
-  const elbow = angles?.elbow_impact_deg
-  if (typeof elbow === 'number' && Number.isFinite(elbow)) {
-    out.push({ key: 'elbow', label: t('analysis.elbowAngle'), deg: elbow })
-  }
-  const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
-  if (typeof torso === 'number' && Number.isFinite(torso)) {
-    out.push({ key: 'torso', label: t('analysis.torsoRotation'), deg: torso })
-  }
+  pushDeg(out, 'elbow', t('analysis.elbowAngle'), angles?.elbow_impact_deg)
+  pushDeg(
+    out,
+    'torso',
+    t('analysis.torsoRotation'),
+    angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
+  )
+  pushDeg(out, 'knee', t('analysis.jointName.knee'), angles?.knee_impact_deg)
   return out
+}
+
+/** Merge biomechanics proxies with live contact-joint readings from the pro library. */
+export function mergeCompareMetrics(
+  base: CompareMetric[],
+  joints: Partial<Record<CompareMetricKey, number | null | undefined>> | null | undefined,
+  t: TFunction
+): CompareMetric[] {
+  const byKey = new Map<CompareMetricKey, CompareMetric>()
+  for (const m of base) byKey.set(m.key, m)
+  const labels: Record<CompareMetricKey, string> = {
+    shoulder: t('analysis.jointName.shoulder'),
+    elbow: t('analysis.elbowAngle'),
+    wrist: t('analysis.jointName.wrist'),
+    torso: t('analysis.torsoRotation'),
+    knee: t('analysis.jointName.knee'),
+  }
+  if (joints) {
+    for (const key of METRIC_ORDER) {
+      const deg = joints[key]
+      if (typeof deg === 'number' && Number.isFinite(deg)) {
+        byKey.set(key, { key, label: labels[key], deg })
+      }
+    }
+  }
+  return METRIC_ORDER.map((key) => byKey.get(key)).filter((m): m is CompareMetric => m != null)
 }
 
 export type ShotHistoryPoint = {

@@ -84,8 +84,10 @@ import { TechniqueResults } from './techniqueResults/TechniqueResults'
 import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
 import { startHologram } from '../lib/hologramJob'
-import { proLibraryVideoUrl } from '../lib/mediaUrl'
+import { proLibraryVideoUrl, resolveMediaUrl } from '../lib/mediaUrl'
 import { BiggestMistakesView, mistakeFocusOrder } from './techniqueResults/BiggestMistakesView'
+import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
+import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { DrillsView } from './techniqueResults/DrillsView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { ViewAnglesPage } from './techniqueResults/ViewAnglesPage'
@@ -110,7 +112,6 @@ import {
 } from '../components/bodyMobility/BodyMobilitySection'
 import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidenceSection'
 import {
-  averagePhysicalMetrics,
   parsePhysicalMetricsFromAnalysis,
   type PhysicalHistoryItem,
 } from '../lib/physicalMetrics'
@@ -646,10 +647,8 @@ export function Technique() {
     shortSide: number
     minimum: number
   } | null>(null)
-  const magicShot = useMagicShotJob(
-    analysisId,
-    SHOW_COMFY_CORRECTIONS && analysisJson?.status === 'completed'
-  )
+  /** Magic Shot is its own product path (Fun Control / correction-videos), not gated on the Comfy image-toggle. */
+  const magicShot = useMagicShotJob(analysisId, analysisJson?.status === 'completed')
   const correctionVideo: CorrectionVideoRow | null = magicShot.video
   const [switchingHand, setSwitchingHand] = useState(false)
   const [switchHandError, setSwitchHandError] = useState<string | null>(null)
@@ -882,15 +881,16 @@ export function Technique() {
     () => parsePhysicalMetricsFromAnalysis(aiAnalysis as Record<string, unknown> | null),
     [aiAnalysis]
   )
-  /** The ring next to stability / power / agility / reactions / acceleration is their average. */
-  const headlineScore = physicalMetrics ? averagePhysicalMetrics(physicalMetrics) : score
+  /** Same 0–100 as homepage / activities — never swap in the physical-metrics average. */
+  const headlineScore = score
   const metricsBlurb = useMemo(() => {
     const diagnosis =
       typeof localeAnalysis?.diagnosis === 'string' ? localeAnalysis.diagnosis.trim() : ''
-    const raw = diagnosis || strengthsList[0] || ''
-    const text = stripCoachRichMarkers(raw)
-    return text || null
+    // Keep markers — DialCaption turns them into keyword pearls.
+    return diagnosis || strengthsList[0] || null
   }, [localeAnalysis?.diagnosis, strengthsList])
+  const dialDiagnosis =
+    typeof localeAnalysis?.diagnosis === 'string' ? localeAnalysis.diagnosis.trim() : null
 
   const biomechanicsSummary = useMemo(
     () => parseBiomechanicsSummary(metrics as Record<string, unknown> | null | undefined),
@@ -2939,18 +2939,6 @@ export function Technique() {
             onProfileChanged={invalidateSessionData}
             onClose={() => setResultsDetail('mistakes')}
           />
-        ) : step === 3 && resultsDetail === 'correct' ? (
-          <CorrectMovementView
-            analysisId={analysisId}
-            originalUri={uploadedVideoUrl}
-            originalAspect={
-              trimPreviewNaturalSize && trimPreviewNaturalSize.w > 0
-                ? trimPreviewNaturalSize.h / trimPreviewNaturalSize.w
-                : null
-            }
-            onProfileChanged={invalidateSessionData}
-            onClose={() => setResultsDetail('mistakes')}
-          />
         ) : step === 3 && resultsDetail === 'mistakes' ? (
           <BiggestMistakesView
             videoUri={uploadedVideoUrl}
@@ -2972,13 +2960,56 @@ export function Technique() {
                   : null
             }
             onClose={() => setResultsDetail('overview')}
-            onSeeCorrect={SHOW_COMFY_CORRECTIONS ? () => setResultsDetail('correct') : undefined}
+            onSeeCorrect={() => setResultsDetail('correct')}
             impactFrame={
               typeof biomechanicsSummary?.timing?.impact_frame === 'number'
                 ? biomechanicsSummary.timing.impact_frame
                 : null
             }
             fps={biomechanicsSummary?.timing?.fps ?? null}
+            magicShot={
+              <View style={{ gap: 12 }} testID={TEST_IDS.magicShotResult}>
+                {correctionVideo?.video && uploadedVideoUrl ? (
+                  <CorrectionVideoCompare
+                    originalUri={uploadedVideoUrl}
+                    correctedUri={
+                      resolveMediaUrl(correctionVideo.video) || toMediaUri(correctionVideo.video)
+                    }
+                    videoKey={`mistakes-magic-${analysisId ?? 'video'}`}
+                    width={Math.max(280, Math.floor(winW - 40))}
+                    originalAspect={
+                      trimPreviewNaturalSize && trimPreviewNaturalSize.w > 0
+                        ? trimPreviewNaturalSize.h / trimPreviewNaturalSize.w
+                        : null
+                    }
+                    windowStartMs={correctionVideo.windowStartMs}
+                    windowEndMs={correctionVideo.windowEndMs}
+                  />
+                ) : (
+                  <MagicShotCard
+                    status={magicShot.status}
+                    startedAt={magicShot.startedAt}
+                    error={magicShot.error}
+                    onGenerate={() => void magicShot.start()}
+                    mismatch={magicShot.mismatch}
+                    onInviteFriend={inviteFriendToMagicShot}
+                    onSwitchHand={() => void switchHandAndRegenerate()}
+                    switchingHand={switchingHand}
+                    switchHandError={switchHandError}
+                  />
+                )}
+              </View>
+            }
+            footer={
+              <ProReferenceCompare
+                videoUri={uploadedVideoUrl ?? ''}
+                analysisId={analysisId}
+                proVideoUri={proLibraryVideoUrl(retrieval)}
+                metrics={compareMetricsFromSummary(biomechanicsSummary, t)}
+                score={headlineScore}
+                onSave={() => navigation.getParent()?.navigate('Progress' as never)}
+              />
+            }
           />
         ) : (
         <ScrollView
@@ -3354,6 +3385,9 @@ export function Technique() {
               score={headlineScore}
               rating={typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null}
               summary={metricsBlurb}
+              diagnosis={dialDiagnosis}
+              strengths={strengthsList}
+              weaknesses={technicalErrorsList}
               shotLabel={userShot?.shotLabel ?? proReferenceShot}
               physicalMetrics={physicalMetrics}
               poseFrames={step3PoseFrames}
@@ -3393,6 +3427,9 @@ export function Technique() {
               score={headlineScore}
               rating={typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null}
               summary={metricsBlurb}
+              diagnosis={dialDiagnosis}
+              strengths={strengthsList}
+              weaknesses={technicalErrorsList}
               metrics={physicalMetrics}
               detail={resultsDetail}
               onBiggestMistakes={() => setResultsDetail('mistakes')}
@@ -3928,21 +3965,7 @@ export function Technique() {
                                 </TouchableOpacity>
                               ))}
 
-                            {SHOW_COMFY_CORRECTIONS && !correctionVideo?.video && (
-                              <View style={{ marginTop: 10 }}>
-                                <MagicShotCard
-                                  status={magicShot.status}
-                                  startedAt={magicShot.startedAt}
-                                  error={magicShot.error}
-                                  onGenerate={() => void magicShot.start()}
-                                  mismatch={magicShot.mismatch}
-                                  onInviteFriend={inviteFriendToMagicShot}
-                                  onSwitchHand={() => void switchHandAndRegenerate()}
-                                  switchingHand={switchingHand}
-                                  switchHandError={switchHandError}
-                                />
-                              </View>
-                            )}
+                            {/* Magic Shot generate card hidden for now — Correct Movement lives under Biggest Mistakes. */}
 
                             {SHOW_COMFY_CORRECTIONS && correctionVideo?.video ? (
                               <View style={styles.correctionVideoBlock} testID={TEST_IDS.magicShotResult}>

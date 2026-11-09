@@ -18,6 +18,9 @@ type Props = {
   score: number | null
   rating: string | null
   summary: string | null
+  diagnosis?: string | null
+  strengths?: string[] | null
+  weaknesses?: string[] | null
   shotLabel: string | null
   physicalMetrics: PhysicalMetricsValues | null
   poseFrames: PoseFrameRow[]
@@ -41,6 +44,9 @@ export function TechniqueResults({
   score,
   rating,
   summary,
+  diagnosis = null,
+  strengths = null,
+  weaknesses = null,
   shotLabel,
   physicalMetrics,
   poseFrames,
@@ -68,6 +74,9 @@ export function TechniqueResults({
         score={score}
         rating={rating}
         summary={summary}
+        diagnosis={diagnosis}
+        strengths={strengths}
+        weaknesses={weaknesses}
         shotLabel={shotLabel}
         metrics={physicalMetrics}
         poseFrames={poseFrames}

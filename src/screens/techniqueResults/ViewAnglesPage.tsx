@@ -227,11 +227,25 @@ export function ViewAnglesPage({
   )
   const served = (SERVED as readonly string[]).includes(joint) ? contact?.joints[joint as ContactJoint] : undefined
   const fallbackYou = served?.you == null ? poseAngle(contactPose, joint, side) : null
+  // Keep server pro/ideal when we only need to fill in the player's angle locally.
   const reading: JointReading | undefined =
     served?.you != null
       ? served
       : fallbackYou != null
-        ? { ...(served ?? EMPTY_READING), you: fallbackYou }
+        ? {
+            ...(served ?? EMPTY_READING),
+            you: fallbackYou,
+            deltaDeg:
+              served?.pro != null
+                ? fallbackYou - served.pro
+                : served?.deltaDeg ?? null,
+            status: served?.status ?? null,
+            direction: served?.direction ?? null,
+            messageKey: served?.messageKey ?? null,
+            idealMin: served?.idealMin ?? null,
+            idealMax: served?.idealMax ?? null,
+            pro: served?.pro ?? null,
+          }
         : served
   const target = targetOf(reading)
   const diff =

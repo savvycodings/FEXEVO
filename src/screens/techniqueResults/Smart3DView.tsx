@@ -22,6 +22,7 @@ import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
 import { useHologram, type HologramKeypoints, type HologramOrbitFrame } from '../../lib/hologramJob'
 import { cacheOrbitVideo } from '../../lib/orbitCache'
+import { orbitKeypointsAt } from '../../lib/orbitKeypoints'
 import { useContactJoints, type ContactJoint, type JointReading } from '../../lib/jointsApi'
 import { SELECTED_GLOW, UI } from '../../components/ui'
 import { kineticChainTiming } from '../../lib/kineticChain'
@@ -109,30 +110,6 @@ function partKeypoints(part: BodyPart, side: 'LEFT' | 'RIGHT'): string[] {
   }
 }
 
-/** MediaPipe frame closest to the scrub position (index is 0..frameCount-1). */
-function orbitKeypointsAt(
-  frames: HologramOrbitFrame[] | null,
-  index: number,
-  frameCount: number
-): HologramKeypoints | null {
-  if (!frames?.length) return null
-  const last = Math.max(frameCount - 1, 1)
-  const target =
-    frames.length === 1
-      ? frames[0].frame
-      : frames[0].frame + (index / last) * (frames[frames.length - 1].frame - frames[0].frame)
-  let best = frames[0]
-  let dist = Math.abs(best.frame - target)
-  for (const row of frames) {
-    const d = Math.abs(row.frame - target)
-    if (d < dist) {
-      best = row
-      dist = d
-    }
-  }
-  return best.keypoints
-}
-
 /**
  * The orbit file is the square hologram still with black bars above and below.
  * Layout is clipped by the stage — only the square band is visible.
@@ -175,8 +152,8 @@ function JointMarkers({
     const p = keypoints[name]
     if (!p) return null
     if (!video) {
-      // Match Image resizeMode="contain" for the square hologram still.
-      const d = Math.min(w, h)
+      // Match Image resizeMode="cover" for the square hologram still.
+      const d = Math.max(w, h)
       return { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d }
     }
     return { x: video.x + p.x * video.w, y: video.y + p.y * video.h }
@@ -472,14 +449,25 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
 
   if (detail) {
     const served = contactJoints?.joints[detail] ?? null
-    // No server reading for this shot: measure the angle from the pose at contact, without a pro.
+    // Fill a missing player angle from pose, but keep any pro/ideal the server already returned.
     let reading: JointReading | null = served
     if (served?.you == null && poseFrames?.length && impactFrame != null) {
       const you = poseAngle(nearestPoseByFrame(poseFrames, impactFrame), detail, dominantSide(poseFrames))
       if (you != null) {
+        const rounded = Math.round(you)
+        const pro = served?.pro ?? null
         reading = {
-          ...(served ?? { pro: null, idealMin: null, idealMax: null, deltaDeg: null, status: null, direction: null, messageKey: null }),
-          you: Math.round(you),
+          ...(served ?? {
+            pro: null,
+            idealMin: null,
+            idealMax: null,
+            deltaDeg: null,
+            status: null,
+            direction: null,
+            messageKey: null,
+          }),
+          you: rounded,
+          deltaDeg: pro != null ? rounded - pro : served?.deltaDeg ?? null,
         }
       }
     }
@@ -494,6 +482,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         proHologramImage={hologram.proImage}
         proPartImage={hologram.proParts?.[partKey] ?? hologram.proImage}
         viewId={viewId}
+        initialLayer={layer}
         playerOrbit={{
           image: hologram.image,
           video: hologram.orbitVideo,
@@ -614,13 +603,13 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               }
             />
           ) : null}
-          {layer === 'overlay' && !hologram.keypoints && (hologram.image || hologram.proImage) ? (
+          {layer === 'overlay' && (hologram.image || hologram.proImage) ? (
             <>
               {hologram.image ? (
-                <Image source={{ uri: hologram.image }} resizeMode="contain" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.9 }]} />
+                <Image source={{ uri: hologram.image }} resizeMode="cover" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: hologram.keypoints ? 0.9 : 0.9 }]} />
               ) : null}
               {hologram.proImage ? (
-                <Image source={{ uri: hologram.proImage }} resizeMode="contain" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.45 }]} />
+                <Image source={{ uri: hologram.proImage }} resizeMode="cover" pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.42 }]} />
               ) : null}
             </>
           ) : null}

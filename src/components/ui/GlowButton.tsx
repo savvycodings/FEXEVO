@@ -108,13 +108,19 @@ export function GlowButton({
           <Text
             allowFontScaling={false}
             numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.72}
             style={[styles.label, styles.primaryLabel, { fontFamily: theme.semiBoldFont }]}
           >
             {label}
           </Text>
         )}
         {/* Design: the arrow sits right after the label (10px gap), centred together, no badge. */}
-        {arrow && !loading ? <ArrowIcon /> : null}
+        {arrow && !loading ? (
+          <View style={styles.arrowSlot} pointerEvents="none">
+            <ArrowIcon />
+          </View>
+        ) : null}
         {leadingIcon && !loading ? (
           <View style={[styles.leadingBadge, { left: (height - 36) / 2 }]} pointerEvents="none">
             <Ionicons name={leadingIcon} size={18} color={UI.text} style={styles.leadingIcon} />
@@ -228,6 +234,8 @@ const styles = StyleSheet.create({
   primaryLabel: {
     color: UI.btnPrimaryText,
   },
+  /** Keep the arrow from being compressed so the label shrinks/fits instead of ellipsizing. */
+  arrowSlot: { flexShrink: 0 },
   leadingBadge: {
     position: 'absolute',
     width: 36,

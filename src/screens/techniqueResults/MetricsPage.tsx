@@ -13,12 +13,16 @@ import {
 import type { PoseFrameRow } from '../../lib/techniquePose'
 import { MovementTimelineChart } from './MovementTimelineChart'
 import { impactSampleIndex, sampleMovementTimeline, seriesHasPoints } from './movementTimeline'
+import { DialCaption } from './DialCaption'
 
 type Props = {
   visible: boolean
   score: number | null
   rating: string | null
   summary: string | null
+  diagnosis?: string | null
+  strengths?: string[] | null
+  weaknesses?: string[] | null
   shotLabel: string | null
   metrics: PhysicalMetricsValues | null
   poseFrames: PoseFrameRow[]
@@ -65,6 +69,9 @@ export function MetricsPage({
   score,
   rating,
   summary,
+  diagnosis = null,
+  strengths = null,
+  weaknesses = null,
   shotLabel,
   metrics,
   poseFrames,
@@ -153,18 +160,14 @@ export function MetricsPage({
               </Text>
             </View>
           </View>
-          <View style={styles.overallCopy}>
-            {toneLabel ? (
-              <Text allowFontScaling={false} style={[styles.tone, { color: toneColor, fontFamily: theme.semiBoldFont }]}>
-                {toneLabel}
-              </Text>
-            ) : null}
-            {summary ? (
-              <Text allowFontScaling={false} style={[styles.summary, { fontFamily: theme.regularFont }]}>
-                {summary}
-              </Text>
-            ) : null}
-          </View>
+          <DialCaption
+            toneLabel={toneLabel}
+            toneColor={toneColor}
+            diagnosis={diagnosis}
+            strengths={strengths}
+            weaknesses={weaknesses}
+            summary={summary}
+          />
         </View>
       </View>
 
@@ -305,9 +308,6 @@ const styles = StyleSheet.create({
   ringCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   scoreNum: { color: '#FFFFFF', fontSize: 32, lineHeight: 36 },
   scoreDenom: { color: '#86A7D2', fontSize: 12, marginTop: -2 },
-  overallCopy: { flex: 1, minWidth: 0, gap: 4 },
-  tone: { fontSize: 16 },
-  summary: { color: '#86A7D2', fontSize: 13, lineHeight: 18 },
   compare: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
   compareLabel: { color: '#86A7D2', fontSize: 10 },
   dot: { width: 7, height: 7, borderRadius: 4 },

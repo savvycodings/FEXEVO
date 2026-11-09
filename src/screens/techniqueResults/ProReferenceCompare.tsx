@@ -1,12 +1,19 @@
-import { useContext, useMemo, useState } from 'react'
-import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Video, ResizeMode } from 'expo-av'
+import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
 import { ThemeContext } from '../../context'
-import { useHologram } from '../../lib/hologramJob'
-import { type CompareMetric, buildCompareMetrics, useShotHistory } from './shotHistory'
+import { useContactJoints } from '../../lib/jointsApi'
+import { type CompareMetric, buildCompareMetrics, mergeCompareMetrics, useShotHistory } from './shotHistory'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
 import { PrimaryFill, UI } from '../../components/ui'
 
@@ -14,9 +21,9 @@ type Segment = 'before' | 'after' | 'progress'
 
 type Props = {
   videoUri: string
-  /** Shows the red pro hologram for this shot when it has been rendered. */
   analysisId?: string | null
-  referenceImageUri: string | null
+  /** Matched pro-library clip (physical video), not the hologram still. */
+  proVideoUri: string | null
   /** This analysis's angles (see `buildCompareMetrics`). */
   metrics: CompareMetric[]
   score: number | null
@@ -31,15 +38,131 @@ const fmtDelta = (n: number, unit = '') => {
   const r = Math.round(n)
   return `${r > 0 ? '+' : ''}${r}${unit}`
 }
+const clock = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+/** Compact clip with a reliable play / pause control (pause then play again works). */
+function PlayableClip({
+  uri,
+  testID,
+  accent,
+}: {
+  uri: string | null
+  testID: string
+  accent: string
+}) {
+  const { theme } = useContext(ThemeContext)
+  const videoRef = useRef<Video>(null)
+  const [playing, setPlaying] = useState(false)
+  const [position, setPosition] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [failed, setFailed] = useState(false)
+  const playable = uri && !failed ? uri : null
+
+  useEffect(() => {
+    setPlaying(false)
+    setPosition(0)
+    setDuration(0)
+    setFailed(false)
+  }, [uri])
+
+  function onStatus(status: AVPlaybackStatus) {
+    if (!status.isLoaded) {
+      if (status.error) setFailed(true)
+      return
+    }
+    setPosition(status.positionMillis)
+    setDuration(status.durationMillis ?? 0)
+    setPlaying(status.isPlaying)
+    if (status.didJustFinish) {
+      setPlaying(false)
+      void videoRef.current?.setPositionAsync(0)
+    }
+  }
+
+  async function togglePlay() {
+    const ref = videoRef.current
+    if (!ref || !playable) return
+    try {
+      const status = await ref.getStatusAsync()
+      if (!status.isLoaded) {
+        await ref.playAsync()
+        return
+      }
+      if (status.isPlaying) {
+        await ref.pauseAsync()
+      } else {
+        // At end of clip, rewind so play works again.
+        if (status.durationMillis && status.positionMillis >= status.durationMillis - 80) {
+          await ref.setPositionAsync(0)
+        }
+        await ref.playAsync()
+      }
+    } catch {
+      // Ignore transient AV race; next tap retries.
+    }
+  }
+
+  return (
+    <View style={[styles.mediaFrame, { borderColor: accent }]} testID={testID}>
+      {playable ? (
+        <Video
+          key={playable}
+          ref={videoRef}
+          source={{ uri: playable }}
+          style={styles.media}
+          resizeMode={ResizeMode.COVER}
+          isMuted
+          shouldPlay={false}
+          useNativeControls={false}
+          onPlaybackStatusUpdate={onStatus}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <View style={styles.proEmpty}>
+          <Ionicons name="videocam-off-outline" size={28} color="#3D9DFF" />
+        </View>
+      )}
+      {playable ? (
+        <LinearGradient
+          pointerEvents="box-none"
+          colors={['rgba(20, 60, 200, 0)', 'rgba(8, 24, 58, 0.92)']}
+          locations={[0, 0.55]}
+          style={styles.clipControls}
+        >
+          <Pressable
+            style={styles.play}
+            accessibilityRole="button"
+            accessibilityLabel={playing ? 'Pause' : 'Play'}
+            hitSlop={8}
+            onPress={() => void togglePlay()}
+            testID={`${testID}-play`}
+          >
+            <Ionicons
+              name={playing ? 'pause' : 'play'}
+              size={18}
+              color={UI.text}
+              style={playing ? undefined : styles.playIcon}
+            />
+          </Pressable>
+          <Text allowFontScaling={false} style={[styles.time, { fontFamily: theme.mediumFont }]}>
+            {clock(position)}/{clock(duration)}
+          </Text>
+        </LinearGradient>
+      ) : null}
+    </View>
+  )
+}
 
 /**
- * Over time for this shot type: Antes is the previous analysis of the same shot, Después is this
- * one, Progreso is the score trend. The pro reference sits next to whichever video is shown.
+ * Over time for this shot type: Before is the previous analysis of the same shot, After is this
+ * one, Progress is the score trend. The pro column plays the matched library video.
  */
-export function ProReferenceCompare({ videoUri, analysisId, referenceImageUri, metrics, score, onSave }: Props) {
+export function ProReferenceCompare({ videoUri, analysisId, proVideoUri, metrics, score, onSave }: Props) {
   const { t, i18n } = useTranslation()
-  const hologram = useHologram(analysisId)
-  const proImage = hologram.proImage ?? referenceImageUri
+  const contact = useContactJoints(analysisId)
   const { theme } = useContext(ThemeContext)
   const history = useShotHistory(analysisId)
   const [segment, setSegment] = useState<Segment>('after')
@@ -51,6 +174,23 @@ export function ProReferenceCompare({ videoUri, analysisId, referenceImageUri, m
 
   const previous = history.previous
   const prevMetrics = useMemo(() => buildCompareMetrics(previous?.metrics, t), [previous?.metrics, t])
+  const afterMetrics = useMemo(
+    () =>
+      mergeCompareMetrics(
+        metrics,
+        contact
+          ? {
+              shoulder: contact.joints.shoulder.you,
+              elbow: contact.joints.elbow.you,
+              wrist: contact.joints.wrist.you,
+              torso: contact.joints.torso.you,
+              knee: contact.joints.knee.you,
+            }
+          : null,
+        t
+      ),
+    [metrics, contact, t]
+  )
   const fmtDate = (iso: string) => {
     const d = new Date(iso)
     return Number.isNaN(d.getTime())
@@ -58,15 +198,14 @@ export function ProReferenceCompare({ videoUri, analysisId, referenceImageUri, m
       : d.toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' })
   }
 
-  // Both columns list every angle either analysis measured.
   const rows = useMemo(() => {
-    const keys = [...new Set([...prevMetrics, ...metrics].map((m) => m.key))]
+    const keys = [...new Set([...prevMetrics, ...afterMetrics].map((m) => m.key))]
     return keys.map((key) => {
       const before = prevMetrics.find((m) => m.key === key)
-      const after = metrics.find((m) => m.key === key)
+      const after = afterMetrics.find((m) => m.key === key)
       return { key, label: (after ?? before)!.label, before: before?.deg ?? null, after: after?.deg ?? null }
     })
-  }, [prevMetrics, metrics])
+  }, [prevMetrics, afterMetrics])
 
   const isBefore = segment === 'before'
   const shownVideo = isBefore ? previous?.videoUri ?? null : videoUri
@@ -200,8 +339,8 @@ export function ProReferenceCompare({ videoUri, analysisId, referenceImageUri, m
         </View>
       ) : isBefore && !previous ? (
         <View style={styles.compareCard} testID="pro-compare-before-empty">
-          <Ionicons name="time-outline" size={28} color="#3D9DFF" style={styles.emptyIcon} />
-          <Text allowFontScaling={false} style={[styles.emptyCentered, { fontFamily: theme.regularFont }]}>
+          <Ionicons name="sparkles-outline" size={28} color="#3D9DFF" style={styles.emptyIcon} />
+          <Text allowFontScaling={false} style={[styles.emptyCentered, { fontFamily: theme.semiBoldFont }]}>
             {shotName ? t('analysis.beforeEmpty', { shot: shotName }) : t('analysis.beforeEmptyAny')}
           </Text>
         </View>
@@ -212,37 +351,13 @@ export function ProReferenceCompare({ videoUri, analysisId, referenceImageUri, m
               <Text allowFontScaling={false} style={[styles.mediaLabel, { fontFamily: theme.mediumFont }]}>
                 {mediaLabel}
               </Text>
-              <View style={styles.mediaFrame}>
-                {shownVideo ? (
-                  <Video
-                    key={shownVideo}
-                    source={{ uri: shownVideo }}
-                    style={styles.media}
-                    resizeMode={ResizeMode.COVER}
-                    shouldPlay={false}
-                    isMuted
-                    testID="pro-compare-video"
-                  />
-                ) : (
-                  <View style={styles.proEmpty}>
-                    <Ionicons name="videocam-off-outline" size={28} color="#3D9DFF" />
-                  </View>
-                )}
-              </View>
+              <PlayableClip uri={shownVideo} testID="pro-compare-video" accent="rgba(0, 184, 255, 0.35)" />
             </View>
             <View style={styles.mediaCol}>
               <Text allowFontScaling={false} style={[styles.mediaLabel, { fontFamily: theme.mediumFont }]}>
                 {t('analysis.proReference')}
               </Text>
-              <View style={[styles.mediaFrame, styles.mediaFramePro]}>
-                {proImage ? (
-                  <Image source={{ uri: proImage }} style={styles.media} resizeMode="cover" />
-                ) : (
-                  <View style={styles.proEmpty}>
-                    <Ionicons name="body" size={36} color="#3D9DFF" />
-                  </View>
-                )}
-              </View>
+              <PlayableClip uri={proVideoUri} testID="pro-compare-pro-video" accent="#00C8FF" />
             </View>
           </View>
           {renderMetricRows()}
@@ -307,10 +422,39 @@ const styles = StyleSheet.create({
   mediaRow: { flexDirection: 'row', gap: 10 },
   mediaCol: { flex: 1, gap: 6 },
   mediaLabel: { color: '#C5D4F5', fontSize: 13, textAlign: 'center' },
-  mediaFrame: { height: 150, borderRadius: 14, overflow: 'hidden', backgroundColor: '#020814' },
-  mediaFramePro: { borderWidth: 1.5, borderColor: '#00C8FF' },
+  mediaFrame: {
+    height: 168,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#020814',
+    borderWidth: 1.5,
+  },
   media: { width: '100%', height: '100%' },
   proEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  clipControls: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 10,
+    paddingTop: 28,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  play: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+    borderWidth: 2,
+    borderColor: UI.text,
+  },
+  playIcon: { marginLeft: 2 },
+  time: { color: UI.text, fontSize: 13 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowLabel: { flex: 1, color: '#C5D4F5', fontSize: 14 },
   colHead: { color: '#5E7BA8', fontSize: 12, minWidth: 52, textAlign: 'right' },
@@ -319,7 +463,7 @@ const styles = StyleSheet.create({
   rowValOn: { color: '#FFFFFF' },
   arrowGap: { width: 16 },
   empty: { color: '#86A7D2', fontSize: 13, lineHeight: 18 },
-  emptyCentered: { color: '#C5D4F5', fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  emptyCentered: { color: '#C5D4F5', fontSize: 15, lineHeight: 22, textAlign: 'center' },
   emptyIcon: { alignSelf: 'center' },
   centered: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
   chartTitle: { color: '#FFFFFF', fontSize: 15 },
