@@ -14,7 +14,6 @@ export type DialCaptionModel = {
   pearls: DialPearl[]
 }
 
-const MAX_BLURB = 110
 /** Pearls are single keywords — never long ellipsized phrases. */
 const MAX_PEARL = 14
 
@@ -23,14 +22,6 @@ function firstSentence(text: string): string {
   if (!clean) return ''
   const cut = clean.search(/(?<=[.!?])\s+/)
   return cut > 0 ? clean.slice(0, cut + 1).trim() : clean
-}
-
-function shorten(text: string, max: number): string {
-  const t = text.replace(/\s+/g, ' ').trim()
-  if (t.length <= max) return t
-  const slice = t.slice(0, max - 1)
-  const at = Math.max(slice.lastIndexOf(' '), slice.lastIndexOf(','))
-  return `${(at > 40 ? slice.slice(0, at) : slice).trimEnd()}…`
 }
 
 /** One keyword for a pearl pill (marked chip wins; otherwise first meaningful word). */
@@ -86,7 +77,7 @@ export function buildDialCaption(input: {
   if (!blurbSource && plainWeakness) {
     blurbSource = firstSentence(plainWeakness)
   }
-  // Plain sentence only — keyword / tone pills are off for now.
-  const blurb = blurbSource ? shorten(blurbSource, MAX_BLURB) : null
+  // Full first sentence — DialCaption wraps up to 4 lines; don't mid-cut with …
+  const blurb = blurbSource || null
   return { blurb, pearls: [] }
 }

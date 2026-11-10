@@ -13,12 +13,27 @@ const CAMERA_YAW: Record<string, number> = {
 
 export type OrbitPreset = 'view' | 'front' | 'side'
 
-/** Where in the 360° orbit that preset sits for this camera. 0 is the filmed view. */
-export function orbitFraction(preset: OrbitPreset, viewId: string | null | undefined): number {
-  if (preset === 'view') return 0
-  const yaw = CAMERA_YAW[viewId ?? ''] ?? 0
-  const target = preset === 'front' ? 0 : 90
-  return ((target - yaw + 360) % 360) / 360
+/**
+ * View 1 / 2 / 3 along the orbit, measured from the filmed angle (clockwise).
+ * Even spacing so both player and pro always share the same relative perspective —
+ * camera-relative "front/side" made View 1 and View 2 identical for front-on shots.
+ */
+export function orbitFraction(preset: OrbitPreset, _viewId?: string | null | undefined): number {
+  switch (preset) {
+    case 'view':
+      return 0
+    case 'front':
+      return 1 / 3
+    case 'side':
+      return 2 / 3
+    default:
+      return 0
+  }
+}
+
+/** Absolute yaw of a filmed camera, for callers that still need anatomical front/side. */
+export function cameraYaw(viewId: string | null | undefined): number {
+  return CAMERA_YAW[viewId ?? ''] ?? 0
 }
 
 function torso(kp: HologramKeypoints) {

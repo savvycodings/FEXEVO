@@ -343,18 +343,20 @@ function ActivitiesDayDetail({
             </Text>
           ) : null
         ) : (
-          visibleSessions.map((s) => (
-            <ShotCard
-              key={s.analysisId}
-              session={s}
-              videoUrl={videoUri(s.videoPath)}
-              theme={theme}
-              compact={winW < 380}
-              favorite={favoriteIds.has(s.analysisId)}
-              onToggleFavorite={() => toggleFavorite(s.analysisId)}
-              onPress={() => onSessionPress?.(s)}
-            />
-          ))
+          <View style={styles.shotsList}>
+            {visibleSessions.map((s) => (
+              <ShotCard
+                key={s.analysisId}
+                session={s}
+                videoUrl={videoUri(s.videoPath)}
+                theme={theme}
+                compact={winW < 380}
+                favorite={favoriteIds.has(s.analysisId)}
+                onToggleFavorite={() => toggleFavorite(s.analysisId)}
+                onPress={() => onSessionPress?.(s)}
+              />
+            ))}
+          </View>
         )}
       </ScrollView>
     </View>
@@ -823,18 +825,20 @@ export function ActivitiesCalendarFlow({
               />
             )
           ) : (
-            shotsSessionsFiltered.map((s) => (
-              <ShotCard
-                key={s.analysisId}
-                session={s}
-                videoUrl={videoUri(s.videoPath)}
-                theme={theme}
-                compact={winW < 380}
-                favorite={favoriteIds.has(s.analysisId)}
-                onToggleFavorite={() => toggleFavorite(s.analysisId)}
-                onPress={() => setAnalysisSession(s)}
-              />
-            ))
+            <View style={shotsStyles.shotsList}>
+              {shotsSessionsFiltered.map((s) => (
+                <ShotCard
+                  key={s.analysisId}
+                  session={s}
+                  videoUrl={videoUri(s.videoPath)}
+                  theme={theme}
+                  compact={winW < 380}
+                  favorite={favoriteIds.has(s.analysisId)}
+                  onToggleFavorite={() => toggleFavorite(s.analysisId)}
+                  onPress={() => setAnalysisSession(s)}
+                />
+              ))}
+            </View>
           )}
         </ScrollView>
         <ShotsFilterSheet
@@ -1349,6 +1353,10 @@ function getStyles(theme: any, _winW: number) {
 
 function getShotsStyles(theme: any, winW: number) {
   return StyleSheet.create({
+    shotsList: {
+      gap: 16,
+      width: '100%',
+    },
     errorInline: {
       fontFamily: theme.regularFont,
       fontSize: 14,
@@ -1533,6 +1541,9 @@ function getDetailStyles(theme: any, winW: number) {
     dayScrollInner: {
       paddingHorizontal: pad,
       paddingBottom: 40,
+    },
+    shotsList: {
+      gap: 16,
     },
     emptyDay: {
       fontFamily: theme.regularFont,

@@ -31,7 +31,7 @@ import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
 import { JointDetailView } from './JointDetailView'
 import { JOINT_ICON, type BodyPartId } from './jointIcons'
 import { dominantSide } from './movementTimeline'
-import { alignKeypoints, orbitFraction, type OrbitPreset } from './orbitPresets'
+import { orbitFraction, type OrbitPreset } from './orbitPresets'
 
 type Layer = 'player' | 'pro' | 'overlay'
 type BodyPart = BodyPartId
@@ -111,25 +111,22 @@ function partKeypoints(part: BodyPart, side: 'LEFT' | 'RIGHT'): string[] {
 }
 
 /**
- * The orbit file is the square hologram still with black bars above and below.
- * Layout is clipped by the stage — only the square band is visible.
+ * Cover-fit the orbit frame into the stage — same math as AnalysisOverview `fitPx`.
+ * Works for letterboxed square→9:16 player orbits and full-bleed impact→Seedance pro orbits.
  */
-function orbitPlacement(stageW: number, stageH: number, videoW: number, videoH: number) {
-  const side = Math.min(videoW, videoH)
-  const scale = Math.max(stageW / side, stageH / side)
-  const w = videoW * scale
-  const h = videoH * scale
-  const contentX = ((videoW - side) / 2) * scale
-  const contentY = ((videoH - side) / 2) * scale
+function coverPlacement(stageW: number, stageH: number, videoW: number, videoH: number) {
+  const videoAR = videoW / videoH
+  const boxAR = stageW / stageH
+  const scale = videoAR > boxAR ? stageH / videoH : stageW / videoW
   return {
-    x: (stageW - side * scale) / 2 - contentX,
-    y: (stageH - side * scale) / 2 - contentY,
-    w,
-    h,
+    x: (stageW - videoW * scale) / 2,
+    y: (stageH - videoH * scale) / 2,
+    w: videoW * scale,
+    h: videoH * scale,
   }
 }
 
-/** Joint markers. 0..1 follows the orbit frame, including the part that hangs outside the card. */
+/** Joint markers. 0..1 is the orbit video frame; must use the same cover rect as the AV player. */
 function JointMarkers({
   keypoints,
   w,
@@ -151,11 +148,7 @@ function JointMarkers({
   const at = (name: string) => {
     const p = keypoints[name]
     if (!p) return null
-    if (!video) {
-      // Match Image resizeMode="cover" for the square hologram still.
-      const d = Math.max(w, h)
-      return { x: (w - d) / 2 + p.x * d, y: (h - d) / 2 + p.y * d }
-    }
+    if (!video) return null
     return { x: video.x + p.x * video.w, y: video.y + p.y * video.h }
   }
   const names = [...BASE_MARKERS, ...lit.filter((name) => !BASE_MARKERS.includes(name))]
@@ -324,13 +317,16 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const clipFrames = layer === 'pro' ? hologram.proOrbitFrames : hologram.orbitFrames
   const clipFrameCount = layer === 'pro' ? hologram.proOrbitFrameCount : hologram.orbitFrameCount
   const clipDurationMs = layer === 'pro' ? hologram.proOrbitDurationMs : hologram.orbitDurationMs
-  const clipWidth = layer === 'pro' ? hologram.proOrbitWidth : hologram.orbitWidth
-  const clipHeight = layer === 'pro' ? hologram.proOrbitHeight : hologram.orbitHeight
+  const metaWidth = layer === 'pro' ? hologram.proOrbitWidth : hologram.orbitWidth
+  const metaHeight = layer === 'pro' ? hologram.proOrbitHeight : hologram.orbitHeight
+  const [naturalClip, setNaturalClip] = useState<{ w: number; h: number } | null>(null)
+  const clipWidth = naturalClip?.w || metaWidth
+  const clipHeight = naturalClip?.h || metaHeight
   const overlayFraction = orbitFraction(viewPreset, viewId)
   frameCountRef.current = Math.max(2, clipFrameCount ?? 2)
   durationRef.current = clipDurationMs && clipDurationMs > 0 ? clipDurationMs : 4000
   const stageWidth = Math.max(1, windowWidth - 32)
-  // The visible picture is the square still. The 9:16 file's black bars are cropped off.
+  // Square stage: cover-fit crops letterboxed bars (player) or head/feet band (full-bleed pro).
   const naturalHeight = stageWidth
   const maxHeight = Math.max(280, windowHeight - (300 + insets.bottom))
   const stageHeight = Math.min(naturalHeight, maxHeight)
@@ -342,15 +338,37 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     setOrbitReady(false)
     setOrbitVideoError(null)
     setOrbitUrlHttp(null)
+    setNaturalClip(null)
     if (layer === 'overlay') setViewPreset('view')
   }, [remoteClip, layer])
 
-  // Overlay: snap both orbits to the active View preset (no free scrub).
+  // Overlay: snap the blue player orbit to the same View 1/2/3 fraction as the orange pro.
   useEffect(() => {
-    if (layer !== 'overlay' || !reveal) return
-    const last = Math.max(0, frameCountRef.current - 1)
-    seekOrbit(overlayFraction * last)
-  }, [layer, reveal, overlayFraction, viewPreset])
+    if (layer !== 'overlay' || !reveal || !playbackUri) return
+    const length = durationRef.current
+    const ms = Math.round(Math.max(0, Math.min(1, overlayFraction)) * length)
+    holdMs.current = ms
+    orbitIndexRef.current = Math.round(overlayFraction * Math.max(0, frameCountRef.current - 1))
+    setOrbitIndex(orbitIndexRef.current)
+    const player = videoRef.current
+    if (!player) return
+    void player
+      .setStatusAsync({
+        shouldPlay: true,
+        positionMillis: ms,
+        seekMillisToleranceBefore: 0,
+        seekMillisToleranceAfter: 0,
+      })
+      .then(() =>
+        player.setStatusAsync({
+          shouldPlay: false,
+          positionMillis: holdMs.current,
+          seekMillisToleranceBefore: 0,
+          seekMillisToleranceAfter: 0,
+        })
+      )
+      .catch(() => {})
+  }, [layer, reveal, overlayFraction, viewPreset, playbackUri, orbitReady])
 
   // Save the cloud video on the phone first. Scrubbing a stream is what made a fresh shot look broken.
   // cacheOrbitVideo keeps the download alive if the user leaves Smart 3D mid-save.
@@ -512,14 +530,21 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   // Prefer per-frame orbit pose; fall back to the contact still when Modal never wrote orbitFrames
   // (that is why the player layer looked bare while the pro library still had lines).
   const stillKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
-  const markerKeys = reveal
-    ? orbitKeypointsAt(clipFrames, orbitIndex, frameCountRef.current) ?? stillKeys
-    : layer === 'overlay'
-      ? hologram.keypoints
-      : null
+  // Overlay is holographics only — no MediaPipe joint dots.
+  const markerKeys =
+    layer === 'overlay'
+      ? null
+      : reveal
+        ? orbitKeypointsAt(clipFrames, orbitIndex, frameCountRef.current) ?? stillKeys
+        : null
+  const stageW = stageSize.w || stageWidth
+  const stageH = stageSize.h || stageHeight
   const placed =
-    reveal && clipWidth && clipHeight
-      ? orbitPlacement(stageSize.w || stageWidth, stageSize.h || stageHeight, clipWidth, clipHeight)
+    stageW && stageH
+      ? clipWidth && clipHeight
+        ? coverPlacement(stageW, stageH, clipWidth, clipHeight)
+        : // Contact still is square; cover matches Image resizeMode="cover" until the orbit dims land.
+          coverPlacement(stageW, stageH, 1024, 1024)
       : null
 
   useEffect(() => {
@@ -650,7 +675,12 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               isMuted
               shouldPlay={false}
               progressUpdateIntervalMillis={100}
-              onLoad={() => {
+              onLoad={(status) => {
+                if (status.isLoaded && status.naturalSize?.width && status.naturalSize?.height) {
+                  const { width: nw, height: nh, orientation } = status.naturalSize
+                  const swapped = orientation === 'landscape' && nw < nh
+                  setNaturalClip({ w: swapped ? nh : nw, h: swapped ? nw : nh })
+                }
                 const player = videoRef.current
                 if (!player) return
                 const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
@@ -660,6 +690,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
                     uri: pictureUri.slice(0, 80),
                     platform: Platform.OS,
                     at,
+                    naturalSize: status.isLoaded ? status.naturalSize : null,
                   })
                 }
                 void player
@@ -728,31 +759,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
               style={[StyleSheet.absoluteFill, { opacity: 0.4, zIndex: 2 }]}
             />
           ) : null}
-          {layer === 'overlay' && stageSize.w ? (
-            <>
-              {(markerKeys ?? hologram.keypoints) ? (
-                <JointMarkers
-                  keypoints={(markerKeys ?? hologram.keypoints)!}
-                  w={stageSize.w}
-                  h={stageSize.h}
-                  lit={lit}
-                  video={placed}
-                  color="#5CE1FF"
-                />
-              ) : null}
-              {hologram.proKeypoints && (markerKeys ?? hologram.keypoints) ? (
-                <JointMarkers
-                  keypoints={alignKeypoints(hologram.proKeypoints, (markerKeys ?? hologram.keypoints)!)}
-                  w={stageSize.w}
-                  h={stageSize.h}
-                  lit={lit}
-                  video={placed}
-                  color="#FF8A3D"
-                />
-              ) : null}
-            </>
-          ) : null}
-          {markerKeys && layer !== 'overlay' && stageSize.w ? (
+          {markerKeys && stageSize.w ? (
             <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
           ) : null}
           {/* Drag-to-orbit only on Player / Pro — Overlay is discrete View 1/2/3. */}
@@ -800,15 +807,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         {/* Sibling of the video clip so AVPlayerLayer / markers cannot sit above the View buttons. */}
         {canOverlayViews ? (
           <View style={styles.presetColumn} pointerEvents="box-none">
-            <SmartViewPresets
-              value={viewPreset}
-              onChange={(next) => {
-                setViewPreset(next)
-                const frac = orbitFraction(next, viewId)
-                const last = Math.max(0, frameCountRef.current - 1)
-                seekOrbit(frac * last)
-              }}
-            />
+            <SmartViewPresets value={viewPreset} onChange={setViewPreset} />
           </View>
         ) : null}
       </View>

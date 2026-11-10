@@ -171,7 +171,7 @@ export function ShotCard({
 }
 
 const styles = StyleSheet.create({
-  hit: { marginBottom: 14 },
+  hit: {},
   card: {
     borderRadius: 20,
     borderWidth: 1,
