@@ -1,14 +1,19 @@
 import { useContext, useEffect, useState } from 'react'
-import { ActivityIndicator, BackHandler, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { ThemeContext } from '../../context'
-import { CARD_GLOW, GlowButton, UI } from '../../components/ui'
-import { useDrills, type Drill, type DrillFocus, type DrillLevel } from '../../lib/drillsApi'
+import { CARD_GLOW, UI } from '../../components/ui'
+import { useDrills, type Drill, type DrillFocus } from '../../lib/drillsApi'
 import { getThumbnailAsync } from '../../lib/videoThumbnails'
+import { DrillDetail, LEVEL_TONE } from './DrillDetail'
+import { DrillStep, type DrillKeyPoint } from './DrillStep'
+import { DrillComplete } from './DrillComplete'
+
+/** Where the user is inside the drills flow. Kept by the parent so a trip to Smart 3D comes back here. */
+export type DrillNav = { slug: string; page: 'detail' | 'done' | number } | null
 
 type Props = {
   videoUri: string | null
@@ -17,33 +22,50 @@ type Props = {
   focus: DrillFocus[]
   /** Time of contact in the clip, for the card thumbnails. */
   thumbTimeMs: number
+  /** Pro clip for this shot, for "Your Movement vs Pro Reference" on a step. */
+  proVideoUri?: string | null
+  /** This shot's mistakes as tips: the Key Points on a step. */
+  keyPoints?: DrillKeyPoint[]
+  nav: DrillNav
+  onNav: (nav: DrillNav) => void
+  /** Opens Smart 3D from a step's "3D View" tab. */
+  onSmart3d?: () => void
   onClose: () => void
 }
 
 const BODY_ART = require('../../../assets/smart3d/body.webp')
-const LEVEL_TONE: Record<DrillLevel, { bg: string; fg: string }> = {
-  beginner: { bg: 'rgba(52, 199, 89, 0.16)', fg: '#5BE38A' },
-  intermediate: { bg: 'rgba(52, 199, 89, 0.16)', fg: '#5BE38A' },
-  advanced: { bg: 'rgba(245, 160, 51, 0.16)', fg: '#F5A033' },
-}
 
-/** Suggested drills for this shot, from the backend catalogue. A card opens its steps. */
-export function DrillsView({ videoUri, shotLabel, focus, thumbTimeMs, onClose }: Props) {
+/** Suggested drills for this shot, from the backend catalogue. A card opens the drill, then its steps. */
+export function DrillsView({
+  videoUri,
+  shotLabel,
+  focus,
+  thumbTimeMs,
+  proVideoUri = null,
+  keyPoints = [],
+  nav,
+  onNav,
+  onSmart3d,
+  onClose,
+}: Props) {
   const { t, i18n } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
   const drills = useDrills(focus, shotLabel, i18n.language)
   const [thumb, setThumb] = useState<string | null>(null)
-  const [open, setOpen] = useState<Drill | null>(null)
+  const open = nav ? (drills.drills.find((d) => d.slug === nav.slug) ?? null) : null
+  const page = open && nav ? nav.page : null
+  const setOpen = (drill: Drill | null) => onNav(drill ? { slug: drill.slug, page: 'detail' } : null)
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (open) setOpen(null)
-      else onClose()
+      if (!open) onClose()
+      else if (typeof page === 'number') onNav(page === 0 ? { slug: open.slug, page: 'detail' } : { slug: open.slug, page: page - 1 })
+      else onNav(null)
       return true
     })
     return () => sub.remove()
-  }, [onClose, open])
+  }, [onClose, onNav, open, page])
 
   useEffect(() => {
     if (!videoUri) return
@@ -62,6 +84,51 @@ export function DrillsView({ videoUri, shotLabel, focus, thumbTimeMs, onClose }:
     .slice(0, 2)
     .map((f) => t(`analysis.drills.focus.${f}`))
     .join(' & ')
+
+  if (open && typeof page === 'number') {
+    const index = Math.min(Math.max(0, page), Math.max(0, open.steps.length - 1))
+    return (
+      <DrillStep
+        // A fresh page per step, so Next / Previous open it at the top.
+        key={`${open.slug}-${index}`}
+        drill={open}
+        index={index}
+        videoUri={videoUri}
+        proVideoUri={proVideoUri}
+        keyPoints={keyPoints}
+        onBack={() => onNav({ slug: open.slug, page: 'detail' })}
+        onGoTo={(i) => onNav({ slug: open.slug, page: i })}
+        onFinish={() => onNav({ slug: open.slug, page: 'done' })}
+        onSmart3d={onSmart3d}
+      />
+    )
+  }
+
+  if (open && page === 'done') {
+    return (
+      <DrillComplete
+        drill={open}
+        others={drills.drills.filter((d) => d.slug !== open.slug)}
+        onAgain={() => onNav({ slug: open.slug, page: 0 })}
+        onOpenDrill={(d) => setOpen(d)}
+        onClose={() => onNav(null)}
+      />
+    )
+  }
+
+  if (open) {
+    return (
+      <DrillDetail
+        drill={open}
+        videoUri={videoUri}
+        thumb={thumb}
+        shotLabel={shotLabel}
+        focusLine={focusLine}
+        onOpenStep={(i) => onNav({ slug: open.slug, page: i })}
+        onClose={() => setOpen(null)}
+      />
+    )
+  }
 
   return (
     <ScrollView
@@ -119,7 +186,6 @@ export function DrillsView({ videoUri, shotLabel, focus, thumbTimeMs, onClose }:
         ))
       )}
 
-      <DrillSheet drill={open} onClose={() => setOpen(null)} />
     </ScrollView>
   )
 }
@@ -175,61 +241,6 @@ function DrillCard({ drill, thumb, onPress }: { drill: Drill; thumb: string | nu
   )
 }
 
-function DrillSheet({ drill, onClose }: { drill: Drill | null; onClose: () => void }) {
-  const { t } = useTranslation()
-  const { theme } = useContext(ThemeContext)
-  const insets = useSafeAreaInsets()
-  const tone = drill ? (LEVEL_TONE[drill.level] ?? LEVEL_TONE.beginner) : LEVEL_TONE.beginner
-  return (
-    <Modal visible={!!drill} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.sheetScrim} onPress={onClose} accessibilityLabel={t('analysis.drills.close')} />
-      {drill ? (
-        <LinearGradient
-          colors={['#0B1F57', UI.cardBg]}
-          style={[styles.sheet, { paddingBottom: 20 + insets.bottom }]}
-          testID="drill-sheet"
-        >
-          <View style={styles.sheetGrip} />
-          <Text allowFontScaling={false} style={[styles.sheetTitle, { fontFamily: theme.mediumFont }]}>
-            {drill.title}
-          </Text>
-          <View style={styles.sheetMeta}>
-            <View style={[styles.level, { backgroundColor: tone.bg }]}>
-              <Text allowFontScaling={false} style={[styles.levelText, { color: tone.fg, fontFamily: theme.regularFont }]}>
-                {t(`analysis.drills.level.${drill.level}`)}
-              </Text>
-            </View>
-            <View style={styles.metaItem}>
-              <Ionicons name="time-outline" size={16} color={UI.textMuted} />
-              <Text allowFontScaling={false} style={[styles.metaText, { fontFamily: theme.regularFont }]}>
-                {t('analysis.drills.minutes', { count: drill.minutes })}
-              </Text>
-            </View>
-          </View>
-          <Text allowFontScaling={false} style={[styles.sheetSummary, { fontFamily: theme.regularFont }]}>
-            {drill.summary}
-          </Text>
-          <Text allowFontScaling={false} style={[styles.sheetHeading, { fontFamily: theme.mediumFont }]}>
-            {t('analysis.drills.steps')}
-          </Text>
-          {drill.steps.map((step, i) => (
-            <View key={i} style={styles.step}>
-              <View style={styles.stepNum}>
-                <Text allowFontScaling={false} style={[styles.stepNumText, { fontFamily: theme.mediumFont }]}>
-                  {i + 1}
-                </Text>
-              </View>
-              <Text allowFontScaling={false} style={[styles.stepText, { fontFamily: theme.regularFont }]}>
-                {step}
-              </Text>
-            </View>
-          ))}
-          <GlowButton label={t('analysis.drills.close')} onPress={onClose} testID="drill-sheet-close" style={styles.sheetClose} />
-        </LinearGradient>
-      ) : null}
-    </Modal>
-  )
-}
 
 const RING = 72
 
@@ -276,33 +287,4 @@ const styles = StyleSheet.create({
   cardMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 'auto' },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
   metaText: { color: UI.textMuted, fontSize: 12, flexShrink: 1 },
-  sheetScrim: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.55)' },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    borderColor: UI.trackBorder,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    gap: 10,
-  },
-  sheetGrip: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: UI.surfaceBorder, marginBottom: 6 },
-  sheetTitle: { color: UI.text, fontSize: 20 },
-  sheetMeta: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  sheetSummary: { color: UI.textMuted, fontSize: 14, lineHeight: 20 },
-  sheetHeading: { color: UI.text, fontSize: 15, marginTop: 4 },
-  step: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  stepNum: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: UI.surface,
-    borderWidth: 1,
-    borderColor: UI.accentStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepNumText: { color: UI.text, fontSize: 12 },
-  stepText: { flex: 1, color: UI.text, fontSize: 14, lineHeight: 20 },
-  sheetClose: { marginTop: 8 },
 })

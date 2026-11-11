@@ -84,10 +84,10 @@ import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
 import { startHologram } from '../lib/hologramJob'
 import { proLibraryVideoUrl, resolveMediaUrl } from '../lib/mediaUrl'
-import { BiggestMistakesView, mistakeFocusOrder } from './techniqueResults/BiggestMistakesView'
+import { BiggestMistakesView, mistakeFocusOrder, mistakeKeyPoints } from './techniqueResults/BiggestMistakesView'
 import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
 import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
-import { DrillsView } from './techniqueResults/DrillsView'
+import { DrillsView, type DrillNav } from './techniqueResults/DrillsView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { ViewAnglesPage } from './techniqueResults/ViewAnglesPage'
 import { CoachHome } from './coachHome/CoachHome'
@@ -565,7 +565,9 @@ export function Technique() {
   /** Which results sub-page is showing. Does not reload analysis. */
   const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
   const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'drills'>('overview')
-  const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
+  const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare' | 'drills'>('overview')
+  /** Open drill / step inside the drills view; survives a trip to Smart 3D and back. */
+  const [drillNav, setDrillNav] = useState<DrillNav>(null)
   const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
   const resultsScrollRef = useRef<ScrollView>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
@@ -573,6 +575,7 @@ export function Technique() {
   useEffect(() => {
     setResultSection('smartFocus')
     setResultsDetail('overview')
+    setDrillNav(null)
   }, [analysisId, step])
   const resultSectionTabs = useMemo(
     () =>
@@ -2851,7 +2854,18 @@ export function Technique() {
                 ? (biomechanicsSummary.timing.impact_frame / (biomechanicsSummary.timing.fps || 30)) * 1000
                 : 0
             }
-            onClose={() => setResultsDetail('compare')}
+            proVideoUri={proLibraryVideoUrl(retrieval, userShot)}
+            keyPoints={mistakeKeyPoints(technicalErrorsList)}
+            nav={drillNav}
+            onNav={setDrillNav}
+            onSmart3d={() => {
+              setPoseReturn('drills')
+              setResultsDetail('pose')
+            }}
+            onClose={() => {
+              setDrillNav(null)
+              setResultsDetail('compare')
+            }}
           />
         ) : step === 3 && resultsDetail === 'compare' ? (
           <CompareWithPro

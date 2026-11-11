@@ -43,8 +43,8 @@ type Props = {
   contactMs?: number | null
 }
 
-const YOU = '#E5352B'
-const PRO = '#5BE3C8'
+export const YOU = '#E5352B'
+export const PRO = '#5BE3C8'
 const OFF = '#FF7A6B'
 const GOOD = '#34C759'
 const PRO_VALUE = '#7BE495'
@@ -304,7 +304,7 @@ export function CompareWithPro({
 const HEADER_H = 50
 const KNOB = 16
 
-function ClipCard({
+export function ClipCard({
   label,
   kind,
   accent,
