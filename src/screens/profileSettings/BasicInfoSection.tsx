@@ -154,7 +154,7 @@ export function BasicInfoSection({
       />
 
       {error ? (
-        <Text allowFontScaling={false} style={st.error} accessibilityRole="alert">
+        <Text allowFontScaling={false} style={modalSt.error} accessibilityRole="alert">
           {error}
         </Text>
       ) : null}
@@ -218,16 +218,16 @@ export function BasicInfoSection({
   );
 }
 
-function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+export function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onClose}>
-      <View style={st.overlay}>
+      <View style={modalSt.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t("profileSettingsUi.close")} />
-        <LinearGradient colors={[PG.cardTop, PG.cardBottom]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={[st.modalCard, glow(18, 0.55)]}>
-          <View style={st.modalHead}>
-            <Text allowFontScaling={false} style={[st.modalTitle, { fontFamily: theme.semiBoldFont }]}>
+        <LinearGradient colors={[PG.cardTop, PG.cardBottom]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={[modalSt.modalCard, glow(18, 0.55)]}>
+          <View style={modalSt.modalHead}>
+            <Text allowFontScaling={false} style={[modalSt.modalTitle, { fontFamily: theme.semiBoldFont }]}>
               {title}
             </Text>
             <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={t("profileSettingsUi.close")}>
@@ -241,18 +241,20 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
   );
 }
 
-function OptionModal({
+export function OptionModal({
   title,
   options,
   value,
   onPick,
   onClose,
+  testIDPrefix = "basic-option",
 }: {
   title: string;
   options: { value: string; label: string }[];
   value: string | null;
   onPick: (v: string) => void;
   onClose: () => void;
+  testIDPrefix?: string;
 }) {
   const { theme } = useContext(ThemeContext);
   return (
@@ -265,12 +267,12 @@ function OptionModal({
               key={o.value}
               onPress={() => onPick(o.value)}
               activeOpacity={0.85}
-              style={[st.option, on && st.optionOn]}
+              style={[modalSt.option, on && modalSt.optionOn]}
               accessibilityRole="radio"
               accessibilityState={{ selected: on }}
-              testID={`basic-option-${o.value}`}
+              testID={`${testIDPrefix}-${o.value}`}
             >
-              <Text allowFontScaling={false} style={[st.optionText, on && st.optionTextOn, { fontFamily: on ? theme.semiBoldFont : theme.mediumFont }]}>
+              <Text allowFontScaling={false} style={[modalSt.optionText, on && modalSt.optionTextOn, { fontFamily: on ? theme.semiBoldFont : theme.mediumFont }]}>
                 {o.label}
               </Text>
               {on ? <Ionicons name="checkmark" size={20} color={PG.pillText} /> : null}
@@ -320,7 +322,7 @@ function BirthDateModal({ value, onDone, onClose }: { value: string | null; onDo
       <View style={{ flexDirection: "row", gap: 10 }}>
         {fields.map((f, i) => (
           <View key={f.id} style={{ flex: f.flex, gap: 6 }}>
-            <Text allowFontScaling={false} style={[st.fieldLabel, { fontFamily: theme.mediumFont }]}>
+            <Text allowFontScaling={false} style={[modalSt.fieldLabel, { fontFamily: theme.mediumFont }]}>
               {f.label}
             </Text>
             <TextInput
@@ -330,7 +332,7 @@ function BirthDateModal({ value, onDone, onClose }: { value: string | null; onDo
               placeholder={f.ph}
               placeholderTextColor="rgba(134, 167, 210, 0.45)"
               autoFocus={i === 0}
-              style={[st.fieldInput, { fontFamily: theme.semiBoldFont }]}
+              style={[modalSt.fieldInput, { fontFamily: theme.semiBoldFont }]}
               testID={f.id}
               onSubmitEditing={done}
             />
@@ -338,7 +340,7 @@ function BirthDateModal({ value, onDone, onClose }: { value: string | null; onDo
         ))}
       </View>
       {err ? (
-        <Text allowFontScaling={false} style={st.error} accessibilityRole="alert">
+        <Text allowFontScaling={false} style={modalSt.error} accessibilityRole="alert">
           {err}
         </Text>
       ) : null}
@@ -347,7 +349,8 @@ function BirthDateModal({ value, onDone, onClose }: { value: string | null; onDo
   );
 }
 
-const st = StyleSheet.create({
+/** Shared with the racket pickers so all Profile Edit popups match. */
+export const modalSt = StyleSheet.create({
   error: { color: "#FF6B5E", fontSize: 13, marginTop: 8, textAlign: "center" },
   overlay: { flex: 1, backgroundColor: "rgba(1, 7, 25, 0.78)", justifyContent: "center", paddingHorizontal: 18 },
   modalCard: { borderRadius: 24, borderWidth: 1, borderColor: PG.border, padding: 18, gap: 14 },

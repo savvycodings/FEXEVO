@@ -9,7 +9,7 @@ import { GlowButton } from "../../components/ui";
 import { authClient } from "../../lib/auth-client";
 import { PG, glow } from "../progress/progressTheme";
 import { SegmentedPills } from "../progress/SegmentedPills";
-import { MockNotice, ProfileHubRow } from "./ProfileHubParts";
+import { ProfileHubRow } from "./ProfileHubParts";
 import {
   cmToFtIn,
   formatTenth,
@@ -326,8 +326,6 @@ export function BodyMeasurementsSection({
               testID={`body-row-${row.key}`}
             />
           ))}
-
-          <MockNotice text={t("profileHub.bodyLocalNotice")} />
 
           {error ? (
             <Text allowFontScaling={false} style={st.error} accessibilityRole="alert">

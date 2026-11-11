@@ -56,13 +56,13 @@ import {
   ProfileHubRow,
   ProfileHubTabs,
   ProfileIdentityHeader,
-  RacketInfoSection,
   type ProfileHubTab,
 } from "./profileSettings/ProfileHubParts";
 import { BodyMeasurementsSection } from "./profileSettings/BodyMeasurementsSection";
 import { EliteLabSection } from "./profileSettings/EliteLabSection";
 import { HowToMeasureSection } from "./profileSettings/HowToMeasureSection";
 import { BasicInfoSection, type BasicInfoChanges } from "./profileSettings/BasicInfoSection";
+import { RacketSection, type Racket } from "./profileSettings/RacketSection";
 import { ManualComplete, MeasureStep, ReviewMeasurements, STEP_TITLE, type WizardStep } from "./profileSettings/MeasureWizard";
 import { EMPTY_EXTRAS, loadExtras, saveExtras, type Extras } from "./profileSettings/BodyMeasurementsSection";
 import {
@@ -161,6 +161,7 @@ type ProfileData = {
     weightKg?: number | null;
     /** Calibration measurements in cm; null until the first save. */
     bodyMeasurements?: Partial<Extras> | null;
+    racket?: Racket | null;
     dominantHand?: string | null;
     courtSide?: string | null;
     gender?: string | null;
@@ -355,7 +356,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     mode: "manual",
     from: "hub",
   });
-  const [racketSavedNotice, setRacketSavedNotice] = useState(false);
   /** Game Settings is two steps: player details (hand, side, height, weight), then level. */
   const [gameStep, setGameStep] = useState<"details" | "level">("details");
   const [handInput, setHandInput] = useState<Side | null>(null);
@@ -2136,15 +2136,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               )}
             />
           ) : activeSection === "racket" ? (
-            <>
-              <RacketInfoSection saved={racketSavedNotice} />
-              <SubsectionFooter
-                onBack={backToHub}
-                primaryLabel={t("profileHub.saveRacket")}
-                onPrimary={() => setRacketSavedNotice(true)}
-                primaryTestID="racket-save"
-              />
-            </>
+            <RacketSection initial={data.profile?.racket} onSaved={() => void loadRemote()} />
           ) : activeSection === "calibration" ? (
             <CalibrationChooser
               onManual={() => setActiveSection("howToMeasure")}
@@ -2312,10 +2304,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               title={t("profileHub.racketInfo")}
               subtitle={t("profileHub.racketInfoSub")}
               icon="tennisball-outline"
-              onPress={() => {
-                setRacketSavedNotice(false);
-                setActiveSection("racket");
-              }}
+              onPress={() => setActiveSection("racket")}
               testID={TEST_IDS.settingsSection("racket")}
             />
             <ProfileHubRow

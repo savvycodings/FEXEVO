@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   type ImageSourcePropType,
@@ -214,148 +213,6 @@ export function MockNotice({ text }: { text?: string } = {}) {
   );
 }
 
-function SectionCard({ title, children }: { title?: string; children: React.ReactNode }) {
-  const { theme } = useContext(ThemeContext);
-  return (
-    <LinearGradient
-      colors={[PG.cardTop, PG.cardBottom]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={[s.sectionCard, glow(10, 0.3)]}
-    >
-      {title ? (
-        <Text allowFontScaling={false} style={[s.sectionCardTitle, { fontFamily: theme.semiBoldFont }]}>
-          {title}
-        </Text>
-      ) : null}
-      {children}
-    </LinearGradient>
-  );
-}
-
-function FieldInput(props: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder?: string;
-  suffix?: string;
-  numeric?: boolean;
-  testID?: string;
-}) {
-  const { theme } = useContext(ThemeContext);
-  const [focused, setFocused] = useState(false);
-  return (
-    <View style={{ gap: 6 }}>
-      <Text allowFontScaling={false} style={[s.fieldLabel, { fontFamily: theme.mediumFont }]}>
-        {props.label}
-      </Text>
-      <View style={[s.fieldBox, focused && s.fieldBoxFocused]}>
-        <TextInput
-          value={props.value}
-          onChangeText={props.onChangeText}
-          placeholder={props.placeholder}
-          placeholderTextColor="rgba(134, 167, 210, 0.55)"
-          keyboardType={props.numeric ? "number-pad" : "default"}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          style={[s.fieldInput, { fontFamily: theme.regularFont }]}
-          testID={props.testID}
-        />
-        {props.suffix ? (
-          <Text allowFontScaling={false} style={[s.fieldSuffix, { fontFamily: theme.mediumFont }]}>
-            {props.suffix}
-          </Text>
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-/* ------------------------------------------------------------------------------------------------
- * Racket Information (mock: local state only).
- * ---------------------------------------------------------------------------------------------- */
-
-type RacketShape = "round" | "teardrop" | "diamond";
-type RacketBalance = "low" | "medium" | "high";
-
-export function RacketInfoSection({ saved }: { saved: boolean }) {
-  const { t } = useTranslation();
-  const { theme } = useContext(ThemeContext);
-  const [brand, setBrand] = useState("");
-  const [model, setModel] = useState("");
-  const [weight, setWeight] = useState("");
-  const [shape, setShape] = useState<RacketShape>("teardrop");
-  const [balance, setBalance] = useState<RacketBalance>("medium");
-  return (
-    <View style={{ gap: 14 }}>
-      <MockNotice />
-      <SectionCard title={t("profileHub.racketModelTitle")}>
-        <FieldInput
-          label={t("profileHub.racketBrand")}
-          value={brand}
-          onChangeText={setBrand}
-          placeholder="Bullpadel"
-          testID="racket-brand"
-        />
-        <FieldInput
-          label={t("profileHub.racketModel")}
-          value={model}
-          onChangeText={setModel}
-          placeholder="Vertex 04"
-          testID="racket-model"
-        />
-        <FieldInput
-          label={t("profileHub.racketWeight")}
-          value={weight}
-          onChangeText={(v) => setWeight(v.replace(/[^0-9]/g, "").slice(0, 3))}
-          placeholder="365"
-          suffix="g"
-          numeric
-          testID="racket-weight"
-        />
-      </SectionCard>
-      <SectionCard title={t("profileHub.racketShape")}>
-        <SegmentedPills<RacketShape>
-          role="radio"
-          options={[
-            { key: "round", label: t("profileHub.shapeRound") },
-            { key: "teardrop", label: t("profileHub.shapeTeardrop") },
-            { key: "diamond", label: t("profileHub.shapeDiamond") },
-          ]}
-          value={shape}
-          onChange={setShape}
-          fontFamily={theme.mediumFont}
-          activeFontFamily={theme.semiBoldFont}
-          accessibilityLabel={t("profileHub.racketShape")}
-        />
-      </SectionCard>
-      <SectionCard title={t("profileHub.racketBalance")}>
-        <SegmentedPills<RacketBalance>
-          role="radio"
-          options={[
-            { key: "low", label: t("profileHub.balanceLow") },
-            { key: "medium", label: t("profileHub.balanceMedium") },
-            { key: "high", label: t("profileHub.balanceHigh") },
-          ]}
-          value={balance}
-          onChange={setBalance}
-          fontFamily={theme.mediumFont}
-          activeFontFamily={theme.semiBoldFont}
-          accessibilityLabel={t("profileHub.racketBalance")}
-        />
-        <Text allowFontScaling={false} style={[s.hint, { fontFamily: theme.regularFont }]}>
-          {t(`profileHub.balanceHint_${balance}`)}
-        </Text>
-      </SectionCard>
-      {saved ? (
-        <Text allowFontScaling={false} style={[s.savedNotice, { fontFamily: theme.mediumFont }]}>
-          {t("profileHub.savedLocally")}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
 /* ------------------------------------------------------------------------------------------------
  * Athlete Calibration: choose manual measurements or a 3D body scan.
  * ---------------------------------------------------------------------------------------------- */
@@ -534,24 +391,6 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(0, 102, 255, 0.08)",
   },
   mockNoticeText: { flex: 1, fontSize: 12, color: "#86A7D2" },
-  sectionCard: { borderRadius: 24, borderWidth: 1, borderColor: PG.border, padding: 16, gap: 12 },
-  sectionCardTitle: { fontSize: 15, color: "#FFFFFF" },
-  fieldLabel: { fontSize: 13, color: "#86A7D2" },
-  fieldBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(21, 102, 196, 0.45)",
-    backgroundColor: "#041641",
-    paddingHorizontal: 14,
-  },
-  fieldBoxFocused: { borderColor: "rgba(143, 184, 255, 0.9)" },
-  fieldInput: { flex: 1, fontSize: 15, color: "#FFFFFF", paddingVertical: 0 },
-  fieldSuffix: { fontSize: 14, color: "#86A7D2", marginLeft: 8 },
-  hint: { fontSize: 13, lineHeight: 19, color: "#86A7D2" },
-  savedNotice: { fontSize: 13, color: PG.labelBlue, textAlign: "center" },
   calIntro: { fontSize: 14, lineHeight: 20, color: "#86A7D2", marginBottom: 4 },
   calOuter: { borderRadius: 26 },
   calCard: {
