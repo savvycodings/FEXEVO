@@ -13,10 +13,14 @@ export const smallShieldLayout = {
     bottom: '22%',
     height: '78%',
   },
+  /**
+   * Kept fully below the card. The shadow art is ~84% of the card's height here, so at `-75%`
+   * only its top strip showed — a grey wedge with a hard edge across the shield tip.
+   */
   fotoShadow: {
     width: '102%',
     left: '-1%',
-    bottom: '-75%',
+    bottom: '-100%',
   },
   backEllipse: {
     width: LAYER_W,
