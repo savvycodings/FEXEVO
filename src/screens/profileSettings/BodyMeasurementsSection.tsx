@@ -6,6 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTranslation } from "react-i18next";
 import { ThemeContext } from "../../context";
 import { GlowButton } from "../../components/ui";
+import { authClient } from "../../lib/auth-client";
 import { PG, glow } from "../progress/progressTheme";
 import { SegmentedPills } from "../progress/SegmentedPills";
 import { MockNotice, ProfileHubRow } from "./ProfileHubParts";
@@ -123,15 +124,35 @@ function lenIn(raw: string, system: System): number | null {
   return roundTenth(system === "metric" ? n : n * CM_PER_IN);
 }
 
-export async function saveExtras(extras: Extras): Promise<void> {
+/**
+ * Saves to the account (POST /profile/body-measurements) and keeps a device copy. Empty values
+ * are sent as null so clearing a field clears it on the server too. Returns an error or null.
+ */
+export async function saveExtras(extras: Extras): Promise<string | null> {
   try {
     await AsyncStorage.setItem(EXTRAS_STORAGE_KEY, JSON.stringify(extras));
   } catch {
-    /* best effort until the backend stores these */
+    /* the server copy is the one that matters */
   }
+  const body: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(extras)) {
+    body[k] = v != null && typeof v === "object" && v.left == null && v.right == null ? null : v;
+  }
+  const res = await authClient
+    .$fetch<{ ok?: boolean; error?: string }>("/profile/body-measurements", { method: "POST", body: body as any })
+    .catch((e) => ({ error: e?.message } as any));
+  const data = ((res as any)?.data ?? res) as { ok?: boolean; error?: unknown };
+  if (data?.ok) return null;
+  const err = (res as any)?.error ?? data?.error;
+  return (typeof err === "string" ? err : typeof err?.message === "string" ? err.message : null) || "Could not save measurements.";
 }
 
-export async function loadExtras(): Promise<Extras> {
+/**
+ * The account copy wins once it exists. Before the first sync, measurements typed on this
+ * device (when they were device-only) are used and get pushed on the next save.
+ */
+export async function loadExtras(server?: Partial<Extras> | null): Promise<Extras> {
+  if (server && typeof server === "object") return { ...EMPTY_EXTRAS, ...server };
   try {
     const raw = await AsyncStorage.getItem(EXTRAS_STORAGE_KEY);
     if (!raw) return EMPTY_EXTRAS;
@@ -145,13 +166,19 @@ export function BodyMeasurementsSection({
   initialMode = "manual",
   initialHeightCm,
   initialWeightKg,
+  initialExtras,
   onSaveRemote,
+  onExtrasSaved,
   renderFooter,
 }: {
   /** Which tab to open on (Athlete Calibration links straight to 3D Scan). */
   initialMode?: "manual" | "scan";
   initialHeightCm: number | null;
   initialWeightKg: number | null;
+  /** Measurements stored on the account (profile.bodyMeasurements), if any. */
+  initialExtras?: Partial<Extras> | null;
+  /** Called after the measurements reach the account, so the screen can refresh the profile. */
+  onExtrasSaved?: () => void;
   /** Saves height / weight to the account; resolves to an error message or null. */
   onSaveRemote: (changes: { heightCm?: number; weightKg?: number }) => Promise<string | null>;
   /** Screen-owned footer (back + primary) so this matches the other Profile Edit sections. */
@@ -171,7 +198,7 @@ export function BodyMeasurementsSection({
 
   useEffect(() => {
     void getBodyUnits().then((u) => setSystem(u.height === "cm" ? "metric" : "imperial"));
-    void loadExtras().then(setExtras);
+    void loadExtras(initialExtras).then(setExtras);
   }, []);
   useEffect(() => setHeightCm(initialHeightCm), [initialHeightCm]);
   useEffect(() => setWeightKg(initialWeightKg), [initialWeightKg]);
@@ -232,15 +259,12 @@ export function BodyMeasurementsSection({
       return;
     }
     setSaving(true);
-    try {
-      await AsyncStorage.setItem(EXTRAS_STORAGE_KEY, JSON.stringify(extras));
-    } catch {
-      /* best effort until the backend stores these */
-    }
+    const extrasErr = await saveExtras(extras);
+    if (!extrasErr) onExtrasSaved?.();
     const changes: { heightCm?: number; weightKg?: number } = {};
     if (heightCm !== initialHeightCm) changes.heightCm = heightCm;
     if (weightKg !== initialWeightKg) changes.weightKg = weightKg;
-    const err = Object.keys(changes).length ? await onSaveRemote(changes) : null;
+    const err = (Object.keys(changes).length ? await onSaveRemote(changes) : null) ?? extrasErr;
     setSaving(false);
     if (err) setError(err);
     else setNotice(t("profileHub.bodySaved"));

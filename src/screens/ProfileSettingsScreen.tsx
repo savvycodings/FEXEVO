@@ -159,6 +159,8 @@ type ProfileData = {
     birthDate?: string | null;
     heightCm?: number | null;
     weightKg?: number | null;
+    /** Calibration measurements in cm; null until the first save. */
+    bodyMeasurements?: Partial<Extras> | null;
     dominantHand?: string | null;
     courtSide?: string | null;
     gender?: string | null;
@@ -345,6 +347,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   >(null);
   /** Manual calibration wizard values (device-only until the backend stores them). */
   const [wizExtras, setWizExtras] = useState<Extras>(EMPTY_EXTRAS);
+  const [wizSaving, setWizSaving] = useState(false);
+  const [wizError, setWizError] = useState<string | null>(null);
   const [hubTab, setHubTab] = useState<ProfileHubTab>("profile");
   /** Body Measurements can open from the Profile tab or from Athlete Calibration (manual / scan). */
   const [bodyEntry, setBodyEntry] = useState<{ mode: "manual" | "scan"; from: "hub" | "calibration" }>({
@@ -609,14 +613,31 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   }
 
   async function startMeasureWizard() {
-    setWizExtras(await loadExtras());
+    setWizExtras(await loadExtras(data.profile?.bodyMeasurements ?? null));
+    setWizError(null);
     setActiveSection("upper");
   }
 
-  /** Each step saves on Next so leaving midway keeps what was typed. */
-  function wizardNext(to: WizardStep | "review" | "manualDone") {
-    void saveExtras(wizExtras);
-    setActiveSection(to);
+  /**
+   * Each step saves on Next so leaving midway keeps what was typed; a failed save there is
+   * retried by the next one. Confirm waits for the save and stays on Review if it fails.
+   */
+  async function wizardNext(to: WizardStep | "review" | "manualDone") {
+    setWizError(null);
+    if (to !== "manualDone") {
+      void saveExtras(wizExtras);
+      setActiveSection(to);
+      return;
+    }
+    setWizSaving(true);
+    const err = await saveExtras(wizExtras);
+    setWizSaving(false);
+    if (err) {
+      setWizError(err);
+      return;
+    }
+    await loadRemote();
+    setActiveSection("manualDone");
   }
 
   /** Switching unit only changes the display; the canonical value stays as it is. */
@@ -2100,6 +2121,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               initialMode={bodyEntry.mode}
               initialHeightCm={data.profile?.heightCm ?? null}
               initialWeightKg={data.profile?.weightKg ?? null}
+              initialExtras={data.profile?.bodyMeasurements ?? null}
+              onExtrasSaved={() => void loadRemote()}
               onSaveRemote={saveBodyToAccount}
               renderFooter={({ label, onPress, saving: bodySavingNow }) => (
                 <SubsectionFooter
@@ -2166,7 +2189,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   onBack={backToHub}
                   primaryLabel={t("profileHub.next")}
                   onPrimary={() =>
-                    wizardNext(activeSection === "upper" ? "lower" : activeSection === "lower" ? "circ" : "review")
+                    void wizardNext(activeSection === "upper" ? "lower" : activeSection === "lower" ? "circ" : "review")
                   }
                   primaryArrow
                   primaryTestID={`wizard-next-${activeSection}`}
@@ -2181,12 +2204,21 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               onGoToStep={(step) => setActiveSection(step)}
               onEditBasic={() => setActiveSection("basicInfo")}
               footer={
-                <SubsectionFooter
-                  onBack={backToHub}
-                  primaryLabel={t("profileHub.confirm")}
-                  onPrimary={() => wizardNext("manualDone")}
-                  primaryTestID="review-confirm"
-                />
+                <>
+                  {wizError ? (
+                    <Text style={{ color: "#FF8A8A", fontSize: 13, marginBottom: 10 }} testID="review-error">
+                      {wizError}
+                    </Text>
+                  ) : null}
+                  <SubsectionFooter
+                    onBack={backToHub}
+                    primaryLabel={t("profileHub.confirm")}
+                    onPrimary={() => void wizardNext("manualDone")}
+                    primaryDisabled={wizSaving}
+                    primaryLoading={wizSaving}
+                    primaryTestID="review-confirm"
+                  />
+                </>
               }
             />
           ) : activeSection === "manualDone" ? (
