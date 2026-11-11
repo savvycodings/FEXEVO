@@ -29,46 +29,68 @@ type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
 /** Segment lengths are not on the backend yet; they live on the device until they are. */
 const EXTRAS_STORAGE_KEY = "xevo_body_measurements_v1";
-const CM_PER_IN = 2.54;
+export const CM_PER_IN = 2.54;
 
 export type System = "metric" | "imperial";
-type Pair = { left: number | null; right: number | null };
-type Extras = {
+export type Pair = { left: number | null; right: number | null };
+export type Extras = {
   wingspan: number | null;
   shoulder: number | null;
+  chest: number | null;
   torso: number | null;
+  hip: number | null;
+  waist: number | null;
+  arm: Pair;
   upperArm: Pair;
   forearm: Pair;
   hand: Pair;
   upperLeg: Pair;
   lowerLeg: Pair;
+  armCirc: Pair;
+  thighCirc: Pair;
+  calfCirc: Pair;
 };
-type SingleKey = "wingspan" | "shoulder" | "torso";
-type PairKey = "upperArm" | "forearm" | "hand" | "upperLeg" | "lowerLeg";
+export type SingleKey = "wingspan" | "shoulder" | "chest" | "torso" | "hip" | "waist";
+export type PairKey = "arm" | "upperArm" | "forearm" | "hand" | "upperLeg" | "lowerLeg" | "armCirc" | "thighCirc" | "calfCirc";
 type EditKey = "height" | "weight" | SingleKey | PairKey;
 
-const EMPTY_PAIR: Pair = { left: null, right: null };
-const EMPTY_EXTRAS: Extras = {
+export const EMPTY_PAIR: Pair = { left: null, right: null };
+export const EMPTY_EXTRAS: Extras = {
   wingspan: null,
   shoulder: null,
+  chest: null,
   torso: null,
+  hip: null,
+  waist: null,
+  arm: EMPTY_PAIR,
   upperArm: EMPTY_PAIR,
   forearm: EMPTY_PAIR,
   hand: EMPTY_PAIR,
   upperLeg: EMPTY_PAIR,
   lowerLeg: EMPTY_PAIR,
+  armCirc: EMPTY_PAIR,
+  thighCirc: EMPTY_PAIR,
+  calfCirc: EMPTY_PAIR,
 };
 
 /** Plausible adult ranges in cm, used to catch typos (e.g. inches typed in cm mode). */
-const RANGE_CM: Record<SingleKey | PairKey, { min: number; max: number }> = {
+export const RANGE_CM: Record<SingleKey | PairKey, { min: number; max: number }> = {
   wingspan: { min: 100, max: 260 },
   shoulder: { min: 25, max: 70 },
+  chest: { min: 60, max: 160 },
   torso: { min: 30, max: 100 },
+  // Wide on purpose: the design shows 96 cm, which reads like a hip circumference.
+  hip: { min: 20, max: 150 },
+  arm: { min: 40, max: 95 },
   upperArm: { min: 15, max: 60 },
   forearm: { min: 15, max: 50 },
   hand: { min: 10, max: 30 },
   upperLeg: { min: 25, max: 80 },
   lowerLeg: { min: 25, max: 75 },
+  waist: { min: 45, max: 160 },
+  armCirc: { min: 18, max: 60 },
+  thighCirc: { min: 35, max: 90 },
+  calfCirc: { min: 25, max: 60 },
 };
 
 const ROWS: { key: EditKey; icon: IconName; pair?: boolean }[] = [
@@ -76,7 +98,10 @@ const ROWS: { key: EditKey; icon: IconName; pair?: boolean }[] = [
   { key: "weight", icon: "speedometer-outline" },
   { key: "wingspan", icon: "swap-horizontal-outline" },
   { key: "shoulder", icon: "accessibility-outline" },
+  { key: "chest", icon: "ellipse-outline" },
   { key: "torso", icon: "shirt-outline" },
+  { key: "hip", icon: "git-compare-outline" },
+  { key: "arm", icon: "git-branch-outline", pair: true },
   { key: "upperArm", icon: "barbell-outline", pair: true },
   { key: "forearm", icon: "fitness-outline", pair: true },
   { key: "hand", icon: "hand-left-outline", pair: true },
@@ -89,7 +114,7 @@ function isPairKey(k: EditKey): k is PairKey {
 }
 
 /** cm → display number in the chosen system (1 decimal, trailing .0 dropped). */
-function lenOut(cm: number, system: System): string {
+export function lenOut(cm: number, system: System): string {
   return formatTenth(system === "metric" ? roundTenth(cm) : roundTenth(cm / CM_PER_IN));
 }
 function lenIn(raw: string, system: System): number | null {
@@ -98,7 +123,15 @@ function lenIn(raw: string, system: System): number | null {
   return roundTenth(system === "metric" ? n : n * CM_PER_IN);
 }
 
-async function loadExtras(): Promise<Extras> {
+export async function saveExtras(extras: Extras): Promise<void> {
+  try {
+    await AsyncStorage.setItem(EXTRAS_STORAGE_KEY, JSON.stringify(extras));
+  } catch {
+    /* best effort until the backend stores these */
+  }
+}
+
+export async function loadExtras(): Promise<Extras> {
   try {
     const raw = await AsyncStorage.getItem(EXTRAS_STORAGE_KEY);
     if (!raw) return EMPTY_EXTRAS;

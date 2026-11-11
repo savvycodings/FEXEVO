@@ -63,6 +63,8 @@ import { BodyMeasurementsSection } from "./profileSettings/BodyMeasurementsSecti
 import { EliteLabSection } from "./profileSettings/EliteLabSection";
 import { HowToMeasureSection } from "./profileSettings/HowToMeasureSection";
 import { BasicInfoSection, type BasicInfoChanges } from "./profileSettings/BasicInfoSection";
+import { ManualComplete, MeasureStep, ReviewMeasurements, STEP_TITLE, type WizardStep } from "./profileSettings/MeasureWizard";
+import { EMPTY_EXTRAS, loadExtras, saveExtras, type Extras } from "./profileSettings/BodyMeasurementsSection";
 import {
   DEFAULT_BODY_UNITS,
   cmToFtIn,
@@ -339,8 +341,10 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     return null;
   }, [data.profile?.birthDate, birthDayInput, birthMonthInput, birthYearInput]);
   const [activeSection, setActiveSection] = useState<
-    "personal" | "account" | "location" | "game" | "body" | "racket" | "calibration" | "howToMeasure" | "basicInfo" | "elite" | "privacy" | null
+    "personal" | "account" | "location" | "game" | "body" | "racket" | "calibration" | "howToMeasure" | "basicInfo" | "elite" | "privacy" | WizardStep | "review" | "manualDone" | null
   >(null);
+  /** Manual calibration wizard values (device-only until the backend stores them). */
+  const [wizExtras, setWizExtras] = useState<Extras>(EMPTY_EXTRAS);
   const [hubTab, setHubTab] = useState<ProfileHubTab>("profile");
   /** Body Measurements can open from the Profile tab or from Athlete Calibration (manual / scan). */
   const [bodyEntry, setBodyEntry] = useState<{ mode: "manual" | "scan"; from: "hub" | "calibration" }>({
@@ -600,8 +604,19 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
       await loadRemote();
       onProfileUpdated?.();
     }
-    openBodyMeasurements("manual", "calibration");
+    await startMeasureWizard();
     return null;
+  }
+
+  async function startMeasureWizard() {
+    setWizExtras(await loadExtras());
+    setActiveSection("upper");
+  }
+
+  /** Each step saves on Next so leaving midway keeps what was typed. */
+  function wizardNext(to: WizardStep | "review" | "manualDone") {
+    void saveExtras(wizExtras);
+    setActiveSection(to);
   }
 
   /** Switching unit only changes the display; the canonical value stays as it is. */
@@ -1022,6 +1037,11 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     elite: t("profileHub.eliteLab"),
     howToMeasure: t("profileHub.howTitle"),
     basicInfo: t("profileHub.basicTitle"),
+    upper: t(STEP_TITLE.upper),
+    lower: t(STEP_TITLE.lower),
+    circ: t(STEP_TITLE.circ),
+    review: t("profileHub.reviewTitle"),
+    manualDone: t("profileHub.doneHeading"),
     privacy: t("profileHub.privacyData"),
   };
   const currentTitle = activeSection ? sectionTitleMap[activeSection] : t("profileSettingsUi.profileEdit");
@@ -2031,14 +2051,22 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     activeSection === "elite" ||
     activeSection === "howToMeasure" ||
     activeSection === "basicInfo" ||
+    activeSection === "upper" ||
+    activeSection === "lower" ||
+    activeSection === "circ" ||
+    activeSection === "review" ||
+    activeSection === "manualDone" ||
     activeSection === "privacy"
   ) {
+    const WIZARD_BACK = { upper: "basicInfo", lower: "upper", circ: "lower", review: "circ", manualDone: null } as const;
     const backToHub = () =>
       setActiveSection(
         activeSection === "howToMeasure"
           ? "calibration"
           : activeSection === "basicInfo"
             ? "howToMeasure"
+            : activeSection in WIZARD_BACK
+              ? WIZARD_BACK[activeSection as keyof typeof WIZARD_BACK]
             : activeSection === "body" && bodyEntry.from === "calibration"
               ? bodyEntry.mode === "manual"
                 ? "basicInfo"
@@ -2063,7 +2091,9 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           showsVerticalScrollIndicator={false}
           bottomOffset={insets.bottom + 12}
         >
-          <Text style={styles.detailPageHeading}>{currentTitle}</Text>
+          <Text style={[styles.detailPageHeading, activeSection === "manualDone" && { textAlign: "center" }]}>
+            {currentTitle}
+          </Text>
           {activeSection === "body" ? (
             <BodyMeasurementsSection
               key={bodyEntry.mode}
@@ -2124,6 +2154,45 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   primaryTestID="basic-next"
                 />
               )}
+            />
+          ) : activeSection === "upper" || activeSection === "lower" || activeSection === "circ" ? (
+            <MeasureStep
+              key={activeSection}
+              step={activeSection}
+              extras={wizExtras}
+              setExtras={setWizExtras}
+              footer={
+                <SubsectionFooter
+                  onBack={backToHub}
+                  primaryLabel={t("profileHub.next")}
+                  onPrimary={() =>
+                    wizardNext(activeSection === "upper" ? "lower" : activeSection === "lower" ? "circ" : "review")
+                  }
+                  primaryArrow
+                  primaryTestID={`wizard-next-${activeSection}`}
+                />
+              }
+            />
+          ) : activeSection === "review" ? (
+            <ReviewMeasurements
+              profile={data.profile ?? {}}
+              extras={wizExtras}
+              setExtras={setWizExtras}
+              onGoToStep={(step) => setActiveSection(step)}
+              onEditBasic={() => setActiveSection("basicInfo")}
+              footer={
+                <SubsectionFooter
+                  onBack={backToHub}
+                  primaryLabel={t("profileHub.confirm")}
+                  onPrimary={() => wizardNext("manualDone")}
+                  primaryTestID="review-confirm"
+                />
+              }
+            />
+          ) : activeSection === "manualDone" ? (
+            <ManualComplete
+              onScan={() => openBodyMeasurements("scan", "calibration")}
+              onFinish={() => setActiveSection(null)}
             />
           ) : activeSection === "elite" ? (
             <EliteLabSection

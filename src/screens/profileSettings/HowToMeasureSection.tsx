@@ -106,8 +106,9 @@ export function HowToMeasureSection({ footer }: { footer: React.ReactNode }) {
 
 const st = StyleSheet.create({
   guideRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  photoWrap: { flex: 1.1, borderRadius: 24, overflow: "hidden", backgroundColor: PG.cardBottom },
-  photo: { width: "100%", aspectRatio: GUIDE_ASPECT },
+  // Ratio lives on the frame: an Image's own aspectRatio is ignored on web and it grows to its intrinsic size.
+  photoWrap: { flex: 1.1, aspectRatio: GUIDE_ASPECT, borderRadius: 24, overflow: "hidden", backgroundColor: PG.cardBottom },
+  photo: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   tipsCard: { flex: 1, borderRadius: 24, borderWidth: 1, borderColor: PG.border, paddingVertical: 10, paddingHorizontal: 12 },
   tipRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
   tipIcon: {
