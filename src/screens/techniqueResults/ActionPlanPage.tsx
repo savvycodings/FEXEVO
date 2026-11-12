@@ -7,6 +7,8 @@ import { CoachTabOrb } from '../../components/CoachCharacterAvatar'
 import { LocalSvgAsset } from '../../components/LocalSvgAsset'
 import { useContactJoints, type ContactJoint, type JointReading } from '../../lib/jointsApi'
 import { mistakeFocusOrder, type MistakeId } from './BiggestMistakesView'
+import { BodyPartGlyph } from './bodyPartGlyphs'
+import type { BodyPartId } from './jointIcons'
 
 type Props = {
   shotLabel: string | null
@@ -24,8 +26,6 @@ const ADJUST = '#FF8000'
 const MUTED = 'rgba(255,255,255,0.75)'
 
 const ICON_TARGET = require('../../../assets/aicoach/analysis/action-plan/icon-target.svg')
-const ICON_ELBOW = require('../../../assets/aicoach/analysis/action-plan/icon-elbow.svg')
-const ICON_RACKET = require('../../../assets/aicoach/analysis/action-plan/icon-racket.svg')
 const ICON_CHEVRON = require('../../../assets/aicoach/analysis/action-plan/icon-chevron.svg')
 const ICON_PLAY = require('../../../assets/aicoach/analysis/action-plan/icon-play.svg')
 const ICON_ARROW = require('../../../assets/aicoach/analysis/action-plan/icon-arrow.svg')
@@ -45,11 +45,12 @@ const JOINT_FOR: Record<MistakeId, ContactJoint | null> = {
   foot: 'knee',
 }
 
-const ROW_ICON: Record<MistakeId, number> = {
-  elbow: ICON_ELBOW,
-  racket: ICON_RACKET,
-  torso: ICON_ELBOW,
-  foot: ICON_RACKET,
+/** Rail glyph for each fix (foot uses the rail's `feet` icon). */
+const ROW_PART: Record<MistakeId, BodyPartId> = {
+  elbow: 'elbow',
+  racket: 'racket',
+  torso: 'torso',
+  foot: 'feet',
 }
 
 /**
@@ -264,7 +265,7 @@ function FixRow({
 
       <View style={styles.fixMid}>
         <View style={styles.fixTitleRow}>
-          <LocalSvgAsset assetModule={ROW_ICON[id]} width={24} height={24} />
+          <BodyPartGlyph id={ROW_PART[id]} size={24} severity={severity} />
           <Text allowFontScaling={false} numberOfLines={1} style={[styles.fixTitle, { fontFamily: fontMed }]}>
             {t(TITLE_KEY[id])}
           </Text>

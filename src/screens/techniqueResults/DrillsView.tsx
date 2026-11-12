@@ -11,6 +11,7 @@ import { getThumbnailAsync } from '../../lib/videoThumbnails'
 import { DrillDetail, LEVEL_TONE } from './DrillDetail'
 import { DrillStep, type DrillKeyPoint } from './DrillStep'
 import { DrillComplete } from './DrillComplete'
+import { BackArrowIcon } from './BackArrowIcon'
 
 /** Where the user is inside the drills flow. Kept by the parent so a trip to Smart 3D comes back here. */
 export type DrillNav = { slug: string; page: 'detail' | 'done' | number } | null
@@ -144,7 +145,7 @@ export function DrillsView({
         style={styles.back}
         testID="drills-back"
       >
-        <Ionicons name="chevron-back" size={30} color="#86A7D2" />
+        <BackArrowIcon />
       </Pressable>
 
       <View style={styles.shotRow}>

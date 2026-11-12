@@ -91,10 +91,10 @@ function severityColor(sev: JointSeverity): string | null {
 }
 
 
-function JointBadge({ joint, size }: { joint: ViewJoint; size: number }) {
+function JointBadge({ joint, size, severity }: { joint: ViewJoint; size: number; severity: JointSeverity }) {
   return (
     <View style={[styles.jointBadge, { width: size, height: size, borderRadius: size / 2 }]}>
-      <BodyPartIcon id={joint as BodyPartId} size={Math.round(size * 0.72)} />
+      <BodyPartIcon id={joint as BodyPartId} size={Math.round(size * 0.72)} severity={severity} />
     </View>
   )
 }
@@ -399,7 +399,7 @@ export function ViewAnglesPage({
       >
         <View style={styles.jointCardLeft}>
           <View style={styles.jointCardTitleRow}>
-            <JointBadge joint={joint} size={24} />
+            <JointBadge joint={joint} size={24} severity={activeSeverity} />
             <Text allowFontScaling={false} style={[styles.jointCardTitle, { fontFamily: theme.mediumFont }]}>
               {t(`analysis.viewAnglesPage.reading.${joint}`)}
             </Text>

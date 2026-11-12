@@ -14,7 +14,30 @@ export type Drill = {
   title: string
   summary: string
   focusLabel: string
-  steps: string[]
+  steps: DrillStepCopy[]
+}
+
+/** Icon beside a step key point. */
+export type DrillKeyPointIcon = 'split' | 'eye' | 'target' | 'posture' | 'racket'
+export type DrillStepKeyPoint = { title: string; text: string; icon: DrillKeyPointIcon }
+
+/** A step is either its one-line instruction, or a titled step with its own key points. */
+export type DrillStepCopy = string | { title: string; subtitle: string; keyPoints: DrillStepKeyPoint[] }
+
+/** The step's own title, or null for a plain one-line step. */
+export function stepTitle(step: DrillStepCopy | undefined): string | null {
+  return step && typeof step === 'object' ? step.title : null
+}
+
+/** The step's line of text: the subtitle, or the plain instruction. */
+export function stepText(step: DrillStepCopy | undefined): string {
+  if (!step) return ''
+  return typeof step === 'string' ? step : step.subtitle
+}
+
+/** Key points written for this step (empty for a plain step). */
+export function stepKeyPoints(step: DrillStepCopy | undefined): DrillStepKeyPoint[] {
+  return step && typeof step === 'object' && Array.isArray(step.keyPoints) ? step.keyPoints : []
 }
 
 export type DrillsState = { status: 'loading' | 'ready' | 'error'; drills: Drill[] }

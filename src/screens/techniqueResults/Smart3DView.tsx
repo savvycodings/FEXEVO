@@ -1184,7 +1184,7 @@ function CompareFixRow({
         </View>
         <View style={styles.fixCopy}>
           <View style={styles.fixTitleRow}>
-            <BodyPartIcon id={part} size={20} />
+            <BodyPartIcon id={part} size={20} severity={sev} />
             <Text allowFontScaling={false} numberOfLines={1} style={[styles.fixTitle, { fontFamily: theme.mediumFont }]}>
               {t(titleKey)}
             </Text>
