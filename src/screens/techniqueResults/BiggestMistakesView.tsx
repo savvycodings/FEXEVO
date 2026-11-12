@@ -50,7 +50,7 @@ const SEVERITY_ORDER: (Severity | null)[] = ['high', 'medium', null, 'ok']
 type Props = {
   videoUri: string | null
   videoKey: string
-  /** For the server's pro-matched joint ranges (wrist, knee). */
+  /** For the server's Ideal Form joint ranges (wrist, knee). */
   analysisId?: string | null
   poseFrames?: PoseFrameRow[]
   totalFrames?: number | null
@@ -61,7 +61,7 @@ type Props = {
   /** Contact frame and fps, for the strip thumbnails and the elbow distance. */
   impactFrame?: number | null
   fps?: number | null
-  /** Save & Track (Pro Reference) below the mistake cards. */
+  /** Save & Track (Ideal Form) below the mistake cards. */
   footer?: ReactNode
 }
 
@@ -232,7 +232,7 @@ type Stat = {
   label: string
   value: string
   color: string
-  /** Pro-library band. Omitted when this shot has no matched contact pose. */
+  /** Ideal Form band. Omitted when this shot has no matched contact pose. */
   target?: string
   diff?: string
   diffOff?: boolean
@@ -738,7 +738,7 @@ function MistakeCard({ item, on, onPress }: { item: Item; on: boolean; onPress: 
       testID={`mistake-card-${item.def.id}`}
       accessibilityRole="button"
       onPress={onPress}
-      style={[styles.card, on && styles.cardOn]}
+      style={[styles.card, item.severity && { borderColor: c.color }, on && styles.cardOn]}
     >
       <NumberBadge n={item.n} severity={item.severity} size={40} />
       <View style={styles.cardCopy}>

@@ -19,7 +19,7 @@ import Svg, {
 } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { TEST_IDS } from '../../lib/testIds'
-import { PrimaryFill, UI } from '../../components/ui'
+import { UI } from '../../components/ui'
 import { LocalSvgAsset } from '../../components/LocalSvgAsset'
 import {
   PHYSICAL_METRIC_KEYS,
@@ -28,7 +28,6 @@ import {
 } from '../../lib/physicalMetrics'
 import {
   computeOverlayJointAngles,
-  emaAngle,
   jointArcSvgPath,
   jointLabelOffset,
   type ComputedJointAngle,
@@ -41,10 +40,58 @@ import {
 } from '../../lib/techniquePose'
 import { DialCaption } from './DialCaption'
 
-type Detail = 'overview' | 'mistakes' | 'pose'
+type Detail = 'overview' | 'pose' | 'compare' | 'drills' | 'shotVsIdeal' | 'trackProgress'
+type PriorityPartId = 'elbow' | 'knee' | 'feet'
 
-const ICON_SMART_3D = require('../../../assets/aicoach/analysis/smart-3d.svg')
-const ICON_ARROW_RIGHT = require('../../../assets/aicoach/analysis/arrow-right.svg')
+const CARD_BG = '#001950'
+const ACCENT = '#00B8FF'
+const PRIORITY_RED = '#E5482B'
+
+const ICON_SMART_3D = require('../../../assets/aicoach/analysis/cta-smart3d.svg')
+/** Stability is three Figma layers (body + head + ball) — same composition as CoachHome. */
+const ICON_STABILITY_BODY = require('../../../assets/aicoach/analysis/metric-stability.svg')
+const ICON_STABILITY_HEAD = require('../../../assets/aicoach/analysis/metric-stability-2.svg')
+const ICON_STABILITY_BALL = require('../../../assets/aicoach/analysis/metric-stability-3.svg')
+const ICON_METRIC: Record<Exclude<PhysicalMetricKey, 'stability'>, ReturnType<typeof require>> = {
+  power: require('../../../assets/aicoach/analysis/metric-power.svg'),
+  agility: require('../../../assets/aicoach/analysis/metric-agility.svg'),
+  reactions: require('../../../assets/aicoach/analysis/metric-reaction.svg'),
+  acceleration: require('../../../assets/aicoach/analysis/metric-acceleration.svg'),
+}
+
+function StabilityMetricIcon() {
+  return (
+    <View style={styles.stabilityIcon}>
+      <View style={[styles.stabilityPart, { left: 2, top: 0.2, width: 16.28, height: 23.71 }]}>
+        <LocalSvgAsset assetModule={ICON_STABILITY_BODY} width={16.28} height={23.71} />
+      </View>
+      <View style={[styles.stabilityPart, { left: 8.86, top: 2.92, width: 4.689, height: 4.689 }]}>
+        <LocalSvgAsset assetModule={ICON_STABILITY_HEAD} width={4.689} height={4.689} />
+      </View>
+      <View style={[styles.stabilityPart, { left: 19.05, top: 0.48, width: 2.954, height: 2.954 }]}>
+        <LocalSvgAsset assetModule={ICON_STABILITY_BALL} width={2.954} height={2.954} />
+      </View>
+    </View>
+  )
+}
+
+function MetricIcon({ metric }: { metric: PhysicalMetricKey }) {
+  if (metric === 'stability') return <StabilityMetricIcon />
+  // Reaction glyph is taller than wide in Figma (18.2 × 24).
+  if (metric === 'reactions') {
+    return (
+      <View style={styles.stabilityIcon}>
+        <LocalSvgAsset assetModule={ICON_METRIC.reactions} width={18.2} height={24} />
+      </View>
+    )
+  }
+  return <LocalSvgAsset assetModule={ICON_METRIC[metric]} width={24} height={24} />
+}
+const ICON_PRIORITY: Record<'elbow' | 'knee' | 'feet', ReturnType<typeof require>> = {
+  elbow: require('../../../assets/aicoach/analysis/priority-elbow.svg'),
+  knee: require('../../../assets/aicoach/analysis/priority-knee.svg'),
+  feet: require('../../../assets/aicoach/analysis/priority-foot.svg'),
+}
 
 type Props = {
   videoUri: string | null
@@ -60,17 +107,20 @@ type Props = {
   weaknesses?: string[] | null
   metrics: PhysicalMetricsValues | null
   detail: Detail
-  onBiggestMistakes: () => void
+  /** Open the Smart 3D joint detail for this Priority Fixes pill. */
+  onPriorityJoint: (id: PriorityPartId) => void
   onSmart3d: () => void
   onScrubbingChange?: (scrubbing: boolean) => void
+  /** Shown under the "Your analysis" title, e.g. the shot name. */
+  shotLabel?: string | null
+  /**
+   * When false, hide the inner hub pills + title (host already shows Your analysis chrome).
+   * Used by Activities so Overview | View Angles | Action Plan stay the only top tabs.
+   */
+  showHubChrome?: boolean
+  /** Optional Progress CTA (Figma activities overview). */
+  onProgress?: () => void
 }
-
-const RING = 120
-const RING_STROKE = 8
-const GLOW = 8
-/** Radius stays inside the svg once the glow stroke is added, so the dial is not clipped. */
-const RING_R = RING / 2 - RING_STROKE / 2 - GLOW - 2
-const RING_C = 2 * Math.PI * RING_R
 
 const JOINT_DOTS = [
   'LEFT_SHOULDER',
@@ -125,12 +175,40 @@ function normBox(b: number[] | null | undefined): [number, number, number, numbe
   return [x1, y1, x2, y2]
 }
 
-const METRIC_ICON: Record<PhysicalMetricKey, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
-  stability: { icon: 'cube-outline', color: '#3D7CFF' },
-  power: { icon: 'flash', color: '#FFD400' },
-  agility: { icon: 'flame', color: '#FF8A00' },
-  reactions: { icon: 'aperture', color: '#7B61FF' },
-  acceleration: { icon: 'walk', color: '#FF4D6A' },
+/** Figma dial is ~74px; keep a little room for the outer glow. */
+const RING = 74
+const RING_STROKE = 6
+const GLOW = 4
+const RING_R = RING / 2 - RING_STROKE / 2 - GLOW - 1
+const RING_C = 2 * Math.PI * RING_R
+
+type PriorityPart = { id: PriorityPartId; labelKey: string; tone: 'high' | 'adjust' }
+const PRIORITY_PARTS: PriorityPart[] = [
+  { id: 'elbow', labelKey: 'analysis.smart3dElbow', tone: 'high' },
+  { id: 'knee', labelKey: 'analysis.smart3dKnee', tone: 'high' },
+  { id: 'feet', labelKey: 'analysis.priorityFoot', tone: 'adjust' },
+]
+
+/** Progress CTA: three rising bars in #00B8FF (Figma 6283:51673). */
+function ProgressBarsIcon({ size = 24 }: { size?: number }) {
+  const barW = Math.max(3, Math.round(size * 0.18))
+  const gap = Math.max(2, Math.round(size * 0.12))
+  const heights = [0.38, 0.62, 0.88]
+  return (
+    <View style={{ width: size, height: size, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap }}>
+      {heights.map((h, i) => (
+        <View
+          key={i}
+          style={{
+            width: barW,
+            height: Math.round(size * h),
+            borderRadius: 1,
+            backgroundColor: ACCENT,
+          }}
+        />
+      ))}
+    </View>
+  )
 }
 
 function ratingTone(rating: string | null, score: number | null) {
@@ -447,11 +525,15 @@ export function AnalysisOverview({
   strengths = null,
   weaknesses = null,
   metrics,
-  detail,
-  onBiggestMistakes,
+  detail: _detail,
+  onPriorityJoint,
   onSmart3d,
   onScrubbingChange,
+  shotLabel = null,
+  showHubChrome = true,
+  onProgress,
 }: Props) {
+  void _detail
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const videoRef = useRef<Video>(null)
@@ -482,37 +564,6 @@ export function AnalysisOverview({
   const progress = score == null ? 0 : Math.max(0, Math.min(1, score / 100))
   const shownMs = scrubMs ?? position
   const playProgress = duration > 0 ? Math.max(0, Math.min(1, shownMs / duration)) : 0
-  const frameH = frameW > 0 ? Math.round(frameW * (9 / 16)) : 180
-  const pose = useMemo(() => {
-    if (!poseFrames?.length || duration <= 0) return null
-    const last = poseFrames.reduce((max, row) => Math.max(max, row.frame), 0)
-    const total = totalFrames && totalFrames > 1 ? totalFrames : last + 1
-    const idx = Math.round((shownMs / duration) * Math.max(0, total - 1))
-    return nearestPoseByFrame(poseFrames, idx)
-  }, [poseFrames, totalFrames, shownMs, duration])
-  const angleEmaRef = useRef<Record<string, number>>({})
-  const [jointAngles, setJointAngles] = useState<ComputedJointAngle[]>([])
-
-  useEffect(() => {
-    if (!pose || !natural || frameW <= 0) {
-      setJointAngles([])
-      return
-    }
-    const getPx = (name: string) => {
-      const p = pose.landmarks[name]
-      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null
-      return fitPx(p.x, p.y, frameW, frameH, natural.w, natural.h, 'cover')
-    }
-    const raw = computeOverlayJointAngles(getPx, pose.landmarks)
-    setJointAngles(
-      raw.map((j) => {
-        const smoothed = emaAngle(angleEmaRef.current[j.id], j.deg)
-        if (smoothed != null) angleEmaRef.current[j.id] = smoothed
-        return { ...j, deg: smoothed ?? j.deg }
-      })
-    )
-  }, [pose, natural, frameW, frameH])
-
   function onStatus(status: AVPlaybackStatus) {
     if (!status.isLoaded) return
     anchor.current = {
@@ -634,8 +685,22 @@ export function AnalysisOverview({
     return Gesture.Exclusive(pan, tap)
   }, [scrubStart, scrubMove, scrubEnd])
 
+  // Overview stage is a wide 16:9 card — not the tall rail+stage View Angles layout.
+  const overviewH = frameW > 0 ? Math.round(frameW * (9 / 16)) : 200
+
   return (
     <View style={styles.page}>
+      {showHubChrome && shotLabel ? (
+        <View style={styles.titleRow}>
+          <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.semiBoldFont }]}>
+            {t('analysis.yourAnalysis')}
+          </Text>
+          <Text allowFontScaling={false} numberOfLines={1} style={[styles.subtitle, { fontFamily: theme.regularFont }]}>
+            {shotLabel}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.frameGlow}>
         <View style={styles.frameBorder}>
           <View
@@ -650,7 +715,7 @@ export function AnalysisOverview({
                 key={videoKey}
                 ref={videoRef}
                 source={{ uri: videoUri }}
-                style={{ width: frameW, height: frameH }}
+                style={{ width: frameW, height: overviewH }}
                 resizeMode={ResizeMode.COVER}
                 onPlaybackStatusUpdate={onStatus}
                 progressUpdateIntervalMillis={STATUS_INTERVAL_MS}
@@ -660,11 +725,8 @@ export function AnalysisOverview({
                 }}
               />
             ) : (
-              <View style={{ width: '100%', height: frameH, backgroundColor: '#000' }} />
+              <View style={{ width: '100%', height: overviewH, backgroundColor: '#000' }} />
             )}
-            {pose && natural && frameW > 0 ? (
-              <PoseSvg pose={pose} angles={jointAngles} width={frameW} height={frameH} natural={natural} fit="cover" />
-            ) : null}
             <Pressable
               style={styles.fullscreen}
               onPress={() => setFullscreen(true)}
@@ -679,22 +741,22 @@ export function AnalysisOverview({
                 <Ionicons name={playing ? 'pause' : 'play'} size={16} color="#FFFFFF" style={playing ? undefined : styles.playIcon} />
               </Pressable>
               <GestureDetector gesture={trackGesture}>
-              <View
-                style={styles.trackHit}
-                onLayout={(event) => setTrackW(event.nativeEvent.layout.width)}
-                accessibilityRole="adjustable"
-                testID="analysis-video-track"
-              >
-                <View style={styles.track}>
-                  <LinearGradient
-                    colors={['#7AECFF', '#3D7CFF']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={[styles.trackFill, { width: `${playProgress * 100}%` }]}
-                  />
-                  <View style={[styles.thumb, { left: `${playProgress * 100}%` }]} />
+                <View
+                  style={styles.trackHit}
+                  onLayout={(event) => setTrackW(event.nativeEvent.layout.width)}
+                  accessibilityRole="adjustable"
+                  testID="analysis-video-track"
+                >
+                  <View style={styles.track}>
+                    <LinearGradient
+                      colors={['#7AECFF', '#3D7CFF']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.trackFill, { width: `${playProgress * 100}%` }]}
+                    />
+                    <View style={[styles.thumb, { left: `${playProgress * 100}%` }]} />
+                  </View>
                 </View>
-              </View>
               </GestureDetector>
               <Text allowFontScaling={false} style={[styles.time, { fontFamily: theme.mediumFont }]}>
                 {clock(shownMs)}/{clock(duration)}
@@ -727,7 +789,7 @@ export function AnalysisOverview({
                 cy={RING / 2}
                 r={RING_R}
                 stroke="url(#analysisScore)"
-                strokeWidth={RING_STROKE + 8}
+                strokeWidth={RING_STROKE + 6}
                 strokeOpacity={0.28}
                 strokeLinecap="round"
                 strokeDasharray={`${RING_C} ${RING_C}`}
@@ -751,15 +813,16 @@ export function AnalysisOverview({
             <Text
               allowFontScaling={false}
               testID={TEST_IDS.techniqueScore}
-              style={[styles.scoreNum, { fontFamily: theme.semiBoldFont }]}
+              style={[styles.scoreNum, { fontFamily: theme.mediumFont }]}
             >
               {score ?? '—'}
             </Text>
-            <Text allowFontScaling={false} style={[styles.scoreDenom, { fontFamily: theme.mediumFont }]}>
+            <Text allowFontScaling={false} style={[styles.scoreDenom, { fontFamily: theme.regularFont }]}>
               /100
             </Text>
           </View>
         </View>
+        <View style={styles.scoreDivider} />
         <DialCaption
           toneLabel={toneLabel}
           toneColor={toneColor}
@@ -772,54 +835,86 @@ export function AnalysisOverview({
 
       <View style={styles.metricRow}>
         {PHYSICAL_METRIC_KEYS.map((key) => {
-          const spec = METRIC_ICON[key]
           const value = metrics?.[key]
           return (
             <View key={key} style={styles.metric}>
-                <Ionicons name={spec.icon} size={24} color={spec.color} />
-                <Text allowFontScaling={false} style={[styles.metricValue, { fontFamily: theme.mediumFont }]}>
-                  {value ?? '—'}
-                </Text>
-                <Text allowFontScaling={false} numberOfLines={1} style={[styles.metricLabel, { fontFamily: theme.regularFont }]}>
-                  {t(`technique.physicalMetric${key[0]!.toUpperCase()}${key.slice(1)}`)}
-                </Text>
+              <MetricIcon metric={key} />
+              <Text allowFontScaling={false} style={[styles.metricValue, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}>
+                {value ?? '—'}
+              </Text>
+              <Text allowFontScaling={false} numberOfLines={1} style={[styles.metricLabel, { fontFamily: theme.regularFont }]}>
+                {t(`technique.physicalMetric${key[0]!.toUpperCase()}${key.slice(1)}`)}
+              </Text>
             </View>
           )
         })}
       </View>
 
-      <Pressable
-        onPress={onBiggestMistakes}
-        accessibilityRole="button"
-        style={styles.btnRadius}
-        testID="overview-biggest-mistakes"
-      >
-        <View style={styles.primaryBtn}>
-          <PrimaryFill radius={UI.btnRadius} />
-          <Text allowFontScaling={false} style={[styles.primaryLabel, { fontFamily: theme.semiBoldFont }]}>
-            {t('analysis.viewBiggestMistakes')}
+      <View style={styles.priorityBlock} testID="overview-biggest-mistakes">
+        <View style={styles.priorityHead}>
+          <Text allowFontScaling={false} style={[styles.priorityHeadLabel, { fontFamily: theme.mediumFont }]}>
+            {t('analysis.hubPriorityFixes')}
           </Text>
-          <LocalSvgAsset assetModule={ICON_ARROW_RIGHT} width={32} height={32} />
         </View>
-      </Pressable>
+        <View style={styles.priorityPills}>
+          {PRIORITY_PARTS.map((part) => {
+            const high = part.tone === 'high'
+            return (
+              <Pressable
+                key={part.id}
+                accessibilityRole="button"
+                accessibilityLabel={t(part.labelKey)}
+                testID={`overview-priority-${part.id}`}
+                onPress={() => onPriorityJoint(part.id)}
+                style={[
+                  styles.priorityJoint,
+                  high ? styles.priorityJointHigh : styles.priorityJointAdjust,
+                ]}
+              >
+                <LocalSvgAsset assetModule={ICON_PRIORITY[part.id]} width={24} height={24} />
+                <Text
+                  allowFontScaling={false}
+                  numberOfLines={1}
+                  style={[styles.priorityJointLabel, { fontFamily: theme.mediumFont }]}
+                >
+                  {t(part.labelKey)}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
+      </View>
 
-      <Pressable onPress={onSmart3d} accessibilityRole="button" style={styles.smart3dBtn}>
-        <View style={styles.smart3dInner}>
-          {/* Design: G2-style navy → blue fill, 2px #00B8FF rim, inset glow (overlay so Android draws it above the fill). */}
-          <LinearGradient
-            colors={['#041641', '#0022FF']}
-            locations={UI.gradientLocations}
-            start={UI.gradientStart}
-            end={UI.gradientEnd}
-            style={StyleSheet.absoluteFill}
-          />
-          <View pointerEvents="none" style={styles.smart3dInset} />
-          <LocalSvgAsset assetModule={ICON_SMART_3D} width={32} height={32} />
-          <Text allowFontScaling={false} style={[styles.smart3dLabel, { fontFamily: theme.mediumFont }]}>
-            {t('analysis.smart3d')}
-          </Text>
-        </View>
-      </Pressable>
+      <View style={styles.ctaRow}>
+        {onProgress ? (
+          <Pressable onPress={onProgress} accessibilityRole="button" style={styles.progressBtn} testID="overview-progress">
+            <View pointerEvents="none" style={styles.progressInset} />
+            <ProgressBarsIcon size={24} />
+            <Text allowFontScaling={false} style={[styles.progressLabel, { fontFamily: theme.semiBoldFont }]}>
+              {t('analysis.progress')}
+            </Text>
+          </Pressable>
+        ) : null}
+        <Pressable onPress={onSmart3d} accessibilityRole="button" style={styles.smart3dBtn}>
+          <View style={styles.smart3dInner}>
+            <LinearGradient
+              colors={['#0048FF', '#07256D']}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View pointerEvents="none" style={styles.smart3dInset} />
+            <LocalSvgAsset assetModule={ICON_SMART_3D} width={24} height={24} />
+            <Text
+              allowFontScaling={false}
+              numberOfLines={1}
+              style={[styles.smart3dLabel, { fontFamily: theme.mediumFont }]}
+            >
+              {t('analysis.smart3d')}
+            </Text>
+          </View>
+        </Pressable>
+      </View>
       <AnalysisFullscreen
         visible={fullscreen}
         uri={videoUri}
@@ -835,10 +930,71 @@ export function AnalysisOverview({
 }
 
 const styles = StyleSheet.create({
-  page: { alignSelf: 'stretch', gap: 16 },
+  page: { alignSelf: 'stretch', gap: 12 },
+  pillTrack: { marginBottom: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  title: { color: '#FFFFFF', fontSize: 18 },
+  subtitle: { flex: 1, color: 'rgba(255,255,255,0.6)', fontSize: 13 },
+  stageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  rail: { width: 90, gap: 6 },
+  railBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    backgroundColor: CARD_BG,
+    paddingHorizontal: 6,
+  },
+  railBtnActive: { borderColor: ACCENT, backgroundColor: '#00206A' },
+  railLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 13 },
+  railLabelActive: { color: '#FFFFFF' },
+  railDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(0,184,255,0.45)' },
+  railDotActive: { backgroundColor: ACCENT },
+  jointCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 16,
+    backgroundColor: CARD_BG,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  jointCardText: { flex: 1, gap: 2 },
+  jointName: { color: 'rgba(255,255,255,0.75)', fontSize: 13 },
+  jointAngle: { color: '#FFFFFF', fontSize: 24 },
+  priorityPill: {
+    borderRadius: 999,
+    backgroundColor: 'rgba(229,72,43,0.18)',
+    borderWidth: 1,
+    borderColor: PRIORITY_RED,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  priorityLabel: { color: PRIORITY_RED, fontSize: 12 },
+  timeline: { gap: 8 },
+  timelineTitle: { color: '#FFFFFF', fontSize: 16 },
+  phaseRow: { flexDirection: 'row', gap: 6 },
+  phaseBtn: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    backgroundColor: CARD_BG,
+    paddingHorizontal: 4,
+  },
+  phaseBtnActive: { borderColor: ACCENT },
+  phaseLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 11, textAlign: 'center' },
+  phaseLabelActive: { color: ACCENT },
   /** No outer glow on the video card (design); only the gradient border remains. */
   frameGlow: {
-    alignSelf: 'stretch',
+    flex: 1,
     borderRadius: 19,
   },
   frameBorder: {
@@ -925,8 +1081,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 4,
   },
-  time: { color: '#FFFFFF', fontSize: 12, minWidth: 68, textAlign: 'right' },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  time: { color: '#FFFFFF', fontSize: 12, minWidth: 60, textAlign: 'right' },
+  /** Figma: dial | divider | caption, gap 20 */
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 20, alignSelf: 'stretch' },
   ringWrap: { width: RING, height: RING },
   ringCenter: {
     ...StyleSheet.absoluteFillObject,
@@ -934,53 +1091,108 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   scoreNum: { color: '#FFFFFF', fontSize: 28, lineHeight: 30 },
-  scoreDenom: { color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: -2 },
-  metricRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  scoreDenom: { color: '#FFFFFF', fontSize: 9, marginTop: -2 },
+  /** Thin vertical rule between dial and copy (Figma 6283:51519). */
+  scoreDivider: {
+    width: 1,
+    height: 50,
+    backgroundColor: 'rgba(134, 167, 210, 0.45)',
+  },
+  metricRow: { flexDirection: 'row', gap: 5, alignSelf: 'stretch' },
+  /** Figma tennis/stability glyph: body + head + ball layers in a 24×24 frame. */
+  stabilityIcon: { width: 24, height: 24, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  stabilityPart: { position: 'absolute' },
   metric: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    minHeight: 84,
-    borderRadius: 16,
-    backgroundColor: '#00195080',
+    minHeight: 83,
+    borderRadius: 10,
+    backgroundColor: '#001435',
+    borderWidth: 1,
+    borderColor: '#0B285A',
     paddingHorizontal: 2,
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
-  /** Design: #FFF, Inter 500 24px, centered. */
-  metricValue: { color: '#FFFFFF', fontSize: 24, textAlign: 'center' },
-  /** Design: #FFF, Inter 400 9px, centered. */
-  metricLabel: { color: '#FFFFFF', fontSize: 9, textAlign: 'center' },
-  btnRadius: { borderRadius: UI.btnRadius },
-  primaryBtn: {
-    height: UI.buttonHeight,
-    borderRadius: UI.btnRadius,
-    overflow: 'hidden',
-    paddingHorizontal: UI.btnPaddingX,
+  metricValue: { color: '#FFFFFF', fontSize: 20, textAlign: 'center', letterSpacing: -0.4 },
+  metricLabel: { color: '#FFFFFF', fontSize: 9, textAlign: 'center', letterSpacing: -0.18 },
+  /** Figma: rgba(7,37,109,0.25) + 2px #0235B6, radius 20 */
+  priorityBlock: {
+    alignSelf: 'stretch',
+    borderRadius: 20,
+    backgroundColor: 'rgba(7, 37, 109, 0.25)',
+    borderWidth: 2,
+    borderColor: '#0235B6',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  priorityHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  priorityHeadLabel: { flex: 1, color: '#FFFFFF', fontSize: 16 },
+  priorityPills: { flexDirection: 'row', alignItems: 'stretch', gap: 5, alignSelf: 'stretch' },
+  priorityJoint: {
+    flex: 1,
+    height: 40,
+    borderRadius: 15,
+    borderWidth: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+    minWidth: 0,
+  },
+  priorityJointHigh: {
+    backgroundColor: 'rgba(255, 0, 0, 0.2)',
+    borderColor: 'rgba(255, 0, 0, 0.5)',
+  },
+  priorityJointAdjust: {
+    backgroundColor: 'rgba(255, 128, 0, 0.2)',
+    borderColor: 'rgba(255, 128, 0, 0.5)',
+  },
+  priorityJointLabel: { color: '#FFFFFF', fontSize: 13, flexShrink: 1 },
+  /** Progress hugs content; Smart 3D takes the rest (Figma 6283:51589). */
+  ctaRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10, alignSelf: 'stretch' },
+  progressBtn: {
+    height: 60,
+    borderRadius: 100,
+    borderWidth: 2,
+    borderColor: '#0048FF',
+    backgroundColor: '#030A17',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+    paddingHorizontal: 25,
+    overflow: 'hidden',
   },
-  primaryLabel: { color: UI.btnPrimaryText, fontSize: 18 },
-  /** Design: #00B8FF, Inter 500 18px. */
-  smart3dLabel: { color: '#00B8FF', fontSize: 18, textAlign: 'center' },
-  /** Smart 3D View: radius 20, 2px #00B8FF border, outer glow `0 0 15px rgba(0,72,255,0.25)`. */
+  progressInset: {
+    ...StyleSheet.absoluteFillObject,
+    boxShadow: '0px 0px 20px 0px #0048FF inset',
+  },
+  progressLabel: { color: '#86A7D2', fontSize: 16 },
   smart3dBtn: {
-    borderRadius: UI.btnRadius,
-    boxShadow: '0px 0px 15px 0px rgba(0, 72, 255, 0.25)',
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 100,
+    overflow: 'hidden',
   },
   smart3dInner: {
-    height: UI.buttonHeight,
-    borderRadius: UI.btnRadius,
-    borderWidth: 2,
-    borderColor: '#00B8FF',
+    height: 60,
+    borderRadius: 100,
     overflow: 'hidden',
-    paddingHorizontal: UI.btnPaddingX,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+  },
+  smart3dLabel: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    textAlign: 'center',
+    flexShrink: 1,
   },
   smart3dInset: {
     ...StyleSheet.absoluteFillObject,

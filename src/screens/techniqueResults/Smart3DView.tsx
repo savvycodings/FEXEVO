@@ -17,24 +17,43 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
+import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Circle, Line } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
+import { LocalSvgAsset } from '../../components/LocalSvgAsset'
+import { GlowButton, SELECTED_GLOW, UI } from '../../components/ui'
 import { useHologram, type HologramKeypoints, type HologramOrbitFrame } from '../../lib/hologramJob'
 import { cacheOrbitVideo } from '../../lib/orbitCache'
 import { orbitKeypointsAt } from '../../lib/orbitKeypoints'
 import { useContactJoints, type ContactJoint, type JointReading } from '../../lib/jointsApi'
-import { SELECTED_GLOW, UI } from '../../components/ui'
 import { kineticChainTiming } from '../../lib/kineticChain'
 import { poseAngle } from '../../lib/poseJointAngles'
 import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
 import { JointDetailView } from './JointDetailView'
-import { JOINT_ICON, type BodyPartId } from './jointIcons'
+import { KineticChainTimingView } from './KineticChainTiming'
+import { PlayableClip } from './PlayableClip'
+import { BodyPartIcon, BodyPartRail, BODY_RAIL_GAP, BODY_RAIL_W, type BodyPartId } from './BodyPartRail'
 import { dominantSide } from './movementTimeline'
 import { orbitFraction, type OrbitPreset } from './orbitPresets'
 
+const ICON_YOUR_SHOT = require('../../../assets/aicoach/analysis/shot-vs-ideal/your-shot.svg')
+const ICON_IDEAL = require('../../../assets/aicoach/analysis/shot-vs-ideal/ideal-form.svg')
+
+/** Which orbit video drives the stage. */
 type Layer = 'player' | 'pro' | 'overlay'
+/** What the layer pills show; `compare` is the side-by-side view and has no video source of its own. */
+type UiLayer = Layer | 'compare'
+type Mode = '3d' | 'kinetic'
 type BodyPart = BodyPartId
+
+/** Ideal Form green, shared with the kinetic chain legend. */
+const IDEAL_GREEN = '#3DDC97'
+const RAIL_W = BODY_RAIL_W
+const RAIL_GAP = BODY_RAIL_GAP
+const HIGH = '#E5482B'
+const MEDIUM = '#FF8000'
+type PartSeverity = 'high' | 'medium' | null
 
 type Props = {
   /** Saved analysis whose ball-contact hologram replaces the stock figure once it is built. */
@@ -45,7 +64,31 @@ type Props = {
   fps?: number | null
   /** Camera the shot was filmed from, so Front and Side seek the matching side of the orbit. */
   viewId?: string | null
+  /** Coach technical-error lines — same issue coloring as View Angles. */
+  errors?: string[]
+  /** Compare → Drill exercises CTA. */
+  onDrills?: () => void
+  /**
+   * Open directly on this body part (Priority Fixes / Action Plan).
+   * When it maps to a contact joint, Joint Detail shows immediately; back leaves Smart 3D.
+   */
+  initialPart?: BodyPart | null
   onClose: () => void
+}
+
+const COMPARE_YOU = 'rgba(0, 72, 255, 0.5)'
+const COMPARE_IDEAL = 'rgba(0, 238, 212, 0.5)'
+const GOOD = '#11DF97'
+
+const FIX_TITLE: Partial<Record<BodyPart, string>> = {
+  elbow: 'analysis.mistakeElbow',
+  wrist: 'analysis.mistakeWrist',
+  shoulder: 'analysis.viewAnglesPage.reading.shoulder',
+  torso: 'analysis.mistakeTorso',
+  knee: 'analysis.mistakeKnee',
+  racket: 'analysis.mistakeRacket',
+  feet: 'analysis.mistakeFoot',
+  head: 'analysis.viewAnglesPage.reading.head',
 }
 
 /** Body parts that open a joint close-up, and the joint they measure. */
@@ -58,23 +101,42 @@ const DETAIL_JOINT: Partial<Record<BodyPart, ContactJoint>> = {
   racket: 'wrist',
 }
 
-/** The "Select a body part" grid, row by row, as in the Smart View 3D design. */
-const PART_ROWS: { id: BodyPart; key: string }[][] = [
-  [
-    { id: 'head', key: 'analysis.smart3dHead' },
-    { id: 'shoulder', key: 'analysis.smart3dShoulder' },
-    { id: 'elbow', key: 'analysis.smart3dElbow' },
-  ],
-  [
-    { id: 'wrist', key: 'analysis.smart3dWrist' },
-    { id: 'torso', key: 'analysis.smart3dTorso' },
-    { id: 'knee', key: 'analysis.smart3dKnee' },
-  ],
-  [
-    { id: 'feet', key: 'analysis.smart3dFeet' },
-    { id: 'racket', key: 'analysis.smart3dRacket' },
-  ],
-]
+/** Same order as View Angles (Figma 6266:55786). */
+const PART_LIST: BodyPart[] = ['head', 'shoulder', 'elbow', 'wrist', 'torso', 'knee', 'feet', 'racket']
+const SERVED: readonly ContactJoint[] = ['shoulder', 'elbow', 'wrist', 'torso', 'knee']
+const PART_ERROR_WORDS: Record<BodyPart, string[]> = {
+  head: ['head', 'cabeza'],
+  shoulder: ['shoulder', 'hombro'],
+  elbow: ['elbow', 'codo'],
+  wrist: ['wrist', 'muñeca'],
+  torso: ['torso', 'rotation', 'rotación', 'hip', 'cadera'],
+  knee: ['knee', 'rodilla'],
+  feet: ['foot', 'feet', 'pie', 'base'],
+  racket: ['racket', 'raqueta', 'pala', 'face'],
+}
+
+function partSeverity(
+  reading: JointReading | undefined,
+  part: BodyPart,
+  errors: string[]
+): PartSeverity {
+  if (reading?.status === 'bad') return 'high'
+  if (reading?.status === 'warn') return 'medium'
+  const delta = reading?.deltaDeg
+  if (delta != null && Number.isFinite(delta)) {
+    const a = Math.abs(delta)
+    if (a >= 15) return 'high'
+    if (a > 5) return 'medium'
+  }
+  if (PART_ERROR_WORDS[part].some((w) => errors.some((e) => e.toLowerCase().includes(w)))) return 'high'
+  return null
+}
+
+function severityColor(sev: PartSeverity): string | null {
+  if (sev === 'high') return HIGH
+  if (sev === 'medium') return MEDIUM
+  return null
+}
 
 /** Markers always drawn on the hologram, as in the design. */
 const BASE_MARKERS = [
@@ -133,7 +195,7 @@ function JointMarkers({
   h,
   lit,
   video,
-  color = '#FF8A3D',
+  color = IDEAL_GREEN,
   full = false,
 }: {
   keypoints: HologramKeypoints
@@ -277,16 +339,82 @@ function OverlayProOrbit({
   )
 }
 
-export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = null, viewId = null, onClose }: Props) {
+/** Side-by-side Compare card — header + playable orbit (Figma 6196:105249). */
+function CompareCard({
+  video,
+  image,
+  label,
+  accent,
+  headerBg,
+  icon,
+  testID,
+  emptyText,
+  fontFamily,
+}: {
+  video: string | null
+  image: string | null
+  label: string
+  accent: string
+  headerBg: string
+  icon: number
+  testID: string
+  emptyText: string
+  fontFamily?: string
+}) {
+  return (
+    <View style={[styles.compareCard, { borderColor: accent }]} testID={testID}>
+      <View style={[styles.compareCardHead, { backgroundColor: headerBg, borderBottomColor: accent }]}>
+        <LocalSvgAsset assetModule={icon} width={24} height={24} />
+        <Text allowFontScaling={false} numberOfLines={1} style={[styles.compareCardTitle, { fontFamily }]}>
+          {label}
+        </Text>
+      </View>
+      <View style={styles.compareCardBody}>
+        {video || image ? (
+          video ? (
+            <PlayableClip uri={video} testID={`${testID}-clip`} accent="transparent" />
+          ) : (
+            <Image source={{ uri: image! }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+          )
+        ) : (
+          <View style={styles.compareEmpty}>
+            <Text allowFontScaling={false} style={[styles.compareEmptyText, { fontFamily }]}>
+              {emptyText}
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  )
+}
+
+export function Smart3DView({
+  analysisId,
+  poseFrames,
+  impactFrame = null,
+  fps = null,
+  viewId = null,
+  errors = [],
+  onDrills,
+  initialPart = null,
+  onClose,
+}: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
-  const [layer, setLayer] = useState<Layer>('player')
-  const [selected, setSelected] = useState<BodyPart | null>(null)
+  const [uiLayer, setUiLayer] = useState<UiLayer>('player')
+  const [mode, setMode] = useState<Mode>('3d')
+  // Compare has no clip of its own; the stage keeps the player orbit loaded behind it.
+  const layer: Layer = uiLayer === 'compare' ? 'player' : uiLayer
+  const isCompare = uiLayer === 'compare'
+  const [selected, setSelected] = useState<BodyPart | null>(initialPart)
   const hologram = useHologram(analysisId)
   const [jointsReload, setJointsReload] = useState(0)
   const contactJoints = useContactJoints(analysisId, jointsReload)
-  const [detail, setDetail] = useState<ContactJoint | null>(null)
+  const entryJoint = initialPart ? DETAIL_JOINT[initialPart] ?? null : null
+  /** Priority / Action Plan deep-link: back from joint detail leaves Smart 3D entirely. */
+  const [detailFromEntry] = useState(Boolean(entryJoint))
+  const [detail, setDetail] = useState<ContactJoint | null>(entryJoint)
   const timing = useMemo(
     () => (poseFrames?.length ? kineticChainTiming(poseFrames, impactFrame, fps, dominantSide(poseFrames)) : null),
     [poseFrames, impactFrame, fps]
@@ -323,13 +451,58 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
   const clipWidth = naturalClip?.w || metaWidth
   const clipHeight = naturalClip?.h || metaHeight
   const overlayFraction = orbitFraction(viewPreset, viewId)
+  /** Orbit is shown only after its file is on the phone and the player has painted a frame. */
+  const reveal = Boolean(playbackUri) && orbitReady && !orbitVideoError
   frameCountRef.current = Math.max(2, clipFrameCount ?? 2)
   durationRef.current = clipDurationMs && clipDurationMs > 0 ? clipDurationMs : 4000
-  const stageWidth = Math.max(1, windowWidth - 32)
-  // Square stage: cover-fit crops letterboxed bars (player) or head/feet band (full-bleed pro).
-  const naturalHeight = stageWidth
-  const maxHeight = Math.max(280, windowHeight - (300 + insets.bottom))
-  const stageHeight = Math.min(naturalHeight, maxHeight)
+  // Tall stage right of the body-part rail (Figma 6266:55785) — flex fills leftover height.
+  const stageWidth = Math.max(1, windowWidth - 40 - RAIL_W - RAIL_GAP)
+  const fallbackStageH = Math.max(360, windowHeight - (300 + insets.bottom))
+
+  const severityByPart = useMemo(() => {
+    const map = {} as Record<BodyPart, PartSeverity>
+    for (const id of PART_LIST) {
+      const served = (SERVED as readonly string[]).includes(id)
+        ? contactJoints?.joints[id as ContactJoint]
+        : undefined
+      map[id] = partSeverity(served, id, errors)
+    }
+    return map
+  }, [contactJoints, errors])
+
+  /** Compare tab priority rows — high first, then adjust (Figma 6196:105280 / 105308). */
+  const compareFixes = useMemo(() => {
+    type Fix = {
+      id: BodyPart
+      sev: NonNullable<PartSeverity>
+      you: number | null
+      target: number | null
+      diff: number | null
+    }
+    const rows: Fix[] = []
+    for (const id of PART_LIST) {
+      const sev = severityByPart[id]
+      if (!sev) continue
+      const joint = DETAIL_JOINT[id]
+      const reading = joint ? contactJoints?.joints[joint] : undefined
+      const you = reading?.you ?? null
+      const target =
+        reading?.pro ??
+        (reading?.idealMax != null && reading?.idealMin != null
+          ? (reading.idealMin + reading.idealMax) / 2
+          : reading?.idealMax ?? reading?.idealMin ?? null)
+      const diff =
+        reading?.deltaDeg ?? (you != null && target != null ? you - target : null)
+      rows.push({ id, sev, you, target, diff })
+    }
+    rows.sort((a, b) => {
+      if (a.sev !== b.sev) return a.sev === 'high' ? -1 : 1
+      return Math.abs(b.diff ?? 0) - Math.abs(a.diff ?? 0)
+    })
+    const top = rows.find((r) => r.sev === 'high') ?? rows[0] ?? null
+    const secondary = rows.filter((r) => r !== top).slice(0, 2)
+    return { top, secondary }
+  }, [severityByPart, contactJoints])
 
   useEffect(() => {
     setOrbitIndex(0)
@@ -342,7 +515,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
     if (layer === 'overlay') setViewPreset('view')
   }, [remoteClip, layer])
 
-  // Overlay: snap the blue player orbit to the same View 1/2/3 fraction as the orange pro.
+  // Overlay: snap the player orbit to the same View 1/2/3 fraction as Ideal Form.
   useEffect(() => {
     if (layer !== 'overlay' || !reveal || !playbackUri) return
     const length = durationRef.current
@@ -519,8 +692,6 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
       },
     })
   ).current
-  /** The orbit is shown only after its file is on the phone and the player has painted a frame. */
-  const reveal = Boolean(playbackUri) && orbitReady && !orbitVideoError
   const proFailed = hologram.proStatus === 'failed' || hologram.proStatus === 'unavailable'
   const playerFailed = hologram.ready && hologram.orbitStatus === 'failed' && !hologram.orbitVideo
   const proMissing = layer === 'pro' && hologram.ready && proFailed && !hologram.proOrbitVideo
@@ -538,7 +709,7 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
         ? orbitKeypointsAt(clipFrames, orbitIndex, frameCountRef.current) ?? stillKeys
         : null
   const stageW = stageSize.w || stageWidth
-  const stageH = stageSize.h || stageHeight
+  const stageH = stageSize.h || fallbackStageH
   const placed =
     stageW && stageH
       ? clipWidth && clipHeight
@@ -557,8 +728,13 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
 
   const tabs = [
     { id: 'player' as const, label: t('analysis.smart3dPlayer') },
-    { id: 'pro' as const, label: t('analysis.proReference') },
+    { id: 'pro' as const, label: t('analysis.idealForm') },
+    { id: 'compare' as const, label: t('analysis.smart3dCompare') },
     { id: 'overlay' as const, label: t('analysis.smart3dOverlay') },
+  ]
+  const modeTabs = [
+    { id: '3d' as const, label: t('analysis.threeDMovement') },
+    { id: 'kinetic' as const, label: t('analysis.kineticAnalysis') },
   ]
 
   function pressPart(part: BodyPart) {
@@ -623,7 +799,10 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
           keypoints: hologram.proKeypoints,
         }}
         timing={timing}
-        onClose={() => setDetail(null)}
+        onClose={() => {
+          if (detailFromEntry) onClose()
+          else setDetail(null)
+        }}
       />
     )
   }
@@ -645,19 +824,142 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
           <Ionicons name="chevron-back" size={28} color="#86A7D2" />
         </Pressable>
         <View style={styles.titleCopy}>
-          <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}>
+          <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.mediumFont }]}>
             {t('analysis.smart3dTitle')}
           </Text>
-          <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: theme.regularFont }]}>
+          <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: theme.mediumFont }]}>
             {t('analysis.smart3dSubtitle')}
           </Text>
         </View>
         <View style={styles.back} />
+        <Pressable accessibilityRole="button" testID="smart3d-view-chip" style={styles.viewChip}>
+          <Ionicons name="scan-outline" size={14} color="#FFFFFF" />
+          <Text allowFontScaling={false} numberOfLines={1} style={[styles.viewChipText, { fontFamily: theme.mediumFont }]}>
+            {t('analysis.view3d')}
+          </Text>
+        </Pressable>
       </View>
-      <ResultSectionPill tabs={tabs} value={layer} onChange={setLayer} trackStyle={styles.pill} />
+      <ResultSectionPill tabs={modeTabs} value={mode} onChange={setMode} trackStyle={styles.modePill} />
+      {mode === 'kinetic' ? (
+        <View style={styles.kineticWrap}>
+          <KineticChainTimingView
+            timing={timing}
+            embedded
+            onClose={() => setMode('3d')}
+            onDrills={onDrills}
+          />
+        </View>
+      ) : (
+      <View style={styles.main3d}>
+      <ResultSectionPill tabs={tabs} value={uiLayer} onChange={setUiLayer} trackStyle={styles.layerPill} />
+      {isCompare ? (
+        <ScrollView
+          style={styles.compareScroll}
+          contentContainerStyle={[styles.compareContent, { paddingBottom: 16 + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+          testID="smart3d-compare"
+        >
+          <View style={styles.compareVideos}>
+            <CompareCard
+              video={hologram.orbitVideo}
+              image={hologram.image}
+              label={t('analysis.yourShot')}
+              accent={COMPARE_YOU}
+              headerBg="rgba(0, 72, 255, 0.25)"
+              icon={ICON_YOUR_SHOT}
+              testID="smart3d-compare-you"
+              emptyText={t('analysis.smart3dViewBuilding')}
+              fontFamily={theme.mediumFont}
+            />
+            <CompareCard
+              video={hologram.proOrbitVideo}
+              image={hologram.proImage}
+              label={t('analysis.idealForm')}
+              accent={COMPARE_IDEAL}
+              headerBg="rgba(0, 238, 212, 0.1)"
+              icon={ICON_IDEAL}
+              testID="smart3d-compare-ideal"
+              emptyText={proFailed ? t('analysis.smart3dProMissing') : t('analysis.smart3dViewBuilding')}
+              fontFamily={theme.mediumFont}
+            />
+          </View>
+
+          {compareFixes.top ? (
+            <View style={styles.fixSection}>
+              <View style={styles.fixSectionHead}>
+                <View style={[styles.fixSectionIcon, styles.fixSectionIconHigh]}>
+                  <MaterialCommunityIcons name="target" size={18} color="#FF4D4D" />
+                </View>
+                <Text allowFontScaling={false} style={[styles.fixSectionTitle, { fontFamily: theme.mediumFont }]}>
+                  {t('analysis.topPriority')}
+                </Text>
+                <Text allowFontScaling={false} style={[styles.fixSectionSub, { fontFamily: theme.mediumFont }]}>
+                  {t('analysis.fixFirst')}
+                </Text>
+              </View>
+              <CompareFixRow
+                part={compareFixes.top.id}
+                you={compareFixes.top.you}
+                target={compareFixes.top.target}
+                diff={compareFixes.top.diff}
+                sev="high"
+                badge={3}
+                thumbUri={hologram.image}
+                onPress={() => pressPart(compareFixes.top!.id)}
+              />
+            </View>
+          ) : null}
+
+          {compareFixes.secondary.length ? (
+            <View style={styles.fixSection}>
+              <View style={styles.fixSectionHead}>
+                <View style={[styles.fixSectionIcon, styles.fixSectionIconMed]}>
+                  <MaterialCommunityIcons name="target" size={18} color={MEDIUM} />
+                </View>
+                <Text allowFontScaling={false} style={[styles.fixSectionTitle, { fontFamily: theme.mediumFont }]}>
+                  {t('analysis.secondaryFixes')}
+                </Text>
+                <Text allowFontScaling={false} style={[styles.fixSectionSub, { fontFamily: theme.mediumFont }]}>
+                  {t('analysis.improveNext')}
+                </Text>
+              </View>
+              {compareFixes.secondary.map((fix, i) => (
+                <CompareFixRow
+                  key={fix.id}
+                  part={fix.id}
+                  you={fix.you}
+                  target={fix.target}
+                  diff={fix.diff}
+                  sev="medium"
+                  badge={4 + i}
+                  thumbUri={hologram.image}
+                  onPress={() => pressPart(fix.id)}
+                  divider={i > 0}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          {onDrills ? (
+            <GlowButton
+              label={t('analysis.drillExercises')}
+              onPress={onDrills}
+              testID="smart3d-compare-drills"
+              arrow
+            />
+          ) : null}
+        </ScrollView>
+      ) : (
+      <View style={styles.stageRow}>
+      <BodyPartRail
+        selected={selected}
+        severityByPart={severityByPart}
+        onSelect={pressPart}
+        testIDPrefix="smart3d-part"
+      />
       <View
         collapsable={false}
-        style={[styles.stage, { height: stageHeight }]}
+        style={styles.stage}
         onLayout={(e) => {
           stageWRef.current = e.nativeEvent.layout.width
           setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
@@ -760,7 +1062,18 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
             />
           ) : null}
           {markerKeys && stageSize.w ? (
-            <JointMarkers keypoints={markerKeys} w={stageSize.w} h={stageSize.h} lit={lit} video={placed} />
+            <JointMarkers
+              keypoints={markerKeys}
+              w={stageSize.w}
+              h={stageSize.h}
+              lit={lit}
+              video={placed}
+              color={
+                selected
+                  ? severityColor(severityByPart[selected]) ?? '#7AECFF'
+                  : '#7AECFF'
+              }
+            />
           ) : null}
           {/* Drag-to-orbit only on Player / Pro — Overlay is discrete View 1/2/3. */}
           {reveal && pictureUri && layer !== 'overlay' ? (
@@ -811,64 +1124,119 @@ export function Smart3DView({ analysisId, poseFrames, impactFrame = null, fps = 
           </View>
         ) : null}
       </View>
-      <ScrollView style={styles.partsScroll} contentContainerStyle={{ paddingBottom: 8 + insets.bottom }}>
-      {reveal ? null : (
-        <Text allowFontScaling={false} style={[styles.prompt, { fontFamily: theme.mediumFont }]}>
-          {t('analysis.smart3dSelectPart')}
-        </Text>
-      )}
-      <View style={[styles.parts, reveal && styles.partsAfterOrbit]}>
-        {PART_ROWS.map((row, index) => (
-          <View key={index} style={styles.partRow}>
-            {row.map((item) => {
-              const on = selected === item.id
-              return (
-                <Pressable
-                  key={item.id}
-                  testID={`smart3d-part-${item.id}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                  onPress={() => pressPart(item.id)}
-                  style={[styles.part, on && [styles.partOn, SELECTED_GLOW]]}
-                >
-                  <View style={styles.partBadge}>
-                    <MaterialCommunityIcons name={JOINT_ICON[item.id]} size={18} color={UI.text} />
-                  </View>
-                  <Text
-                    allowFontScaling={false}
-                    numberOfLines={1}
-                    style={[styles.partLabel, { fontFamily: theme.regularFont }]}
-                  >
-                    {t(item.key)}
-                  </Text>
-                </Pressable>
-              )
-            })}
-          </View>
-        ))}
       </View>
-      </ScrollView>
+      )}
+      </View>
+      )}
     </View>
   )
 }
 
+function CompareFixRow({
+  part,
+  you,
+  target,
+  diff,
+  sev,
+  badge,
+  thumbUri,
+  onPress,
+  divider = false,
+}: {
+  part: BodyPart
+  you: number | null
+  target: number | null
+  diff: number | null
+  sev: 'high' | 'medium'
+  badge: number
+  thumbUri: string | null
+  onPress: () => void
+  divider?: boolean
+}) {
+  const { t } = useTranslation()
+  const { theme } = useContext(ThemeContext)
+  const tone = sev === 'high' ? '#E53C3C' : MEDIUM
+  const pillLabel = sev === 'high' ? t('analysis.mistakeHighPriority') : t('analysis.adjustPriority')
+  const titleKey = FIX_TITLE[part] ?? `analysis.viewAnglesPage.joints.${part}`
+  const fmt = (n: number) => `${Math.round(n)}°`
+  const fmtDiff = (n: number) => `${n > 0 ? '+' : ''}${Math.round(n)}°`
+
+  return (
+    <>
+      {divider ? <View style={styles.fixDivider} /> : null}
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        style={styles.fixRow}
+        testID={`smart3d-compare-fix-${part}`}
+      >
+        <View style={styles.fixThumb}>
+          {thumbUri ? (
+            <Image source={{ uri: thumbUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#041641' }]} />
+          )}
+          <View style={[styles.fixBadge, { backgroundColor: tone }]}>
+            <Text allowFontScaling={false} style={[styles.fixBadgeText, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}>
+              {badge}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.fixCopy}>
+          <View style={styles.fixTitleRow}>
+            <BodyPartIcon id={part} size={20} />
+            <Text allowFontScaling={false} numberOfLines={1} style={[styles.fixTitle, { fontFamily: theme.mediumFont }]}>
+              {t(titleKey)}
+            </Text>
+          </View>
+          <View style={styles.fixMetrics}>
+            <Text allowFontScaling={false} style={[styles.fixYou, { color: tone, fontFamily: theme.mediumFont }]}>
+              {you != null ? fmt(you) : '—'}
+            </Text>
+            <View style={styles.fixMeta}>
+              <Text allowFontScaling={false} style={[styles.fixMetaLine, { fontFamily: theme.mediumFont }]}>
+                {t('analysis.viewAnglesPage.target')}
+                <Text style={{ color: GOOD }}>{target != null ? fmt(target) : '—'}</Text>
+              </Text>
+              <Text allowFontScaling={false} style={[styles.fixMetaLine, { fontFamily: theme.mediumFont }]}>
+                {t('analysis.viewAnglesPage.difference')}
+                <Text style={{ color: tone }}>{diff != null ? fmtDiff(diff) : '—'}</Text>
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View style={[styles.fixPill, { borderColor: tone, backgroundColor: sev === 'high' ? 'rgba(255,0,4,0.2)' : 'rgba(255,128,0,0.15)' }]}>
+          <Text allowFontScaling={false} numberOfLines={1} style={[styles.fixPillText, { color: sev === 'high' ? '#FF7676' : MEDIUM, fontFamily: theme.mediumFont }]}>
+            {pillLabel}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#86A7D2" />
+      </Pressable>
+    </>
+  )
+}
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, paddingHorizontal: 16, paddingTop: 4 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  back: { width: 32 },
-  titleCopy: { flex: 1, alignItems: 'center' },
-  title: { color: UI.text, fontSize: 24, textAlign: 'center' },
-  subtitle: { color: UI.accent, fontSize: 14, textAlign: 'center' },
-  pill: { marginBottom: 12 },
+  screen: { flex: 1, paddingHorizontal: 20, paddingTop: 4, paddingBottom: 8 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, position: 'relative' },
+  back: { width: 20, alignItems: 'center', justifyContent: 'center' },
+  titleCopy: { flex: 1, alignItems: 'center', paddingHorizontal: 56 },
+  title: { color: UI.text, fontSize: 22, textAlign: 'center' },
+  subtitle: { color: '#00B8FF', fontSize: 13, textAlign: 'center' },
+  modePill: { marginBottom: 16 },
+  layerPill: { marginBottom: 0 },
+  main3d: { flex: 1, minHeight: 0, gap: 10 },
   stage: {
-    width: '100%',
-    borderRadius: UI.radiusCard,
+    flex: 1,
+    minHeight: 0,
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#5B6CFF',
+    borderColor: '#0066FF',
     backgroundColor: '#020A1C',
     // Must clip: the 9:16 AVPlayerLayer is taller than the stage. overflow:visible on iOS
     // let it paint over the part buttons and steal horizontal drags.
     overflow: 'hidden',
+    boxShadow: 'inset 0px 0px 50px 0px rgba(0, 102, 255, 0.5)',
   },
   stageClip: {
     ...StyleSheet.absoluteFillObject,
@@ -909,7 +1277,6 @@ const styles = StyleSheet.create({
     elevation: 20,
     backgroundColor: 'transparent',
   },
-  partsScroll: { flex: 1 },
   fill: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   preparing: {
     ...StyleSheet.absoluteFillObject,
@@ -953,32 +1320,135 @@ const styles = StyleSheet.create({
     zIndex: 15,
   },
   proMissingLabel: { color: '#BFE6FF', fontSize: 15, lineHeight: 21, textAlign: 'center' },
-  prompt: { color: UI.text, fontSize: 20, marginTop: 14, marginBottom: 12 },
-  parts: { gap: 10 },
-  partsAfterOrbit: { marginTop: 14 },
-  partRow: { flexDirection: 'row', gap: 10 },
-  part: {
-    flex: 1,
-    height: 54,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: 'rgba(47, 107, 255, 0.45)',
-    backgroundColor: '#0A1550',
+  stageRow: { flex: 1, flexDirection: 'row', gap: RAIL_GAP, alignItems: 'stretch', minHeight: 0 },
+  kineticWrap: { flex: 1 },
+  viewChip: {
+    position: 'absolute',
+    right: 0,
+    top: 3,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 2,
+    height: 26,
     paddingHorizontal: 8,
+    borderRadius: 100,
+    overflow: 'hidden',
+    backgroundColor: '#0048FF',
+    boxShadow: 'inset 0px 0px 16px 0px rgba(0, 72, 255, 0.25)',
   },
-  partOn: { borderColor: UI.text, borderWidth: 2, backgroundColor: '#1B2AA8' },
-  partBadge: {
+  viewChipText: { color: '#FFFFFF', fontSize: 9 },
+  compareScroll: { flex: 1, minHeight: 0 },
+  compareContent: { gap: 10 },
+  compareVideos: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
+  compareCard: {
+    flex: 1,
+    minWidth: 0,
+    height: 290,
+    borderRadius: 20,
+    borderWidth: 2,
+    overflow: 'hidden',
+    backgroundColor: '#030A17',
+  },
+  compareCardHead: {
+    height: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 2,
+  },
+  compareCardTitle: { color: '#FFFFFF', fontSize: 13 },
+  compareCardBody: { flex: 1, minHeight: 0, backgroundColor: '#030A17' },
+  compareEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  compareEmptyText: { color: '#BFE6FF', fontSize: 12, lineHeight: 16, textAlign: 'center' },
+  fixSection: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#001950',
+    backgroundColor: '#030A17',
+    overflow: 'hidden',
+    boxShadow: 'inset 0px 0px 20px 0px #0048FF',
+  },
+  fixSectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(7, 37, 109, 0.5)',
+  },
+  fixSectionIcon: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    borderWidth: 1.5,
-    borderColor: UI.text,
-    backgroundColor: UI.accentStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  fixSectionIconHigh: {
+    backgroundColor: 'rgba(255, 0, 0, 0.25)',
+    borderColor: '#FF0000',
+  },
+  fixSectionIconMed: {
+    backgroundColor: 'rgba(255, 128, 0, 0.25)',
+    borderColor: MEDIUM,
+  },
+  fixSectionTitle: { color: '#FFFFFF', fontSize: 16 },
+  fixSectionSub: { flex: 1, color: 'rgba(255,255,255,0.75)', fontSize: 9 },
+  fixRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingLeft: 15,
+    paddingRight: 10,
+    paddingVertical: 10,
+  },
+  fixDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(134,167,210,0.25)',
+    marginLeft: 15,
+  },
+  fixThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#00B8FF',
+    overflow: 'hidden',
+    backgroundColor: '#030A17',
+  },
+  fixBadge: {
+    position: 'absolute',
+    left: 5,
+    top: 5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  partLabel: { color: UI.text, fontSize: 13, flexShrink: 1, flexGrow: 1, textAlign: 'center', letterSpacing: -0.2 },
+  fixBadgeText: { color: '#FFFFFF', fontSize: 9 },
+  fixCopy: { flex: 1, minWidth: 0, gap: 5 },
+  fixTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  fixTitle: { color: '#FFFFFF', fontSize: 16, flexShrink: 1 },
+  fixMetrics: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  fixYou: { fontSize: 32, lineHeight: 36 },
+  fixMeta: { flex: 1, gap: 2 },
+  fixMetaLine: { color: 'rgba(255,255,255,0.75)', fontSize: 11 },
+  fixPill: {
+    height: 24,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: 88,
+  },
+  fixPillText: { fontSize: 11 },
 })

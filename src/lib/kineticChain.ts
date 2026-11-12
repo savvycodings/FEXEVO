@@ -9,7 +9,11 @@ export type SegmentTiming = {
   /** Seconds relative to contact (negative = before). Null when the segment never clearly moved. */
   startS: number | null;
   peakS: number | null;
-  /** Against the proximal-to-distal order: each segment should peak after the one before it. */
+  /** Ideal Form peak (always available — reference kinetic chain). */
+  idealPeakS: number;
+  /** you.peakS − idealPeakS; positive = late. */
+  deltaS: number | null;
+  /** Against Ideal Form peak timing (Figma Your Timing vs Ideal Form). */
   status: ChainStatus | null;
 };
 
@@ -22,14 +26,26 @@ export const CHAIN_ORDER: ChainSegment[] = [
   "racket",
 ];
 
+/**
+ * Ideal Form peak times relative to contact (Figma 6196:105815).
+ * Always shown in the Pro column — these are the reference kinetic chain.
+ */
+export const IDEAL_PEAK_S: Record<ChainSegment, number> = {
+  legs: -0.42,
+  hips: -0.28,
+  torso: -0.18,
+  arm: -0.1,
+  racket: -0.0,
+};
+
+/** Within this of ideal = On Time. */
+const IDEAL_SLACK_S = 0.015;
+
 /** How far before and after contact to look for each segment's burst. */
 const WINDOW_BEFORE_S = 1;
 const WINDOW_AFTER_S = 0.25;
 /** A segment "starts" when its speed first rises past this share of its peak. */
 const START_SHARE = 0.25;
-/** Peaks closer than this count as together, not out of order. */
-const ORDER_SLACK_S = 0.02;
-
 type Pt = { x: number; y: number };
 
 function point(lm: Record<string, LandmarkPoint>, name: string): Pt | null {
@@ -187,23 +203,37 @@ export function kineticChainTiming(
     Math.round(((frame - impact) / rate) * 100) / 100;
   const out: SegmentTiming[] = CHAIN_ORDER.map((id) => {
     const b = burst(series[id], idx, from, to);
+    const idealPeakS = IDEAL_PEAK_S[id];
+    const peakS = b ? rel(b.peak) : null;
+    const deltaS =
+      peakS != null ? Math.round((peakS - idealPeakS) * 100) / 100 : null;
+    let status: ChainStatus | null = null;
+    if (deltaS != null) {
+      if (deltaS > IDEAL_SLACK_S) status = "late";
+      else if (deltaS < -IDEAL_SLACK_S) status = "early";
+      else status = "onTime";
+    }
     return {
       id,
       startS: b ? rel(b.start) : null,
-      peakS: b ? rel(b.peak) : null,
-      status: null,
+      peakS,
+      idealPeakS,
+      deltaS,
+      status,
     };
   });
   if (out.every((s) => s.peakS == null)) return null;
+  return out;
+}
 
-  // Judge each segment against the one before it, so one swap flags one segment. The legs have
-  // nothing before them: they're late when the hips beat them.
-  return out.map((s, i) => {
-    if (s.peakS == null) return s
-    const prev = out[i - 1]?.peakS
-    const next = out[i + 1]?.peakS
-    if (prev != null && s.peakS < prev - ORDER_SLACK_S) return { ...s, status: 'early' }
-    if (i === 0 && next != null && s.peakS > next + ORDER_SLACK_S) return { ...s, status: 'late' }
-    return { ...s, status: 'onTime' }
-  })
+/** Ideal-only rows when pose timing is unavailable — Pro column always has values. */
+export function idealChainTiming(): SegmentTiming[] {
+  return CHAIN_ORDER.map((id) => ({
+    id,
+    startS: null,
+    peakS: null,
+    idealPeakS: IDEAL_PEAK_S[id],
+    deltaS: null,
+    status: null,
+  }));
 }

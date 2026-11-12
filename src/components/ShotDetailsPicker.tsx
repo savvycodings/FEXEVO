@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  LayoutChangeEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -83,7 +84,15 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
   const [exampleAngleId, setExampleAngleId] = useState<CameraAngleId | null>(null)
 
   const contentW = Math.min(winW, 640) - HORIZONTAL_PAD * 2
-  const tileW = (contentW - GRID_GAP) / 2
+  /** Measured grid width — percentage + flexWrap often collapses to one column on Android. */
+  const [gridW, setGridW] = useState(0)
+  const onGridLayout = (e: LayoutChangeEvent) => {
+    const w = Math.floor(e.nativeEvent.layout.width)
+    if (w > 0 && w !== gridW) setGridW(w)
+  }
+  const rowW = gridW > 0 ? gridW : contentW
+  // Floor so two tiles + gap never exceed the row (fractional widths wrap into a single column).
+  const tileW = Math.max(1, Math.floor((rowW - GRID_GAP) / 2))
   const tileH = Math.min(TILE_MAX_H, Math.round(tileW * TILE_ASPECT))
   const angleW = (cols: number) => Math.floor((contentW - ANGLE_GAP * (cols - 1)) / cols) - 1
 
@@ -150,8 +159,7 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
     s.labelLine2Key ? `${t(s.labelKey)} ${t(s.labelLine2Key)}` : t(s.labelKey)
 
   /** Two columns; an odd last tile spans the full width (Serve in the mockup). */
-  const tileWidth = (index: number, count: number) =>
-    count % 2 === 1 && index === count - 1 ? contentW : tileW
+  const isFullWidthTile = (index: number, count: number) => count % 2 === 1 && index === count - 1
 
   return (
     <View style={styles.root}>
@@ -197,19 +205,22 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
             <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: fonts.regular }]}>
               {t('technique.shotPicker.categorySubtitle')}
             </Text>
-            <View style={styles.grid}>
-              {ANALYSIS_CORE_CATEGORIES.map((c, i) => (
-                <ShotTile
-                  key={c.coreGroup}
-                  label={t(c.labelKey)}
-                  selected={c.coreGroup === coreGroup}
-                  width={tileWidth(i, ANALYSIS_CORE_CATEGORIES.length)}
-                  height={tileH}
-                  onPress={() => pickGroup(c.coreGroup)}
-                  fontFamily={fonts.medium}
-                  testID={TEST_IDS.shotCategory(c.coreGroup)}
-                />
-              ))}
+            <View style={styles.grid} onLayout={onGridLayout}>
+              {ANALYSIS_CORE_CATEGORIES.map((c, i) => {
+                const full = isFullWidthTile(i, ANALYSIS_CORE_CATEGORIES.length)
+                return (
+                  <ShotTile
+                    key={c.coreGroup}
+                    label={t(c.labelKey)}
+                    selected={c.coreGroup === coreGroup}
+                    width={full ? rowW : tileW}
+                    height={tileH}
+                    onPress={() => pickGroup(c.coreGroup)}
+                    fontFamily={fonts.medium}
+                    testID={TEST_IDS.shotCategory(c.coreGroup)}
+                  />
+                )
+              })}
             </View>
           </View>
         ) : null}
@@ -222,19 +233,22 @@ export function ShotDetailsPicker({ videoUri, onBack, onDone, initialShot, initi
             <Text allowFontScaling={false} style={[styles.subtitle, { fontFamily: fonts.regular }]}>
               {t('technique.shotPicker.typeSubtitle')}
             </Text>
-            <View style={styles.grid}>
-              {shots.map((s, i) => (
-                <ShotTile
-                  key={s.presetId + s.labelKey}
-                  label={shotLabel(s)}
-                  selected={shot?.labelKey === s.labelKey}
-                  width={tileWidth(i, shots.length)}
-                  height={tileH}
-                  onPress={() => pickShot(s)}
-                  fontFamily={fonts.medium}
-                  testID={TEST_IDS.shotOption(s.presetId)}
-                />
-              ))}
+            <View style={styles.grid} onLayout={onGridLayout}>
+              {shots.map((s, i) => {
+                const full = isFullWidthTile(i, shots.length)
+                return (
+                  <ShotTile
+                    key={s.presetId + s.labelKey}
+                    label={shotLabel(s)}
+                    selected={shot?.labelKey === s.labelKey}
+                    width={full ? rowW : tileW}
+                    height={tileH}
+                    onPress={() => pickShot(s)}
+                    fontFamily={fonts.medium}
+                    testID={TEST_IDS.shotOption(s.presetId)}
+                  />
+                )
+              })}
             </View>
           </View>
         ) : null}
@@ -316,7 +330,12 @@ const styles = StyleSheet.create({
   titleInRow: { flexShrink: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   subtitle: { color: UI.textMuted, fontSize: 15, lineHeight: 21, marginTop: 14, marginBottom: 14 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: GRID_GAP,
+  },
   angleGrid: { gap: ANGLE_GAP, marginTop: 14, marginBottom: 28 },
   angleRow: { flexDirection: 'row', gap: ANGLE_GAP },
 })

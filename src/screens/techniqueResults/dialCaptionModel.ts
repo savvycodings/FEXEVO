@@ -77,7 +77,16 @@ export function buildDialCaption(input: {
   if (!blurbSource && plainWeakness) {
     blurbSource = firstSentence(plainWeakness)
   }
-  // Full first sentence — DialCaption wraps up to 4 lines; don't mid-cut with …
-  const blurb = blurbSource || null
+  // Overview dial body is short (Figma ~1–2 lines). Prefer a clean cut at a word, never "…".
+  const blurb = blurbSource ? softCap(blurbSource, 110) : null
   return { blurb, pearls: [] }
+}
+
+/** Trim to maxLen at a word boundary — no ellipsis character. */
+function softCap(text: string, maxLen: number): string {
+  const t = text.replace(/\s+/g, ' ').trim()
+  if (t.length <= maxLen) return t
+  const slice = t.slice(0, maxLen)
+  const at = slice.lastIndexOf(' ')
+  return (at > 40 ? slice.slice(0, at) : slice).trim()
 }

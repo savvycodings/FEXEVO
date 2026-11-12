@@ -10,9 +10,9 @@ import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
 import { CARD_GLOW, SELECTED_GLOW, UI } from '../../components/ui'
 import type { ContactJoint, JointReading } from '../../lib/jointsApi'
+import { BodyPartIcon } from './BodyPartRail'
 import type { SegmentTiming } from '../../lib/kineticChain'
 import type { HologramKeypoints, HologramOrbitFrame } from '../../lib/hologramJob'
-import { JOINT_ICON } from './jointIcons'
 import { ChainLegend, KineticChainTimingView, TimingCard } from './KineticChainTiming'
 import { orbitFraction, type OrbitPreset } from './orbitPresets'
 
@@ -38,25 +38,31 @@ type Props = {
    * Falls back to the placeholder when the grid cell is not ready yet.
    */
   partImage?: string | null
-  /** Pro hologram, shown beside the player's on the Pro Reference tab. */
+  /** Ideal Form hologram, shown beside the player's on the Ideal Form tab. */
   proHologramImage?: string | null
-  /** Pro close-up for this body part when the orange board was sliced. */
+  /** Ideal Form close-up for this body part when the Ideal Form board was sliced. */
   proPartImage?: string | null
   /** Orbit clips, so View 1 / 2 / 3 seek the turn instead of doing nothing. */
   playerOrbit?: OrbitClip | null
   proOrbit?: OrbitClip | null
   /** Camera the shot was filmed from, so View 2 / 3 land on those sides of the turn. */
   viewId?: string | null
-  /** Open on the same Smart 3D layer the person was looking at (Player / Pro / Overlay). */
+  /** Open on the same Smart 3D layer the person was looking at (Player / Ideal Form / Overlay). */
   initialLayer?: Layer
-  /** Kinetic chain timing from the player's pose, for the Pro Reference tab. */
+  /** Kinetic chain timing from the player's pose, for the Ideal Form tab. */
   timing?: SegmentTiming[] | null
   /** Back to the full-body stage ("3D View" goes there too). */
   onClose: () => void
 }
 
-const YOU = '#FF6B5B'
-const PRO = '#5CE1FF'
+/** Your Shot (Figma blue). */
+const YOU = '#5B6CFF'
+/** Ideal Form (Figma green). */
+const PRO = '#3DDC97'
+/** Off-target values and the degrees called out in a warning. */
+const BAD = '#E5482B'
+/** Selected cell in the part strip. */
+const CELL_ON = '#5CE1FF'
 const GOOD = '#7BE495'
 const DIFF = '#F2B33D'
 /** Stand-in close-up until the joint renders exist. */
@@ -81,7 +87,7 @@ function Highlighted({ text, mark, style }: { text: string; mark: string | null;
   return (
     <Text style={style}>
       {text.slice(0, at)}
-      <Text style={{ color: YOU }}>{mark}</Text>
+      <Text style={{ color: BAD }}>{mark}</Text>
       {text.slice(at + mark.length)}
     </Text>
   )
@@ -246,6 +252,36 @@ function JointStage({
   )
 }
 
+/**
+ * Numbered cells under the stage: Your Shot close-up, Ideal Form close-up, Your Shot hologram,
+ * Ideal Form hologram. Cosmetic — cell 1 is always the selected one; empty cells show the placeholder.
+ */
+function CellStrip({ images }: { images: (string | null | undefined)[] }) {
+  const { theme } = useContext(ThemeContext)
+  return (
+    <View testID="joint-cell-strip" style={styles.strip}>
+      {[0, 1, 2, 3].map((i) => {
+        const uri = images[i]
+        const on = i === 0
+        return (
+          <View key={i} testID={`joint-cell-${i + 1}`} style={[styles.cell, on && styles.cellOn]}>
+            <Image
+              source={uri ? { uri } : PLACEHOLDER}
+              resizeMode="cover"
+              style={[styles.fill, !uri && { opacity: 0.35 }]}
+            />
+            <View style={[styles.cellNum, on && styles.cellNumOn]}>
+              <Text allowFontScaling={false} style={[styles.cellNumText, { fontFamily: theme.mediumFont }]}>
+                {i + 1}
+              </Text>
+            </View>
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
 /** Paused orbit frame. Seeking is what View 1 / 2 / 3 actually do. */
 function HeldOrbit({ uri, fraction, durationMs }: { uri: string; fraction: number; durationMs: number | null }) {
   const ref = useRef<Video>(null)
@@ -282,7 +318,7 @@ function ClipPicture({ clip, fraction }: { clip: OrbitClip | null | undefined; f
 }
 
 /**
- * Joint Pro Reference: side-by-side holographics.
+ * Joint Ideal Form: side-by-side holographics (Your Shot left, Ideal Form right).
  * View 1/2/3 are allowed here (joint only) so both figures share an angle —
  * full-body Smart 3D still keeps Views on Overlay only.
  */
@@ -410,9 +446,11 @@ export function JointDetailView({
   const jointName = t(`analysis.jointName.${joint}`)
   const title = layer === 'pro' ? t('analysis.kineticChain') : t('analysis.jointAngleTitle', { joint: jointName })
   const good = reading?.status === 'good'
-  /** Pro reference exists when the orange library clip is on the phone or the joint has a pro angle. */
+  const highPriority = reading?.status === 'bad'
+  const cells = [partImage ?? hologramImage, proPartImage ?? proHologramImage, hologramImage, proHologramImage]
+  /** Ideal Form exists when its library clip is on the phone or the joint has an ideal angle. */
   const hasProRef = Boolean(proHologramImage || proOrbit?.image || proOrbit?.video || reading?.pro != null)
-  /** No pro to compare against: say so plainly, not as a warning. */
+  /** No Ideal Form to compare against: say so plainly, not as a warning. */
   const tone: 'good' | 'bad' | 'info' = good ? 'good' : reading?.messageKey ? 'bad' : 'info'
   const deg = reading?.deltaDeg != null ? Math.abs(Math.round(reading.deltaDeg)) : null
   const message =
@@ -468,7 +506,11 @@ export function JointDetailView({
 
       <View style={styles.header}>
         <View style={[styles.badge, SELECTED_GLOW]}>
-          <MaterialCommunityIcons name={layer === 'pro' ? 'link-variant' : JOINT_ICON[joint]} size={30} color={UI.text} />
+          {layer === 'pro' ? (
+            <MaterialCommunityIcons name="link-variant" size={30} color={UI.text} />
+          ) : (
+            <BodyPartIcon id={joint} size={30} />
+          )}
         </View>
         <View style={styles.headerText}>
           <Text allowFontScaling={false} numberOfLines={1} style={[styles.title, { fontFamily: theme.regularFont }]}>
@@ -478,6 +520,13 @@ export function JointDetailView({
             {shotLabel ? `${shotLabel} | ` : ''}
             {t('analysis.contactPhase')}
           </Text>
+          {highPriority ? (
+            <View testID="joint-high-priority" style={styles.priority}>
+              <Text allowFontScaling={false} numberOfLines={1} style={[styles.priorityText, { fontFamily: theme.regularFont }]}>
+                {t('analysis.mistakeHighPriority')}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <Pressable testID="joint-view3d" accessibilityRole="button" onPress={onClose} style={[styles.view3d, CARD_GLOW]}>
           <MaterialCommunityIcons name="cube-outline" size={22} color={UI.text} />
@@ -496,6 +545,7 @@ export function JointDetailView({
             viewId={viewId}
             onFullscreen={() => setFullscreen(true)}
           />
+          <CellStrip images={cells} />
           <TimingCard timing={timing} onPress={() => setChainOpen(true)} />
         </>
       ) : (
@@ -530,18 +580,20 @@ export function JointDetailView({
             />
           )}
 
+          <CellStrip images={cells} />
+
           <View testID="joint-metrics" style={[styles.metricCard, CARD_GLOW]}>
             <View style={styles.badgeSmall}>
-              <MaterialCommunityIcons name={JOINT_ICON[joint]} size={26} color={UI.text} />
+              <BodyPartIcon id={joint} size={26} />
             </View>
             <View style={styles.metricCol}>
               <Text allowFontScaling={false} numberOfLines={1} style={[styles.metricLabel, { fontFamily: theme.regularFont }]}>
                 {t('analysis.jointAngleTitle', { joint: jointName })}
               </Text>
-              <Text allowFontScaling={false} style={[styles.metricValue, { color: good ? GOOD : YOU, fontFamily: theme.semiBoldFont }]}>
+              <Text allowFontScaling={false} style={[styles.metricValue, { color: good ? GOOD : BAD, fontFamily: theme.semiBoldFont }]}>
                 {you ?? '—'}
               </Text>
-              <Text allowFontScaling={false} style={[styles.metricSub, { color: good ? GOOD : YOU, fontFamily: theme.regularFont }]}>
+              <Text allowFontScaling={false} style={[styles.metricSub, { color: good ? GOOD : BAD, fontFamily: theme.regularFont }]}>
                 {t('analysis.yourAngle')}
               </Text>
             </View>
@@ -668,6 +720,41 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 },
   title: { color: UI.text, fontSize: 20 },
   subtitle: { color: UI.accent, fontSize: 13, marginTop: 2 },
+  priority: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    borderRadius: UI.radiusPill,
+    borderWidth: 1.5,
+    borderColor: BAD,
+    backgroundColor: 'rgba(229, 72, 43, 0.22)',
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+  },
+  priorityText: { color: '#FF8A70', fontSize: 12 },
+  strip: { flexDirection: 'row', gap: 8 },
+  cell: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#1F3FC0',
+    backgroundColor: '#000814',
+    overflow: 'hidden',
+  },
+  cellOn: { borderColor: CELL_ON },
+  cellNum: {
+    position: 'absolute',
+    left: 4,
+    top: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0, 20, 53, 0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cellNumOn: { backgroundColor: CELL_ON },
+  cellNumText: { color: UI.text, fontSize: 12 },
   view3d: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -701,7 +788,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1.5,
     borderColor: YOU,
-    backgroundColor: 'rgba(40, 6, 10, 0.85)',
+    backgroundColor: 'rgba(8, 12, 48, 0.85)',
     paddingHorizontal: 10,
     paddingVertical: 4,
   },

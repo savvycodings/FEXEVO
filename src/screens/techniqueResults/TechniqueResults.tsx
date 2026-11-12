@@ -13,7 +13,7 @@ type Props = {
   section: ResultSectionId
   onSectionChange: (id: ResultSectionId) => void
   tabs: Tab[]
-  /** Current score view. Owned by the technique screen so analysis state stays put. */
+  /** Overview hub. Owned by the technique screen so analysis state stays put. */
   smartFocus: ReactNode
   score: number | null
   rating: string | null
@@ -26,15 +26,16 @@ type Props = {
   poseFrames: PoseFrameRow[]
   impactFrame: number | null
   onCompare?: () => void
-  /** View Angles: per-joint angles on the clip. Replaced the Pro Reference compare. */
+  /** View Angles tab (Figma 6190:102332). */
   viewAngles?: ReactNode
+  /** Action Plan tab (Figma 6194:103613). */
+  actionPlan?: ReactNode
   /** Smart Focus only: sit the pill on top of the video instead of above it. */
   floatPill?: boolean
 }
 
 /**
- * Results pill and its four pages. Pages stay mounted and only change visibility,
- * so switching tabs does not reload the analysis.
+ * Results pill + pages. Overview | View Angles | Action Plan stay mounted where possible.
  */
 export function TechniqueResults({
   section,
@@ -53,6 +54,7 @@ export function TechniqueResults({
   impactFrame,
   onCompare,
   viewAngles,
+  actionPlan,
   floatPill = false,
 }: Props) {
   const overlay = floatPill && section === 'smartFocus'
@@ -84,6 +86,7 @@ export function TechniqueResults({
         onCompare={onCompare}
       />
       {section === 'viewAngles' ? viewAngles ?? null : null}
+      {section === 'actionPlan' ? actionPlan ?? null : null}
       {overlay ? (
         <View pointerEvents="box-none" style={styles.pillOverlay}>
           {pill}

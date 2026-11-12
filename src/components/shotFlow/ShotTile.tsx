@@ -8,7 +8,8 @@ type Props = {
   /** Camera tiles show an image instead of a label. */
   image?: ImageSourcePropType
   selected: boolean
-  width: number
+  /** Pixel width, or omit to fill the parent slot (responsive grids). */
+  width?: number
   height: number
   onPress: () => void
   fontFamily?: string
@@ -37,7 +38,12 @@ export function ShotTile({
       accessibilityState={{ selected }}
       aria-selected={selected}
       accessibilityLabel={accessibilityLabel ?? label}
-      style={[{ width, height }, selected && styles.selectedGlow, styles.radius]}
+      style={[
+        { width: width ?? '100%', height },
+        width == null ? styles.fillSlot : null,
+        selected && styles.selectedGlow,
+        styles.radius,
+      ]}
     >
       <LinearGradient
         colors={selected ? ['#0B2378', '#06124A'] : ['#06102E', '#020814']}
@@ -65,6 +71,8 @@ export function ShotTile({
 
 const styles = StyleSheet.create({
   radius: { borderRadius: UI.radiusCard },
+  /** Only when the parent slot owns the width — avoid stretch in flexWrap rows (forces a single column). */
+  fillSlot: { alignSelf: 'stretch' },
   selectedGlow: { boxShadow: '0px 0px 16px 0px rgba(47, 107, 255, 0.7)' },
   tile: { flex: 1, borderRadius: UI.radiusCard, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   tileOff: { borderWidth: 2, borderColor: '#062C7B', boxShadow: '0px 0px 25px 0px #0048FF80 inset' },

@@ -4,21 +4,21 @@ import { useTranslation } from 'react-i18next'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
-import { LinearGradient } from 'expo-linear-gradient'
-import Svg, { Circle, Path } from 'react-native-svg'
 import { ThemeContext } from '../../context'
 import { TechniqueAnalysisVideoPanel } from '../../components/TechniqueAnalysisVideoPanel'
-import { CARD_GLOW, SELECTED_GLOW, UI } from '../../components/ui'
+import { LinearGradient } from 'expo-linear-gradient'
+import { SELECTED_GLOW, UI } from '../../components/ui'
 import { useContactJoints, type ContactJoint, type JointReading } from '../../lib/jointsApi'
 import { landmarkVisOk, poseAngle, RACKET_ANGLE_ID, TORSO_ANGLE_ID, type PoseAngleJoint } from '../../lib/poseJointAngles'
 import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
 import { getThumbnailAsync } from '../../lib/videoThumbnails'
+import { BodyPartIcon, BodyPartRail, BODY_RAIL_W, type BodyPartId } from './BodyPartRail'
 import { dominantSide } from './movementTimeline'
-import { JOINT_ICON } from './jointIcons'
 
 type Mode = 'angles' | 'motion'
 type PhaseId = 'preparation' | 'swing' | 'impact' | 'followThrough'
 type Phase = { id: PhaseId; from: number; to: number; at: number }
+export type JointSeverity = 'high' | 'medium' | null
 
 type Props = {
   videoUri: string
@@ -32,6 +32,10 @@ type Props = {
   fps: number | null
   /** Frames from the start of preparation to contact, when the server measured it. */
   framesPrepToImpact: number | null
+  /** Coach technical-error lines — used to flag issue joints red/orange. */
+  errors?: string[]
+  /** Opens Your Shot VS Ideal Form for this joint (issue joints only). */
+  onOpenShotVsIdeal?: (joint: ViewJoint) => void
 }
 
 const EMPTY_READING: JointReading = {
@@ -46,38 +50,52 @@ const EMPTY_READING: JointReading = {
 }
 
 /** Joints on the left column. The first five come from the server; head, feet and racket are read from the pose. */
-type ViewJoint = PoseAngleJoint
+export type ViewJoint = PoseAngleJoint
 const JOINTS: ViewJoint[] = ['head', 'shoulder', 'elbow', 'wrist', 'torso', 'knee', 'feet', 'racket']
 const SERVED: readonly ViewJoint[] = ['shoulder', 'elbow', 'wrist', 'torso', 'knee']
-/** Joint column share of the row, from the design. The video takes the rest, as a square. */
-const JOINT_COLUMN_SHARE = 0.26
+/** Words in coach errors that map a joint to an issue. */
+const JOINT_ERROR_WORDS: Record<ViewJoint, string[]> = {
+  head: ['head', 'cabeza'],
+  shoulder: ['shoulder', 'hombro'],
+  elbow: ['elbow', 'codo'],
+  wrist: ['wrist', 'muñeca'],
+  torso: ['torso', 'rotation', 'rotación', 'hip', 'cadera'],
+  knee: ['knee', 'rodilla'],
+  feet: ['foot', 'feet', 'pie', 'base'],
+  racket: ['racket', 'raqueta', 'pala', 'face'],
+}
 const GAP = 10
-const BUTTON_GAP = 5
 const GOOD = '#34C759'
 const OFF = '#FF7A6B'
+const HIGH = '#E5482B'
+const MEDIUM = '#FF8000'
+
+function severityOf(reading: JointReading | undefined, joint: ViewJoint, errors: string[]): JointSeverity {
+  if (reading?.status === 'bad') return 'high'
+  if (reading?.status === 'warn') return 'medium'
+  const delta = reading?.deltaDeg
+  if (delta != null && Number.isFinite(delta)) {
+    const a = Math.abs(delta)
+    if (a >= 15) return 'high'
+    if (a > 5) return 'medium'
+  }
+  const words = JOINT_ERROR_WORDS[joint]
+  if (words.some((w) => errors.some((e) => e.toLowerCase().includes(w)))) return 'high'
+  return null
+}
+
+function severityColor(sev: JointSeverity): string | null {
+  if (sev === 'high') return HIGH
+  if (sev === 'medium') return MEDIUM
+  return null
+}
 
 
 function JointBadge({ joint, size }: { joint: ViewJoint; size: number }) {
   return (
     <View style={[styles.jointBadge, { width: size, height: size, borderRadius: size / 2 }]}>
-      <MaterialCommunityIcons name={JOINT_ICON[joint]} size={Math.round(size * 0.62)} color={UI.text} />
+      <BodyPartIcon id={joint as BodyPartId} size={Math.round(size * 0.72)} />
     </View>
-  )
-}
-
-/** Player mid-swing with a racket, for the shot card. */
-function PlayerIcon() {
-  const line = { stroke: UI.text, strokeWidth: 1.6, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
-  return (
-    <Svg width={26} height={26} viewBox="0 0 24 24">
-      <Circle cx={14.5} cy={4.5} r={2} fill={UI.text} />
-      <Path d="M13.5 8l-2.5 5 3.5 2.5-1.5 5.5" {...line} />
-      <Path d="M11 13l-4 2.5-1.5 4" {...line} />
-      <Path d="M13.5 8l4.5 2.5 1.5-2" {...line} />
-      <Path d="M13.5 8L9 7 7 5" {...line} />
-      <Circle cx={5.5} cy={3.5} r={2.2} {...line} />
-      <Circle cx={21} cy={6.5} r={1} fill="#D9FF3C" />
-    </Svg>
   )
 }
 
@@ -172,12 +190,13 @@ export function ViewAnglesPage({
   videoUri,
   videoKey,
   analysisId,
-  shotLabel,
   poseFrames,
   totalFrames,
   impactFrame,
   fps,
   framesPrepToImpact,
+  errors = [],
+  onOpenShotVsIdeal,
 }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
@@ -252,23 +271,29 @@ export function ViewAnglesPage({
     reading?.deltaDeg ?? (reading?.you != null && target != null ? reading.you - target : null)
   const insets = useSafeAreaInsets()
   const [fullscreen, setFullscreen] = useState(false)
-  const jointColumn = Math.round(width * JOINT_COLUMN_SHARE)
-  /** Square stage. The joint buttons share its height. */
-  const square = Math.max(0, width - jointColumn - GAP)
-  const buttonH = square > 0 ? (square - BUTTON_GAP * (JOINTS.length - 1)) / JOINTS.length : 32
-  const badge = Math.max(14, Math.min(20, Math.round(buttonH - 12)))
-  const jointName = t(`analysis.viewAnglesPage.joints.${joint}`)
+  const jointColumn = BODY_RAIL_W
+  /** Figma Frame 1107 — navy housing around video + Motion/Angles (290×323, pad 10). */
+  const housingW = Math.max(0, width - jointColumn - GAP)
+  const housingPad = 10
+  const housingGap = 10
+  const modeTrackH = 36
+  const videoW = Math.max(0, housingW - housingPad * 2)
+  const videoH = videoW > 0 ? Math.round(videoW * (257 / 270)) : 0
+  const housingH =
+    videoH > 0 ? housingPad + videoH + housingGap + modeTrackH + housingPad : 0
+  const badge = 24
   const seconds = (frame: number) => `${(frame / frameRate).toFixed(1)}s`
 
-  // Cover the square ourselves: size the clip so its short side fills it, then centre on the
+  // Cover the video frame ourselves: size the clip so its short side fills it, then centre on the
   // player at contact. (expo-av's cover mode doesn't fill on web.)
   const aspect = clipSize ? clipSize.h / clipSize.w : 16 / 9
-  const panelW = aspect >= 1 ? square : square / aspect
+  const coverSide = Math.max(videoW, videoH)
+  const panelW = aspect >= 1 ? coverSide : coverSide / aspect
   const panelH = panelW * aspect
   const center = useMemo(() => bodyCenter(contactPose), [contactPose])
   const clamp = (v: number, max: number) => Math.max(-max, Math.min(0, v))
-  const offsetX = clamp(square / 2 - center.x * panelW, panelW - square)
-  const offsetY = clamp(square / 2 - center.y * panelH, panelH - square)
+  const offsetX = videoW > 0 ? clamp(videoW / 2 - center.x * panelW, panelW - videoW) : 0
+  const offsetY = videoH > 0 ? clamp(videoH / 2 - center.y * panelH, panelH - videoH) : 0
 
   const pickPhase = (p: Phase) => {
     setPhase(p.id)
@@ -276,6 +301,21 @@ export function ViewAnglesPage({
   }
 
   const offTarget = diff != null && Math.abs(diff) > 5
+  const severityByJoint = useMemo(() => {
+    const map = {} as Record<ViewJoint, JointSeverity>
+    for (const id of JOINTS) {
+      const served = (SERVED as readonly string[]).includes(id)
+        ? contact?.joints[id as ContactJoint]
+        : undefined
+      map[id] = severityOf(served, id, errors)
+    }
+    return map
+  }, [contact, errors])
+  const activeSeverity = severityByJoint[joint]
+  const issueColor = severityColor(activeSeverity) ?? (offTarget ? OFF : null)
+  const highlightColor = issueColor ?? '#2454FF'
+  const canOpenIdeal = activeSeverity != null && onOpenShotVsIdeal != null
+
   const panelProps = {
     videoUri,
     poseFrames,
@@ -287,6 +327,8 @@ export function ViewAnglesPage({
     jointAngleIds: angleIds,
     motionPathLandmark: mode === 'motion' ? pathLandmark(joint, side) : null,
     highlightedLandmarks: highlighted,
+    highlightColor,
+    motionPathColor: issueColor ?? '#00BBFF',
     isLooping: false,
     coverScale: 1,
     naturalSizeHint: clipSize,
@@ -294,139 +336,138 @@ export function ViewAnglesPage({
 
   return (
     <View style={styles.page} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}>
-      <View style={styles.shotRow}>
-        <View style={styles.shotIcon}>
-          <PlayerIcon />
-        </View>
-        <Text allowFontScaling={false} numberOfLines={1} style={[styles.shotText, { fontFamily: theme.regularFont }]}>
-          {shotLabel || contact?.shotLabel || t('analysis.viewAnglesPage.shotFallback')}
-        </Text>
-      </View>
-
       <View style={styles.stageRow}>
-        <View style={[styles.jointColumn, { width: jointColumn }]}>
-          {JOINTS.map((id) => {
-            const on = id === joint
-            const content = (
-              <>
-                <JointBadge joint={id} size={badge} />
-                <Text
-                  allowFontScaling={false}
-                  numberOfLines={1}
-                  style={[styles.jointText, { fontFamily: theme.regularFont }]}
-                >
-                  {t(`analysis.viewAnglesPage.joints.${id}`)}
-                </Text>
-              </>
-            )
-            return (
-              <Pressable
-                key={id}
-                testID={`viewAnglesJoint-${id}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-                onPress={() => setJoint(id)}
-                style={[styles.jointBtn, { height: buttonH }, on ? [styles.jointBtnOn, SELECTED_GLOW] : null]}
-              >
-                {on ? (
-                  <LinearGradient
-                    colors={['#7CC4FF', '#3D6BFF']}
-                    start={UI.gradientStart}
-                    end={UI.gradientEnd}
-                    style={styles.jointFill}
-                  >
-                    {content}
-                  </LinearGradient>
-                ) : (
-                  <View style={styles.jointFill}>{content}</View>
-                )}
-              </Pressable>
-            )
-          })}
-        </View>
+        <BodyPartRail
+          selected={joint}
+          severityByPart={severityByJoint}
+          onSelect={(id) => setJoint(id)}
+          testIDPrefix="viewAnglesJoint"
+          style={{ height: housingH || undefined }}
+        />
 
-        <View testID="viewAnglesStage" style={[styles.stage, { width: square, height: square }]}>
-          {square > 0 && poseFrames.length ? (
-            <View style={{ position: 'absolute', left: offsetX, top: offsetY, width: panelW, height: panelH }}>
-              <TechniqueAnalysisVideoPanel
-                {...panelProps}
-                videoKey={`${videoKey}-angles`}
-                width={panelW}
-                showPlaybackControls={false}
-                autoPlay={false}
-                interactiveScrub
-                startFraction={startFraction}
-                seekTo={seek}
-              />
-            </View>
-          ) : null}
-          <Pressable
-            testID="viewAnglesFullscreen"
-            accessibilityRole="button"
-            accessibilityLabel={t('analysis.viewAnglesPage.fullscreen')}
-            onPress={() => setFullscreen(true)}
-            hitSlop={8}
-            style={styles.fullscreenBtn}
-          >
-            <MaterialCommunityIcons name="arrow-expand-all" size={16} color={UI.text} />
-          </Pressable>
-          <View pointerEvents="none" style={styles.readout}>
-            <Text allowFontScaling={false} numberOfLines={1} style={[styles.readoutTitle, { fontFamily: theme.regularFont }]}>
-              {t(`analysis.viewAnglesPage.reading.${joint}`)}
-            </Text>
-            {reading?.you != null ? (
-              <>
-                <Text
-                  allowFontScaling={false}
-                  style={[
-                    styles.readoutValue,
-                    { fontFamily: theme.mediumFont, color: diff == null ? UI.text : offTarget ? OFF : GOOD },
-                  ]}
-                >
-                  {`${Math.round(reading.you)}°`}
-                </Text>
-                {target != null ? (
-                  <Text allowFontScaling={false} style={[styles.readoutLine, { fontFamily: theme.regularFont }]}>
-                    {t('analysis.viewAnglesPage.target')}
-                    <Text style={{ color: GOOD }}>{`${Math.round(target)}°`}</Text>
-                  </Text>
-                ) : null}
-                {diff != null ? (
-                  <Text allowFontScaling={false} style={[styles.readoutLine, { fontFamily: theme.regularFont }]}>
-                    {t('analysis.viewAnglesPage.difference')}
-                    <Text style={{ color: offTarget ? OFF : GOOD }}>{signed(diff)}</Text>
-                  </Text>
-                ) : null}
-              </>
-            ) : (
-              <Text allowFontScaling={false} style={[styles.readoutLine, { fontFamily: theme.regularFont }]}>
-                {t('analysis.viewAnglesPage.noReading')}
-              </Text>
-            )}
+        <View style={[styles.stageHousing, { width: housingW }]}>
+          <View testID="viewAnglesStage" style={[styles.stage, { width: videoW, height: videoH || videoW }]}>
+            {videoW > 0 && poseFrames.length ? (
+              <View style={{ position: 'absolute', left: offsetX, top: offsetY, width: panelW, height: panelH }}>
+                <TechniqueAnalysisVideoPanel
+                  {...panelProps}
+                  videoKey={`${videoKey}-angles`}
+                  width={panelW}
+                  showPlaybackControls={false}
+                  autoPlay={false}
+                  interactiveScrub
+                  startFraction={startFraction}
+                  seekTo={seek}
+                />
+              </View>
+            ) : null}
+            <Pressable
+              testID="viewAnglesFullscreen"
+              accessibilityRole="button"
+              accessibilityLabel={t('analysis.viewAnglesPage.fullscreen')}
+              onPress={() => setFullscreen(true)}
+              hitSlop={8}
+              style={styles.fullscreenBtn}
+            >
+              <MaterialCommunityIcons name="arrow-expand-all" size={16} color={UI.text} />
+            </Pressable>
+          </View>
+
+          <View style={styles.modeTrack}>
+            <ModeButton
+              label={t('analysis.viewAnglesPage.motionPath')}
+              on={mode === 'motion'}
+              onPress={() => setMode('motion')}
+              testID="viewAnglesMotion"
+            />
+            <ModeButton
+              label={t('analysis.viewAnglesPage.angles')}
+              on={mode === 'angles'}
+              onPress={() => setMode('angles')}
+              testID="viewAnglesAngles"
+            />
           </View>
         </View>
       </View>
 
-      <View style={styles.modeRow}>
-        <ModeButton
-          label={t('analysis.viewAnglesPage.motionPath')}
-          on={mode === 'motion'}
-          onPress={() => setMode('motion')}
-          testID="viewAnglesMotion"
-        />
-        <ModeButton
-          label={t('analysis.viewAnglesPage.angles')}
-          on={mode === 'angles'}
-          onPress={() => setMode('angles')}
-          testID="viewAnglesAngles"
-        />
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        disabled={!canOpenIdeal}
+        onPress={() => canOpenIdeal && onOpenShotVsIdeal?.(joint)}
+        style={styles.jointCard}
+        testID="viewAnglesJointCard"
+      >
+        <View style={styles.jointCardLeft}>
+          <View style={styles.jointCardTitleRow}>
+            <JointBadge joint={joint} size={24} />
+            <Text allowFontScaling={false} style={[styles.jointCardTitle, { fontFamily: theme.mediumFont }]}>
+              {t(`analysis.viewAnglesPage.reading.${joint}`)}
+            </Text>
+          </View>
+          <View style={styles.jointCardStats}>
+            {reading?.you != null ? (
+              <Text
+                allowFontScaling={false}
+                style={[
+                  styles.jointCardDeg,
+                  { fontFamily: theme.mediumFont, color: issueColor ?? UI.text },
+                ]}
+              >
+                {`${Math.round(reading.you)}°`}
+              </Text>
+            ) : (
+              <Text allowFontScaling={false} style={[styles.jointCardDeg, { fontFamily: theme.mediumFont }]}>
+                —
+              </Text>
+            )}
+            <View style={styles.jointCardMetaCol}>
+              {target != null ? (
+                <Text allowFontScaling={false} style={[styles.jointCardMeta, { fontFamily: theme.regularFont }]}>
+                  {t('analysis.viewAnglesPage.target')}
+                  <Text style={{ color: GOOD }}>{`${Math.round(target)}°`}</Text>
+                </Text>
+              ) : null}
+              {diff != null ? (
+                <Text allowFontScaling={false} style={[styles.jointCardMeta, { fontFamily: theme.regularFont }]}>
+                  {t('analysis.viewAnglesPage.difference')}
+                  <Text style={{ color: issueColor ?? (offTarget ? OFF : GOOD) }}>{signed(diff)}</Text>
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        </View>
+        <View style={styles.jointCardRight}>
+          {activeSeverity ? (
+            <View
+              style={[
+                styles.sevPill,
+                {
+                  borderColor: issueColor ?? HIGH,
+                  backgroundColor: activeSeverity === 'high' ? 'rgba(255,0,0,0.2)' : 'rgba(255,128,0,0.2)',
+                },
+              ]}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[
+                  styles.sevPillLabel,
+                  { color: issueColor ?? HIGH, fontFamily: theme.mediumFont },
+                ]}
+              >
+                {activeSeverity === 'high'
+                  ? t('analysis.mistakeHighPriority')
+                  : t('analysis.mistakeMediumPriority')}
+              </Text>
+            </View>
+          ) : null}
+          {canOpenIdeal ? <Ionicons name="chevron-forward" size={18} color="#86A7D2" /> : null}
+        </View>
+      </Pressable>
 
       {phases.length ? (
         <View style={styles.timelineCard}>
           <Text allowFontScaling={false} style={[styles.timelineTitle, { fontFamily: theme.regularFont }]}>
             {t('analysis.viewAnglesPage.timeline')}
-            <Text style={[styles.timelineJoint, { fontFamily: theme.regularFont }]}>{`  (${jointName})`}</Text>
           </Text>
           <View style={styles.phaseRow}>
             {phases.map((p) => {
@@ -524,73 +565,68 @@ function ModeButton({
   testID: string
 }) {
   const { theme } = useContext(ThemeContext)
+  const labelEl = (
+    <Text
+      allowFontScaling={false}
+      numberOfLines={1}
+      style={[
+        styles.modeText,
+        { fontFamily: on ? theme.semiBoldFont : theme.mediumFont },
+        on && styles.modeTextOn,
+      ]}
+    >
+      {label}
+    </Text>
+  )
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       accessibilityState={{ selected: on }}
       onPress={onPress}
-      style={[styles.modeBtn, on && styles.modeBtnOn]}
+      style={styles.modeBtn}
     >
-      <Text
-        allowFontScaling={false}
-        numberOfLines={1}
-        style={[styles.modeText, { fontFamily: theme.regularFont }, on && styles.modeTextOn]}
-      >
-        {label}
-      </Text>
+      {on ? (
+        <LinearGradient
+          colors={['#A9D8FF', '#4DA6FF']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.modeBtnFill}
+        >
+          {labelEl}
+        </LinearGradient>
+      ) : (
+        <View style={styles.modeBtnFill}>{labelEl}</View>
+      )}
     </Pressable>
   )
 }
 
-const STAGE_BORDER = '#1F4BFF'
+const STAGE_BORDER = '#0066FF'
+const HOUSING_BG = '#041641'
 
 const styles = StyleSheet.create({
   page: { alignSelf: 'stretch', gap: 12 },
-  shotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    borderRadius: UI.radiusCard,
-    borderWidth: 1,
-    borderColor: UI.trackBorder,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  shotIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+  stageRow: { flexDirection: 'row', gap: GAP, alignItems: 'flex-start' },
+  jointBadge: {
+    backgroundColor: 'rgba(0, 72, 255, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: UI.cardBg,
   },
-  shotText: { color: UI.text, fontSize: 18, flexShrink: 1 },
-  stageRow: { flexDirection: 'row', gap: GAP },
-  jointColumn: { gap: BUTTON_GAP },
-  jointBtn: {
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: STAGE_BORDER,
-    backgroundColor: UI.cardBg,
-    overflow: 'hidden',
+  // Figma Frame 1107 — contains video + Motion Path / Angles.
+  stageHousing: {
+    backgroundColor: HOUSING_BG,
+    borderRadius: 25,
+    padding: 10,
+    gap: 10,
+    justifyContent: 'center',
   },
-  jointBtnOn: { borderColor: UI.text },
-  jointFill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 4,
-  },
-  jointBadge: { backgroundColor: UI.accentStrong, alignItems: 'center', justifyContent: 'center' },
-  jointText: { color: UI.text, fontSize: 12, flexShrink: 1 },
   stage: {
-    borderRadius: UI.radiusCard,
+    borderRadius: 20,
     borderWidth: 2,
     borderColor: STAGE_BORDER,
     overflow: 'hidden',
-    backgroundColor: UI.cardBg,
+    backgroundColor: HOUSING_BG,
   },
   fullscreenBtn: {
     position: 'absolute',
@@ -605,45 +641,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  readout: {
-    position: 'absolute',
-    right: 8,
-    bottom: 8,
-    maxWidth: '62%',
-    borderRadius: 18,
-    backgroundColor: 'rgba(11, 31, 87, 0.94)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  modeTrack: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: HOUSING_BG,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 72, 255, 0.5)',
+    padding: 2,
+    overflow: 'hidden',
+    boxShadow: 'inset 0px 0px 30px 0px rgba(0, 72, 255, 0.5)',
   },
-  readoutTitle: { color: UI.text, fontSize: 12 },
-  readoutValue: { color: UI.text, fontSize: 28, lineHeight: 34 },
-  readoutLine: { color: UI.text, fontSize: 12, lineHeight: 15 },
-  modeRow: { flexDirection: 'row', gap: 8 },
   modeBtn: {
     flex: 1,
-    height: 38,
-    borderRadius: UI.radiusPill,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  modeBtnFill: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
-    backgroundColor: UI.cardBg,
-    borderWidth: 1,
-    borderColor: UI.surfaceBorder,
+    paddingHorizontal: 8,
+    borderRadius: 999,
   },
-  modeBtnOn: { backgroundColor: '#4BAEF5', borderColor: '#4BAEF5' },
-  modeText: { color: UI.text, fontSize: 14, flexShrink: 1 },
-  modeTextOn: { color: UI.cardBg },
-  timelineCard: {
-    borderRadius: UI.radiusCard,
+  modeText: { color: '#86A7D2', fontSize: 11, flexShrink: 1 },
+  modeTextOn: { color: '#07256D' },
+  jointCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 5,
+    borderRadius: 20,
+    backgroundColor: '#030A17',
+    paddingLeft: 20,
+    paddingRight: 10,
+    paddingVertical: 10,
+    boxShadow: 'inset 0px 0px 30px 0px rgba(0, 72, 255, 0.5)',
+  },
+  jointCardLeft: { flex: 1, gap: 5, minWidth: 0 },
+  jointCardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  jointCardTitle: { color: UI.text, fontSize: 16 },
+  jointCardStats: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  jointCardDeg: { color: UI.text, fontSize: 32, lineHeight: 32 },
+  jointCardMetaCol: { gap: 2, flex: 1 },
+  jointCardMeta: { color: 'rgba(255,255,255,0.75)', fontSize: 11, lineHeight: 13 },
+  jointCardRight: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  sevPill: {
+    height: 30,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: UI.trackBorder,
-    paddingHorizontal: 10,
-    paddingTop: 12,
+    paddingHorizontal: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sevPillLabel: { fontSize: 13 },
+  timelineCard: {
+    borderRadius: 20,
+    backgroundColor: '#030A17',
+    paddingHorizontal: 12,
+    paddingTop: 7,
     paddingBottom: 10,
-    gap: 10,
+    gap: 5,
+    boxShadow: 'inset 0px 0px 30px 0px rgba(0, 72, 255, 0.5)',
   },
   timelineTitle: { color: UI.text, fontSize: 17, paddingHorizontal: 2 },
-  timelineJoint: { color: UI.accent, fontSize: 12 },
   phaseRow: { flexDirection: 'row', gap: 4 },
   phase: { flex: 1, alignItems: 'center', gap: 3, borderRadius: 10, paddingBottom: 6 },
   phaseOn: { backgroundColor: UI.surface },

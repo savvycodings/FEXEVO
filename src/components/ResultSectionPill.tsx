@@ -4,7 +4,8 @@ import { ThemeContext } from '../context'
 import { SegmentedPills } from '../screens/progress/SegmentedPills'
 
 /** Which results section is on screen. Local UI state only — not a route. */
-export type ResultSectionId = 'smartFocus' | 'shotInfo' | 'metrics' | 'viewAngles'
+/** Host pills: Overview | View Angles | Action Plan (Figma Your analysis). */
+export type ResultSectionId = 'smartFocus' | 'shotInfo' | 'metrics' | 'viewAngles' | 'actionPlan'
 
 type Tab<T extends string> = { id: T; label: string; testID?: string }
 

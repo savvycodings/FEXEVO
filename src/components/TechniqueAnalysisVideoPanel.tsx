@@ -130,6 +130,7 @@ function PoseSkeletonOverlay({
   showJointMetrics = false,
   jointAngles = [],
   highlightedLandmarks = [],
+  highlightColor = '#2454FF',
   overlayFit = 'fill',
 }: {
   landmarks: Record<string, LandmarkPoint>
@@ -144,6 +145,8 @@ function PoseSkeletonOverlay({
   showJointMetrics?: boolean
   jointAngles?: ComputedJointAngle[]
   highlightedLandmarks?: readonly string[]
+  /** Ring + glow around `highlightedLandmarks` (blue default; red/orange for issues). */
+  highlightColor?: string
   overlayFit?: 'fill' | 'cover'
 }) {
   const arcR = Math.max(10, Math.min(22, boxW * 0.035))
@@ -193,17 +196,21 @@ function PoseSkeletonOverlay({
       {highlightedLandmarks.map((name) => {
         const pt = projectLmPx(name, landmarks, boxW, boxH, naturalW, naturalH, overlayFit)
         if (!pt) return null
+        const glow = highlightColor.startsWith('#')
+          ? `${highlightColor}59`
+          : highlightColor
         return (
           <React.Fragment key={`hi-${name}`}>
             <Circle
               cx={pt.x}
               cy={pt.y}
               r={dotR * 2.8}
-              fill="rgba(36,84,255,0.35)"
-              stroke="#FFFFFF"
-              strokeWidth={2}
+              fill={glow}
+              stroke={highlightColor}
+              strokeWidth={2.5}
             />
-            <Circle cx={pt.x} cy={pt.y} r={dotR * 1.2} fill="#FFFFFF" />
+            <Circle cx={pt.x} cy={pt.y} r={dotR * 1.35} fill={highlightColor} />
+            <Circle cx={pt.x} cy={pt.y} r={dotR * 0.55} fill="#FFFFFF" />
           </React.Fragment>
         )
       })}
@@ -343,6 +350,10 @@ export type TechniqueAnalysisVideoPanelProps = {
   jointAngleIds?: readonly string[]
   /** Trace this landmark across the clip: faint for the whole shot, bright up to the current frame. */
   motionPathLandmark?: string | null
+  /** Color for `highlightedLandmarks` rings (issue joints use red/orange). */
+  highlightColor?: string
+  /** Color for the motion-path stroke; defaults to cyan, issue joints use red/orange. */
+  motionPathColor?: string
   /** Jump to a 0–1 position. Change `key` to repeat a jump to the same spot. */
   seekTo?: { fraction: number; key: number } | null
   /** Clip pixel size when the player can't report it (expo-av on web often doesn't). */
@@ -382,6 +393,8 @@ export function TechniqueAnalysisVideoPanel({
   onScrubbingChange,
   jointAngleIds,
   motionPathLandmark = null,
+  highlightColor = '#2454FF',
+  motionPathColor = MOTION_PATH_COLOR,
   seekTo = null,
   naturalSizeHint = null,
 }: TechniqueAnalysisVideoPanelProps) {
@@ -1136,6 +1149,7 @@ export function TechniqueAnalysisVideoPanel({
       showJointMetrics={showDetailedPoseOverlay}
       jointAngles={jointAngles}
       highlightedLandmarks={highlightedLandmarks}
+      highlightColor={highlightColor}
       overlayFit={overlayFit}
     />
   ) : null
@@ -1271,7 +1285,7 @@ export function TechniqueAnalysisVideoPanel({
             <Path
               d={pointsToPath(motionPathPoints)}
               fill="none"
-              stroke={MOTION_PATH_COLOR}
+              stroke={motionPathColor}
               strokeOpacity={0.3}
               strokeWidth={2}
               strokeLinecap="round"
@@ -1280,7 +1294,7 @@ export function TechniqueAnalysisVideoPanel({
             <Path
               d={pointsToPath(motionPathPoints.filter((p) => p.frame <= estimatedVideoFrame))}
               fill="none"
-              stroke={MOTION_PATH_COLOR}
+              stroke={motionPathColor}
               strokeWidth={3}
               strokeLinecap="round"
               strokeLinejoin="round"

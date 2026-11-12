@@ -84,12 +84,15 @@ import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
 import { startHologram } from '../lib/hologramJob'
 import { proLibraryVideoUrl, resolveMediaUrl } from '../lib/mediaUrl'
-import { BiggestMistakesView, mistakeFocusOrder, mistakeKeyPoints } from './techniqueResults/BiggestMistakesView'
-import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
+import { mistakeFocusOrder, mistakeKeyPoints, type MistakeId } from './techniqueResults/BiggestMistakesView'
+import type { BodyPartId } from './techniqueResults/jointIcons'
 import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { DrillsView, type DrillNav } from './techniqueResults/DrillsView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
-import { ViewAnglesPage } from './techniqueResults/ViewAnglesPage'
+import { ViewAnglesPage, type ViewJoint } from './techniqueResults/ViewAnglesPage'
+import { ActionPlanPage } from './techniqueResults/ActionPlanPage'
+import { ShotVsIdealView } from './techniqueResults/ShotVsIdealView'
+import { TrackProgressView } from './techniqueResults/TrackProgressView'
 import { CoachHome } from './coachHome/CoachHome'
 import { TrimClipPreview, type TrimClipPreviewHandle } from '../components/TrimClipPreview'
 import { ProLibraryGradientProgressBar } from '../components'
@@ -564,8 +567,24 @@ export function Technique() {
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   /** Which results sub-page is showing. Does not reload analysis. */
   const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
-  const [resultsDetail, setResultsDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'drills'>('overview')
-  const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare' | 'drills'>('overview')
+  const [resultsDetail, setResultsDetail] = useState<
+    'overview' | 'pose' | 'compare' | 'drills' | 'shotVsIdeal' | 'trackProgress'
+  >('overview')
+  const [shotVsIdealJoint, setShotVsIdealJoint] = useState<ViewJoint>('elbow')
+  /** Body part to open inside Smart 3D (Priority Fixes / Action Plan); null = main 3D stage. */
+  const [smart3dPart, setSmart3dPart] = useState<BodyPartId | null>(null)
+  const [poseReturn, setPoseReturn] = useState<'overview' | 'compare' | 'drills'>('overview')
+
+  function openSmart3d(part: BodyPartId | null = null, returnTo: 'overview' | 'compare' | 'drills' = 'overview') {
+    setSmart3dPart(part)
+    setPoseReturn(returnTo)
+    setResultsDetail('pose')
+  }
+
+  function openMistakeFix(id: MistakeId) {
+    const part: BodyPartId = id === 'foot' ? 'feet' : id === 'racket' ? 'racket' : id
+    openSmart3d(part, 'overview')
+  }
   /** Open drill / step inside the drills view; survives a trip to Smart 3D and back. */
   const [drillNav, setDrillNav] = useState<DrillNav>(null)
   const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
@@ -582,8 +601,8 @@ export function Technique() {
       (
         [
           ['smartFocus', 'analysis.overview'],
-          ['metrics', 'analysis.metrics'],
           ['viewAngles', 'analysis.viewAngles'],
+          ['actionPlan', 'analysis.hubActionPlan'],
         ] as const
       ).map(([id, key]) => ({ id, label: t(key) })),
     [t]
@@ -2842,7 +2861,13 @@ export function Technique() {
             }
             fps={biomechanicsSummary?.timing?.fps ?? null}
             viewId={userShot?.viewId ?? null}
-            onClose={() => setResultsDetail(poseReturn)}
+            errors={technicalErrorsList}
+            initialPart={smart3dPart}
+            onDrills={() => setResultsDetail('drills')}
+            onClose={() => {
+              setSmart3dPart(null)
+              setResultsDetail(poseReturn)
+            }}
           />
         ) : step === 3 && resultsDetail === 'drills' ? (
           <DrillsView
@@ -2858,14 +2883,21 @@ export function Technique() {
             keyPoints={mistakeKeyPoints(technicalErrorsList)}
             nav={drillNav}
             onNav={setDrillNav}
-            onSmart3d={() => {
-              setPoseReturn('drills')
-              setResultsDetail('pose')
-            }}
+            onSmart3d={() => openSmart3d(null, 'drills')}
             onClose={() => {
               setDrillNav(null)
               setResultsDetail('compare')
             }}
+          />
+        ) : step === 3 && resultsDetail === 'trackProgress' ? (
+          <TrackProgressView
+            videoUri={uploadedVideoUrl}
+            idealVideoUri={proLibraryVideoUrl(retrieval, userShot)}
+            analysisId={analysisId}
+            metrics={compareMetricsFromSummary(biomechanicsSummary, t)}
+            score={headlineScore}
+            onClose={() => setResultsDetail('overview')}
+            onCompareAnother={() => navigation.getParent()?.navigate('Progress' as never)}
           />
         ) : step === 3 && resultsDetail === 'compare' ? (
           <CompareWithPro
@@ -2901,10 +2933,7 @@ export function Technique() {
             power={typeof physicalMetrics?.power === 'number' ? physicalMetrics.power : null}
             errors={technicalErrorsList}
             onClose={() => setResultsDetail('overview')}
-            onSmart3d={() => {
-              setPoseReturn('compare')
-              setResultsDetail('pose')
-            }}
+            onSmart3d={() => openSmart3d(null, 'compare')}
             onDrills={() => setResultsDetail('drills')}
             analysisId={analysisId}
             contactMs={
@@ -2913,43 +2942,24 @@ export function Technique() {
                 : null
             }
           />
-        ) : step === 3 && resultsDetail === 'mistakes' ? (
-          <BiggestMistakesView
+        ) : step === 3 && resultsDetail === 'shotVsIdeal' ? (
+          <ShotVsIdealView
             videoUri={uploadedVideoUrl}
-            videoKey={analysisId ?? 'technique-step3'}
+            idealVideoUri={proLibraryVideoUrl(retrieval, userShot)}
             analysisId={analysisId}
-            poseFrames={step3PoseFrames}
-            totalFrames={overlayTotalFrames}
+            initialJoint={shotVsIdealJoint}
             errors={technicalErrorsList}
-            elbowDeg={
-              typeof biomechanicsSummary?.angles_deg_proxy?.elbow_impact_deg === 'number'
-                ? biomechanicsSummary.angles_deg_proxy.elbow_impact_deg
-                : null
-            }
-            torsoDeg={
-              typeof biomechanicsSummary?.angles_deg_proxy?.torso_sep_delta_deg === 'number'
-                ? biomechanicsSummary.angles_deg_proxy.torso_sep_delta_deg
-                : typeof biomechanicsSummary?.angles_deg_proxy?.shoulder_hip_sep_impact_deg === 'number'
-                  ? biomechanicsSummary.angles_deg_proxy.shoulder_hip_sep_impact_deg
-                  : null
-            }
-            onClose={() => setResultsDetail('overview')}
+            poseFrames={step3PoseFrames}
             impactFrame={
               typeof biomechanicsSummary?.timing?.impact_frame === 'number'
                 ? biomechanicsSummary.timing.impact_frame
                 : null
             }
-            fps={biomechanicsSummary?.timing?.fps ?? null}
-            footer={
-              <ProReferenceCompare
-                videoUri={uploadedVideoUrl ?? ''}
-                analysisId={analysisId}
-                proVideoUri={proLibraryVideoUrl(retrieval, userShot)}
-                metrics={compareMetricsFromSummary(biomechanicsSummary, t)}
-                score={headlineScore}
-                onSave={() => navigation.getParent()?.navigate('Progress' as never)}
-              />
-            }
+            onClose={() => setResultsDetail('overview')}
+            onDrills={() => {
+              setDrillNav(null)
+              setResultsDetail('drills')
+            }}
           />
         ) : (
         <ScrollView
@@ -3311,12 +3321,23 @@ export function Technique() {
               >
                 <Ionicons name="chevron-back" size={24} color="#86A7D2" />
               </TouchableOpacity>
-              <Text
-                allowFontScaling={false}
-                style={[styles.analysisTitle, { fontFamily: theme.semiBoldFont }]}
-              >
-                {t('analysis.yourAnalysis')}
-              </Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.analysisTitle, { fontFamily: theme.semiBoldFont }]}
+                >
+                  {t('analysis.yourAnalysis')}
+                </Text>
+                {(userShot?.shotLabel ?? proReferenceShot) ? (
+                  <Text
+                    allowFontScaling={false}
+                    numberOfLines={1}
+                    style={{ color: '#00B8FF', fontSize: 13, marginTop: 2, fontFamily: theme.regularFont }}
+                  >
+                    {userShot?.shotLabel ?? proReferenceShot}
+                  </Text>
+                ) : null}
+              </View>
             </View>
             <TechniqueResults
               section={resultSection}
@@ -3354,8 +3375,25 @@ export function Technique() {
                     }
                     fps={biomechanicsSummary?.timing?.fps ?? null}
                     framesPrepToImpact={biomechanicsSummary?.timing?.frames_prep_to_impact ?? null}
+                    errors={technicalErrorsList}
+                    onOpenShotVsIdeal={(j) => {
+                      setShotVsIdealJoint(j)
+                      setResultsDetail('shotVsIdeal')
+                    }}
                   />
                 ) : null
+              }
+              actionPlan={
+                <ActionPlanPage
+                  shotLabel={userShot?.shotLabel ?? proReferenceShot}
+                  errors={technicalErrorsList}
+                  analysisId={analysisId}
+                  onOpenFix={openMistakeFix}
+                  onSeeCorrectMovement={() => {
+                    setDrillNav(null)
+                    setResultsDetail('drills')
+                  }}
+                />
               }
               smartFocus={
             <>
@@ -3366,26 +3404,26 @@ export function Technique() {
               totalFrames={overlayTotalFrames}
               score={headlineScore}
               rating={typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null}
+              shotLabel={null}
+              showHubChrome={false}
               summary={metricsBlurb}
               diagnosis={dialDiagnosis}
               strengths={strengthsList}
               weaknesses={technicalErrorsList}
               metrics={physicalMetrics}
               detail={resultsDetail}
-              onBiggestMistakes={() => setResultsDetail('mistakes')}
-              onSmart3d={() => {
-                setPoseReturn('overview')
-                setResultsDetail('pose')
-              }}
+              onPriorityJoint={(id) => openSmart3d(id, 'overview')}
+              onProgress={() => setResultsDetail('trackProgress')}
+              onSmart3d={() => openSmart3d(null, 'overview')}
               onScrubbingChange={setSmartFocusScrubbing}
             />
-            {resultsDetail === 'mistakes' && metrics && localeAnalysis && strengthsList.length > 0 ? (
+            {false ? (
               <View style={styles.step3EarlyFeedbackWrap}>
                 <CoachDoneWellSection strengths={strengthsList} />
               </View>
             ) : null}
 
-            {resultsDetail === 'mistakes' && metrics && localeAnalysis && physicalMetrics ? (
+            {false && metrics && localeAnalysis && physicalMetrics ? (
               <View style={styles.poseGaugeSectionWrap}>
                 <PhysicalMetricsSection
                   metrics={physicalMetrics}
@@ -3427,7 +3465,7 @@ export function Technique() {
               </View>
             ) : null}
 
-            {resultsDetail === 'mistakes' && score != null && (
+            {false && score != null && (
               <LinearGradient
                 colors={[...STEP3_CARD_GRADIENT_COLORS]}
                 locations={[...STEP3_CARD_GRADIENT_LOCATIONS]}
@@ -3490,13 +3528,13 @@ export function Technique() {
               </LinearGradient>
             )}
 
-            {resultsDetail === 'mistakes' && metrics && localeAnalysis ? (
+            {false && metrics && localeAnalysis ? (
               <View style={styles.step3InsightBeforeChartWrap}>
                 <CoachStrengthFocusInsightCards content={coachInsightCards} />
               </View>
             ) : null}
 
-            {resultsDetail === 'mistakes' && (analysisError || analysisJson) ? (
+            {false && (analysisError || analysisJson) ? (
               <View style={styles.step3}>
                 <View style={styles.placeholderCard}>
                   {analysisError ? (
