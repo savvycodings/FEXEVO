@@ -28,7 +28,6 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { MainStackParamList } from "../navigation/types";
 import { ThemeContext } from "../context";
 import { useSessionData } from "../context/SessionDataContext";
-import { AdminGradientCard } from "../components";
 import { currentAppLanguage, setAppLanguage, type AppLanguage } from "../i18n/language";
 import { GlowButton, SurfaceIconButton } from "../components/ui";
 import { Header } from "../components/Header";
@@ -51,6 +50,21 @@ import { CountryPickerModal } from "../components/CountryPickerModal";
 import { CourtSideGraphic } from "../components/CourtSideGraphic";
 import { MeasureField, type MeasureInput } from "../components/MeasureField";
 import { CARD_GLOW, SegmentedToggle, UI } from "../components/ui";
+import {
+  CalibrationChooser,
+  PrivacyDataSection,
+  ProfileHubRow,
+  ProfileHubTabs,
+  ProfileIdentityHeader,
+  type ProfileHubTab,
+} from "./profileSettings/ProfileHubParts";
+import { BodyMeasurementsSection } from "./profileSettings/BodyMeasurementsSection";
+import { EliteLabSection } from "./profileSettings/EliteLabSection";
+import { HowToMeasureSection } from "./profileSettings/HowToMeasureSection";
+import { BasicInfoSection, type BasicInfoChanges } from "./profileSettings/BasicInfoSection";
+import { RacketSection, type Racket } from "./profileSettings/RacketSection";
+import { ManualComplete, MeasureStep, ReviewMeasurements, STEP_TITLE, type WizardStep } from "./profileSettings/MeasureWizard";
+import { EMPTY_EXTRAS, loadExtras, saveExtras, type Extras } from "./profileSettings/BodyMeasurementsSection";
 import {
   DEFAULT_BODY_UNITS,
   cmToFtIn,
@@ -145,6 +159,9 @@ type ProfileData = {
     birthDate?: string | null;
     heightCm?: number | null;
     weightKg?: number | null;
+    /** Calibration measurements in cm; null until the first save. */
+    bodyMeasurements?: Partial<Extras> | null;
+    racket?: Racket | null;
     dominantHand?: string | null;
     courtSide?: string | null;
     gender?: string | null;
@@ -216,6 +233,8 @@ function SubsectionFooter({
   primaryDisabled,
   primaryLoading,
   primaryTestID = TEST_IDS.settingsSave,
+  primaryIcon,
+  primaryArrow,
 }: {
   onBack: () => void;
   primaryLabel?: string;
@@ -223,6 +242,8 @@ function SubsectionFooter({
   primaryDisabled?: boolean;
   primaryLoading?: boolean;
   primaryTestID?: string;
+  primaryIcon?: React.ComponentProps<typeof Ionicons>["name"];
+  primaryArrow?: boolean;
 }) {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
@@ -236,6 +257,8 @@ function SubsectionFooter({
           onPress={onPrimary}
           testID={primaryTestID}
           disabled={primaryDisabled || primaryLoading}
+          leadingIcon={primaryIcon}
+          arrow={primaryArrow}
           style={styles.subsectionPrimaryButton}
         />
       ) : (
@@ -320,7 +343,19 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     }
     return null;
   }, [data.profile?.birthDate, birthDayInput, birthMonthInput, birthYearInput]);
-  const [activeSection, setActiveSection] = useState<"personal" | "account" | "location" | "game" | null>(null);
+  const [activeSection, setActiveSection] = useState<
+    "personal" | "account" | "location" | "game" | "body" | "racket" | "calibration" | "howToMeasure" | "basicInfo" | "elite" | "privacy" | WizardStep | "review" | "manualDone" | null
+  >(null);
+  /** Manual calibration wizard values (device-only until the backend stores them). */
+  const [wizExtras, setWizExtras] = useState<Extras>(EMPTY_EXTRAS);
+  const [wizSaving, setWizSaving] = useState(false);
+  const [wizError, setWizError] = useState<string | null>(null);
+  const [hubTab, setHubTab] = useState<ProfileHubTab>("profile");
+  /** Body Measurements can open from the Profile tab or from Athlete Calibration (manual / scan). */
+  const [bodyEntry, setBodyEntry] = useState<{ mode: "manual" | "scan"; from: "hub" | "calibration" }>({
+    mode: "manual",
+    from: "hub",
+  });
   /** Game Settings is two steps: player details (hand, side, height, weight), then level. */
   const [gameStep, setGameStep] = useState<"details" | "level">("details");
   const [handInput, setHandInput] = useState<Side | null>(null);
@@ -510,6 +545,99 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
       setBodyUnitsState(units);
       syncBodyFields(saved?.heightCm ?? null, saved?.weightKg ?? null, units);
     });
+  }
+
+  function openBodyMeasurements(mode: "manual" | "scan" = "manual", from: "hub" | "calibration" = "hub") {
+    setBodyEntry({ mode, from });
+    setActiveSection("body");
+  }
+
+  /** Height / weight go to the account (same endpoint as Game Settings, partial changes OK). */
+  async function saveBodyToAccount(changes: { heightCm?: number; weightKg?: number }): Promise<string | null> {
+    const res = await authClient
+      .$fetch<{ ok?: boolean; error?: string }>("/profile/player-details", {
+        method: "POST",
+        body: changes as any,
+      })
+      .catch((e) => ({ error: e?.message } as any));
+    const body = ((res as any)?.data ?? res) as { ok?: boolean; error?: unknown };
+    if (!body?.ok) {
+      const err = (res as any)?.error ?? body?.error;
+      return (
+        (typeof err === "string" ? err : typeof err?.message === "string" ? err.message : null) ||
+        t("profileSettingsUi.playerDetailsSaveFailed")
+      );
+    }
+    await loadRemote();
+    onProfileUpdated?.();
+    return null;
+  }
+
+  /** Calibration step 1. /profile/basic overwrites name + username, so the current ones go along. */
+  async function saveBasicInfo(changes: BasicInfoChanges): Promise<string | null> {
+    const readErr = (res: any, body: any) => {
+      const err = res?.error ?? body?.error;
+      return (
+        (typeof err === "string" ? err : typeof err?.message === "string" ? err.message : null) ||
+        t("profileSettingsUi.playerDetailsSaveFailed")
+      );
+    };
+    if (Object.keys(changes.details).length > 0) {
+      const res = await authClient
+        .$fetch<{ ok?: boolean }>("/profile/player-details", { method: "POST", body: changes.details as any })
+        .catch((e) => ({ error: e?.message } as any));
+      const body = ((res as any)?.data ?? res) as { ok?: boolean };
+      if (!body?.ok) return readErr(res, body);
+    }
+    if (changes.basic) {
+      const res = await authClient
+        .$fetch<{ ok?: boolean }>("/profile/basic", {
+          method: "POST",
+          body: {
+            name: data.user?.name ?? "",
+            username: data.profile?.username ?? "",
+            gender: changes.basic.gender ?? "",
+            birthDate: changes.basic.birthDate ?? null,
+          } as any,
+        })
+        .catch((e) => ({ error: e?.message } as any));
+      const body = ((res as any)?.data ?? res) as { ok?: boolean };
+      if (!body?.ok) return readErr(res, body);
+    }
+    if (Object.keys(changes.details).length > 0 || changes.basic) {
+      await loadRemote();
+      onProfileUpdated?.();
+    }
+    await startMeasureWizard();
+    return null;
+  }
+
+  async function startMeasureWizard() {
+    setWizExtras(await loadExtras(data.profile?.bodyMeasurements ?? null));
+    setWizError(null);
+    setActiveSection("upper");
+  }
+
+  /**
+   * Each step saves on Next so leaving midway keeps what was typed; a failed save there is
+   * retried by the next one. Confirm waits for the save and stays on Review if it fails.
+   */
+  async function wizardNext(to: WizardStep | "review" | "manualDone") {
+    setWizError(null);
+    if (to !== "manualDone") {
+      void saveExtras(wizExtras);
+      setActiveSection(to);
+      return;
+    }
+    setWizSaving(true);
+    const err = await saveExtras(wizExtras);
+    setWizSaving(false);
+    if (err) {
+      setWizError(err);
+      return;
+    }
+    await loadRemote();
+    setActiveSection("manualDone");
   }
 
   /** Switching unit only changes the display; the canonical value stays as it is. */
@@ -924,54 +1052,97 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     account: t("profileSettingsUi.account"),
     location: t("profileSettingsUi.location"),
     game: t("profileSettingsUi.gameSettings"),
+    body: t("profileHub.bodyMeasurements"),
+    racket: t("profileHub.racketInfo"),
+    calibration: t("profileHub.athleteCalibration"),
+    elite: t("profileHub.eliteLab"),
+    howToMeasure: t("profileHub.howTitle"),
+    basicInfo: t("profileHub.basicTitle"),
+    upper: t(STEP_TITLE.upper),
+    lower: t(STEP_TITLE.lower),
+    circ: t(STEP_TITLE.circ),
+    review: t("profileHub.reviewTitle"),
+    manualDone: t("profileHub.doneHeading"),
+    privacy: t("profileHub.privacyData"),
   };
   const currentTitle = activeSection ? sectionTitleMap[activeSection] : t("profileSettingsUi.profileEdit");
 
-  const MenuRow = ({
-    title,
-    subtitle,
-    iconModule,
-    icon,
-    onPress,
-    testID,
-    first,
-  }: {
-    title: string;
-    subtitle?: string;
-    iconModule?: number;
-    icon?: React.ComponentProps<typeof Ionicons>["name"];
-    onPress: () => void;
-    testID?: string;
-    first?: boolean;
-  }) => (
-    <TouchableOpacity
-      style={[styles.menuRow, !first && styles.menuRowDivided]}
-      activeOpacity={0.82}
-      onPress={onPress}
-      testID={testID}
-    >
-      <View style={styles.menuRowLeft}>
-        <View style={styles.menuIconSlot}>
-          {iconModule != null ? (
-            <LocalSvgAsset assetModule={iconModule} width={22} height={22} />
-          ) : icon ? (
-            <Ionicons name={icon} size={22} color="#86A7D2" />
-          ) : null}
-        </View>
-        <View style={styles.menuRowText}>
-          <Text allowFontScaling={false} style={styles.menuRowTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text allowFontScaling={false} style={styles.menuRowSubtitle} numberOfLines={1}>
-              {subtitle}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color="#86A7D2" />
-    </TouchableOpacity>
-  );
+  function renderBodyFields() {
+    const heightInputs: MeasureInput[] =
+      bodyUnits.height === "ftin"
+        ? [
+            {
+              value: heightFtText,
+              onChangeText: onHeightFtText,
+              suffix: t("profileSettingsUi.feetShort"),
+              placeholder: "5",
+              testID: TEST_IDS.settingsHeightFt,
+              keyboardType: "number-pad",
+              maxLength: 1,
+            },
+            {
+              value: heightInText,
+              onChangeText: onHeightInText,
+              suffix: t("profileSettingsUi.inchesShort"),
+              placeholder: "7",
+              testID: TEST_IDS.settingsHeightIn,
+              keyboardType: "number-pad",
+              maxLength: 2,
+            },
+          ]
+        : [
+            {
+              value: heightText,
+              onChangeText: onHeightCmText,
+              suffix: t("profileSettingsUi.unitCm"),
+              placeholder: t("profileSettingsUi.heightPlaceholder"),
+              testID: TEST_IDS.settingsHeight,
+              maxLength: 5,
+            },
+          ];
+    const weightInputs: MeasureInput[] = [
+      {
+        value: weightText,
+        onChangeText: onWeightText,
+        suffix: bodyUnits.weight === "lb" ? t("profileSettingsUi.unitLb") : t("profileSettingsUi.unitKg"),
+        placeholder: bodyUnits.weight === "lb" ? "165" : t("profileSettingsUi.weightPlaceholder"),
+        testID: TEST_IDS.settingsWeight,
+        keyboardType: bodyUnits.weight === "lb" ? "number-pad" : "decimal-pad",
+        maxLength: bodyUnits.weight === "lb" ? 3 : 5,
+      },
+    ];
+    return (
+      <>
+        <MeasureField<HeightUnit>
+          label={t("profileSettingsUi.height")}
+          inputs={heightInputs}
+          unit={bodyUnits.height}
+          unitOptions={[
+            { value: "cm", label: t("profileSettingsUi.unitCm"), testID: TEST_IDS.settingsUnitOption("cm") },
+            { value: "ftin", label: t("profileSettingsUi.unitFtIn"), testID: TEST_IDS.settingsUnitOption("ftin") },
+          ]}
+          onUnitChange={(u) => changeBodyUnit("height", u)}
+          unitPickerTitle={t("profileSettingsUi.heightUnitTitle")}
+          unitTestID={TEST_IDS.settingsUnit("height")}
+          closeLabel={t("profileSettingsUi.close")}
+        />
+        <MeasureField<WeightUnit>
+          label={t("profileSettingsUi.weight")}
+          inputs={weightInputs}
+          unit={bodyUnits.weight}
+          unitOptions={[
+            { value: "kg", label: t("profileSettingsUi.unitKg"), testID: TEST_IDS.settingsUnitOption("kg") },
+            { value: "lb", label: t("profileSettingsUi.unitLb"), testID: TEST_IDS.settingsUnitOption("lb") },
+          ]}
+          onUnitChange={(u) => changeBodyUnit("weight", u)}
+          unitPickerTitle={t("profileSettingsUi.weightUnitTitle")}
+          unitTestID={TEST_IDS.settingsUnit("weight")}
+          closeLabel={t("profileSettingsUi.close")}
+        />
+
+      </>
+    );
+  }
 
   function navigateMainTab(screen: "AICoach" | "You") {
     if (screen === "You") {
@@ -1697,49 +1868,6 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     const displayFullName =
       joinDisplayName(firstNameInput, lastNameInput) || data.user?.name || "Player";
     const backFromGame = () => (gameStep === "level" ? setGameStep("details") : setActiveSection(null));
-    const heightInputs: MeasureInput[] =
-      bodyUnits.height === "ftin"
-        ? [
-            {
-              value: heightFtText,
-              onChangeText: onHeightFtText,
-              suffix: t("profileSettingsUi.feetShort"),
-              placeholder: "5",
-              testID: TEST_IDS.settingsHeightFt,
-              keyboardType: "number-pad",
-              maxLength: 1,
-            },
-            {
-              value: heightInText,
-              onChangeText: onHeightInText,
-              suffix: t("profileSettingsUi.inchesShort"),
-              placeholder: "7",
-              testID: TEST_IDS.settingsHeightIn,
-              keyboardType: "number-pad",
-              maxLength: 2,
-            },
-          ]
-        : [
-            {
-              value: heightText,
-              onChangeText: onHeightCmText,
-              suffix: t("profileSettingsUi.unitCm"),
-              placeholder: t("profileSettingsUi.heightPlaceholder"),
-              testID: TEST_IDS.settingsHeight,
-              maxLength: 5,
-            },
-          ];
-    const weightInputs: MeasureInput[] = [
-      {
-        value: weightText,
-        onChangeText: onWeightText,
-        suffix: bodyUnits.weight === "lb" ? t("profileSettingsUi.unitLb") : t("profileSettingsUi.unitKg"),
-        placeholder: bodyUnits.weight === "lb" ? "165" : t("profileSettingsUi.weightPlaceholder"),
-        testID: TEST_IDS.settingsWeight,
-        keyboardType: bodyUnits.weight === "lb" ? "number-pad" : "decimal-pad",
-        maxLength: bodyUnits.weight === "lb" ? 3 : 5,
-      },
-    ];
     return (
       <View style={styles.screenRoot}>
         <Header
@@ -1814,32 +1942,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                 <CourtSideGraphic courtSide={courtSideInput} />
               </View>
 
-              <MeasureField<HeightUnit>
-                label={t("profileSettingsUi.height")}
-                inputs={heightInputs}
-                unit={bodyUnits.height}
-                unitOptions={[
-                  { value: "cm", label: t("profileSettingsUi.unitCm"), testID: TEST_IDS.settingsUnitOption("cm") },
-                  { value: "ftin", label: t("profileSettingsUi.unitFtIn"), testID: TEST_IDS.settingsUnitOption("ftin") },
-                ]}
-                onUnitChange={(u) => changeBodyUnit("height", u)}
-                unitPickerTitle={t("profileSettingsUi.heightUnitTitle")}
-                unitTestID={TEST_IDS.settingsUnit("height")}
-                closeLabel={t("profileSettingsUi.close")}
-              />
-              <MeasureField<WeightUnit>
-                label={t("profileSettingsUi.weight")}
-                inputs={weightInputs}
-                unit={bodyUnits.weight}
-                unitOptions={[
-                  { value: "kg", label: t("profileSettingsUi.unitKg"), testID: TEST_IDS.settingsUnitOption("kg") },
-                  { value: "lb", label: t("profileSettingsUi.unitLb"), testID: TEST_IDS.settingsUnitOption("lb") },
-                ]}
-                onUnitChange={(u) => changeBodyUnit("weight", u)}
-                unitPickerTitle={t("profileSettingsUi.weightUnitTitle")}
-                unitTestID={TEST_IDS.settingsUnit("weight")}
-                closeLabel={t("profileSettingsUi.close")}
-              />
+              {renderBodyFields()}
 
               {detailsError ? (
                 <Text style={styles.gameErrorText} testID={TEST_IDS.settingsDetailsError} accessibilityRole="alert">
@@ -1962,6 +2065,184 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     );
   }
 
+  if (
+    activeSection === "body" ||
+    activeSection === "racket" ||
+    activeSection === "calibration" ||
+    activeSection === "elite" ||
+    activeSection === "howToMeasure" ||
+    activeSection === "basicInfo" ||
+    activeSection === "upper" ||
+    activeSection === "lower" ||
+    activeSection === "circ" ||
+    activeSection === "review" ||
+    activeSection === "manualDone" ||
+    activeSection === "privacy"
+  ) {
+    const WIZARD_BACK = { upper: "basicInfo", lower: "upper", circ: "lower", review: "circ", manualDone: null } as const;
+    const backToHub = () =>
+      setActiveSection(
+        activeSection === "howToMeasure"
+          ? "calibration"
+          : activeSection === "basicInfo"
+            ? "howToMeasure"
+            : activeSection in WIZARD_BACK
+              ? WIZARD_BACK[activeSection as keyof typeof WIZARD_BACK]
+            : activeSection === "body" && bodyEntry.from === "calibration"
+              ? bodyEntry.mode === "manual"
+                ? "basicInfo"
+                : "calibration"
+              : null
+      );
+    return (
+      <View style={styles.screenRoot}>
+        <Header
+          flatOverlay
+          onBackPress={backToHub}
+          onProPress={() => navigation.navigate("ProSubscription")}
+          onNotificationsPress={() => navigation.navigate("Notifications")}
+        />
+        <KeyboardAwareScrollView
+          style={{ flex: 1, width: "100%" }}
+          contentContainerStyle={[
+            styles.subsectionScrollContent,
+            { paddingHorizontal: pageHorizontalPad, paddingTop: 12, paddingBottom: 28 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bottomOffset={insets.bottom + 12}
+        >
+          <Text style={[styles.detailPageHeading, activeSection === "manualDone" && { textAlign: "center" }]}>
+            {currentTitle}
+          </Text>
+          {activeSection === "body" ? (
+            <BodyMeasurementsSection
+              key={bodyEntry.mode}
+              initialMode={bodyEntry.mode}
+              initialHeightCm={data.profile?.heightCm ?? null}
+              initialWeightKg={data.profile?.weightKg ?? null}
+              initialExtras={data.profile?.bodyMeasurements ?? null}
+              onExtrasSaved={() => void loadRemote()}
+              onSaveRemote={saveBodyToAccount}
+              renderFooter={({ label, onPress, saving: bodySavingNow }) => (
+                <SubsectionFooter
+                  onBack={backToHub}
+                  primaryLabel={label}
+                  onPrimary={onPress}
+                  primaryDisabled={bodySavingNow}
+                  primaryLoading={bodySavingNow}
+                  primaryTestID="body-save"
+                />
+              )}
+            />
+          ) : activeSection === "racket" ? (
+            <RacketSection initial={data.profile?.racket} onSaved={() => void loadRemote()} />
+          ) : activeSection === "calibration" ? (
+            <CalibrationChooser
+              onManual={() => setActiveSection("howToMeasure")}
+              onScan={() => openBodyMeasurements("scan", "calibration")}
+            />
+          ) : activeSection === "howToMeasure" ? (
+            <HowToMeasureSection
+              footer={
+                <SubsectionFooter
+                  onBack={backToHub}
+                  primaryLabel={t("profileHub.getStarted")}
+                  onPrimary={() => setActiveSection("basicInfo")}
+                  primaryArrow
+                  primaryTestID="howto-start"
+                />
+              }
+            />
+          ) : activeSection === "basicInfo" ? (
+            <BasicInfoSection
+              initial={data.profile ?? {}}
+              onSave={saveBasicInfo}
+              renderFooter={({ label, onPress, saving: basicSaving }) => (
+                <SubsectionFooter
+                  onBack={backToHub}
+                  primaryLabel={label}
+                  onPrimary={onPress}
+                  primaryDisabled={basicSaving}
+                  primaryLoading={basicSaving}
+                  primaryArrow
+                  primaryTestID="basic-next"
+                />
+              )}
+            />
+          ) : activeSection === "upper" || activeSection === "lower" || activeSection === "circ" ? (
+            <MeasureStep
+              key={activeSection}
+              step={activeSection}
+              extras={wizExtras}
+              setExtras={setWizExtras}
+              footer={
+                <SubsectionFooter
+                  onBack={backToHub}
+                  primaryLabel={t("profileHub.next")}
+                  onPrimary={() =>
+                    void wizardNext(activeSection === "upper" ? "lower" : activeSection === "lower" ? "circ" : "review")
+                  }
+                  primaryArrow
+                  primaryTestID={`wizard-next-${activeSection}`}
+                />
+              }
+            />
+          ) : activeSection === "review" ? (
+            <ReviewMeasurements
+              profile={data.profile ?? {}}
+              extras={wizExtras}
+              setExtras={setWizExtras}
+              onGoToStep={(step) => setActiveSection(step)}
+              onEditBasic={() => setActiveSection("basicInfo")}
+              footer={
+                <>
+                  {wizError ? (
+                    <Text style={{ color: "#FF8A8A", fontSize: 13, marginBottom: 10 }} testID="review-error">
+                      {wizError}
+                    </Text>
+                  ) : null}
+                  <SubsectionFooter
+                    onBack={backToHub}
+                    primaryLabel={t("profileHub.confirm")}
+                    onPrimary={() => void wizardNext("manualDone")}
+                    primaryDisabled={wizSaving}
+                    primaryLoading={wizSaving}
+                    primaryTestID="review-confirm"
+                  />
+                </>
+              }
+            />
+          ) : activeSection === "manualDone" ? (
+            <ManualComplete
+              onScan={() => openBodyMeasurements("scan", "calibration")}
+              onFinish={() => setActiveSection(null)}
+            />
+          ) : activeSection === "elite" ? (
+            <EliteLabSection
+              renderFooter={({ label, onPress, disabled, icon }) => (
+                <SubsectionFooter
+                  onBack={backToHub}
+                  primaryLabel={label}
+                  onPrimary={onPress}
+                  primaryDisabled={disabled}
+                  primaryIcon={icon}
+                  primaryTestID="elite-primary"
+                />
+              )}
+            />
+          ) : (
+            <>
+              <PrivacyDataSection />
+              <SubsectionFooter onBack={backToHub} />
+            </>
+          )}
+        </KeyboardAwareScrollView>
+        <MainTabBarChrome activeTab="You" />
+      </View>
+    );
+  }
+
   async function shareProfile() {
     try {
       await Share.share({
@@ -1991,168 +2272,247 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         keyboardShouldPersistTaps="handled"
         bottomOffset={insets.bottom + 12}
       >
-        <View style={styles.profileEditHeaderRow}>
-          <View style={styles.profileEditTitleRow}>
-            <Text allowFontScaling={false} style={styles.profileEditTitleInline}>
-              {t("profileSettingsUi.profileEdit")}
-            </Text>
-          </View>
-          <Text allowFontScaling={false} style={styles.profileEditSubtitle}>
-            {t("profileSettingsUi.profileEditSubtitle")}
-          </Text>
-        </View>
+        <ProfileIdentityHeader
+          avatarSource={profileImageSource(!loading ? profileImageUri : null)}
+          name={data.user?.name || "Player"}
+          email={data.user?.email}
+          isPro={false}
+          uploading={avatarSaving}
+          onAvatarPress={() => void pickAndUploadAvatar()}
+          onProPress={() => navigation.navigate("ProSubscription")}
+        />
 
-        <View style={styles.badgeRow}>
-          <View style={[styles.badgeFrame, { width: badgeShieldRowW, height: badgeShieldDisplayH + 12 }]}>
-            <ShieldHeroRow
-              rowWidth={badgeShieldRowW}
-              coachName={data.user?.name || "Player"}
-              coachImageUri={!loading ? profileImageUri : null}
-              onSharePress={() => void shareProfile()}
-              shareAccessibilityLabel={t("profileSettingsUi.shareProfile")}
-              shareIconModule={SHARE_BUTTON_SVG}
-              shareIconSize={36}
-              shieldCardProps={{
-                variant: "profileSettings",
-                showName: false,
-                showScore: true,
-                scoreLabel: "Score",
-                scoreValue: String(overallPillarScore ?? 54),
-                showFlag: false,
-                showPillarScores: false,
-                topNameScale: 2.15,
-                brandLogoSource: XEVO_BLUE_WORDMARK,
-                // Reflect the live picker selection (before save) and the saved value (after save).
-                flagCode:
-                  locationCountry?.code ??
-                  findCountry(data.profile?.areaLocation ?? "")?.code ??
-                  null,
-              }}
+        <ProfileHubTabs value={hubTab} onChange={setHubTab} />
+
+        {hubTab === "profile" ? (
+          <View>
+            <ProfileHubRow
+              title={t("profileHub.personalInfo")}
+              subtitle={t("profileHub.personalInfoSub")}
+              iconModule={MENU_SVG.personal}
+              onPress={() => setActiveSection("personal")}
+              testID={TEST_IDS.settingsSection("personal")}
             />
-            <TouchableOpacity
-              style={[
-                styles.badgeCameraCorner,
-                {
-                  right: badgeCameraRightUnderShare,
-                },
-              ]}
-              onPress={pickAndUploadAvatar}
-              activeOpacity={0.88}
-              accessibilityLabel={t("profileSettingsUi.changeProfilePhoto")}
-            >
-              <Ionicons name="camera-outline" size={18} color="#CFE0FF" />
-            </TouchableOpacity>
+            <ProfileHubRow
+              title={t("profileHub.bodyMeasurements")}
+              subtitle={t("profileHub.bodyMeasurementsSub")}
+              icon="body-outline"
+              onPress={() => openBodyMeasurements()}
+              testID={TEST_IDS.settingsSection("body")}
+            />
+            <ProfileHubRow
+              title={t("profileHub.racketInfo")}
+              subtitle={t("profileHub.racketInfoSub")}
+              icon="tennisball-outline"
+              onPress={() => setActiveSection("racket")}
+              testID={TEST_IDS.settingsSection("racket")}
+            />
+            <ProfileHubRow
+              title={t("profileHub.athleteCalibration")}
+              subtitle={t("profileHub.athleteCalibrationSub")}
+              icon="trophy-outline"
+              onPress={() => setActiveSection("calibration")}
+              testID={TEST_IDS.settingsSection("calibration")}
+            />
+            <ProfileHubRow
+              title={t("profileHub.privacyData")}
+              subtitle={t("profileHub.privacyDataSub")}
+              icon="shield-checkmark-outline"
+              onPress={() => setActiveSection("privacy")}
+              testID={TEST_IDS.settingsSection("privacy")}
+            />
+            <ProfileHubRow
+              title={t("profileSettingsUi.account")}
+              subtitle={t("profileSettingsUi.accountSub")}
+              iconModule={MENU_SVG.account}
+              onPress={() => setActiveSection("account")}
+              testID={TEST_IDS.settingsSection("account")}
+            />
           </View>
-        </View>
-        {avatarSaving ? (
-          <Text allowFontScaling={false} style={styles.avatarSavingBelowBadge}>
-            Uploading…
-          </Text>
         ) : null}
 
-        <View style={styles.quickInfoRow}>
-          <TouchableOpacity
-            style={styles.quickInfoItem}
-            activeOpacity={0.7}
-            onPress={() => {
-              commitPersonalFieldFocus("birthdate");
-              setActiveSection("personal");
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={shieldQuickBirthLabel ?? t("profileSettingsUi.dateNotSet")}
-          >
-            <LocalSvgAsset assetModule={BIRTHDAY_ICON_SVG} width={18} height={18} strokeColor="#86A7D2" />
-            <View style={styles.quickInfoTextCol}>
-              <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
-                {shieldQuickBirthLabel ?? t("profileSettingsUi.dateNotSet")}
-              </Text>
-              <Text allowFontScaling={false} style={styles.quickInfoCaption} numberOfLines={1}>
-                {t("profileSettingsUi.dateOfBirth")}
-              </Text>
+        {hubTab === "stats" ? (
+          <View>
+            <View style={styles.badgeRow}>
+              <View style={[styles.badgeFrame, { width: badgeShieldRowW, height: badgeShieldDisplayH + 12 }]}>
+                <ShieldHeroRow
+                  rowWidth={badgeShieldRowW}
+                  coachName={data.user?.name || "Player"}
+                  coachImageUri={!loading ? profileImageUri : null}
+                  onSharePress={() => void shareProfile()}
+                  shareAccessibilityLabel={t("profileSettingsUi.shareProfile")}
+                  shareIconModule={SHARE_BUTTON_SVG}
+                  shareIconSize={36}
+                  shieldCardProps={{
+                    variant: "profileSettings",
+                    showName: false,
+                    showScore: true,
+                    scoreLabel: "Score",
+                    scoreValue: String(overallPillarScore ?? 54),
+                    showFlag: false,
+                    showPillarScores: false,
+                    topNameScale: 2.15,
+                    brandLogoSource: XEVO_BLUE_WORDMARK,
+                    // Reflect the live picker selection (before save) and the saved value (after save).
+                    flagCode:
+                      locationCountry?.code ??
+                      findCountry(data.profile?.areaLocation ?? "")?.code ??
+                      null,
+                  }}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.badgeCameraCorner,
+                    {
+                      right: badgeCameraRightUnderShare,
+                    },
+                  ]}
+                  onPress={pickAndUploadAvatar}
+                  activeOpacity={0.88}
+                  accessibilityLabel={t("profileSettingsUi.changeProfilePhoto")}
+                >
+                  <Ionicons name="camera-outline" size={18} color="#CFE0FF" />
+                </TouchableOpacity>
+              </View>
             </View>
-          </TouchableOpacity>
-          <View style={styles.quickInfoDivider} />
-          <TouchableOpacity
-            style={styles.quickInfoItem}
-            activeOpacity={0.7}
-            onPress={() => setActiveSection("location")}
-            accessibilityRole="button"
-            accessibilityLabel={shieldQuickLocationLabel ?? t("profileSettingsUi.locationNotSet")}
-          >
-            <LocalSvgAsset assetModule={LOCATION_PIN_ICON_SVG} width={18} height={18} strokeColor="#86A7D2" />
-            <View style={styles.quickInfoTextCol}>
-              <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
-                {shieldQuickLocationLabel ?? t("profileSettingsUi.locationNotSet")}
+            {avatarSaving ? (
+              <Text allowFontScaling={false} style={styles.avatarSavingBelowBadge}>
+                Uploading…
               </Text>
-              <Text allowFontScaling={false} style={styles.quickInfoCaption} numberOfLines={1}>
-                {t("profileSettingsUi.location")}
-              </Text>
+            ) : null}
+
+            <View style={styles.quickInfoRow}>
+              <TouchableOpacity
+                style={styles.quickInfoItem}
+                activeOpacity={0.7}
+                onPress={() => {
+                  commitPersonalFieldFocus("birthdate");
+                  setActiveSection("personal");
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={shieldQuickBirthLabel ?? t("profileSettingsUi.dateNotSet")}
+              >
+                <LocalSvgAsset assetModule={BIRTHDAY_ICON_SVG} width={18} height={18} strokeColor="#86A7D2" />
+                <View style={styles.quickInfoTextCol}>
+                  <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
+                    {shieldQuickBirthLabel ?? t("profileSettingsUi.dateNotSet")}
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.quickInfoCaption} numberOfLines={1}>
+                    {t("profileSettingsUi.dateOfBirth")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <View style={styles.quickInfoDivider} />
+              <TouchableOpacity
+                style={styles.quickInfoItem}
+                activeOpacity={0.7}
+                onPress={() => setActiveSection("location")}
+                accessibilityRole="button"
+                accessibilityLabel={shieldQuickLocationLabel ?? t("profileSettingsUi.locationNotSet")}
+              >
+                <LocalSvgAsset assetModule={LOCATION_PIN_ICON_SVG} width={18} height={18} strokeColor="#86A7D2" />
+                <View style={styles.quickInfoTextCol}>
+                  <Text allowFontScaling={false} style={styles.quickInfoText} numberOfLines={1} ellipsizeMode="tail">
+                    {shieldQuickLocationLabel ?? t("profileSettingsUi.locationNotSet")}
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.quickInfoCaption} numberOfLines={1}>
+                    {t("profileSettingsUi.location")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        </View>
 
-        <AdminGradientCard innerStyle={{ overflow: "hidden" }}>
-          <MenuRow
-            first
-            title={t("profileSettingsUi.personalData")}
-            subtitle={t("profileSettingsUi.personalDataSub")}
-            iconModule={MENU_SVG.personal}
-            onPress={() => setActiveSection("personal")}
-            testID={TEST_IDS.settingsSection("personal")}
-          />
-          <MenuRow
-            title={t("profileSettingsUi.account")}
-            subtitle={t("profileSettingsUi.accountSub")}
-            iconModule={MENU_SVG.account}
-            onPress={() => setActiveSection("account")}
-            testID={TEST_IDS.settingsSection("account")}
-          />
-          <MenuRow
-            title={t("profileSettingsUi.location")}
-            subtitle={t("profileSettingsUi.locationSub")}
-            iconModule={MENU_SVG.location}
-            onPress={() => setActiveSection("location")}
-            testID={TEST_IDS.settingsSection("location")}
-          />
-          <MenuRow
-            title={t("profileSettingsUi.gameSettings")}
-            subtitle={t("profileSettingsUi.gameSettingsSub")}
-            iconModule={MENU_SVG.game}
-            onPress={openGameSettings}
-            testID={TEST_IDS.settingsSection("game")}
-          />
-          <MenuRow
-            title={t("profileSettingsUi.about")}
-            subtitle={
-              aboutOpen
-                ? t("profileSettingsUi.appVersion", { version: APP_VERSION })
-                : t("profileSettingsUi.aboutSub")
-            }
-            icon="information-circle-outline"
-            onPress={() => setAboutOpen((v) => !v)}
-          />
-          <MenuRow
-            title="Admin"
-            subtitle={t("profileSettingsUi.adminSub")}
-            icon="shield-checkmark-outline"
-            onPress={() => navigation.navigate("AdminHub")}
-          />
-        </AdminGradientCard>
-
-        <TouchableOpacity
-          style={styles.logoutRow}
-          activeOpacity={0.82}
-          onPress={() => setLogoutModalVisible(true)}
-          accessibilityRole="button"
-        >
-          <View style={styles.menuRowLeft}>
-            <Ionicons name="log-out-outline" size={22} color="#FF6B5E" style={styles.logoutIcon} />
-            <Text allowFontScaling={false} style={styles.logoutText}>
-              {t("profileSettingsUi.signOut")}
-            </Text>
+            <ProfileHubRow
+              title={t("profileHub.eliteLab")}
+              subtitle={t("profileHub.eliteLabSub")}
+              icon="diamond-outline"
+              onPress={() => setActiveSection("elite")}
+              testID={TEST_IDS.settingsSection("elite")}
+            />
+            <ProfileHubRow
+              title={t("profileHub.fullProgress")}
+              subtitle={t("profileHub.fullProgressSub")}
+              icon="stats-chart-outline"
+              onPress={() => navigation.navigate("Main", { screen: "Progress" } as never)}
+            />
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#FF6B5E" />
-        </TouchableOpacity>
+        ) : null}
+
+        {hubTab === "achievements" ? (
+          <View>
+            <ProfileHubRow
+              title={t("profileHub.allAchievements")}
+              subtitle={t("profileHub.allAchievementsSub")}
+              icon="ribbon-outline"
+              onPress={() =>
+                navigation.navigate("Main", {
+                  screen: "Progress",
+                  params: { screen: "AllAchievements" },
+                } as never)
+              }
+            />
+            <ProfileHubRow
+              title={t("profileHub.dailyQuest")}
+              subtitle={t("profileHub.dailyQuestSub")}
+              icon="flame-outline"
+              onPress={() =>
+                navigation.navigate("Main", {
+                  screen: "Progress",
+                  params: { screen: "DailyQuest" },
+                } as never)
+              }
+            />
+          </View>
+        ) : null}
+
+        {hubTab === "settings" ? (
+          <View>
+            <ProfileHubRow
+              title={t("profileSettingsUi.location")}
+              subtitle={t("profileSettingsUi.locationSub")}
+              iconModule={MENU_SVG.location}
+              onPress={() => setActiveSection("location")}
+              testID={TEST_IDS.settingsSection("location")}
+            />
+            <ProfileHubRow
+              title={t("profileSettingsUi.gameSettings")}
+              subtitle={t("profileSettingsUi.gameSettingsSub")}
+              iconModule={MENU_SVG.game}
+              onPress={openGameSettings}
+              testID={TEST_IDS.settingsSection("game")}
+            />
+            <ProfileHubRow
+              title={t("profileSettingsUi.about")}
+              subtitle={
+                aboutOpen
+                  ? t("profileSettingsUi.appVersion", { version: APP_VERSION })
+                  : t("profileSettingsUi.aboutSub")
+              }
+              icon="information-circle-outline"
+              onPress={() => setAboutOpen((v) => !v)}
+            />
+            <ProfileHubRow
+              title="Admin"
+              subtitle={t("profileSettingsUi.adminSub")}
+              icon="key-outline"
+              onPress={() => navigation.navigate("AdminHub")}
+            />
+            <TouchableOpacity
+              style={styles.logoutRow}
+              activeOpacity={0.82}
+              onPress={() => setLogoutModalVisible(true)}
+              accessibilityRole="button"
+            >
+              <View style={styles.menuRowLeft}>
+                <Ionicons name="log-out-outline" size={22} color="#FF6B5E" style={styles.logoutIcon} />
+                <Text allowFontScaling={false} style={styles.logoutText}>
+                  {t("profileSettingsUi.signOut")}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#FF6B5E" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </KeyboardAwareScrollView>
       <LogoutConfirmModal
         visible={logoutModalVisible}

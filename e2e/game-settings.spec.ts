@@ -13,6 +13,7 @@ test('game settings: switch court side, enter weight in lb, set level, values pe
 
   const openGameSettings = async () => {
     await openScreen(page, 'ProfileSettings', undefined, ['/api/auth/profile/me'])
+    await page.getByTestId('profile-hub-tab-settings').click()
     await page.getByTestId(T.settingsSection('game')).click()
     await expect(page.getByTestId(T.settingsSetLevel)).toBeVisible()
   }
@@ -53,6 +54,7 @@ test('game settings: out-of-range height shows the range and sends nothing', asy
   const page = await ctx.newPage()
   await openApp(page)
   await openScreen(page, 'ProfileSettings', undefined, ['/api/auth/profile/me'])
+  await page.getByTestId('profile-hub-tab-settings').click()
   await page.getByTestId(T.settingsSection('game')).click()
 
   const posts: string[] = []
