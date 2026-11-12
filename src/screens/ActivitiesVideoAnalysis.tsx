@@ -38,7 +38,8 @@ import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidence
 import { ResultSectionPill } from '../components/ResultSectionPill'
 import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
-import { BiggestMistakesView } from './techniqueResults/BiggestMistakesView'
+import { BiggestMistakesView, mistakeFocusOrder, mistakeKeyPoints } from './techniqueResults/BiggestMistakesView'
+import { DrillsView, type DrillNav } from './techniqueResults/DrillsView'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { MetricsPage } from './techniqueResults/MetricsPage'
 import { ProReferenceCompare } from './techniqueResults/ProReferenceCompare'
@@ -641,8 +642,10 @@ export function ActivitiesVideoAnalysis({
   const [correctionCompareW, setCorrectionCompareW] = useState(0)
 
   const [analysisTab, setAnalysisTab] = useState<'overview' | 'shotInfo' | 'metrics' | 'viewAngles'>('overview')
-  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare'>('overview')
-  const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare'>('overview')
+  const [overviewDetail, setOverviewDetail] = useState<'overview' | 'mistakes' | 'pose' | 'compare' | 'drills'>('overview')
+  const [poseReturn, setPoseReturn] = useState<'overview' | 'mistakes' | 'compare' | 'drills'>('overview')
+  /** Open drill / step inside the drills view; survives a trip to Smart 3D and back. */
+  const [drillNav, setDrillNav] = useState<DrillNav>(null)
 
   const styles = useMemo(() => getStyles(theme), [theme])
 
@@ -1062,6 +1065,33 @@ export function ActivitiesVideoAnalysis({
     )
   }
 
+  if (overviewDetail === 'drills') {
+    const timing = aiSnapshot?.biomechanicsSummary?.timing
+    const errors = aiSections?.technicalErrors ?? []
+    return (
+      <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
+        <DrillsView
+          videoUri={videoUri(session.videoPath)}
+          shotLabel={session.shotLabel ?? shotTitle}
+          focus={mistakeFocusOrder(errors)}
+          thumbTimeMs={typeof timing?.impact_frame === 'number' ? (timing.impact_frame / (timing.fps || 30)) * 1000 : 0}
+          proVideoUri={proVideoUrl}
+          keyPoints={mistakeKeyPoints(errors)}
+          nav={drillNav}
+          onNav={setDrillNav}
+          onSmart3d={() => {
+            setPoseReturn('drills')
+            setOverviewDetail('pose')
+          }}
+          onClose={() => {
+            setDrillNav(null)
+            setOverviewDetail('compare')
+          }}
+        />
+      </View>
+    )
+  }
+
   if (overviewDetail === 'compare') {
     const angles = aiSnapshot?.biomechanicsSummary?.angles_deg_proxy
     const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
@@ -1084,6 +1114,7 @@ export function ActivitiesVideoAnalysis({
             setPoseReturn('compare')
             setOverviewDetail('pose')
           }}
+          onDrills={() => setOverviewDetail('drills')}
           analysisId={session.analysisId}
           contactMs={
             typeof aiSnapshot?.biomechanicsSummary?.timing?.impact_frame === 'number'

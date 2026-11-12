@@ -204,6 +204,24 @@ export function mistakeFocusOrder(errors: string[]): MistakeId[] {
   return [...hit, ...all.filter((id) => !hit.includes(id))]
 }
 
+/**
+ * The coach's error lines as drill key points, each tagged with the body area it names
+ * (`null` when it names none). Same grouping as `mistakeFocusOrder`.
+ */
+export function mistakeKeyPoints(errors: string[], limit = 4): { focus: MistakeId | null; text: string }[] {
+  const focus = (id: ItemId): MistakeId =>
+    id === 'shoulder' ? 'elbow' : id === 'wrist' ? 'racket' : id === 'knee' ? 'foot' : id
+  return errors
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, limit)
+    .map((text) => {
+      const lower = text.toLowerCase()
+      const hit = MISTAKES.find((m) => m.words.some((w) => lower.includes(w)))
+      return { focus: hit ? focus(hit.id) : null, text }
+    })
+}
+
 function rangeDiff(value: number, low: number, high: number) {
   if (value < low) return Math.round(value - low)
   if (value > high) return Math.round(value - high)
