@@ -5,6 +5,7 @@ import { ThemeContext } from '../../context'
 import { PrimaryFill, UI } from '../../components/ui'
 import { LocalSvgAsset, prefetchSvgAssets } from '../../components/LocalSvgAsset'
 import { MockDrillPlayer } from './MockDrillPlayer'
+import { getDrillMediaPack, type DrillStepMedia } from './drillMedia'
 
 const TASK_SVG = require('../../../assets/drillspage/yourtasks.svg')
 const FOCUS_SVG = require('../../../assets/drillspage/focusonblue.svg')
@@ -13,44 +14,8 @@ const CLOCK_SVG = require('../../../assets/drillspage/clock.svg')
 
 prefetchSvgAssets([TASK_SVG, FOCUS_SVG, PRACTICE_SVG, CLOCK_SVG])
 
-const STEP_COUNT = 4
 const CARD_BORDER = '#336AB3'
 const CHECK_GREEN = '#00FFA6'
-
-const STEPS = [
-  {
-    title: 'Prepare without the racket',
-    summary: 'Move backward and locate the contact point by catching the ball.',
-    task: 'Perform the full movement without a ball, focusing on a smooth, controlled swing.',
-    focus: ['Move back early and stay balanced.', 'Catch the ball in front and above your shoulder.'],
-    practice: '3 sets x 8 repetitions',
-    minutes: '~ 2 min',
-  },
-  {
-    title: 'Without the racket',
-    summary: 'Move backward and locate the contact point by catching the ball.',
-    task: 'Perform the full movement without a ball, focusing on a smooth, controlled swing.',
-    focus: ['Move back early and stay balanced.', 'Catch the ball in front and above your shoulder.'],
-    practice: '3 sets x 8 repetitions',
-    minutes: '~ 2 min',
-  },
-  {
-    title: 'Add the ball',
-    summary: 'Move backward and locate the contact point by catching the ball.',
-    task: 'Perform the full movement without a ball, focusing on a smooth, controlled swing.',
-    focus: ['Move back early and stay balanced.', 'Catch the ball in front and above your shoulder.'],
-    practice: '3 sets x 8 repetitions',
-    minutes: '~ 2 min',
-  },
-  {
-    title: 'Put it together',
-    summary: 'Move backward and locate the contact point by catching the ball.',
-    task: 'Perform the full movement without a ball, focusing on a smooth, controlled swing.',
-    focus: ['Move back early and stay balanced.', 'Catch the ball in front and above your shoulder.'],
-    practice: '3 sets x 8 repetitions',
-    minutes: '~ 2 min',
-  },
-] as const
 
 type Props = {
   onClose: () => void
@@ -58,21 +23,26 @@ type Props = {
   onBackToOverview: () => void
   /** Final-step Next → Drill Completed screen. */
   onComplete?: () => void
+  /** Suggested-drills card id. */
+  drillId?: string
 }
 
 /**
  * Drill step walkthrough — opened from overview “Next”.
  * Same video chrome / pill CTAs as the overview; badges + Your Focus removed.
  */
-export function DrillWalkthroughPage({ onClose, onBackToOverview, onComplete }: Props) {
+export function DrillWalkthroughPage({ onClose, onBackToOverview, onComplete, drillId }: Props) {
   const { theme } = useContext(ThemeContext)
   const font = theme.regularFont
   const fontSemi = theme.semiBoldFont ?? theme.regularFont
   const fontMed = theme.mediumFont ?? theme.regularFont
+  const pack = getDrillMediaPack(drillId)
+  const steps: DrillStepMedia[] = pack.steps
+  const stepCount = steps.length
   const [stepIndex, setStepIndex] = useState(0)
   const [trackWidth, setTrackWidth] = useState(0)
   const scrollRef = useRef<ScrollView>(null)
-  const step = STEPS[stepIndex] ?? STEPS[0]
+  const step = steps[stepIndex] ?? steps[0]
 
   function scrollToTop() {
     scrollRef.current?.scrollTo({ y: 0, animated: true })
@@ -84,7 +54,7 @@ export function DrillWalkthroughPage({ onClose, onBackToOverview, onComplete }: 
   const firstCenter = DOT_PAD + DOT_SIZE / 2
   const lastCenter = Math.max(firstCenter, trackWidth - DOT_PAD - DOT_SIZE / 2)
   const railSpan = Math.max(0, lastCenter - firstCenter)
-  const progress = STEP_COUNT <= 1 ? 0 : stepIndex / (STEP_COUNT - 1)
+  const progress = stepCount <= 1 ? 0 : stepIndex / (stepCount - 1)
   const trailWidth = stepIndex <= 0 ? 0 : progress * railSpan
 
   function onTrackLayout(e: LayoutChangeEvent) {
@@ -101,7 +71,7 @@ export function DrillWalkthroughPage({ onClose, onBackToOverview, onComplete }: 
   }
 
   function goNext() {
-    if (stepIndex >= STEP_COUNT - 1) {
+    if (stepIndex >= stepCount - 1) {
       onComplete?.()
       return
     }
@@ -136,7 +106,7 @@ export function DrillWalkthroughPage({ onClose, onBackToOverview, onComplete }: 
             {trailWidth > 0 ? (
               <View style={[styles.dotsTrail, { left: firstCenter, width: trailWidth }]} />
             ) : null}
-            {Array.from({ length: STEP_COUNT }, (_, i) => {
+            {Array.from({ length: stepCount }, (_, i) => {
               if (i === stepIndex) {
                 return (
                   <View key={i} style={styles.dotActiveOuter}>
@@ -171,8 +141,9 @@ export function DrillWalkthroughPage({ onClose, onBackToOverview, onComplete }: 
         </View>
 
         <MockDrillPlayer
-          key={`drill-player-${stepIndex}`}
+          key={`drill-player-${stepIndex}-${step.videoUri ?? 'none'}`}
           fontFamily={font}
+          uri={step.videoUri}
           style={styles.playerSpacing}
           testID="drill-walkthrough-player"
         />

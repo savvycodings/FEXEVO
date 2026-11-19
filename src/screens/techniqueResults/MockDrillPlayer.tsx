@@ -10,12 +10,13 @@ import {
   type ViewStyle,
 } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
+import { AVPlaybackStatus, ResizeMode, Video } from 'expo-av'
 
-/** Placeholder clip length until real media is wired. */
+/** Placeholder clip length when no real media URI is provided. */
 export const VIDEO_DURATION_SEC = 8
 
-function formatVideoClock(seconds: number) {
-  const clamped = Math.max(0, Math.min(VIDEO_DURATION_SEC, seconds))
+function formatVideoClock(seconds: number, durationSec: number) {
+  const clamped = Math.max(0, Math.min(durationSec, seconds))
   const whole = Math.floor(clamped)
   const mins = Math.floor(whole / 60)
   const secs = whole % 60
@@ -24,25 +25,36 @@ function formatVideoClock(seconds: number) {
 
 type Props = {
   fontFamily: string
+  /** Absolute video URL. Null/empty keeps the timer placeholder. */
+  uri?: string | null
   /** Extra shell style (e.g. margin). */
   style?: StyleProp<ViewStyle>
   testID?: string
 }
 
 /**
- * Semi-functional placeholder player — 8s scrubber, play/pause, drag-to-seek, fullscreen.
+ * Drill player — real expo-av Video when `uri` is set; otherwise 8s scrubber placeholder.
  * Shared by drill overview + walkthrough.
  */
-export function MockDrillPlayer({ fontFamily, style, testID }: Props) {
+export function MockDrillPlayer({ fontFamily, uri, style, testID }: Props) {
+  const hasUri = !!(uri && uri.trim())
+  const videoRef = useRef<Video>(null)
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
+  const [durationSec, setDurationSec] = useState(hasUri ? 0 : VIDEO_DURATION_SEC)
   const [fullscreen, setFullscreen] = useState(false)
   const scrubWRef = useRef(0)
   const scrubLeftRef = useRef(0)
   const trackRef = useRef<View>(null)
 
   useEffect(() => {
-    if (!playing) return
+    setPlaying(false)
+    setCurrent(0)
+    setDurationSec(hasUri ? 0 : VIDEO_DURATION_SEC)
+  }, [uri, hasUri])
+
+  useEffect(() => {
+    if (hasUri || !playing) return
     const id = setInterval(() => {
       setCurrent((t) => {
         const next = t + 0.05
@@ -54,12 +66,46 @@ export function MockDrillPlayer({ fontFamily, style, testID }: Props) {
       })
     }, 50)
     return () => clearInterval(id)
-  }, [playing])
+  }, [playing, hasUri])
 
-  const pct = Math.max(0, Math.min(100, (current / VIDEO_DURATION_SEC) * 100))
-  const clockLabel = `${formatVideoClock(current)}/${formatVideoClock(VIDEO_DURATION_SEC)}`
+  const effectiveDuration = durationSec > 0 ? durationSec : VIDEO_DURATION_SEC
+  const pct = Math.max(0, Math.min(100, (current / effectiveDuration) * 100))
+  const clockLabel = `${formatVideoClock(current, effectiveDuration)}/${formatVideoClock(
+    effectiveDuration,
+    effectiveDuration
+  )}`
 
-  function togglePlay() {
+  function onPlaybackStatusUpdate(status: AVPlaybackStatus) {
+    if (!status.isLoaded) return
+    const dur = (status.durationMillis ?? 0) / 1000
+    const pos = (status.positionMillis ?? 0) / 1000
+    if (dur > 0) setDurationSec(dur)
+    setCurrent(pos)
+    setPlaying(status.isPlaying)
+    if (status.didJustFinish) {
+      setPlaying(false)
+      setCurrent(dur > 0 ? dur : 0)
+    }
+  }
+
+  async function togglePlay() {
+    if (hasUri) {
+      const ref = videoRef.current
+      if (!ref) return
+      const status = await ref.getStatusAsync()
+      if (!status.isLoaded) {
+        await ref.playAsync()
+        return
+      }
+      if (status.didJustFinish || (status.durationMillis != null && status.positionMillis >= status.durationMillis - 50)) {
+        await ref.setPositionAsync(0)
+        await ref.playAsync()
+        return
+      }
+      if (status.isPlaying) await ref.pauseAsync()
+      else await ref.playAsync()
+      return
+    }
     if (current >= VIDEO_DURATION_SEC) {
       setCurrent(0)
       setPlaying(true)
@@ -68,10 +114,18 @@ export function MockDrillPlayer({ fontFamily, style, testID }: Props) {
     setPlaying((p) => !p)
   }
 
-  function seekFromPageX(pageX: number) {
+  async function seekFromPageX(pageX: number) {
     const w = scrubWRef.current
     if (w <= 0) return
     const ratio = Math.max(0, Math.min(1, (pageX - scrubLeftRef.current) / w))
+    if (hasUri) {
+      const ref = videoRef.current
+      if (!ref) return
+      const status = await ref.getStatusAsync()
+      if (!status.isLoaded || !status.durationMillis) return
+      await ref.setPositionAsync(ratio * status.durationMillis)
+      return
+    }
     setCurrent(ratio * VIDEO_DURATION_SEC)
   }
 
@@ -85,16 +139,30 @@ export function MockDrillPlayer({ fontFamily, style, testID }: Props) {
 
   function onScrubGrant(e: GestureResponderEvent) {
     const pageX = e.nativeEvent.pageX
-    captureScrubGeometry(seekFromPageX, pageX)
+    captureScrubGeometry((x) => {
+      void seekFromPageX(x)
+    }, pageX)
   }
 
   function onScrubMove(e: GestureResponderEvent) {
-    seekFromPageX(e.nativeEvent.pageX)
+    void seekFromPageX(e.nativeEvent.pageX)
   }
 
-  function renderStage(full: boolean) {
+  function renderStage(full: boolean, attachVideo: boolean) {
     return (
       <View style={[styles.playerStage, full ? styles.playerStageFull : null]}>
+        {hasUri && attachVideo ? (
+          <Video
+            ref={videoRef}
+            style={StyleSheet.absoluteFill}
+            source={{ uri: uri!.trim() }}
+            resizeMode={ResizeMode.CONTAIN}
+            useNativeControls={false}
+            isLooping={false}
+            onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+            shouldPlay={false}
+          />
+        ) : null}
         <Pressable
           style={styles.fullscreen}
           accessibilityRole="button"
@@ -110,7 +178,9 @@ export function MockDrillPlayer({ fontFamily, style, testID }: Props) {
             accessibilityLabel={playing ? 'Pause' : 'Play'}
             style={styles.playBtn}
             hitSlop={6}
-            onPress={togglePlay}
+            onPress={() => {
+              void togglePlay()
+            }}
           >
             <Ionicons
               name={playing ? 'pause' : 'play'}
@@ -148,7 +218,7 @@ export function MockDrillPlayer({ fontFamily, style, testID }: Props) {
   return (
     <>
       <View style={[styles.player, style]} testID={testID}>
-        <View style={styles.playerClip}>{renderStage(false)}</View>
+        <View style={styles.playerClip}>{renderStage(false, !fullscreen)}</View>
       </View>
       <Modal
         visible={fullscreen}
@@ -158,7 +228,7 @@ export function MockDrillPlayer({ fontFamily, style, testID }: Props) {
         statusBarTranslucent
       >
         <View style={styles.fsRoot} testID={testID ? `${testID}-fullscreen` : undefined}>
-          {renderStage(true)}
+          {renderStage(true, fullscreen)}
         </View>
       </Modal>
     </>

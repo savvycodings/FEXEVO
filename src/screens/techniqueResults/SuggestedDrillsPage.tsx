@@ -97,10 +97,13 @@ export function SuggestedDrillsPage({
     setOverviewOpen(false)
   }
 
+  const activeDrillId = selectedId ?? 'bandeja-drill'
+  const activeDrill = MOCK_DRILLS.find((d) => d.id === activeDrillId) ?? MOCK_DRILLS[0]
+
   if (completedOpen) {
     return (
       <DrillCompletedPage
-        drillName="Bandeja Drill"
+        drillName={activeDrill?.title ?? 'Drill'}
         onDoAgain={restartWalkthroughFromStepOne}
         onDone={backToSuggestedDrills}
         onNextDrill={() => {
@@ -115,6 +118,7 @@ export function SuggestedDrillsPage({
     return (
       <DrillWalkthroughPage
         key={walkthroughKey}
+        drillId={activeDrillId}
         onClose={() => setWalkthroughOpen(false)}
         onBackToOverview={() => setWalkthroughOpen(false)}
         onComplete={() => {
@@ -128,8 +132,9 @@ export function SuggestedDrillsPage({
   if (overviewOpen) {
     return (
       <DrillOverviewPage
-        shotLabel={shotLabel}
-        subtitle={subtitle}
+        drillId={activeDrillId}
+        shotLabel={activeDrill?.title ?? shotLabel}
+        subtitle={activeDrill?.summary ?? subtitle}
         onClose={() => setOverviewOpen(false)}
         onNext={() => setWalkthroughOpen(true)}
       />

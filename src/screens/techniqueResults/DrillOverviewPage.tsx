@@ -5,6 +5,7 @@ import { ThemeContext } from '../../context'
 import { PrimaryFill, UI } from '../../components/ui'
 import { LocalSvgAsset, prefetchSvgAssets } from '../../components/LocalSvgAsset'
 import { MockDrillPlayer } from './MockDrillPlayer'
+import { getDrillMediaPack, type DrillStepMedia } from './drillMedia'
 
 const RACKET_SVG = require('../../../assets/drillspage/tennisracket.svg')
 const STEPS_SVG = require('../../../assets/drillspage/steps.svg')
@@ -20,34 +21,12 @@ const FOCUS_GOLD = '#FFBB00'
 const FOCUS_BORDER = '#FFBB0080'
 const FOCUS_DISC = '#FFBB0026'
 
-type Step = {
-  title: string
-  summary: string
-}
-
-const STEPS: Step[] = [
-  {
-    title: 'Prepare without the racket',
-    summary: 'Improve your overhead position and spacing',
-  },
-  {
-    title: 'Without the racket',
-    summary: 'Improve your overhead position and spacing',
-  },
-  {
-    title: 'Add the ball',
-    summary: 'Improve your overhead position and spacing',
-  },
-  {
-    title: 'Put it together',
-    summary: 'Improve your overhead position and spacing',
-  },
-]
-
 type Props = {
   onClose: () => void
   /** Opens the step walkthrough (Figma “Next”). */
   onNext?: () => void
+  /** Suggested-drills card id (bandeja-drill, overhead-positioning, …). */
+  drillId?: string
   shotLabel?: string
   subtitle?: string
 }
@@ -59,13 +38,19 @@ type Props = {
 export function DrillOverviewPage({
   onClose,
   onNext,
-  shotLabel = 'Bandeja',
-  subtitle = 'Targeted drills to improve your bandeja and overhead consistency',
+  drillId,
+  shotLabel,
+  subtitle,
 }: Props) {
   const { theme } = useContext(ThemeContext)
   const font = theme.regularFont
   const fontSemi = theme.semiBoldFont ?? theme.regularFont
   const fontMed = theme.mediumFont ?? theme.regularFont
+  const pack = getDrillMediaPack(drillId)
+  const steps: DrillStepMedia[] = pack.steps
+  const heroShot = shotLabel ?? pack.shotLabel
+  const heroSubtitle = subtitle ?? pack.subtitle
+  const overviewUri = steps[0]?.videoUri ?? null
 
   return (
     <View style={[styles.shell, { backgroundColor: UI.pageBg }]} testID="drill-overview">
@@ -91,22 +76,26 @@ export function DrillOverviewPage({
           </View>
           <View style={styles.heroCopy}>
             <Text allowFontScaling={false} style={[styles.heroTitle, { fontFamily: fontSemi }]}>
-              {shotLabel}
+              {heroShot}
             </Text>
             <Text allowFontScaling={false} style={[styles.heroSubtitle, { fontFamily: font }]}>
-              {subtitle}
+              {heroSubtitle}
             </Text>
           </View>
         </View>
 
-        <MockDrillPlayer fontFamily={font} testID="drill-overview-player" />
+        <MockDrillPlayer
+          fontFamily={font}
+          uri={overviewUri}
+          testID="drill-overview-player"
+        />
 
         <View style={styles.statRow}>
           <View style={styles.statChip}>
             <View style={styles.statInner}>
               <LocalSvgAsset assetModule={STEPS_SVG} width={26} height={26} />
               <Text allowFontScaling={false} style={[styles.statText, { fontFamily: font }]}>
-                4 Steps
+                {steps.length} Steps
               </Text>
             </View>
           </View>
@@ -144,7 +133,7 @@ export function DrillOverviewPage({
         </Text>
 
         <View style={styles.stepList}>
-          {STEPS.map((step, i) => (
+          {steps.map((step, i) => (
             <Pressable
               key={step.title}
               accessibilityRole="button"
