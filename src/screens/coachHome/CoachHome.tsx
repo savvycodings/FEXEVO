@@ -20,7 +20,11 @@ import { LocalSvgAsset } from '../../components/LocalSvgAsset'
 import { CARD_GLOW, GradientText, UI } from '../../components/ui'
 import { glow } from '../progress/progressTheme'
 import { TEST_IDS } from '../../lib/testIds'
-import type { PhysicalHistoryItem, PhysicalMetricsValues } from '../../lib/physicalMetrics'
+import {
+  type PhysicalHistoryItem,
+  type PhysicalMetricsValues,
+} from '../../lib/physicalMetrics'
+import { displayHeadlineScore } from '../../lib/techniqueScoreDisplay'
 import { peekCoachHome, prefetchCoachHome, type ActivityItem } from './coachHomeData'
 import { DOMAIN } from '../../../constants'
 import { getThumbnailAsync } from '../../lib/videoThumbnails'
@@ -137,13 +141,16 @@ export function CoachHome({
   const newest = history?.[0] ?? null
   const now = Date.now()
   const day = 24 * 60 * 60 * 1000
-  const scoredItems = (history ?? []).filter((item) => typeof item.score === 'number')
+  const scoredItems = (history ?? []).filter(
+    (item) =>
+      typeof item.score === 'number' ||
+      (item.physicalMetrics && typeof item.physicalMetrics.stability === 'number')
+  )
+  const scoreFromItem = (item: PhysicalHistoryItem | null | undefined) =>
+    item ? displayHeadlineScore(item.score, item.physicalMetrics) : null
   const score =
-    typeof scoredItems[0]?.score === 'number'
-      ? scoredItems[0].score
-      : typeof latest?.score === 'number'
-        ? latest.score
-        : null
+    scoreFromItem(scoredItems[0]) ??
+    (typeof latest?.score === 'number' ? Math.round(latest.score) : null)
   const inWindow = (minDays: number, maxDays: number) =>
     scoredItems.filter((item) => {
       const at = Date.parse(item.createdAt)
@@ -156,19 +163,30 @@ export function CoachHome({
   const priorItems = inWindow(period.days, period.days * 2)
   let delta: number | null = null
   let deltaCaption = t(period.vsKey)
-  const periodAvg = average(periodItems.map((item) => item.score as number))
-  const priorAvg = average(priorItems.map((item) => item.score as number))
+  const periodScores = periodItems
+    .map((item) => scoreFromItem(item))
+    .filter((n): n is number => n != null)
+  const priorScores = priorItems
+    .map((item) => scoreFromItem(item))
+    .filter((n): n is number => n != null)
+  const periodAvg = average(periodScores)
+  const priorAvg = average(priorScores)
   if (periodAvg != null && priorAvg != null) {
     delta = Math.round(periodAvg - priorAvg)
   } else if (scoredItems.length >= 2) {
-    delta = Math.round((scoredItems[0].score as number) - (scoredItems[1].score as number))
-    deltaCaption = t('technique.home.vsLastSession')
+    const a = scoreFromItem(scoredItems[0])
+    const b = scoreFromItem(scoredItems[1])
+    if (a != null && b != null) {
+      delta = Math.round(a - b)
+      deltaCaption = t('technique.home.vsLastSession')
+    }
   }
   const bars = periodItems
     .slice()
     .reverse()
     .slice(-12)
-    .map((item) => item.score as number)
+    .map((item) => scoreFromItem(item))
+    .filter((n): n is number => n != null)
   const heroHeight = Math.round(Math.min(440, Math.max(220, winH * 0.4)))
   const nameSize = winW < 360 ? 28 : 34
   // New-user home must fit the viewport exactly: fixed sections keep their size and the
@@ -1046,7 +1064,7 @@ function LatestCard({
   const whenLabel = when
     ? `${isToday ? t('technique.home.today') : when.toLocaleDateString(locale, { month: 'short', day: 'numeric' })} - ${time}`
     : ''
-  const score = typeof item.score === 'number' ? Math.round(item.score) : null
+  const score = displayHeadlineScore(item.score, metrics)
   const [localThumb, setLocalThumb] = useState<string | null>(null)
   useEffect(() => {
     if (item.thumbnailUrl || !item.videoPath) return

@@ -1,3 +1,9 @@
+import {
+  averagePhysicalMetrics,
+  parsePhysicalMetricsFromAnalysis,
+  type PhysicalMetricsValues,
+} from './physicalMetrics'
+
 /**
  * Align with server `storedAiScoreToPercent`.
  * Legacy rows: 0–10 without `score_scale`; new rows: `score_scale === 'percent'`.
@@ -16,6 +22,30 @@ export function storedAiScoreToPercent(
     return Math.round(Math.max(0, Math.min(100, score * 10)))
   }
   return Math.round(Math.max(0, Math.min(100, score)))
+}
+
+/**
+ * Ring / list score: average of the five physical metrics when present.
+ * Aligns with server `headlineScoreFromAnalysis`.
+ */
+export function headlineScoreFromAnalysis(
+  ai: Record<string, unknown> | null | undefined
+): number | null {
+  const pm = parsePhysicalMetricsFromAnalysis(ai)
+  if (pm) return averagePhysicalMetrics(pm)
+  return storedAiScoreToPercent(ai)
+}
+
+/** Prefer avg-of-five from metrics; fall back to a stored list score. */
+export function displayHeadlineScore(
+  score: number | null | undefined,
+  metrics?: PhysicalMetricsValues | null
+): number | null {
+  if (metrics) return averagePhysicalMetrics(metrics)
+  if (typeof score === 'number' && Number.isFinite(score)) {
+    return Math.round(Math.max(0, Math.min(100, score)))
+  }
+  return null
 }
 
 function normalize0to100(value: unknown): number | null {

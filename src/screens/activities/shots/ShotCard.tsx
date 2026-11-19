@@ -5,9 +5,25 @@ import { LinearGradient } from 'expo-linear-gradient'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import type { ActivitySession } from '../../../lib/activitySession'
+import { averagePhysicalMetrics, type PhysicalMetricsValues } from '../../../lib/physicalMetrics'
 import { displayTrainShotTitle } from '../../../lib/trainShotDisplay'
 import { PG, glow } from '../../progress/progressTheme'
 import { formatDuration, shotCategoryLabelKey } from './shotsFilter'
+
+function scoreFromSession(s: ActivitySession): number | null {
+  const pm = s.physicalMetrics
+  if (
+    pm &&
+    typeof pm.reactions === 'number' &&
+    typeof pm.acceleration === 'number'
+  ) {
+    return averagePhysicalMetrics(pm as PhysicalMetricsValues)
+  }
+  if (typeof s.score === 'number' && Number.isFinite(s.score)) {
+    return Math.round(Math.max(0, Math.min(100, s.score)))
+  }
+  return null
+}
 
 type Props = {
   session: ActivitySession
@@ -40,7 +56,7 @@ export function ShotCard({
   const [thumbFailed, setThumbFailed] = useState(false)
 
   const title = displayTrainShotTitle({ strokeLabel: s.shotLabel, strokeName: s.shotLabel })
-  const score = typeof s.score === 'number' ? Math.round(Math.max(0, Math.min(100, s.score))) : null
+  const score = scoreFromSession(s)
   const categoryKey = shotCategoryLabelKey(s.category)
   const duration = formatDuration(s.durationMs)
   const date = new Date(s.createdAt).toLocaleDateString(i18n.language, {

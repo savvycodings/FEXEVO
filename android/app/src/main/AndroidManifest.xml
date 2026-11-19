@@ -7,6 +7,9 @@
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
   <uses-permission android:name="android.permission.VIBRATE"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <!-- Play: portrait lock + ACCESS_WIFI_STATE (expo-network) imply these as required — keep optional. -->
+  <uses-feature android:name="android.hardware.screen.portrait" android:required="false" tools:node="replace"/>
+  <uses-feature android:name="android.hardware.wifi" android:required="false" tools:node="replace"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>

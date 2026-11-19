@@ -127,9 +127,9 @@ import { stripCoachRichMarkers } from '../lib/coachRichText'
 import { stripTrainClipIndexSuffix } from '../lib/trainShotDisplay'
 import { normalizePoseData, resolveTotalFrames, type PoseFrameRow } from '../lib/techniquePose'
 import {
+  headlineScoreFromAnalysis,
   storedAiBreakdownToPercent,
   storedAiConfidenceToPercent,
-  storedAiScoreToPercent,
 } from '../lib/techniqueScoreDisplay'
 import {
   clampClipRangeMs,
@@ -833,11 +833,6 @@ export function Technique() {
   const metrics = analysisJson?.metrics || null
   const retrieval = (metrics as { retrieval?: TechniqueRetrievalMetrics } | null)?.retrieval
   const aiAnalysis = metrics?.ai_analysis || null
-  /** Overall 0–100 from `metrics.ai_analysis.score` after server GPT + v6.1.x calibration (see `techniqueRouter` / `scoreCalibration`). */
-  const score =
-    aiAnalysis != null
-      ? storedAiScoreToPercent(aiAnalysis as Record<string, unknown>)
-      : null
   const scoreBreakdown =
     aiAnalysis != null
       ? storedAiBreakdownToPercent(aiAnalysis as Record<string, unknown>)
@@ -875,8 +870,11 @@ export function Technique() {
     () => parsePhysicalMetricsFromAnalysis(aiAnalysis as Record<string, unknown> | null),
     [aiAnalysis]
   )
-  /** Same 0–100 as homepage / activities — never swap in the physical-metrics average. */
-  const headlineScore = score
+  /** Ring / list score: equal-weight average of the five physical metrics. */
+  const headlineScore =
+    aiAnalysis != null
+      ? headlineScoreFromAnalysis(aiAnalysis as Record<string, unknown>)
+      : null
   const metricsBlurb = useMemo(() => {
     const diagnosis =
       typeof localeAnalysis?.diagnosis === 'string' ? localeAnalysis.diagnosis.trim() : ''
@@ -2873,6 +2871,7 @@ export function Technique() {
           <DrillsView
             videoUri={uploadedVideoUrl}
             shotLabel={userShot?.shotLabel ?? proReferenceShot}
+            strokePreset={userShot?.strokePreset ?? null}
             focus={mistakeFocusOrder(technicalErrorsList)}
             thumbTimeMs={
               typeof biomechanicsSummary?.timing?.impact_frame === 'number'
@@ -3390,8 +3389,18 @@ export function Technique() {
                   analysisId={analysisId}
                   onOpenFix={openMistakeFix}
                   onSeeCorrectMovement={() => {
-                    setDrillNav(null)
-                    setResultsDetail('drills')
+                    const focus = mistakeFocusOrder(technicalErrorsList)
+                    const first = focus[0]
+                    const joint: ViewJoint =
+                      first === 'foot'
+                        ? 'knee'
+                        : first === 'racket'
+                          ? 'wrist'
+                          : first === 'torso'
+                            ? 'torso'
+                            : 'elbow'
+                    setShotVsIdealJoint(joint)
+                    setResultsDetail('shotVsIdeal')
                   }}
                 />
               }
@@ -3455,7 +3464,7 @@ export function Technique() {
                     totalVidFrames={step3TotalVidFrames}
                     qualitySession={{
                       rating: typeof aiAnalysis?.rating === 'string' ? aiAnalysis.rating : null,
-                      score: score ?? null,
+                      score: headlineScore ?? null,
                     }}
                     isLooping
                     showDetailedPoseOverlay
@@ -3465,7 +3474,7 @@ export function Technique() {
               </View>
             ) : null}
 
-            {false && score != null && (
+            {false && headlineScore != null && (
               <LinearGradient
                 colors={[...STEP3_CARD_GRADIENT_COLORS]}
                 locations={[...STEP3_CARD_GRADIENT_LOCATIONS]}
@@ -3556,7 +3565,7 @@ export function Technique() {
                                 aiAnalysis?.rating != null
                                   ? String(aiAnalysis.rating)
                                   : null,
-                              score: score ?? null,
+                              score: headlineScore ?? null,
                               diagnosis:
                                 typeof localeAnalysis.diagnosis === 'string'
                                   ? localeAnalysis.diagnosis

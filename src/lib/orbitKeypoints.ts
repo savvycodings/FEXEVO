@@ -23,8 +23,8 @@ export function orbitKeypointsAt(
       dist = d
     }
   }
-  const maxGap = Math.max(5, Math.round(last * 0.05))
-  if (dist > maxGap) return null
+  // Always use the nearest sample. Rejecting large gaps fell back to the contact still
+  // while the orbit video kept turning — markers then sat on the wrong pose.
   return best.keypoints
 }
 

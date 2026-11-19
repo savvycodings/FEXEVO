@@ -20,7 +20,13 @@ export type ActivitySession = {
   durationMs?: number | null
   /** Train category id (e.g. `net_play`), when the analysis resolved one. */
   category?: string | null
-  physicalMetrics?: { stability: number; power: number; agility: number } | null
+  physicalMetrics?: {
+    stability: number
+    power: number
+    agility: number
+    reactions?: number
+    acceleration?: number
+  } | null
   rating?: string | null
   coachReviewId?: string | null
   coachReviewStatus?: string | null

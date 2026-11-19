@@ -44,10 +44,6 @@ type HeaderProps = {
   onSettingsPress?: () => void
   /** Notifications (immediately left of settings). */
   onNotificationsPress?: () => void
-  /** Dev/test shortcut: open drills without finishing an analysis (left of notifications). */
-  onDrillsPress?: () => void
-  /** Dev/test shortcut: Figma Suggested Drills mock (left of Drills). */
-  onDrills1Press?: () => void
   /** Progress / You: show search instead of name + rank. */
   headerLeftMode?: 'profile' | 'search'
   onSearchPress?: () => void
@@ -67,8 +63,6 @@ export function Header({
   profileImageUri,
   onSettingsPress,
   onNotificationsPress,
-  onDrillsPress,
-  onDrills1Press,
   headerLeftMode = 'profile',
   onSearchPress,
   onBackPress,
@@ -147,36 +141,6 @@ export function Header({
         <View style={styles.leftEmptySlot} />
       )}
       <View style={styles.rightCluster}>
-        {onDrills1Press ? (
-          <TouchableOpacity
-            style={styles.drillsButton}
-            activeOpacity={0.8}
-            onPress={onDrills1Press}
-            accessibilityLabel="Open drills mock"
-            accessibilityRole="button"
-            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-            testID="header-drills-1"
-          >
-            <Text allowFontScaling={false} style={styles.drillsButtonText}>
-              Drills 1
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-        {onDrillsPress ? (
-          <TouchableOpacity
-            style={styles.drillsButton}
-            activeOpacity={0.8}
-            onPress={onDrillsPress}
-            accessibilityLabel="Open drills"
-            accessibilityRole="button"
-            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-            testID="header-drills"
-          >
-            <Text allowFontScaling={false} style={styles.drillsButtonText}>
-              Drills
-            </Text>
-          </TouchableOpacity>
-        ) : null}
         {onNotificationsPress ? (
           <TouchableOpacity
             style={styles.notiButton}
@@ -329,21 +293,6 @@ function getStyles(
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-    },
-    drillsButton: {
-      height: 28,
-      paddingHorizontal: 10,
-      borderRadius: 14,
-      backgroundColor: '#00C853',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 2,
-    },
-    drillsButtonText: {
-      color: '#FFFFFF',
-      fontFamily: theme.semiBoldFont,
-      fontSize: 12,
-      lineHeight: 14,
     },
     notiButton: {
       width: 40,

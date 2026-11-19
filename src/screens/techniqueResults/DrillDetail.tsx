@@ -10,6 +10,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { ThemeContext } from '../../context'
 import { CARD_GLOW, UI } from '../../components/ui'
 import { stepText, stepTitle, type Drill, type DrillLevel } from '../../lib/drillsApi'
+import { findDrillMediaPack } from './drillMedia'
 import { BackArrowIcon } from './BackArrowIcon'
 
 type Props = {
@@ -52,7 +53,9 @@ export function DrillDetail({ drill, videoUri, thumb, shotLabel, focusLine, onOp
   const insets = useSafeAreaInsets()
   const tone = LEVEL_TONE[drill.level] ?? LEVEL_TONE.beginner
   const levelLabel = t(`analysis.drills.level.${drill.level}`)
-  const clipUri = drill.videoUrl || videoUri
+  const pack = findDrillMediaPack(drill.slug)
+  const packVideo = pack?.steps.find((s) => s.videoUri)?.videoUri ?? null
+  const clipUri = packVideo || drill.videoUrl || videoUri
 
   return (
     <ScrollView

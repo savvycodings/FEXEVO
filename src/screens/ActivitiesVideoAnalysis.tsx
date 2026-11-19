@@ -20,9 +20,10 @@ import { authClient } from '../lib/auth-client'
 import { normalizePoseData, type PoseFrameRow, resolveTotalFrames } from '../lib/techniquePose'
 import type { ActivitySession } from '../lib/activitySession'
 import {
+  displayHeadlineScore,
+  headlineScoreFromAnalysis,
   storedAiBreakdownToPercent,
   storedAiConfidenceToPercent,
-  storedAiScoreToPercent,
 } from '../lib/techniqueScoreDisplay'
 import { Video, ResizeMode } from 'expo-av'
 import {
@@ -717,7 +718,7 @@ export function ActivitiesVideoAnalysis({
         const retrievalBlock = metrics?.retrieval as Record<string, unknown> | undefined
         const shotHyp = retrievalBlock?.shot_hypothesis as Record<string, unknown> | undefined
         const rating = typeof ai?.rating === 'string' ? ai.rating : null
-        const scorePercent = storedAiScoreToPercent(ai as Record<string, unknown>)
+        const scorePercent = headlineScoreFromAnalysis(ai as Record<string, unknown>)
         const breakdown = storedAiBreakdownToPercent(ai as Record<string, unknown>)
         const confidence = storedAiConfidenceToPercent(ai as Record<string, unknown>)
         const rows = normalizePoseData(overlayBody?.pose_data ?? metrics?.pose_data)
@@ -871,12 +872,15 @@ export function ActivitiesVideoAnalysis({
 
   const effectiveSession = useMemo((): ActivitySession => {
     if (aiSnapshot === null) return session
-    const scoreForSession =
-      aiSnapshot.scorePercent ?? session.score ?? null
+    const scoreForSession = displayHeadlineScore(
+      aiSnapshot.scorePercent ?? session.score,
+      aiSnapshot.physicalMetrics
+    )
     return {
       ...session,
       rating: aiSnapshot.rating ?? session.rating ?? null,
       score: scoreForSession,
+      physicalMetrics: aiSnapshot.physicalMetrics ?? session.physicalMetrics ?? null,
       techniqueScore: aiSnapshot.techniqueScore ?? session.techniqueScore ?? null,
       outcomeScore: aiSnapshot.outcomeScore ?? session.outcomeScore ?? null,
       tacticsScore: aiSnapshot.tacticsScore ?? session.tacticsScore ?? null,
@@ -1069,9 +1073,12 @@ export function ActivitiesVideoAnalysis({
     </View>
   ) : null
 
-  /** Match homepage / history — use calibrated AI score, not the physical-metrics average. */
+  /** Same ring score as analysis / home: average of the five physical metrics. */
   const headlineScore =
-    aiSnapshot?.scorePercent ?? (typeof session.score === 'number' ? Math.round(session.score) : null)
+    displayHeadlineScore(
+      aiSnapshot?.scorePercent ?? session.score,
+      aiSnapshot?.physicalMetrics ?? null
+    )
   const metricsSummary = useMemo(() => {
     // Plain dial copy — keyword pills are off; markers are stripped in DialCaption.
     return aiSections?.diagnosis?.trim() || aiSections?.strengths[0] || null
@@ -1113,6 +1120,7 @@ export function ActivitiesVideoAnalysis({
         <DrillsView
           videoUri={videoUri(session.videoPath)}
           shotLabel={session.shotLabel ?? shotTitle}
+          strokePreset={aiSections?.strokePreset ?? aiSections?.strokePresetId ?? null}
           focus={mistakeFocusOrder(errors)}
           thumbTimeMs={typeof timing?.impact_frame === 'number' ? (timing.impact_frame / (timing.fps || 30)) * 1000 : 0}
           proVideoUri={proVideoUrl}
@@ -1295,8 +1303,18 @@ export function ActivitiesVideoAnalysis({
               analysisId={session.analysisId}
               onOpenFix={openMistakeFix}
               onSeeCorrectMovement={() => {
-                setDrillNav(null)
-                setOverviewDetail('drills')
+                const focus = mistakeFocusOrder(aiSections?.technicalErrors ?? [])
+                const first = focus[0]
+                const joint: ViewJoint =
+                  first === 'foot'
+                    ? 'knee'
+                    : first === 'racket'
+                      ? 'wrist'
+                      : first === 'torso'
+                        ? 'torso'
+                        : 'elbow'
+                setShotVsIdealJoint(joint)
+                setOverviewDetail('shotVsIdeal')
               }}
             />
           </View>

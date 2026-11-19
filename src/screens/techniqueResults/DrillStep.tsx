@@ -7,6 +7,7 @@ import { CARD_GLOW, GlowButton, SegmentedToggle, SurfaceButton, UI } from '../..
 import { stepKeyPoints, stepText, stepTitle, type Drill, type DrillFocus, type DrillKeyPointIcon } from '../../lib/drillsApi'
 import { DrillPlayer } from './DrillDetail'
 import { ClipCard, PRO, YOU } from './CompareWithPro'
+import { findDrillMediaPack } from './drillMedia'
 import { DrillKeyPointIconView, focusIcon } from './drillFocusIcons'
 import { BackArrowIcon } from './BackArrowIcon'
 
@@ -42,7 +43,10 @@ export function DrillStep({ drill, index, videoUri, proVideoUri, keyPoints, onBa
   const sections = useRef<{ video: number; keyPoints: number }>({ video: 0, keyPoints: 0 })
   const total = drill.steps.length
   const last = index >= total - 1
-  const clipUri = drill.videoUrl || videoUri
+  const pack = findDrillMediaPack(drill.slug)
+  const stepMedia = pack?.steps[index] ?? null
+  // Prefer this step's Railway clip, then the drill's overview clip, then the player's shot.
+  const clipUri = stepMedia?.videoUri || drill.videoUrl || videoUri
   const step = drill.steps[index]
   // The step's own key points when the drill has them, else the shot's mistakes.
   const ownPoints = stepKeyPoints(step)

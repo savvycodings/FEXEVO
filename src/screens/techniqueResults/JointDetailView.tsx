@@ -61,8 +61,6 @@ const YOU = '#5B6CFF'
 const PRO = '#3DDC97'
 /** Off-target values and the degrees called out in a warning. */
 const BAD = '#E5482B'
-/** Selected cell in the part strip. */
-const CELL_ON = '#5CE1FF'
 const GOOD = '#7BE495'
 const DIFF = '#F2B33D'
 /** Stand-in close-up until the joint renders exist. */
@@ -252,36 +250,6 @@ function JointStage({
   )
 }
 
-/**
- * Numbered cells under the stage: Your Shot close-up, Ideal Form close-up, Your Shot hologram,
- * Ideal Form hologram. Cosmetic — cell 1 is always the selected one; empty cells show the placeholder.
- */
-function CellStrip({ images }: { images: (string | null | undefined)[] }) {
-  const { theme } = useContext(ThemeContext)
-  return (
-    <View testID="joint-cell-strip" style={styles.strip}>
-      {[0, 1, 2, 3].map((i) => {
-        const uri = images[i]
-        const on = i === 0
-        return (
-          <View key={i} testID={`joint-cell-${i + 1}`} style={[styles.cell, on && styles.cellOn]}>
-            <Image
-              source={uri ? { uri } : PLACEHOLDER}
-              resizeMode="cover"
-              style={[styles.fill, !uri && { opacity: 0.35 }]}
-            />
-            <View style={[styles.cellNum, on && styles.cellNumOn]}>
-              <Text allowFontScaling={false} style={[styles.cellNumText, { fontFamily: theme.mediumFont }]}>
-                {i + 1}
-              </Text>
-            </View>
-          </View>
-        )
-      })}
-    </View>
-  )
-}
-
 /** Paused orbit frame. Seeking is what View 1 / 2 / 3 actually do. */
 function HeldOrbit({ uri, fraction, durationMs }: { uri: string; fraction: number; durationMs: number | null }) {
   const ref = useRef<Video>(null)
@@ -447,7 +415,6 @@ export function JointDetailView({
   const title = layer === 'pro' ? t('analysis.kineticChain') : t('analysis.jointAngleTitle', { joint: jointName })
   const good = reading?.status === 'good'
   const highPriority = reading?.status === 'bad'
-  const cells = [partImage ?? hologramImage, proPartImage ?? proHologramImage, hologramImage, proHologramImage]
   /** Ideal Form exists when its library clip is on the phone or the joint has an ideal angle. */
   const hasProRef = Boolean(proHologramImage || proOrbit?.image || proOrbit?.video || reading?.pro != null)
   /** No Ideal Form to compare against: say so plainly, not as a warning. */
@@ -545,7 +512,6 @@ export function JointDetailView({
             viewId={viewId}
             onFullscreen={() => setFullscreen(true)}
           />
-          <CellStrip images={cells} />
           <TimingCard timing={timing} onPress={() => setChainOpen(true)} />
         </>
       ) : (
@@ -579,8 +545,6 @@ export function JointDetailView({
               onFullscreen={() => setFullscreen(true)}
             />
           )}
-
-          <CellStrip images={cells} />
 
           <View testID="joint-metrics" style={[styles.metricCard, CARD_GLOW]}>
             <View style={styles.badgeSmall}>
@@ -731,30 +695,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   priorityText: { color: '#FF8A70', fontSize: 12 },
-  strip: { flexDirection: 'row', gap: 8 },
-  cell: {
-    flex: 1,
-    aspectRatio: 1,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#1F3FC0',
-    backgroundColor: '#000814',
-    overflow: 'hidden',
-  },
-  cellOn: { borderColor: CELL_ON },
-  cellNum: {
-    position: 'absolute',
-    left: 4,
-    top: 4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(0, 20, 53, 0.85)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cellNumOn: { backgroundColor: CELL_ON },
-  cellNumText: { color: UI.text, fontSize: 12 },
   view3d: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -772,15 +712,17 @@ const styles = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: 6 },
   legendLabel: { color: UI.text, fontSize: 13 },
   stage: {
-    height: 220,
+    width: '100%',
+    minHeight: 280,
+    aspectRatio: 3 / 4,
     borderRadius: UI.radiusCard,
     borderWidth: 2,
     borderColor: STAGE_BORDER,
     backgroundColor: '#000814',
     overflow: 'hidden',
   },
-  stageTall: { height: 330 },
-  stageFill: { flex: 1, height: '100%' },
+  stageTall: { minHeight: 360, aspectRatio: 3 / 4 },
+  stageFill: { flex: 1, width: '100%', minHeight: 360, aspectRatio: undefined },
   tag: {
     position: 'absolute',
     top: 40,

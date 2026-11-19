@@ -21,7 +21,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { ThemeContext } from '../context'
 import { useSessionData } from '../context/SessionDataContext'
 import { authClient } from '../lib/auth-client'
-import { storedAiScoreToPercent } from '../lib/techniqueScoreDisplay'
+import { headlineScoreFromAnalysis } from '../lib/techniqueScoreDisplay'
 import { DOMAIN } from '../../constants'
 import { useFavoriteIds } from '../lib/activitiesFavorites'
 import type { ActivitySession } from '../lib/activitySession'
@@ -578,7 +578,7 @@ export function ActivitiesCalendarFlow({
           score:
             typeof body.aiSummary?.score === 'number'
               ? body.aiSummary.score
-              : storedAiScoreToPercent(
+              : headlineScoreFromAnalysis(
                   (body.metrics as any)?.ai_analysis as Record<string, unknown>
                 ),
           rating: body.aiSummary?.rating ?? null,

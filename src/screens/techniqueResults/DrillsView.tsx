@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
@@ -8,6 +8,7 @@ import { ThemeContext } from '../../context'
 import { CARD_GLOW, UI } from '../../components/ui'
 import { useDrills, type Drill, type DrillFocus } from '../../lib/drillsApi'
 import { getThumbnailAsync } from '../../lib/videoThumbnails'
+import { drillsFromMediaPacks } from './drillMedia'
 import { DrillDetail, LEVEL_TONE } from './DrillDetail'
 import { DrillStep, type DrillKeyPoint } from './DrillStep'
 import { DrillComplete } from './DrillComplete'
@@ -19,6 +20,8 @@ export type DrillNav = { slug: string; page: 'detail' | 'done' | number } | null
 type Props = {
   videoUri: string | null
   shotLabel: string | null
+  /** Stroke preset from analysis (e.g. `bandeja`, `forehand_volley`) — helps pick media packs. */
+  strokePreset?: string | null
   /** Most important first; the first two name the screen's focus line. */
   focus: DrillFocus[]
   /** Time of contact in the clip, for the card thumbnails. */
@@ -40,6 +43,7 @@ const BODY_ART = require('../../../assets/smart3d/body.webp')
 export function DrillsView({
   videoUri,
   shotLabel,
+  strokePreset = null,
   focus,
   thumbTimeMs,
   proVideoUri = null,
@@ -52,7 +56,19 @@ export function DrillsView({
   const { t, i18n } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
-  const drills = useDrills(focus, shotLabel, i18n.language)
+  // Prefer a concrete shot name so ranking / media matching have context.
+  const shotQuery = (shotLabel?.trim() || strokePreset?.trim() || null)?.replace(/[_-]+/g, ' ') ?? null
+  const apiDrills = useDrills(focus, shotQuery, i18n.language)
+  // Railway media packs (bandeja / remate) win when the shot matches — same content as Suggested Drills.
+  const mediaDrills = useMemo(
+    () => drillsFromMediaPacks(shotLabel, strokePreset),
+    [shotLabel, strokePreset]
+  )
+  const drills = useMemo(() => {
+    if (mediaDrills.length) return { status: 'ready' as const, drills: mediaDrills }
+    // API error with no media: still show whatever ranked list we got (may be empty → empty copy).
+    return apiDrills
+  }, [mediaDrills, apiDrills])
   const [thumb, setThumb] = useState<string | null>(null)
   const open = nav ? (drills.drills.find((d) => d.slug === nav.slug) ?? null) : null
   const page = open && nav ? nav.page : null

@@ -173,10 +173,14 @@ function partKeypoints(part: BodyPart, side: 'LEFT' | 'RIGHT'): string[] {
 }
 
 /**
- * Cover-fit the orbit frame into the stage — same math as AnalysisOverview `fitPx`.
- * Works for letterboxed square→9:16 player orbits and full-bleed impact→Seedance pro orbits.
+ * Cover-fit the orbit frame into the stage (same as ResizeMode.COVER).
+ * Joint 0..1 coords map into this rect so MediaPipe dots land on the body
+ * when the stage is a tall rectangle instead of a square.
  */
 function coverPlacement(stageW: number, stageH: number, videoW: number, videoH: number) {
+  if (stageW <= 0 || stageH <= 0 || videoW <= 0 || videoH <= 0) {
+    return { x: 0, y: 0, w: Math.max(1, stageW), h: Math.max(1, stageH) }
+  }
   const videoAR = videoW / videoH
   const boxAR = stageW / stageH
   const scale = videoAR > boxAR ? stageH / videoH : stageW / videoW
@@ -292,49 +296,57 @@ function OverlayProOrbit({
   uri,
   fraction,
   durationMs,
-  placed,
 }: {
   uri: string
   fraction: number
   durationMs: number | null
-  placed: { x: number; y: number; w: number; h: number } | null
 }) {
   const ref = useRef<Video>(null)
+  const measured = useRef<number | null>(null)
   const seek = () => {
-    const length = durationMs && durationMs > 0 ? durationMs : 4000
-    void ref.current?.setStatusAsync({
-      shouldPlay: false,
-      positionMillis: Math.round(length * fraction),
-      seekMillisToleranceBefore: 0,
-      seekMillisToleranceAfter: 0,
-    })
+    const length =
+      (measured.current && measured.current > 0 ? measured.current : null) ??
+      (durationMs && durationMs > 0 ? durationMs : null) ??
+      4000
+    const ms = Math.round(length * Math.max(0, Math.min(1, fraction)))
+    void ref.current
+      ?.setStatusAsync({
+        shouldPlay: true,
+        positionMillis: ms,
+        seekMillisToleranceBefore: 0,
+        seekMillisToleranceAfter: 0,
+      })
+      .then(() =>
+        ref.current?.setStatusAsync({
+          shouldPlay: false,
+          positionMillis: ms,
+          seekMillisToleranceBefore: 0,
+          seekMillisToleranceAfter: 0,
+        })
+      )
+      .catch(() => {})
   }
   useEffect(() => {
     seek()
   }, [fraction, durationMs, uri])
   return (
     <Video
+      // Remount on View 1/2/3 so Android paints the new orbit angle (paused seek alone is flaky).
+      key={`overlay-pro-${Math.round(fraction * 1000)}`}
       ref={ref}
       source={{ uri }}
       pointerEvents="none"
-      resizeMode={placed ? ResizeMode.STRETCH : ResizeMode.COVER}
+      resizeMode={ResizeMode.COVER}
       isMuted
       shouldPlay={false}
-      onLoad={seek}
+      onLoad={(status) => {
+        if (status.isLoaded && typeof status.durationMillis === 'number' && status.durationMillis > 0) {
+          measured.current = status.durationMillis
+        }
+        seek()
+      }}
       onReadyForDisplay={seek}
-      style={
-        placed
-          ? {
-              position: 'absolute',
-              left: placed.x,
-              top: placed.y,
-              width: placed.w,
-              height: placed.h,
-              opacity: 0.42,
-              zIndex: 2,
-            }
-          : [StyleSheet.absoluteFillObject, { opacity: 0.42, zIndex: 2 }]
-      }
+      style={[StyleSheet.absoluteFillObject, { opacity: 0.42, zIndex: 2 }]}
     />
   )
 }
@@ -448,8 +460,10 @@ export function Smart3DView({
   const metaWidth = layer === 'pro' ? hologram.proOrbitWidth : hologram.orbitWidth
   const metaHeight = layer === 'pro' ? hologram.proOrbitHeight : hologram.orbitHeight
   const [naturalClip, setNaturalClip] = useState<{ w: number; h: number } | null>(null)
-  const clipWidth = naturalClip?.w || metaWidth
-  const clipHeight = naturalClip?.h || metaHeight
+  /** Prefer server probe size — Android naturalSize orientation is often wrong and throws COVER mapping off. */
+  const clipWidth = metaWidth || naturalClip?.w || null
+  const clipHeight = metaHeight || naturalClip?.h || null
+  const [playDurationMs, setPlayDurationMs] = useState<number | null>(null)
   const overlayFraction = orbitFraction(viewPreset, viewId)
   /** Orbit is shown only after its file is on the phone and the player has painted a frame. */
   const reveal = Boolean(playbackUri) && orbitReady && !orbitVideoError
@@ -512,13 +526,18 @@ export function Smart3DView({
     setOrbitVideoError(null)
     setOrbitUrlHttp(null)
     setNaturalClip(null)
+    setPlayDurationMs(null)
     if (layer === 'overlay') setViewPreset('view')
   }, [remoteClip, layer])
 
   // Overlay: snap the player orbit to the same View 1/2/3 fraction as Ideal Form.
   useEffect(() => {
     if (layer !== 'overlay' || !reveal || !playbackUri) return
-    const length = durationRef.current
+    const length =
+      (playDurationMs && playDurationMs > 0 ? playDurationMs : null) ??
+      (clipDurationMs && clipDurationMs > 0 ? clipDurationMs : null) ??
+      durationRef.current
+    durationRef.current = length
     const ms = Math.round(Math.max(0, Math.min(1, overlayFraction)) * length)
     holdMs.current = ms
     orbitIndexRef.current = Math.round(overlayFraction * Math.max(0, frameCountRef.current - 1))
@@ -541,7 +560,7 @@ export function Smart3DView({
         })
       )
       .catch(() => {})
-  }, [layer, reveal, overlayFraction, viewPreset, playbackUri, orbitReady])
+  }, [layer, reveal, overlayFraction, viewPreset, playbackUri, orbitReady, playDurationMs, clipDurationMs])
 
   // Save the cloud video on the phone first. Scrubbing a stream is what made a fresh shot look broken.
   // cacheOrbitVideo keeps the download alive if the user leaves Smart 3D mid-save.
@@ -698,24 +717,29 @@ export function Smart3DView({
   const clipBroken = Boolean(orbitVideoError) || (layer === 'player' && playerFailed)
   const preparing = (layer === 'player' || layer === 'pro') && !reveal && !proMissing && !clipBroken
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
-  // Prefer per-frame orbit pose; fall back to the contact still when Modal never wrote orbitFrames
-  // (that is why the player layer looked bare while the pro library still had lines).
+  // Prefer per-frame orbit pose. Do not fall back to the contact still while the orbit plays —
+  // that pinned dots to impact pose while the camera turned.
   const stillKeys = layer === 'pro' ? hologram.proKeypoints : hologram.keypoints
   // Overlay is holographics only — no MediaPipe joint dots.
   const markerKeys =
     layer === 'overlay'
       ? null
       : reveal
-        ? orbitKeypointsAt(clipFrames, orbitIndex, frameCountRef.current) ?? stillKeys
+        ? orbitKeypointsAt(clipFrames, orbitIndex, frameCountRef.current) ??
+          (clipFrames?.length ? null : stillKeys)
         : null
   const stageW = stageSize.w || stageWidth
   const stageH = stageSize.h || fallbackStageH
+  // Prefer real orbit/natural size so dots track the COVER-fitted video in a tall stage.
+  // Fall back to square hologram stills only before video metadata arrives.
   const placed =
     stageW && stageH
-      ? clipWidth && clipHeight
-        ? coverPlacement(stageW, stageH, clipWidth, clipHeight)
-        : // Contact still is square; cover matches Image resizeMode="cover" until the orbit dims land.
-          coverPlacement(stageW, stageH, 1024, 1024)
+      ? coverPlacement(
+          stageW,
+          stageH,
+          clipWidth && clipHeight ? clipWidth : 1024,
+          clipWidth && clipHeight ? clipHeight : 1024
+        )
       : null
 
   useEffect(() => {
@@ -969,23 +993,42 @@ export function Smart3DView({
         <View collapsable={false} style={styles.stageClip} pointerEvents="box-none">
           {pictureUri ? (
             <Video
+              // Overlay View 1/2/3 remount so the paused frame actually changes on Android.
+              key={layer === 'overlay' ? `overlay-player-${viewPreset}-${pictureUri}` : `orbit-${pictureUri}`}
               ref={videoRef}
               source={{ uri: pictureUri }}
               pointerEvents="none"
-              // 9:16 orbit is laid out so the square hologram band fills the stage (same as the still).
-              resizeMode={placed ? ResizeMode.STRETCH : ResizeMode.COVER}
+              // Full-bleed COVER into the rectangular stage; JointMarkers use the same cover math.
+              resizeMode={ResizeMode.COVER}
               isMuted
               shouldPlay={false}
               progressUpdateIntervalMillis={100}
               onLoad={(status) => {
-                if (status.isLoaded && status.naturalSize?.width && status.naturalSize?.height) {
-                  const { width: nw, height: nh, orientation } = status.naturalSize
-                  const swapped = orientation === 'landscape' && nw < nh
-                  setNaturalClip({ w: swapped ? nh : nw, h: swapped ? nw : nh })
+                if (status.isLoaded) {
+                  if (typeof status.durationMillis === 'number' && status.durationMillis > 0) {
+                    setPlayDurationMs(status.durationMillis)
+                    durationRef.current = status.durationMillis
+                  }
+                  if (status.naturalSize?.width && status.naturalSize?.height) {
+                    const { width: nw, height: nh, orientation } = status.naturalSize
+                    // Only swap when orientation contradicts the pixel aspect (Android often lies).
+                    const pixelsPortrait = nh >= nw
+                    const orientPortrait = orientation === 'portrait'
+                    const swapped = orientPortrait !== pixelsPortrait
+                    setNaturalClip({ w: swapped ? nh : nw, h: swapped ? nw : nh })
+                  }
                 }
                 const player = videoRef.current
                 if (!player) return
-                const at = orbitIndexRef.current === 0 ? 0 : scrubMillis()
+                const at =
+                  layer === 'overlay'
+                    ? Math.round(
+                        Math.max(0, Math.min(1, overlayFraction)) *
+                          ((status.isLoaded && status.durationMillis) || durationRef.current)
+                      )
+                    : orbitIndexRef.current === 0
+                      ? 0
+                      : scrubMillis()
                 holdMs.current = at
                 if (__DEV__) {
                   console.log('[smart3d] orbit onLoad', {
@@ -993,6 +1036,7 @@ export function Smart3DView({
                     platform: Platform.OS,
                     at,
                     naturalSize: status.isLoaded ? status.naturalSize : null,
+                    stage: { w: stageWRef.current, h: stageSize.h },
                   })
                 }
                 void player
@@ -1022,18 +1066,7 @@ export function Smart3DView({
                 if (__DEV__) console.warn('[smart3d] orbit video error', msg)
                 setOrbitVideoError(msg)
               }}
-              style={
-                placed
-                  ? {
-                      position: 'absolute',
-                      left: placed.x,
-                      top: placed.y,
-                      width: placed.w,
-                      height: placed.h,
-                      zIndex: 1,
-                    }
-                  : [StyleSheet.absoluteFillObject, { zIndex: 1 }]
-              }
+              style={[StyleSheet.absoluteFillObject, { zIndex: 1 }]}
             />
           ) : null}
           {layer === 'overlay' && !pictureUri && (hologram.image || hologram.proImage) ? (
@@ -1051,7 +1084,6 @@ export function Smart3DView({
               uri={hologram.proOrbitVideo}
               fraction={overlayFraction}
               durationMs={hologram.proOrbitDurationMs}
-              placed={placed}
             />
           ) : layer === 'overlay' && hologram.proImage ? (
             <Image
@@ -1225,16 +1257,17 @@ const styles = StyleSheet.create({
   subtitle: { color: '#00B8FF', fontSize: 13, textAlign: 'center' },
   modePill: { marginBottom: 16 },
   layerPill: { marginBottom: 0 },
-  main3d: { flex: 1, minHeight: 0, gap: 10 },
+  main3d: { flex: 1, minHeight: 0, gap: 10, alignSelf: 'stretch' },
   stage: {
     flex: 1,
+    alignSelf: 'stretch',
+    minWidth: 0,
     minHeight: 0,
     borderRadius: 20,
     borderWidth: 2,
     borderColor: '#0066FF',
     backgroundColor: '#020A1C',
-    // Must clip: the 9:16 AVPlayerLayer is taller than the stage. overflow:visible on iOS
-    // let it paint over the part buttons and steal horizontal drags.
+    // Must clip: the COVER video fills this rectangular stage edge-to-edge.
     overflow: 'hidden',
     boxShadow: 'inset 0px 0px 50px 0px rgba(0, 102, 255, 0.5)',
   },
@@ -1320,7 +1353,15 @@ const styles = StyleSheet.create({
     zIndex: 15,
   },
   proMissingLabel: { color: '#BFE6FF', fontSize: 15, lineHeight: 21, textAlign: 'center' },
-  stageRow: { flex: 1, flexDirection: 'row', gap: RAIL_GAP, alignItems: 'stretch', minHeight: 0 },
+  stageRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: RAIL_GAP,
+    alignItems: 'stretch',
+    alignSelf: 'stretch',
+    minHeight: 0,
+    minWidth: 0,
+  },
   kineticWrap: { flex: 1 },
   viewChip: {
     position: 'absolute',

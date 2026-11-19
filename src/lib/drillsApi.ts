@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { authClient } from './auth-client'
+import { localCatalogueDrills } from './drillLocalCatalogue'
 
 export type DrillFocus = 'elbow' | 'racket' | 'torso' | 'foot'
 export type DrillLevel = 'beginner' | 'intermediate' | 'advanced'
@@ -57,6 +58,7 @@ export function useDrills(focus: DrillFocus[], shotLabel: string | null, lang: s
   const focusKey = focus.join(',')
   useEffect(() => {
     let cancelled = false
+    const focusList = focusKey.split(',').filter(Boolean) as DrillFocus[]
     setState((prev) => ({ status: 'loading', drills: prev.drills }))
     const q = new URLSearchParams({ focus: focusKey, lang: lang.startsWith('es') ? 'es' : 'en', limit: String(limit) })
     if (shotLabel) q.set('shot', shotLabel)
@@ -65,11 +67,26 @@ export function useDrills(focus: DrillFocus[], shotLabel: string | null, lang: s
       .then((res) => {
         if (cancelled) return
         // $fetch resolves with { data, error } rather than throwing on HTTP errors.
-        if ((res as { error?: unknown })?.error) setState({ status: 'error', drills: [] })
-        else setState({ status: 'ready', drills: toDrills(res) })
+        if ((res as { error?: unknown })?.error) {
+          setState({
+            status: 'ready',
+            drills: localCatalogueDrills(focusList, shotLabel, lang, limit),
+          })
+          return
+        }
+        const drills = toDrills(res)
+        setState({
+          status: 'ready',
+          drills: drills.length ? drills : localCatalogueDrills(focusList, shotLabel, lang, limit),
+        })
       })
       .catch(() => {
-        if (!cancelled) setState({ status: 'error', drills: [] })
+        if (!cancelled) {
+          setState({
+            status: 'ready',
+            drills: localCatalogueDrills(focusList, shotLabel, lang, limit),
+          })
+        }
       })
     return () => {
       cancelled = true

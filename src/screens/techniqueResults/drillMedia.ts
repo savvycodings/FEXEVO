@@ -1,4 +1,5 @@
 import { DOMAIN } from '../../../constants'
+import type { Drill, DrillFocus, DrillKeyPointIcon } from '../../lib/drillsApi'
 
 export type DrillStepMedia = {
   title: string
@@ -17,6 +18,8 @@ export type DrillMediaPack = {
   shotLabel: string
   subtitle: string
   steps: DrillStepMedia[]
+  /** Body-part focus for ranking / focus line (optional). */
+  focusParts?: DrillFocus[]
 }
 
 const PRODUCTION_DRILLS_BASE = 'https://bexevo-production.up.railway.app'
@@ -226,6 +229,7 @@ const DRILLS: Record<string, DrillMediaPack> = {
     name: 'Bandeja Drill',
     shotLabel: 'Bandeja',
     subtitle: 'Build a more consistent bandeja with the right preparation and contact.',
+    focusParts: ['foot', 'racket', 'torso'],
     steps: BANDEJA_STEPS,
   },
   'overhead-positioning': {
@@ -233,6 +237,7 @@ const DRILLS: Record<string, DrillMediaPack> = {
     name: 'Overhead Positioning',
     shotLabel: 'Overhead',
     subtitle: 'Improve your overhead position and spacing.',
+    focusParts: ['elbow', 'racket', 'torso'],
     steps: OVERHEAD_STEPS,
   },
   'topspin-smash': {
@@ -261,6 +266,7 @@ const DRILLS: Record<string, DrillMediaPack> = {
     name: 'Recovery & Balance',
     shotLabel: 'Recovery',
     subtitle: 'Recover after the overhead and get ready for the next shot.',
+    focusParts: ['foot', 'torso'],
     steps: [
       {
         title: 'Recover to ready',
@@ -321,4 +327,61 @@ export function getNextSuggestedDrillId(currentId: string | null | undefined): s
 export function getDrillMediaPack(drillId: string | null | undefined): DrillMediaPack {
   if (drillId && DRILLS[drillId]) return DRILLS[drillId]
   return DRILLS['bandeja-drill']
+}
+
+/** Exact pack for a drill slug, or null (no bandeja fallback). */
+export function findDrillMediaPack(drillId: string | null | undefined): DrillMediaPack | null {
+  if (!drillId) return null
+  return DRILLS[drillId] ?? null
+}
+
+/** Media packs that match this analysis shot (bandeja / remate / overhead). */
+export function mediaPacksForShot(
+  shotLabel: string | null | undefined,
+  strokePreset?: string | null
+): DrillMediaPack[] {
+  const text = `${shotLabel ?? ''} ${strokePreset ?? ''}`.toLowerCase().replace(/[_-]+/g, ' ')
+  if (!text.trim()) return []
+  const out: DrillMediaPack[] = []
+  if (/bandeja/.test(text)) out.push(DRILLS['bandeja-drill']!)
+  if (/remate|smash|overhead|vibora|v[ií]bora/.test(text)) {
+    out.push(DRILLS['overhead-positioning']!)
+    out.push(DRILLS['recovery-balance']!)
+  }
+  return out
+}
+
+/** Turn a Railway media pack into the Drill shape used by DrillsView / DrillDetail / DrillStep. */
+export function mediaPackToDrill(pack: DrillMediaPack): Drill {
+  const firstVideo = pack.steps.find((s) => s.videoUri)?.videoUri ?? null
+  return {
+    slug: pack.id,
+    level: 'beginner',
+    minutes: Math.max(1, pack.steps.length * 2),
+    focus: pack.focusParts ?? [],
+    videoUrl: firstVideo,
+    title: pack.name,
+    summary: pack.subtitle,
+    focusLabel: pack.shotLabel,
+    steps: pack.steps.map((s) => {
+      const keyPoints: { title: string; text: string; icon: DrillKeyPointIcon }[] = [
+        { title: 'Your task', text: s.task, icon: 'target' },
+        ...s.focus.map((text, i) => ({
+          title: i === 0 ? 'Focus on' : `Focus ${i + 1}`,
+          text,
+          icon: 'eye' as const,
+        })),
+        { title: 'Practice', text: `${s.practice} · ${s.minutes}`, icon: 'split' },
+      ]
+      return { title: s.title, subtitle: s.summary, keyPoints }
+    }),
+  }
+}
+
+/** Suggested drills for this shot when Railway media packs exist; empty → use the API catalogue. */
+export function drillsFromMediaPacks(
+  shotLabel: string | null | undefined,
+  strokePreset?: string | null
+): Drill[] {
+  return mediaPacksForShot(shotLabel, strokePreset).map(mediaPackToDrill)
 }

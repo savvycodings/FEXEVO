@@ -72,10 +72,11 @@ export function proLibraryVideoUrl(retrieval: unknown, shot?: ProShotHint): stri
   const view =
     typeof shot?.viewId === 'string' && shot.viewId.trim() ? shot.viewId.trim() : 'front'
 
-  // Same curated filmed clip hologram uses — raw mp4, never the orange `/pro-library/*.mp4` render.
+  // Same curated filmed clip hologram uses — raw mp4, never the `/pro-library/*.mp4` Seedance render.
+  // Server falls back across camera angles when this view file is missing.
   if (preset) {
     return resolveMediaUrl(
-      `/pro-library/source/${encodeURIComponent(preset)}/${encodeURIComponent(view)}`
+      `/pro-library/source/${encodeURIComponent(preset)}/${encodeURIComponent(view || 'front')}`
     )
   }
 
