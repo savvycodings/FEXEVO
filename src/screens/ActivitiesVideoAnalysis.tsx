@@ -39,9 +39,9 @@ import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidence
 import { ResultSectionPill } from '../components/ResultSectionPill'
 import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
-import { mistakeFocusOrder, mistakeKeyPoints, type MistakeId } from './techniqueResults/BiggestMistakesView'
+import { mistakeFocusOrder, type MistakeId } from './techniqueResults/BiggestMistakesView'
 import type { BodyPartId } from './techniqueResults/jointIcons'
-import { DrillsView, type DrillNav } from './techniqueResults/DrillsView'
+import { SuggestedDrillsPage } from './techniqueResults/SuggestedDrillsPage'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { ViewAnglesPage, type ViewJoint } from './techniqueResults/ViewAnglesPage'
 import { ActionPlanPage } from './techniqueResults/ActionPlanPage'
@@ -660,9 +660,6 @@ export function ActivitiesVideoAnalysis({
   const [shotVsIdealJoint, setShotVsIdealJoint] = useState<ViewJoint>('elbow')
   /** Body part to open inside Smart 3D (Priority Fixes / Action Plan); null = main 3D stage. */
   const [smart3dPart, setSmart3dPart] = useState<BodyPartId | null>(null)
-  /** Open drill / step inside the drills view; survives a trip to Smart 3D and back. */
-  const [drillNav, setDrillNav] = useState<DrillNav>(null)
-
   function openSmart3d(
     part: BodyPartId | null = null,
     returnTo: 'overview' | 'compare' | 'drills' | 'shotVsIdeal' = 'overview'
@@ -805,7 +802,6 @@ export function ActivitiesVideoAnalysis({
         // Always land on Your Analysis overview (Figma 6283:51484), not Smart 3D / Metrics.
         setOverviewDetail('overview')
         setAnalysisTab('overview')
-        setDrillNav(null)
         const expectsCorrections = metrics?.has_correction_images === true
         setHasCorrectionImagesFlag(expectsCorrections)
         const expectsVideo =
@@ -1099,10 +1095,7 @@ export function ActivitiesVideoAnalysis({
           viewId={aiSnapshot?.viewId ?? null}
           errors={aiSections?.technicalErrors ?? []}
           initialPart={smart3dPart}
-          onDrills={() => {
-            setDrillNav(null)
-            setOverviewDetail('drills')
-          }}
+          onDrills={() => setOverviewDetail('drills')}
           onClose={() => {
             setSmart3dPart(null)
             setOverviewDetail(poseReturn)
@@ -1113,25 +1106,11 @@ export function ActivitiesVideoAnalysis({
   }
 
   if (overviewDetail === 'drills') {
-    const timing = aiSnapshot?.biomechanicsSummary?.timing
-    const errors = aiSections?.technicalErrors ?? []
     return (
       <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
-        <DrillsView
-          videoUri={videoUri(session.videoPath)}
+        <SuggestedDrillsPage
           shotLabel={session.shotLabel ?? shotTitle}
-          strokePreset={aiSections?.strokePreset ?? aiSections?.strokePresetId ?? null}
-          focus={mistakeFocusOrder(errors)}
-          thumbTimeMs={typeof timing?.impact_frame === 'number' ? (timing.impact_frame / (timing.fps || 30)) * 1000 : 0}
-          proVideoUri={proVideoUrl}
-          keyPoints={mistakeKeyPoints(errors)}
-          nav={drillNav}
-          onNav={setDrillNav}
-          onSmart3d={() => openSmart3d(null, 'drills')}
-          onClose={() => {
-            setDrillNav(null)
-            setOverviewDetail('compare')
-          }}
+          onClose={() => setOverviewDetail('compare')}
         />
       </View>
     )
@@ -1200,10 +1179,7 @@ export function ActivitiesVideoAnalysis({
               : null
           }
           onClose={() => setOverviewDetail('overview')}
-          onDrills={() => {
-            setDrillNav(null)
-            setOverviewDetail('drills')
-          }}
+          onDrills={() => setOverviewDetail('drills')}
         />
       </View>
     )
