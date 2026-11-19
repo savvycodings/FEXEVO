@@ -1,5 +1,5 @@
 import { useContext, useState, useEffect, useCallback, useMemo } from 'react'
-import { StyleSheet, View, Text, Platform, useWindowDimensions } from 'react-native'
+import { Modal, StyleSheet, View, Text, Platform, useWindowDimensions } from 'react-native'
 import {
   Technique,
   Profile,
@@ -41,7 +41,10 @@ import {
 import { AchievementDetailScreen } from './screens/AchievementDetailScreen'
 import { FriendRequestDetailScreen } from './screens/FriendRequestDetailScreen'
 import { Header } from './components'
+import { UI } from './components/ui'
 import { MainTabBarBackground } from './components/MainTabBarBackground'
+import { DrillsView, type DrillNav } from './screens/techniqueResults/DrillsView'
+import { SuggestedDrillsPage } from './screens/techniqueResults/SuggestedDrillsPage'
 import { screenEntranceLayout } from './components/PageEntrance'
 import { TAB_ACTIVE, TAB_INACTIVE, renderTabIcon, tabLabelActive } from './components/tabBarStyle'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -251,6 +254,15 @@ function MainTabsLayoutInner({
   const [profileName, setProfileName] = useState('Player')
   const [profileRank, setProfileRank] = useState('No rank yet')
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
+  /** Header shortcut so drills can be opened without finishing an upload/analysis. */
+  const [drillsShortcutOpen, setDrillsShortcutOpen] = useState(false)
+  const [drillsShortcutNav, setDrillsShortcutNav] = useState<DrillNav>(null)
+  const [drills1Open, setDrills1Open] = useState(false)
+  const closeDrillsShortcut = useCallback(() => {
+    setDrillsShortcutNav(null)
+    setDrillsShortcutOpen(false)
+  }, [])
+  const closeDrills1 = useCallback(() => setDrills1Open(false), [])
   const tabLabels: Record<keyof MainTabParamList, string> = {
     AICoach: t('tabs.aiCoach'),
     Playlist: t('tabs.playlist'),
@@ -515,106 +527,139 @@ function MainTabsLayoutInner({
         profileImageUri={profileImageUri}
         onSettingsPress={() => stackNavigation.navigate('ProfileSettings')}
         onNotificationsPress={() => stackNavigation.navigate('Notifications')}
+        onDrills1Press={() => setDrills1Open(true)}
+        onDrillsPress={() => {
+          setDrillsShortcutNav(null)
+          setDrillsShortcutOpen(true)
+        }}
         headerLeftMode={headerSearchLeft ? 'search' : 'profile'}
         onSearchPress={headerSearchLeft ? () => stackNavigation.navigate('InviteSearch') : undefined}
       />
-      <Tab.Navigator
-        key={viewerIsCoach ? 'coach-tabs' : 'student-tabs'}
-        screenOptions={({ route }) => ({
-          ...tabScreenOptions,
-          tabBarButtonTestID: TEST_IDS.tab(route.name),
-          tabBarLabel: renderTabLabel(tabLabels[route.name as keyof MainTabParamList]),
-          ...(route.name === 'AICoach' && viewerIsCoach
-            ? {
-                tabBarButton: () => null,
-                tabBarItemStyle: {
-                  width: 0,
-                  minWidth: 0,
-                  maxWidth: 0,
-                  height: 0,
-                  padding: 0,
-                  margin: 0,
-                  overflow: 'hidden',
-                  display: 'none' as const,
-                },
-              }
-            : {}),
-          ...(route.name === 'Playlist' && !viewerIsCoach
-            ? {
-                tabBarButton: () => null,
-                tabBarItemStyle: {
-                  width: 0,
-                  minWidth: 0,
-                  maxWidth: 0,
-                  height: 0,
-                  padding: 0,
-                  margin: 0,
-                  overflow: 'hidden',
-                  display: 'none' as const,
-                },
-              }
-            : {}),
-          ...(route.name === 'MyCoach' && !viewerIsCoach
-            ? {
-                tabBarButton: () => null,
-                tabBarItemStyle: {
-                  width: 0,
-                  minWidth: 0,
-                  maxWidth: 0,
-                  height: 0,
-                  padding: 0,
-                  margin: 0,
-                  overflow: 'hidden',
-                  display: 'none' as const,
-                },
-              }
-            : {}),
-          tabBarLabelStyle: {
-            fontFamily: theme.mediumFont,
-            fontSize: tabMetrics.labelFontSize,
-            lineHeight: tabMetrics.labelFontSize + (Platform.OS === 'android' ? 6 : 4),
-            marginTop: 0,
-            marginBottom: 0,
-            ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
-          },
-          tabBarIcon: ({ focused }) =>
-            renderTabIcon(route.name as keyof MainTabParamList, focused, tabMetrics.iconSize, viewerIsCoach),
-        })}
-        screenListeners={({ route }) => ({
-          focus: () => setFocusedTab(route.name as keyof MainTabParamList),
-          tabPress: () => {
-            if (route.name !== 'Assistant') closeAssistant()
-          },
-        })}
-      >
-        <Tab.Screen name="AICoach" options={{ title: tabLabels.AICoach }}>
-          {() => <AICoachTabStack techniqueResetKey={techniqueResetKey} />}
-        </Tab.Screen>
-        <Tab.Screen name="MyCoach" options={{ title: tabLabels.MyCoach }} component={MyCoachTabStack} />
-        <Tab.Screen name="Activities" options={{ title: tabLabels.Activities }} component={ActivitiesScreen} layout={screenEntranceLayout} />
-        <Tab.Screen
-          name="Assistant"
-          component={AssistantTabPlaceholder}
-          options={{ title: tabLabels.Assistant }}
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault()
-              if (open) closeAssistant()
-              else openAssistant()
+      <View style={styles.tabsShell}>
+        <Tab.Navigator
+          key={viewerIsCoach ? 'coach-tabs' : 'student-tabs'}
+          screenOptions={({ route }) => ({
+            ...tabScreenOptions,
+            tabBarButtonTestID: TEST_IDS.tab(route.name),
+            tabBarLabel: renderTabLabel(tabLabels[route.name as keyof MainTabParamList]),
+            ...(route.name === 'AICoach' && viewerIsCoach
+              ? {
+                  tabBarButton: () => null,
+                  tabBarItemStyle: {
+                    width: 0,
+                    minWidth: 0,
+                    maxWidth: 0,
+                    height: 0,
+                    padding: 0,
+                    margin: 0,
+                    overflow: 'hidden',
+                    display: 'none' as const,
+                  },
+                }
+              : {}),
+            ...(route.name === 'Playlist' && !viewerIsCoach
+              ? {
+                  tabBarButton: () => null,
+                  tabBarItemStyle: {
+                    width: 0,
+                    minWidth: 0,
+                    maxWidth: 0,
+                    height: 0,
+                    padding: 0,
+                    margin: 0,
+                    overflow: 'hidden',
+                    display: 'none' as const,
+                  },
+                }
+              : {}),
+            ...(route.name === 'MyCoach' && !viewerIsCoach
+              ? {
+                  tabBarButton: () => null,
+                  tabBarItemStyle: {
+                    width: 0,
+                    minWidth: 0,
+                    maxWidth: 0,
+                    height: 0,
+                    padding: 0,
+                    margin: 0,
+                    overflow: 'hidden',
+                    display: 'none' as const,
+                  },
+                }
+              : {}),
+            tabBarLabelStyle: {
+              fontFamily: theme.mediumFont,
+              fontSize: tabMetrics.labelFontSize,
+              lineHeight: tabMetrics.labelFontSize + (Platform.OS === 'android' ? 6 : 4),
+              marginTop: 0,
+              marginBottom: 0,
+              ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
             },
-          }}
-        />
-        <Tab.Screen name="Playlist" component={CoachPlaylistScreen} layout={screenEntranceLayout} />
-        <Tab.Screen name="Progress" options={{ title: tabLabels.Progress }} component={ProgressTabStack} />
-        <Tab.Screen name="You" options={{ title: tabLabels.You }} layout={screenEntranceLayout}>
-          {() => (
-            <YouTabStack
-              onProfileUpdated={onProfileUpdated}
-              onDone={() => goToTab(viewerIsCoach ? 'MyCoach' : 'AICoach')}
-            />
-          )}
-        </Tab.Screen>
-      </Tab.Navigator>
+            tabBarIcon: ({ focused }) =>
+              renderTabIcon(route.name as keyof MainTabParamList, focused, tabMetrics.iconSize, viewerIsCoach),
+          })}
+          screenListeners={({ route }) => ({
+            focus: () => setFocusedTab(route.name as keyof MainTabParamList),
+            tabPress: () => {
+              if (route.name !== 'Assistant') closeAssistant()
+            },
+          })}
+        >
+          <Tab.Screen name="AICoach" options={{ title: tabLabels.AICoach }}>
+            {() => <AICoachTabStack techniqueResetKey={techniqueResetKey} />}
+          </Tab.Screen>
+          <Tab.Screen name="MyCoach" options={{ title: tabLabels.MyCoach }} component={MyCoachTabStack} />
+          <Tab.Screen name="Activities" options={{ title: tabLabels.Activities }} component={ActivitiesScreen} layout={screenEntranceLayout} />
+          <Tab.Screen
+            name="Assistant"
+            component={AssistantTabPlaceholder}
+            options={{ title: tabLabels.Assistant }}
+            listeners={{
+              tabPress: (e) => {
+                e.preventDefault()
+                if (open) closeAssistant()
+                else openAssistant()
+              },
+            }}
+          />
+          <Tab.Screen name="Playlist" component={CoachPlaylistScreen} layout={screenEntranceLayout} />
+          <Tab.Screen name="Progress" options={{ title: tabLabels.Progress }} component={ProgressTabStack} />
+          <Tab.Screen name="You" options={{ title: tabLabels.You }} layout={screenEntranceLayout}>
+            {() => (
+              <YouTabStack
+                onProfileUpdated={onProfileUpdated}
+                onDone={() => goToTab(viewerIsCoach ? 'MyCoach' : 'AICoach')}
+              />
+            )}
+          </Tab.Screen>
+        </Tab.Navigator>
+        {drills1Open ? (
+          <View
+            style={[styles.drills1Overlay, { bottom: tabBarHeight }]}
+            pointerEvents="box-none"
+          >
+            <SuggestedDrillsPage onClose={closeDrills1} />
+          </View>
+        ) : null}
+      </View>
+      <Modal
+        visible={drillsShortcutOpen}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={closeDrillsShortcut}
+      >
+        <View style={[styles.drillsShortcutShell, { paddingTop: insets.top, backgroundColor: tabBg }]}>
+          <DrillsView
+            videoUri={null}
+            shotLabel={null}
+            focus={['elbow', 'racket']}
+            thumbTimeMs={0}
+            nav={drillsShortcutNav}
+            onNav={setDrillsShortcutNav}
+            onClose={closeDrillsShortcut}
+          />
+        </View>
+      </Modal>
       </View>
     </View>
   )
@@ -744,5 +789,19 @@ const getStyles = (theme: { backgroundColor?: string }) =>
       flex: 1,
       zIndex: 1,
       backgroundColor: theme.backgroundColor ?? '#030A17',
+    },
+    drillsShortcutShell: {
+      flex: 1,
+    },
+    tabsShell: {
+      flex: 1,
+      position: 'relative',
+    },
+    /** Covers tab scenes only — leaves global Header and bottom tab bar visible. */
+    drills1Overlay: {
+      ...StyleSheet.absoluteFillObject,
+      bottom: 0,
+      zIndex: 20,
+      backgroundColor: UI.pageBg,
     },
   })
