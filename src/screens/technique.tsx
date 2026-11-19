@@ -84,10 +84,10 @@ import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
 import { startHologram } from '../lib/hologramJob'
 import { proLibraryVideoUrl, resolveMediaUrl } from '../lib/mediaUrl'
-import { mistakeFocusOrder, mistakeKeyPoints, type MistakeId } from './techniqueResults/BiggestMistakesView'
+import { mistakeFocusOrder, type MistakeId } from './techniqueResults/BiggestMistakesView'
 import type { BodyPartId } from './techniqueResults/jointIcons'
 import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
-import { DrillsView, type DrillNav } from './techniqueResults/DrillsView'
+import { SuggestedDrillsPage } from './techniqueResults/SuggestedDrillsPage'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
 import { ViewAnglesPage, type ViewJoint } from './techniqueResults/ViewAnglesPage'
 import { ActionPlanPage } from './techniqueResults/ActionPlanPage'
@@ -585,8 +585,6 @@ export function Technique() {
     const part: BodyPartId = id === 'foot' ? 'feet' : id === 'racket' ? 'racket' : id
     openSmart3d(part, 'overview')
   }
-  /** Open drill / step inside the drills view; survives a trip to Smart 3D and back. */
-  const [drillNav, setDrillNav] = useState<DrillNav>(null)
   const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
   const resultsScrollRef = useRef<ScrollView>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
@@ -594,7 +592,6 @@ export function Technique() {
   useEffect(() => {
     setResultSection('smartFocus')
     setResultsDetail('overview')
-    setDrillNav(null)
   }, [analysisId, step])
   const resultSectionTabs = useMemo(
     () =>
@@ -2868,25 +2865,9 @@ export function Technique() {
             }}
           />
         ) : step === 3 && resultsDetail === 'drills' ? (
-          <DrillsView
-            videoUri={uploadedVideoUrl}
+          <SuggestedDrillsPage
             shotLabel={userShot?.shotLabel ?? proReferenceShot}
-            strokePreset={userShot?.strokePreset ?? null}
-            focus={mistakeFocusOrder(technicalErrorsList)}
-            thumbTimeMs={
-              typeof biomechanicsSummary?.timing?.impact_frame === 'number'
-                ? (biomechanicsSummary.timing.impact_frame / (biomechanicsSummary.timing.fps || 30)) * 1000
-                : 0
-            }
-            proVideoUri={proLibraryVideoUrl(retrieval, userShot)}
-            keyPoints={mistakeKeyPoints(technicalErrorsList)}
-            nav={drillNav}
-            onNav={setDrillNav}
-            onSmart3d={() => openSmart3d(null, 'drills')}
-            onClose={() => {
-              setDrillNav(null)
-              setResultsDetail('compare')
-            }}
+            onClose={() => setResultsDetail('compare')}
           />
         ) : step === 3 && resultsDetail === 'trackProgress' ? (
           <TrackProgressView
@@ -2955,10 +2936,7 @@ export function Technique() {
                 : null
             }
             onClose={() => setResultsDetail('overview')}
-            onDrills={() => {
-              setDrillNav(null)
-              setResultsDetail('drills')
-            }}
+            onDrills={() => setResultsDetail('drills')}
           />
         ) : (
         <ScrollView

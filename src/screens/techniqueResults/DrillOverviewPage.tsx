@@ -154,15 +154,6 @@ export function DrillOverviewPage({
                 >
                   {step.title}
                 </Text>
-                <Text
-                  allowFontScaling={false}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.7}
-                  style={[styles.stepSummary, { fontFamily: font }]}
-                >
-                  {step.summary}
-                </Text>
               </View>
               <View style={styles.stepThumb}>
                 <Image source={STEP_THUMB} style={styles.stepThumbImage} resizeMode="cover" />
@@ -343,9 +334,8 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   stepNumText: { color: '#FFFFFF', fontSize: 18 },
-  stepCopy: { flex: 1, gap: 1, minWidth: 0 },
+  stepCopy: { flex: 1, justifyContent: 'center', minWidth: 0 },
   stepTitle: { color: UI.text, fontSize: 15, lineHeight: 19 },
-  stepSummary: { color: UI.text, fontSize: 13, lineHeight: 16 },
   stepThumb: {
     width: 64,
     height: 52,
