@@ -9,7 +9,8 @@ import { ResizeMode, Video, type AVPlaybackStatus } from 'expo-av'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { ThemeContext } from '../../context'
 import { CARD_GLOW, UI } from '../../components/ui'
-import type { Drill, DrillLevel } from '../../lib/drillsApi'
+import { stepText, stepTitle, type Drill, type DrillLevel } from '../../lib/drillsApi'
+import { BackArrowIcon } from './BackArrowIcon'
 
 type Props = {
   drill: Drill
@@ -68,7 +69,7 @@ export function DrillDetail({ drill, videoUri, thumb, shotLabel, focusLine, onOp
         style={styles.back}
         testID="drill-detail-back"
       >
-        <Ionicons name="chevron-back" size={30} color="#86A7D2" />
+        <BackArrowIcon />
       </Pressable>
 
       <View style={styles.head}>
@@ -159,10 +160,10 @@ export function DrillDetail({ drill, videoUri, thumb, shotLabel, focusLine, onOp
             ) : null}
             <View style={styles.stepBody}>
               <Text allowFontScaling={false} style={[styles.stepTitle, { fontFamily: theme.regularFont }]}>
-                {t('analysis.drills.detail.step', { n: i + 1 })}
+                {stepTitle(step) ?? t('analysis.drills.detail.step', { n: i + 1 })}
               </Text>
               <Text allowFontScaling={false} style={[styles.stepText, { fontFamily: theme.regularFont }]}>
-                {step}
+                {stepText(step)}
               </Text>
             </View>
           </Pressable>

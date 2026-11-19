@@ -509,7 +509,7 @@ export function JointDetailView({
           {layer === 'pro' ? (
             <MaterialCommunityIcons name="link-variant" size={30} color={UI.text} />
           ) : (
-            <BodyPartIcon id={joint} size={30} />
+            <BodyPartIcon id={joint} size={30} severity={highPriority ? 'high' : null} />
           )}
         </View>
         <View style={styles.headerText}>
@@ -584,7 +584,7 @@ export function JointDetailView({
 
           <View testID="joint-metrics" style={[styles.metricCard, CARD_GLOW]}>
             <View style={styles.badgeSmall}>
-              <BodyPartIcon id={joint} size={26} />
+              <BodyPartIcon id={joint} size={26} severity={highPriority ? 'high' : null} />
             </View>
             <View style={styles.metricCol}>
               <Text allowFontScaling={false} numberOfLines={1} style={[styles.metricLabel, { fontFamily: theme.regularFont }]}>

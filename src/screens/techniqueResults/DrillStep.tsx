@@ -2,13 +2,13 @@ import { useContext, useRef } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
-import Ionicons from '@expo/vector-icons/Ionicons'
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { ThemeContext } from '../../context'
 import { CARD_GLOW, GlowButton, SegmentedToggle, SurfaceButton, UI } from '../../components/ui'
-import type { Drill, DrillFocus } from '../../lib/drillsApi'
+import { stepKeyPoints, stepText, stepTitle, type Drill, type DrillFocus, type DrillKeyPointIcon } from '../../lib/drillsApi'
 import { DrillPlayer } from './DrillDetail'
 import { ClipCard, PRO, YOU } from './CompareWithPro'
+import { DrillKeyPointIconView, focusIcon } from './drillFocusIcons'
+import { BackArrowIcon } from './BackArrowIcon'
 
 export type DrillKeyPoint = { focus: DrillFocus | null; text: string }
 
@@ -28,12 +28,6 @@ type Props = {
   onSmart3d?: () => void
 }
 
-const FOCUS_ICON: Record<DrillFocus, React.ComponentProps<typeof MaterialCommunityIcons>['name']> = {
-  elbow: 'arm-flex-outline',
-  racket: 'tennis',
-  torso: 'human',
-  foot: 'shoe-sneaker',
-}
 const DONE = '#4DB8FF'
 const BLUE = '#1F4BFF'
 
@@ -49,10 +43,20 @@ export function DrillStep({ drill, index, videoUri, proVideoUri, keyPoints, onBa
   const total = drill.steps.length
   const last = index >= total - 1
   const clipUri = drill.videoUrl || videoUri
+  const step = drill.steps[index]
+  // The step's own key points when the drill has them, else the shot's mistakes.
+  const ownPoints = stepKeyPoints(step)
+  const points: { title: string; text: string; icon: DrillKeyPointIcon | null }[] = ownPoints.length
+    ? ownPoints
+    : keyPoints.map((kp) => ({
+        title: kp.focus ? t(`analysis.drills.focus.${kp.focus}`) : t('analysis.drills.step.keyPoint'),
+        text: kp.text,
+        icon: focusIcon(kp.focus),
+      }))
 
   const tabs = [
     { value: 'video' as const, label: t('analysis.drills.step.tabVideo'), testID: 'drill-step-tab-video' },
-    ...(keyPoints.length
+    ...(points.length
       ? [{ value: 'keyPoints' as const, label: t('analysis.drills.step.tabKeyPoints'), testID: 'drill-step-tab-key-points' }]
       : []),
     ...(onSmart3d ? [{ value: 'smart3d' as const, label: t('analysis.drills.step.tab3d'), testID: 'drill-step-tab-3d' }] : []),
@@ -79,28 +83,28 @@ export function DrillStep({ drill, index, videoUri, proVideoUri, keyPoints, onBa
           onPress={onBack}
           testID="drill-step-back"
         >
-          <Ionicons name="chevron-back" size={30} color="#86A7D2" />
+          <BackArrowIcon />
         </Pressable>
         <Stepper total={total} index={index} onGoTo={onGoTo} />
       </View>
 
       <View style={styles.head}>
-        <View style={[styles.numRing, CARD_GLOW]}>
-          <Text allowFontScaling={false} style={[styles.numText, { fontFamily: theme.regularFont }]}>
+        <View style={styles.numRing}>
+          <Text allowFontScaling={false} style={[styles.numText, { fontFamily: theme.mediumFont }]}>
             {index + 1}
           </Text>
         </View>
         <View style={styles.headCopy}>
           <View style={styles.titleRow}>
             <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.regularFont }]}>
-              {t('analysis.drills.detail.step', { n: index + 1 })}
+              {stepTitle(step) ?? t('analysis.drills.detail.step', { n: index + 1 })}
             </Text>
             <Text allowFontScaling={false} style={[styles.of, { fontFamily: theme.regularFont }]}>
               {t('analysis.drills.step.of', { n: index + 1, total })}
             </Text>
           </View>
           <Text allowFontScaling={false} style={[styles.sub, { fontFamily: theme.regularFont }]}>
-            {drill.steps[index]}
+            {stepText(step)}
           </Text>
         </View>
       </View>
@@ -113,7 +117,7 @@ export function DrillStep({ drill, index, videoUri, proVideoUri, keyPoints, onBa
         {clipUri ? <DrillPlayer key={`${drill.slug}-${index}`} uri={clipUri} poster={null} /> : null}
       </View>
 
-      {keyPoints.length ? (
+      {points.length ? (
         <View
           style={[styles.panel, CARD_GLOW]}
           onLayout={(e) => (sections.current.keyPoints = e.nativeEvent.layout.y)}
@@ -122,14 +126,14 @@ export function DrillStep({ drill, index, videoUri, proVideoUri, keyPoints, onBa
           <Text allowFontScaling={false} style={[styles.panelTitle, { fontFamily: theme.regularFont }]}>
             {t('analysis.drills.step.keyPoints')}
           </Text>
-          {keyPoints.map((kp, i) => (
+          {points.map((kp, i) => (
             <View key={i} style={styles.kpRow}>
               <View style={[styles.kpIcon, CARD_GLOW]}>
-                <MaterialCommunityIcons name={kp.focus ? FOCUS_ICON[kp.focus] : 'lightbulb-outline'} size={26} color="#4DB8FF" />
+                <DrillKeyPointIconView icon={kp.icon} size={26} />
               </View>
               <View style={[styles.kpCard, CARD_GLOW]}>
                 <Text allowFontScaling={false} style={[styles.kpTitle, { fontFamily: theme.regularFont }]}>
-                  {kp.focus ? t(`analysis.drills.focus.${kp.focus}`) : t('analysis.drills.step.keyPoint')}
+                  {kp.title}
                 </Text>
                 <Text allowFontScaling={false} style={[styles.kpText, { fontFamily: theme.regularFont }]}>
                   {kp.text}
@@ -226,12 +230,14 @@ const styles = StyleSheet.create({
     width: RING,
     height: RING,
     borderRadius: RING / 2,
-    borderWidth: 2.5,
-    borderColor: UI.accentStrong,
+    borderWidth: 2,
+    borderColor: '#00B8FF',
+    backgroundColor: '#030A17',
+    boxShadow: '0px 0px 20px 0px #0048FF, 0px 0px 20px 0px #0048FF inset',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  numText: { color: '#4DB8FF', fontSize: 40 },
+  numText: { color: '#00B8FF', fontSize: 33, textAlign: 'center' },
   headCopy: { flex: 1, gap: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   title: { flex: 1, color: UI.text, fontSize: 22 },
@@ -248,15 +254,18 @@ const styles = StyleSheet.create({
   panelTitle: { color: UI.text, fontSize: 20 },
   kpRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
   kpIcon: {
-    width: 64,
-    borderRadius: 18,
-    backgroundColor: '#0B1F57',
+    width: 71,
+    minHeight: 75,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 25, 80, 0.50)',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 64,
+    gap: 5,
   },
-  kpCard: { flex: 1, borderRadius: 18, backgroundColor: '#0B1F57', paddingHorizontal: 14, paddingVertical: 12, gap: 2, justifyContent: 'center' },
-  kpTitle: { color: '#4DB8FF', fontSize: 16 },
+  kpCard: { flex: 1, borderRadius: 20, backgroundColor: 'rgba(0, 25, 80, 0.50)', paddingHorizontal: 14, paddingVertical: 12, gap: 2, justifyContent: 'center' },
+  kpTitle: { color: '#00B8FF', fontSize: 16 },
   kpText: { color: UI.text, fontSize: 13, lineHeight: 18 },
   compare: { gap: 12 },
   compareTitle: { color: UI.text, fontSize: 20 },

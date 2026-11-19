@@ -3,14 +3,14 @@ import { BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, View } fro
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { ThemeContext } from '../../context'
 import { LocalSvgAsset } from '../../components/LocalSvgAsset'
 import { GlowButton } from '../../components/ui'
 import { useContactJoints, type ContactJoint } from '../../lib/jointsApi'
 import { landmarkVisOk, poseAngle } from '../../lib/poseJointAngles'
 import { nearestPoseByFrame, type LandmarkPoint, type PoseFrameRow } from '../../lib/techniquePose'
-import { JOINT_ICON } from './jointIcons'
+import { BackArrowIcon } from './BackArrowIcon'
+import { BodyPartGlyph } from './bodyPartGlyphs'
 import type { ViewJoint } from './ViewAnglesPage'
 import { PlayableClip } from './PlayableClip'
 import { dominantSide } from './movementTimeline'
@@ -19,7 +19,6 @@ const ICON_YOUR_SHOT = require('../../../assets/aicoach/analysis/shot-vs-ideal/y
 const ICON_IDEAL = require('../../../assets/aicoach/analysis/shot-vs-ideal/ideal-form.svg')
 const ICON_PROBLEM = require('../../../assets/aicoach/analysis/shot-vs-ideal/problem.svg')
 const ICON_WHY = require('../../../assets/aicoach/analysis/shot-vs-ideal/why-matters.svg')
-const ICON_ELBOW = require('../../../assets/aicoach/analysis/shot-vs-ideal/joint-elbow.svg')
 
 type Props = {
   videoUri: string | null
@@ -42,6 +41,8 @@ type Metric = {
 }
 
 const HIGH = '#E5482B'
+/** In-range accent (Figma "Analysis View" good state). */
+const GOOD = '#2FA8FF'
 const YOU_BORDER = 'rgba(0, 72, 255, 0.5)'
 const ISSUE_ORDER: ViewJoint[] = ['elbow', 'shoulder', 'wrist', 'torso', 'knee', 'feet', 'racket', 'head']
 const SERVED: ContactJoint[] = ['shoulder', 'elbow', 'wrist', 'torso', 'knee']
@@ -205,24 +206,28 @@ export function ShotVsIdealView({
   const contact = useContactJoints(analysisId)
   const [joint, setJoint] = useState<ViewJoint>(initialJoint)
 
+  /** True when the reading is off target or the coach's errors name this joint. */
+  const isFlagged = (id: ViewJoint) => {
+    if ((SERVED as string[]).includes(id)) {
+      const r = contact?.joints[id as ContactJoint]
+      if (r?.status === 'bad' || r?.status === 'warn') return true
+      if (r?.deltaDeg != null && Math.abs(r.deltaDeg) > 5) return true
+    }
+    const words =
+      id === 'feet'
+        ? ['foot', 'feet', 'pie']
+        : id === 'torso'
+          ? ['torso', 'rotation', 'hip']
+          : id === 'head'
+            ? ['head', 'cabeza']
+            : [id]
+    return words.some((w) => errors.some((e) => e.toLowerCase().includes(w)))
+  }
+
   const issueJoints = useMemo(() => {
-    const flagged = ISSUE_ORDER.filter((id) => {
-      if ((SERVED as string[]).includes(id)) {
-        const r = contact?.joints[id as ContactJoint]
-        if (r?.status === 'bad' || r?.status === 'warn') return true
-        if (r?.deltaDeg != null && Math.abs(r.deltaDeg) > 5) return true
-      }
-      const words =
-        id === 'feet'
-          ? ['foot', 'feet', 'pie']
-          : id === 'torso'
-            ? ['torso', 'rotation', 'hip']
-            : id === 'head'
-              ? ['head', 'cabeza']
-              : [id]
-      return words.some((w) => errors.some((e) => e.toLowerCase().includes(w)))
-    })
+    const flagged = ISSUE_ORDER.filter(isFlagged)
     return flagged.length ? flagged : [initialJoint]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact, errors, initialJoint])
 
   useEffect(() => {
@@ -301,6 +306,10 @@ export function ShotVsIdealView({
   const whyKey = WHY_KEY[joint]
   const problemKey = PROBLEM_KEY[joint]
   const problemBodyKey = PROBLEM_BODY_KEY[joint]
+  // Nothing wrong with this joint: the blue "In Range" state instead of High Priority.
+  const inRange = !isFlagged(joint)
+  const accent = inRange ? GOOD : HIGH
+  const jointName = t(`analysis.viewAnglesPage.joints.${joint}`)
 
   // Host tab scenes already clear the status bar — do not stack insets.top again.
   return (
@@ -313,7 +322,7 @@ export function ShotVsIdealView({
           accessibilityLabel={t('analysis.back')}
           style={styles.navSide}
         >
-          <Ionicons name="chevron-back" size={24} color="#86A7D2" />
+          <BackArrowIcon />
         </Pressable>
         <View style={styles.navCenter}>
           <Text allowFontScaling={false} style={[styles.navTitle, { fontFamily: theme.mediumFont }]}>
@@ -367,7 +376,7 @@ export function ShotVsIdealView({
 
         <View style={styles.issueCard}>
           <View style={styles.issueHead}>
-            <View style={styles.issueNum}>
+            <View style={[styles.issueNum, inRange && styles.issueNumGood]}>
               <Text
                 allowFontScaling={false}
                 style={[styles.issueNumText, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}
@@ -375,11 +384,7 @@ export function ShotVsIdealView({
                 {idx + 1}
               </Text>
             </View>
-            {joint === 'elbow' ? (
-              <LocalSvgAsset assetModule={ICON_ELBOW} width={24} height={24} />
-            ) : (
-              <MaterialCommunityIcons name={JOINT_ICON[joint]} size={22} color="#FFFFFF" />
-            )}
+            <BodyPartGlyph id={joint} size={24} severity={inRange ? null : 'high'} />
             <View style={styles.issueCopy}>
               <Text
                 allowFontScaling={false}
@@ -398,13 +403,13 @@ export function ShotVsIdealView({
                 </Text>
               ) : null}
             </View>
-            <View style={styles.highPill}>
+            <View style={[styles.highPill, inRange && styles.goodPill]} testID="shot-vs-ideal-status">
               <Text
                 allowFontScaling={false}
                 numberOfLines={1}
-                style={[styles.highPillLabel, { fontFamily: theme.mediumFont }]}
+                style={[styles.highPillLabel, inRange && styles.goodPillLabel, { fontFamily: theme.mediumFont }]}
               >
-                {t('analysis.mistakeHighPriority')}
+                {inRange ? t('analysis.inRange') : t('analysis.mistakeHighPriority')}
               </Text>
             </View>
           </View>
@@ -427,7 +432,7 @@ export function ShotVsIdealView({
                     minimumFontScale={0.55}
                     style={[
                       styles.metricValue,
-                      { fontFamily: theme.mediumFont },
+                      { color: accent, fontFamily: theme.mediumFont },
                       m.value.length > 5 && styles.metricValueLong,
                     ]}
                   >
@@ -449,7 +454,7 @@ export function ShotVsIdealView({
                       style={[styles.metricMeta, { fontFamily: theme.mediumFont }]}
                     >
                       {t('analysis.mistakeDiffLabel')}
-                      <Text style={{ color: HIGH }}>{m.diff}</Text>
+                      <Text style={{ color: accent }}>{m.diff}</Text>
                     </Text>
                   ) : null}
                 </View>
@@ -459,6 +464,7 @@ export function ShotVsIdealView({
           </View>
         </View>
 
+        {inRange ? null : (
         <View style={styles.navJoints}>
           <Pressable onPress={goPrev} style={styles.navJointBtn} accessibilityRole="button">
             <Ionicons name="chevron-back" size={18} color="#86A7D2" />
@@ -481,28 +487,45 @@ export function ShotVsIdealView({
             <Ionicons name="chevron-forward" size={18} color="#86A7D2" />
           </Pressable>
         </View>
+        )}
 
-        <View style={styles.problemCard}>
-          <View style={styles.problemIcon}>
-            <LocalSvgAsset assetModule={ICON_PROBLEM} width={24} height={24} />
+        {inRange ? (
+          <View style={[styles.problemCard, styles.goodCard]} testID="shot-vs-ideal-in-range">
+            <View style={[styles.problemIcon, styles.goodIcon]}>
+              <Ionicons name="checkmark" size={26} color="#FFFFFF" />
+            </View>
+            <View style={styles.problemCopy}>
+              <Text allowFontScaling={false} numberOfLines={1} style={[styles.problemTitle, { fontFamily: theme.mediumFont }]}>
+                {t('analysis.jointInRangeTitle', { joint: jointName })}
+              </Text>
+              <Text allowFontScaling={false} numberOfLines={2} style={[styles.problemBody, { fontFamily: theme.mediumFont }]}>
+                {t('analysis.jointInRangeBody', { joint: jointName.toLowerCase() })}
+              </Text>
+            </View>
           </View>
-          <View style={styles.problemCopy}>
-            <Text
-              allowFontScaling={false}
-              numberOfLines={1}
-              style={[styles.problemTitle, { fontFamily: theme.mediumFont }]}
-            >
-              {problemKey ? t(problemKey) : t(titleKey)}
-            </Text>
-            <Text
-              allowFontScaling={false}
-              numberOfLines={2}
-              style={[styles.problemBody, { fontFamily: theme.mediumFont }]}
-            >
-              {problemBodyKey ? t(problemBodyKey) : bodyKey ? t(bodyKey) : ''}
-            </Text>
+        ) : (
+          <View style={styles.problemCard}>
+            <View style={styles.problemIcon}>
+              <LocalSvgAsset assetModule={ICON_PROBLEM} width={24} height={24} />
+            </View>
+            <View style={styles.problemCopy}>
+              <Text
+                allowFontScaling={false}
+                numberOfLines={1}
+                style={[styles.problemTitle, { fontFamily: theme.mediumFont }]}
+              >
+                {problemKey ? t(problemKey) : t(titleKey)}
+              </Text>
+              <Text
+                allowFontScaling={false}
+                numberOfLines={2}
+                style={[styles.problemBody, { fontFamily: theme.mediumFont }]}
+              >
+                {problemBodyKey ? t(problemBodyKey) : bodyKey ? t(bodyKey) : ''}
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.whyCard}>
           <View style={styles.whyIcon}>
@@ -586,6 +609,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  issueNumGood: { backgroundColor: GOOD },
   issueNumText: { color: '#FFFFFF', fontSize: 9 },
   issueCopy: { flex: 1, minWidth: 0, gap: 2 },
   issueTitle: { color: '#FFFFFF', fontSize: 16 },
@@ -600,6 +624,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   highPillLabel: { color: '#FF7676', fontSize: 11 },
+  goodPill: { borderColor: '#2F6BFF', backgroundColor: 'rgba(0,72,255,0.25)' },
+  goodPillLabel: { color: '#8CCBFF' },
   metricRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 0, paddingBottom: 0 },
   metricCard: {
     flex: 1,
@@ -660,6 +686,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  goodCard: {
+    borderColor: '#2F6BFF',
+    backgroundColor: '#0A2A8A',
+    boxShadow: '0px 0px 20px 0px rgba(0, 72, 255, 0.6) inset',
+  },
+  goodIcon: { backgroundColor: GOOD },
   problemCopy: { flex: 1, gap: 5, minWidth: 0 },
   problemTitle: { color: '#FFFFFF', fontSize: 13 },
   problemBody: { color: 'rgba(255,255,255,0.75)', fontSize: 9 },
