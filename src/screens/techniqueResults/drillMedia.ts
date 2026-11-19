@@ -19,14 +19,20 @@ export type DrillMediaPack = {
   steps: DrillStepMedia[]
 }
 
+const PRODUCTION_DRILLS_BASE = 'https://bexevo-production.up.railway.app'
+
 function drillsMediaUrl(shot: string, file: string): string {
-  // Prefer explicit drills host, then app DOMAIN, then production BEXEVO
-  // (drills are served from Railway even when the app API points at ngrok).
-  const base = (
-    process.env.EXPO_PUBLIC_DRILLS_MEDIA_BASE_URL ||
-    DOMAIN ||
-    'https://bexevo-production.up.railway.app'
-  ).replace(/\/$/, '')
+  // Drills live on Railway production. Prefer an explicit override; otherwise
+  // use DOMAIN only when it already points at BEXEVO production (not ngrok/dev).
+  const explicit = process.env.EXPO_PUBLIC_DRILLS_MEDIA_BASE_URL?.trim()
+  const domain = (DOMAIN || '').replace(/\/$/, '')
+  const domainIsProd =
+    /bexevo-production\.up\.railway\.app/i.test(domain) ||
+    /bexevo\.up\.railway\.app/i.test(domain)
+  const base = (explicit || (domainIsProd ? domain : '') || PRODUCTION_DRILLS_BASE).replace(
+    /\/$/,
+    ''
+  )
   return `${base}/drills/media/${shot}/${file}`
 }
 
@@ -142,6 +148,78 @@ const OVERHEAD_STEPS: DrillStepMedia[] = [
   },
 ]
 
+const TOPSIN_SMASH_STEPS: DrillStepMedia[] = [
+  {
+    title: 'Lift and wrap the ball',
+    summary:
+      'The racket comes out hidden from behind the head and, without pronating the arm, continues lifting and wrapping the ball by going over it so it leaves with forward spin and climbs the glass.',
+    task: 'Hide the racket behind the head, then lift and wrap over the ball for topspin.',
+    focus: [
+      'No arm pronation — lift and wrap over the ball.',
+      'Finish so the ball climbs the glass with forward spin.',
+    ],
+    practice: PRACTICE,
+    minutes: MINUTES,
+    videoUri: drillsMediaUrl('remate-liftado', '01-primary.mp4'),
+  },
+]
+
+const FOREHAND_VOLLEY_STEPS: DrillStepMedia[] = [
+  {
+    title: 'Demo without the racket',
+    summary: 'Initial forehand-volley progression (demo without racket).',
+    task: 'Shadow the forehand volley pattern without a racket.',
+    focus: [
+      'Compact preparation.',
+      'Meet the ball out in front.',
+    ],
+    practice: PRACTICE,
+    minutes: MINUTES,
+    videoUri: drillsMediaUrl('volea-derecha', '01-primary.mp4'),
+  },
+  {
+    title: 'Block the volley',
+    summary: 'Forehand-volley progression focused on the block.',
+    task: 'Practice a firm block on the forehand volley.',
+    focus: [
+      'Firm wrist and short contact.',
+      'Absorb and redirect — do not swing big.',
+    ],
+    practice: PRACTICE,
+    minutes: MINUTES,
+    videoUri: null,
+  },
+  {
+    title: 'Impact in front',
+    summary:
+      'Impact in front of the body while rotating the hip and transferring weight forward; the racket tip goes forward following the ball, then recover holding the racket with two hands.',
+    task: 'Volley with impact in front, hip turn, and two-handed recovery.',
+    focus: [
+      'Impact in front with hip rotation.',
+      'Recover holding the racket with two hands.',
+    ],
+    practice: PRACTICE,
+    minutes: MINUTES,
+    videoUri: null,
+  },
+]
+
+const BACKHAND_VOLLEY_STEPS: DrillStepMedia[] = [
+  {
+    title: 'Hands together, hip turn',
+    summary:
+      'Hands-together drill rotating the hip without moving the legs, to transfer weight well through the hip and into the leg.',
+    task: 'Keep hands together and rotate the hip without stepping.',
+    focus: [
+      'Hands stay together through the turn.',
+      'Transfer weight through the hip into the leg.',
+    ],
+    practice: PRACTICE,
+    minutes: MINUTES,
+    videoUri: drillsMediaUrl('volea-reves', '01-primary.mp4'),
+  },
+]
+
 const DRILLS: Record<string, DrillMediaPack> = {
   'bandeja-drill': {
     id: 'bandeja-drill',
@@ -156,6 +234,27 @@ const DRILLS: Record<string, DrillMediaPack> = {
     shotLabel: 'Overhead',
     subtitle: 'Improve your overhead position and spacing.',
     steps: OVERHEAD_STEPS,
+  },
+  'topspin-smash': {
+    id: 'topspin-smash',
+    name: 'Topsin Smash',
+    shotLabel: 'Topsin smash',
+    subtitle: 'Lift and wrap the ball so it climbs the glass with forward spin.',
+    steps: TOPSIN_SMASH_STEPS,
+  },
+  'forehand-volley': {
+    id: 'forehand-volley',
+    name: 'Forehand Volley',
+    shotLabel: 'Forehand volley',
+    subtitle: 'Build a compact forehand volley from the block to impact in front.',
+    steps: FOREHAND_VOLLEY_STEPS,
+  },
+  'backhand-volley': {
+    id: 'backhand-volley',
+    name: 'Backhand Volley',
+    shotLabel: 'Backhand volley',
+    subtitle: 'Train hip transfer on the sliced backhand volley.',
+    steps: BACKHAND_VOLLEY_STEPS,
   },
   'recovery-balance': {
     id: 'recovery-balance',
@@ -201,6 +300,22 @@ const DRILLS: Record<string, DrillMediaPack> = {
       },
     ],
   },
+}
+
+/** Ordered list of suggested-drill card ids (for Next Drill). */
+export const SUGGESTED_DRILL_IDS = [
+  'bandeja-drill',
+  'overhead-positioning',
+  'topspin-smash',
+  'forehand-volley',
+  'backhand-volley',
+  'recovery-balance',
+] as const
+
+export function getNextSuggestedDrillId(currentId: string | null | undefined): string {
+  const idx = SUGGESTED_DRILL_IDS.indexOf(currentId as (typeof SUGGESTED_DRILL_IDS)[number])
+  const next = idx >= 0 ? (idx + 1) % SUGGESTED_DRILL_IDS.length : 1
+  return SUGGESTED_DRILL_IDS[next]
 }
 
 export function getDrillMediaPack(drillId: string | null | undefined): DrillMediaPack {

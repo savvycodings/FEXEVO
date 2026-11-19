@@ -15,6 +15,7 @@ import { LocalSvgAsset, prefetchSvgAssets } from '../../components/LocalSvgAsset
 import { DrillOverviewPage } from './DrillOverviewPage'
 import { DrillWalkthroughPage } from './DrillWalkthroughPage'
 import { DrillCompletedPage } from './DrillCompletedPage'
+import { getNextSuggestedDrillId } from './drillMedia'
 
 const RACKET_SVG = require('../../../assets/drillspage/tennisracket.svg')
 prefetchSvgAssets([RACKET_SVG])
@@ -44,6 +45,24 @@ const MOCK_DRILLS: MockDrill[] = [
     title: 'Overhead Positioning',
     summary: 'Improve your overhead position and spacing',
     thumb: THUMB_OVERHEAD,
+  },
+  {
+    id: 'topspin-smash',
+    title: 'Topsin Smash',
+    summary: 'Lift and wrap the ball so it climbs the glass with forward spin.',
+    thumb: THUMB_OVERHEAD,
+  },
+  {
+    id: 'forehand-volley',
+    title: 'Forehand Volley',
+    summary: 'Build a compact forehand volley from the block to impact in front.',
+    thumb: THUMB_BANDEJA,
+  },
+  {
+    id: 'backhand-volley',
+    title: 'Backhand Volley',
+    summary: 'Train hip transfer on the sliced backhand volley.',
+    thumb: THUMB_RECOVERY,
   },
   {
     id: 'recovery-balance',
@@ -108,7 +127,7 @@ export function SuggestedDrillsPage({
         onDone={backToSuggestedDrills}
         onNextDrill={() => {
           backToSuggestedDrills()
-          setSelectedId('overhead-positioning')
+          setSelectedId(getNextSuggestedDrillId(activeDrillId))
         }}
       />
     )
