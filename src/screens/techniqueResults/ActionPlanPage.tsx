@@ -6,9 +6,12 @@ import { ThemeContext } from '../../context'
 import { CoachTabOrb } from '../../components/CoachCharacterAvatar'
 import { LocalSvgAsset } from '../../components/LocalSvgAsset'
 import { useContactJoints, type ContactJoint, type JointReading } from '../../lib/jointsApi'
+import { poseAngle } from '../../lib/poseJointAngles'
+import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
 import { mistakeFocusOrder, type MistakeId } from './BiggestMistakesView'
 import { BodyPartGlyph } from './bodyPartGlyphs'
 import type { BodyPartId } from './jointIcons'
+import { dominantSide } from './movementTimeline'
 
 type Props = {
   shotLabel: string | null
@@ -16,6 +19,9 @@ type Props = {
   analysisId?: string | null
   /** Thumbnail at contact, when available. */
   thumbUri?: string | null
+  /** Pose frames — fill missing /joints angles the same way Smart 3D does. */
+  poseFrames?: PoseFrameRow[]
+  impactFrame?: number | null
   onOpenFix: (id: MistakeId) => void
   onSeeCorrectMovement: () => void
 }
@@ -62,6 +68,8 @@ export function ActionPlanPage({
   errors,
   analysisId = null,
   thumbUri = null,
+  poseFrames,
+  impactFrame = null,
   onOpenFix,
   onSeeCorrectMovement,
 }: Props) {
@@ -76,11 +84,39 @@ export function ActionPlanPage({
     return { first: list[0]!, rest: list.slice(1, 3) }
   }, [errors])
 
+  const contactPose = useMemo(() => {
+    if (!poseFrames?.length) return null
+    const last = poseFrames.reduce((max, row) => Math.max(max, row.frame), 0)
+    const frame = impactFrame != null && impactFrame >= 0 ? impactFrame : Math.round(last * 0.6)
+    return nearestPoseByFrame(poseFrames, frame)
+  }, [poseFrames, impactFrame])
+
+  const side = contact?.side ?? (poseFrames?.length ? dominantSide(poseFrames) : 'RIGHT')
+
   const shotName = shotLabel?.trim() || t('analysis.viewAnglesPage.shotFallback')
   const reading = (id: MistakeId): JointReading | null => {
     const joint = JOINT_FOR[id]
-    if (!joint || !contact) return null
-    return contact.joints[joint] ?? null
+    if (!joint) return null
+    const served = contact?.joints[joint] ?? null
+    // /joints can lag or miss a landmark (esp. wrist→racket on Android). Fill `you` from pose.
+    if (served?.you != null) return served
+    const you = contactPose ? poseAngle(contactPose, joint, side) : null
+    if (you == null) return served
+    const rounded = Math.round(you)
+    const pro = served?.pro ?? null
+    return {
+      ...(served ?? {
+        pro: null,
+        idealMin: null,
+        idealMax: null,
+        deltaDeg: null,
+        status: null,
+        direction: null,
+        messageKey: null,
+      }),
+      you: rounded,
+      deltaDeg: pro != null ? rounded - pro : served?.deltaDeg ?? null,
+    }
   }
 
   return (

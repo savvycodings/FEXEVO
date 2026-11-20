@@ -39,7 +39,11 @@ import { MotionEvidenceSection } from '../components/biomechanics/MotionEvidence
 import { ResultSectionPill } from '../components/ResultSectionPill'
 import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
-import { mistakeFocusOrder, type MistakeId } from './techniqueResults/BiggestMistakesView'
+import {
+  BiggestMistakesView,
+  mistakeFocusOrder,
+  type MistakeId,
+} from './techniqueResults/BiggestMistakesView'
 import type { BodyPartId } from './techniqueResults/jointIcons'
 import { SuggestedDrillsPage } from './techniqueResults/SuggestedDrillsPage'
 import { CompareWithPro } from './techniqueResults/CompareWithPro'
@@ -654,7 +658,7 @@ export function ActivitiesVideoAnalysis({
   /** Figma 6283:51484 — Overview | View Angles | Action Plan (no Metrics / inner hub). */
   const [analysisTab, setAnalysisTab] = useState<'overview' | 'viewAngles' | 'actionPlan'>('overview')
   const [overviewDetail, setOverviewDetail] = useState<
-    'overview' | 'pose' | 'compare' | 'drills' | 'shotVsIdeal' | 'trackProgress'
+    'overview' | 'pose' | 'compare' | 'drills' | 'shotVsIdeal' | 'trackProgress' | 'mistakes'
   >('overview')
   const [poseReturn, setPoseReturn] = useState<'overview' | 'compare' | 'drills' | 'shotVsIdeal'>('overview')
   const [shotVsIdealJoint, setShotVsIdealJoint] = useState<ViewJoint>('elbow')
@@ -1110,6 +1114,7 @@ export function ActivitiesVideoAnalysis({
       <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
         <SuggestedDrillsPage
           shotLabel={session.shotLabel ?? shotTitle}
+          strokePreset={aiSections?.strokePresetId ?? aiSections?.strokePreset ?? null}
           onClose={() => setOverviewDetail('compare')}
         />
       </View>
@@ -1127,6 +1132,32 @@ export function ActivitiesVideoAnalysis({
           score={headlineScore}
           onClose={() => setOverviewDetail('overview')}
           onCompareAnother={() => navigation.getParent()?.navigate('Progress' as never)}
+        />
+      </View>
+    )
+  }
+
+  if (overviewDetail === 'mistakes') {
+    const angles = aiSnapshot?.biomechanicsSummary?.angles_deg_proxy
+    const torso = angles?.torso_sep_delta_deg ?? angles?.shoulder_hip_sep_impact_deg
+    return (
+      <View style={[styles.gradient, { backgroundColor: theme.backgroundColor }]}>
+        <BiggestMistakesView
+          videoUri={videoUri(session.videoPath)}
+          videoKey={session.analysisId}
+          analysisId={session.analysisId}
+          poseFrames={poseFrames}
+          totalFrames={totalVidFrames}
+          errors={aiSections?.technicalErrors ?? []}
+          elbowDeg={typeof angles?.elbow_impact_deg === 'number' ? angles.elbow_impact_deg : null}
+          torsoDeg={typeof torso === 'number' ? torso : null}
+          impactFrame={
+            typeof aiSnapshot?.biomechanicsSummary?.timing?.impact_frame === 'number'
+              ? aiSnapshot.biomechanicsSummary.timing.impact_frame
+              : null
+          }
+          fps={aiSnapshot?.biomechanicsSummary?.timing?.fps ?? null}
+          onClose={() => setOverviewDetail('overview')}
         />
       </View>
     )
@@ -1277,6 +1308,12 @@ export function ActivitiesVideoAnalysis({
               shotLabel={session.shotLabel ?? shotTitle}
               errors={aiSections?.technicalErrors ?? []}
               analysisId={session.analysisId}
+              poseFrames={poseFrames}
+              impactFrame={
+                typeof aiSnapshot?.biomechanicsSummary?.timing?.impact_frame === 'number'
+                  ? aiSnapshot.biomechanicsSummary.timing.impact_frame
+                  : null
+              }
               onOpenFix={openMistakeFix}
               onSeeCorrectMovement={() => {
                 const focus = mistakeFocusOrder(aiSections?.technicalErrors ?? [])
@@ -1315,6 +1352,7 @@ export function ActivitiesVideoAnalysis({
             metrics={aiSnapshot?.physicalMetrics ?? null}
             detail={overviewDetail}
             onPriorityJoint={(id) => openSmart3d(id, 'overview')}
+            onPriorityFixes={() => setOverviewDetail('mistakes')}
             onProgress={() => setOverviewDetail('trackProgress')}
             onSmart3d={() => openSmart3d(null, 'overview')}
           />

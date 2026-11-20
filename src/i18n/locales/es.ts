@@ -796,6 +796,7 @@ export const es = {
       wrist: "muñeca",
       torso: "torso",
       knee: "rodilla",
+      feet: "pie",
     },
     joints: {
       shoulder: {

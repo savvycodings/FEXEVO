@@ -40,7 +40,7 @@ import {
 } from '../../lib/techniquePose'
 import { DialCaption } from './DialCaption'
 
-type Detail = 'overview' | 'pose' | 'compare' | 'drills' | 'shotVsIdeal' | 'trackProgress'
+type Detail = 'overview' | 'pose' | 'compare' | 'drills' | 'shotVsIdeal' | 'trackProgress' | 'mistakes'
 type PriorityPartId = 'elbow' | 'knee' | 'feet'
 
 const CARD_BG = '#001950'
@@ -111,6 +111,8 @@ type Props = {
   detail: Detail
   /** Open the Smart 3D joint detail for this Priority Fixes pill. */
   onPriorityJoint: (id: PriorityPartId) => void
+  /** Open the full Priority Fixes page (title / card outside the joint pills). */
+  onPriorityFixes: () => void
   onSmart3d: () => void
   onScrubbingChange?: (scrubbing: boolean) => void
   /** Shown under the "Your analysis" title, e.g. the shot name. */
@@ -423,19 +425,30 @@ function AnalysisFullscreen({
     return computeOverlayJointAngles(getPx, pose.landmarks)
   }, [pose, natural, box])
 
-  function hold(ms: number, play: boolean) {
+  async function hold(ms: number, play: boolean) {
+    const video = ref.current
+    if (!video) return
     const at = duration > 0 ? Math.min(Math.max(0, ms), Math.max(0, duration - 40)) : Math.max(0, ms)
     const restart = play && duration > 0 && at >= duration - 120
     const next = restart ? 0 : at
+    // Optimistic UI; reconcile from onPlaybackStatusUpdate once the decoder catches up.
     anchor.current = { pos: next, at: Date.now(), playing: play }
     setPlaying(play)
     setPosition(next)
-    void ref.current?.setStatusAsync({
-      shouldPlay: play,
-      positionMillis: next,
-      seekMillisToleranceBefore: 0,
-      seekMillisToleranceAfter: 80,
-    })
+    try {
+      const status = await video.getStatusAsync()
+      if (!status.isLoaded) {
+        await video.playAsync()
+        return
+      }
+      if (restart || Math.abs((status.positionMillis ?? 0) - next) > 40) {
+        await video.setPositionAsync(next, EXACT_SEEK)
+      }
+      if (play) await video.playAsync()
+      else await video.pauseAsync()
+    } catch {
+      // Android expo-av can throw on mid-load taps; next press retries.
+    }
   }
 
   return (
@@ -500,7 +513,7 @@ function AnalysisFullscreen({
         <View style={styles.fullControls}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => hold(position, !playing)}
+            onPress={() => void hold(position, !playing)}
             style={styles.play}
           >
             <Ionicons name={playing ? 'pause' : 'play'} size={18} color="#FFFFFF" style={playing ? undefined : styles.playIcon} />
@@ -528,6 +541,7 @@ export function AnalysisOverview({
   metrics,
   detail: _detail,
   onPriorityJoint,
+  onPriorityFixes,
   onSmart3d,
   onScrubbingChange,
   shotLabel = null,
@@ -542,6 +556,8 @@ export function AnalysisOverview({
   const compact = windowHeight < 740
   const iconSz = compact ? 18 : 24
   const videoRef = useRef<Video>(null)
+  const naturalFromPlayerRef = useRef(false)
+  const playBusyRef = useRef(false)
   const [frameW, setFrameW] = useState(0)
   const [trackW, setTrackW] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -555,6 +571,38 @@ export function AnalysisOverview({
   const anchor = useRef({ pos: 0, at: 0, rate: 1, playing: false })
   const scrub = useRef({ wasPlaying: false, lastSeek: 0 })
   const tone = ratingTone(rating, score)
+
+  const applyNaturalSize = useCallback((ns: { width: number; height: number } | null | undefined) => {
+    if (!ns || ns.width <= 0 || ns.height <= 0) return
+    naturalFromPlayerRef.current = true
+    setNatural({ w: ns.width, h: ns.height })
+  }, [])
+
+  useEffect(() => {
+    naturalFromPlayerRef.current = false
+    setNatural(null)
+    setPlaying(false)
+    setPosition(0)
+    setDuration(0)
+    anchor.current = { pos: 0, at: 0, rate: 1, playing: false }
+  }, [videoKey])
+
+  // Android sometimes skips onReadyForDisplay — pull naturalSize from the player after a short wait.
+  useEffect(() => {
+    if (!videoUri) return
+    const id = setTimeout(() => {
+      if (naturalFromPlayerRef.current) return
+      void videoRef.current
+        ?.getStatusAsync()
+        .then((s) => {
+          if (!s.isLoaded || naturalFromPlayerRef.current) return
+          const ns = (s as AVPlaybackStatus & { naturalSize?: { width: number; height: number } }).naturalSize
+          applyNaturalSize(ns)
+        })
+        .catch(() => {})
+    }, 400)
+    return () => clearTimeout(id)
+  }, [videoKey, videoUri, applyNaturalSize])
   const toneColor = tone === 'needs_improvement' ? '#FFB020' : tone === 'poor' ? '#FF5A6A' : '#3DDC97'
   const toneLabel =
     tone === 'excellent'
@@ -571,6 +619,10 @@ export function AnalysisOverview({
   const playProgress = duration > 0 ? Math.max(0, Math.min(1, shownMs / duration)) : 0
   function onStatus(status: AVPlaybackStatus) {
     if (!status.isLoaded) return
+    const ext = status as AVPlaybackStatus & {
+      naturalSize?: { width: number; height: number }
+    }
+    if (ext.naturalSize) applyNaturalSize(ext.naturalSize)
     anchor.current = {
       pos: status.positionMillis,
       at: Date.now(),
@@ -605,22 +657,64 @@ export function AnalysisOverview({
     return () => cancelAnimationFrame(raf)
   }, [playing, scrubMs, duration])
 
-  function togglePlay() {
+  // Overview stage is a wide 16:9 card — not the tall rail+stage View Angles layout.
+  // Overview stage is a wide 16:9 card — not the tall rail+stage View Angles layout.
+  const overviewH =
+    frameW > 0 ? Math.max(Math.round(frameW * (9 / 16)), compact ? 200 : 180) : 200
+
+  const pose = useMemo(() => {
+    if (!poseFrames?.length) return null
+    // Show the first pose as soon as data arrives — don't wait for duration (Android can lag).
+    if (duration <= 0) return nearestPoseByFrame(poseFrames, 0) ?? poseFrames[0] ?? null
+    const last = poseFrames.reduce((max, row) => Math.max(max, row.frame), 0)
+    const total = totalFrames && totalFrames > 1 ? totalFrames : last + 1
+    const idx = Math.round((Math.min(shownMs, duration) / duration) * Math.max(0, total - 1))
+    return nearestPoseByFrame(poseFrames, idx)
+  }, [poseFrames, totalFrames, shownMs, duration])
+
+  // Prefer player-reported size; fall back to the 16:9 card so the skeleton still draws on Android.
+  const overlayNatural = natural ?? { w: 16, h: 9 }
+
+  const angles = useMemo(() => {
+    if (!pose || frameW <= 0 || overviewH <= 0) return []
+    const getPx = (name: string) => {
+      const p = pose.landmarks[name]
+      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null
+      return fitPx(p.x, p.y, frameW, overviewH, overlayNatural.w, overlayNatural.h, 'cover')
+    }
+    return computeOverlayJointAngles(getPx, pose.landmarks)
+  }, [pose, overlayNatural, frameW, overviewH])
+
+  async function togglePlay() {
     const video = videoRef.current
-    if (!video) return
+    if (!video || playBusyRef.current) return
+    playBusyRef.current = true
     // The frame clock can run a little past the clip. Seeking there makes the next play do nothing.
+    const wantPlay = !playing
     const at = duration > 0 ? Math.min(Math.max(0, position), Math.max(0, duration - 40)) : Math.max(0, position)
-    const restart = duration > 0 && at >= duration - 120
+    const restart = wantPlay && duration > 0 && at >= duration - 120
     const next = restart ? 0 : at
-    anchor.current = { ...anchor.current, playing: !playing, pos: next, at: Date.now() }
-    setPlaying(!playing)
+    anchor.current = { ...anchor.current, playing: wantPlay, pos: next, at: Date.now() }
+    setPlaying(wantPlay)
     setPosition(next)
-    void video.setStatusAsync({
-      shouldPlay: !playing,
-      positionMillis: next,
-      seekMillisToleranceBefore: 0,
-      seekMillisToleranceAfter: 80,
-    })
+    try {
+      const status = await video.getStatusAsync()
+      if (!status.isLoaded) {
+        await video.playAsync()
+        return
+      }
+      if (restart || Math.abs((status.positionMillis ?? 0) - next) > 40) {
+        await video.setPositionAsync(next, EXACT_SEEK)
+      }
+      if (wantPlay) await video.playAsync()
+      else await video.pauseAsync()
+    } catch {
+      // Android expo-av can throw on mid-load taps; next press retries.
+      anchor.current = { ...anchor.current, playing: false, at: Date.now() }
+      setPlaying(false)
+    } finally {
+      playBusyRef.current = false
+    }
   }
 
   const msAt = useCallback(
@@ -690,10 +784,6 @@ export function AnalysisOverview({
     return Gesture.Exclusive(pan, tap)
   }, [scrubStart, scrubMove, scrubEnd])
 
-  // Overview stage is a wide 16:9 card — not the tall rail+stage View Angles layout.
-  const overviewH =
-    frameW > 0 ? Math.max(Math.round(frameW * (9 / 16)), compact ? 200 : 180) : 200
-
   return (
     <View style={[styles.page, compact ? styles.pageCompact : null]}>
       {showHubChrome && shotLabel ? (
@@ -726,13 +816,22 @@ export function AnalysisOverview({
                 onPlaybackStatusUpdate={onStatus}
                 progressUpdateIntervalMillis={STATUS_INTERVAL_MS}
                 onReadyForDisplay={(event) => {
-                  const n = event.naturalSize
-                  if (n?.width > 0 && n?.height > 0) setNatural({ w: n.width, h: n.height })
+                  applyNaturalSize(event.naturalSize)
                 }}
               />
             ) : (
               <View style={{ width: '100%', height: overviewH, backgroundColor: '#000' }} />
             )}
+            {pose && frameW > 0 ? (
+              <PoseSvg
+                pose={pose}
+                angles={angles}
+                width={frameW}
+                height={overviewH}
+                natural={overlayNatural}
+                fit="cover"
+              />
+            ) : null}
             <Pressable
               style={styles.fullscreen}
               onPress={() => setFullscreen(true)}
@@ -743,7 +842,12 @@ export function AnalysisOverview({
               <Ionicons name="scan-outline" size={16} color="#FFFFFF" />
             </Pressable>
             <View style={styles.controls}>
-              <Pressable style={styles.play} onPress={togglePlay} accessibilityRole="button" testID="analysis-video-play">
+              <Pressable
+                style={styles.play}
+                onPress={() => void togglePlay()}
+                accessibilityRole="button"
+                testID="analysis-video-play"
+              >
                 <Ionicons name={playing ? 'pause' : 'play'} size={16} color="#FFFFFF" style={playing ? undefined : styles.playIcon} />
               </Pressable>
               <GestureDetector gesture={trackGesture}>
@@ -863,9 +967,12 @@ export function AnalysisOverview({
         })}
       </View>
 
-      <View
+      <Pressable
         style={[styles.priorityBlock, compact ? styles.priorityBlockCompact : null]}
         testID="overview-biggest-mistakes"
+        accessibilityRole="button"
+        accessibilityLabel={t('analysis.hubPriorityFixes')}
+        onPress={onPriorityFixes}
       >
         <View style={styles.priorityHead}>
           <Text
@@ -911,7 +1018,7 @@ export function AnalysisOverview({
             )
           })}
         </View>
-      </View>
+      </Pressable>
 
       <View style={[styles.ctaRow, compact ? styles.ctaRowCompact : null]}>
         {onProgress ? (

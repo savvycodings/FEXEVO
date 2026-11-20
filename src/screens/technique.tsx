@@ -84,7 +84,11 @@ import { AnalysisOverview } from './techniqueResults/AnalysisOverview'
 import { Smart3DView } from './techniqueResults/Smart3DView'
 import { startHologram } from '../lib/hologramJob'
 import { proLibraryVideoUrl, resolveMediaUrl } from '../lib/mediaUrl'
-import { mistakeFocusOrder, type MistakeId } from './techniqueResults/BiggestMistakesView'
+import {
+  BiggestMistakesView,
+  mistakeFocusOrder,
+  type MistakeId,
+} from './techniqueResults/BiggestMistakesView'
 import type { BodyPartId } from './techniqueResults/jointIcons'
 import { compareMetricsFromSummary } from './techniqueResults/shotHistory'
 import { SuggestedDrillsPage } from './techniqueResults/SuggestedDrillsPage'
@@ -568,7 +572,7 @@ export function Technique() {
   /** Which results sub-page is showing. Does not reload analysis. */
   const [resultSection, setResultSection] = useState<ResultSectionId>('smartFocus')
   const [resultsDetail, setResultsDetail] = useState<
-    'overview' | 'pose' | 'compare' | 'drills' | 'shotVsIdeal' | 'trackProgress'
+    'overview' | 'pose' | 'compare' | 'drills' | 'shotVsIdeal' | 'trackProgress' | 'mistakes'
   >('overview')
   const [shotVsIdealJoint, setShotVsIdealJoint] = useState<ViewJoint>('elbow')
   /** Body part to open inside Smart 3D (Priority Fixes / Action Plan); null = main 3D stage. */
@@ -2867,6 +2871,7 @@ export function Technique() {
         ) : step === 3 && resultsDetail === 'drills' ? (
           <SuggestedDrillsPage
             shotLabel={userShot?.shotLabel ?? proReferenceShot}
+            strokePreset={userShot?.strokePreset ?? null}
             onClose={() => setResultsDetail('compare')}
           />
         ) : step === 3 && resultsDetail === 'trackProgress' ? (
@@ -2878,6 +2883,34 @@ export function Technique() {
             score={headlineScore}
             onClose={() => setResultsDetail('overview')}
             onCompareAnother={() => navigation.getParent()?.navigate('Progress' as never)}
+          />
+        ) : step === 3 && resultsDetail === 'mistakes' ? (
+          <BiggestMistakesView
+            videoUri={uploadedVideoUrl}
+            videoKey={analysisId ?? 'technique-step3'}
+            analysisId={analysisId}
+            poseFrames={step3PoseFrames}
+            totalFrames={overlayTotalFrames}
+            errors={technicalErrorsList}
+            elbowDeg={
+              typeof biomechanicsSummary?.angles_deg_proxy?.elbow_impact_deg === 'number'
+                ? biomechanicsSummary.angles_deg_proxy.elbow_impact_deg
+                : null
+            }
+            torsoDeg={
+              typeof biomechanicsSummary?.angles_deg_proxy?.torso_sep_delta_deg === 'number'
+                ? biomechanicsSummary.angles_deg_proxy.torso_sep_delta_deg
+                : typeof biomechanicsSummary?.angles_deg_proxy?.shoulder_hip_sep_impact_deg === 'number'
+                  ? biomechanicsSummary.angles_deg_proxy.shoulder_hip_sep_impact_deg
+                  : null
+            }
+            impactFrame={
+              typeof biomechanicsSummary?.timing?.impact_frame === 'number'
+                ? biomechanicsSummary.timing.impact_frame
+                : null
+            }
+            fps={biomechanicsSummary?.timing?.fps ?? null}
+            onClose={() => setResultsDetail('overview')}
           />
         ) : step === 3 && resultsDetail === 'compare' ? (
           <CompareWithPro
@@ -3365,6 +3398,12 @@ export function Technique() {
                   shotLabel={userShot?.shotLabel ?? proReferenceShot}
                   errors={technicalErrorsList}
                   analysisId={analysisId}
+                  poseFrames={step3PoseFrames}
+                  impactFrame={
+                    typeof biomechanicsSummary?.timing?.impact_frame === 'number'
+                      ? biomechanicsSummary.timing.impact_frame
+                      : null
+                  }
                   onOpenFix={openMistakeFix}
                   onSeeCorrectMovement={() => {
                     const focus = mistakeFocusOrder(technicalErrorsList)
@@ -3400,6 +3439,7 @@ export function Technique() {
               metrics={physicalMetrics}
               detail={resultsDetail}
               onPriorityJoint={(id) => openSmart3d(id, 'overview')}
+              onPriorityFixes={() => setResultsDetail('mistakes')}
               onProgress={() => setResultsDetail('trackProgress')}
               onSmart3d={() => openSmart3d(null, 'overview')}
               onScrubbingChange={setSmartFocusScrubbing}

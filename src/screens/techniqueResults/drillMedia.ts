@@ -308,7 +308,7 @@ const DRILLS: Record<string, DrillMediaPack> = {
   },
 }
 
-/** Ordered list of suggested-drill card ids (for Next Drill). */
+/** Ordered list of all media-pack ids (legacy / tests). Prefer `suggestedDrillIdsForShot`. */
 export const SUGGESTED_DRILL_IDS = [
   'bandeja-drill',
   'overhead-positioning',
@@ -318,15 +318,15 @@ export const SUGGESTED_DRILL_IDS = [
   'recovery-balance',
 ] as const
 
-export function getNextSuggestedDrillId(currentId: string | null | undefined): string {
-  const idx = SUGGESTED_DRILL_IDS.indexOf(currentId as (typeof SUGGESTED_DRILL_IDS)[number])
-  const next = idx >= 0 ? (idx + 1) % SUGGESTED_DRILL_IDS.length : 1
-  return SUGGESTED_DRILL_IDS[next]
-}
-
-export function getDrillMediaPack(drillId: string | null | undefined): DrillMediaPack {
-  if (drillId && DRILLS[drillId]) return DRILLS[drillId]
-  return DRILLS['bandeja-drill']
+/** Empty placeholder pack — never invents bandeja content for unknown ids. */
+function emptyMediaPack(drillId: string | null | undefined): DrillMediaPack {
+  return {
+    id: drillId?.trim() || 'drill',
+    name: 'Drill',
+    shotLabel: '',
+    subtitle: '',
+    steps: [],
+  }
 }
 
 /** Exact pack for a drill slug, or null (no bandeja fallback). */
@@ -335,20 +335,88 @@ export function findDrillMediaPack(drillId: string | null | undefined): DrillMed
   return DRILLS[drillId] ?? null
 }
 
-/** Media packs that match this analysis shot (bandeja / remate / overhead). */
+/**
+ * Resolve a media pack for overview / walkthrough.
+ * Known Railway packs only — unknown ids get an empty placeholder (not bandeja).
+ */
+export function getDrillMediaPack(drillId: string | null | undefined): DrillMediaPack {
+  return findDrillMediaPack(drillId) ?? emptyMediaPack(drillId)
+}
+
+function shotMatchText(shotLabel: string | null | undefined, strokePreset?: string | null): string {
+  return `${shotLabel ?? ''} ${strokePreset ?? ''}`.toLowerCase().replace(/[_-]+/g, ' ').trim()
+}
+
+function pushUnique(out: DrillMediaPack[], pack: DrillMediaPack | undefined) {
+  if (!pack) return
+  if (out.some((p) => p.id === pack.id)) return
+  out.push(pack)
+}
+
+/** Media packs that match this analysis shot (category-aware — bandeja only for bandeja). */
 export function mediaPacksForShot(
   shotLabel: string | null | undefined,
   strokePreset?: string | null
 ): DrillMediaPack[] {
-  const text = `${shotLabel ?? ''} ${strokePreset ?? ''}`.toLowerCase().replace(/[_-]+/g, ' ')
-  if (!text.trim()) return []
+  const text = shotMatchText(shotLabel, strokePreset)
+  if (!text) return []
   const out: DrillMediaPack[] = []
-  if (/bandeja/.test(text)) out.push(DRILLS['bandeja-drill']!)
-  if (/remate|smash|overhead|vibora|v[ií]bora/.test(text)) {
-    out.push(DRILLS['overhead-positioning']!)
-    out.push(DRILLS['recovery-balance']!)
+  const isVolley = /volley|volea/.test(text)
+  const isBandeja = /bandeja/.test(text)
+  const isOverheadFamily = /remate|smash|overhead|vibora|v[ií]bora|topspin/.test(text)
+  const isForehand = /forehand|derecha|fh\b/.test(text)
+  const isBackhand = /backhand|rev[eé]s|bh\b/.test(text)
+  const isGround = /drive|ground|ground.?stroke/.test(text) || ((isForehand || isBackhand) && !isVolley)
+
+  if (isBandeja) pushUnique(out, DRILLS['bandeja-drill'])
+
+  if (isOverheadFamily && !isBandeja) {
+    pushUnique(out, DRILLS['overhead-positioning'])
+    pushUnique(out, DRILLS['recovery-balance'])
+    if (/remate|smash|topspin/.test(text)) pushUnique(out, DRILLS['topspin-smash'])
+  } else if (isOverheadFamily && isBandeja) {
+    // Bandeja shots can still use recovery after the overhead pattern.
+    pushUnique(out, DRILLS['recovery-balance'])
   }
+
+  if (isVolley && isForehand) pushUnique(out, DRILLS['forehand-volley'])
+  if (isVolley && isBackhand) pushUnique(out, DRILLS['backhand-volley'])
+  if (isVolley && !isForehand && !isBackhand) {
+    pushUnique(out, DRILLS['forehand-volley'])
+    pushUnique(out, DRILLS['backhand-volley'])
+  }
+
+  // Ground strokes / drives: never bandeja or smash packs — recovery for footwork only.
+  if (isGround && !isVolley && !isBandeja && !isOverheadFamily) {
+    pushUnique(out, DRILLS['recovery-balance'])
+  }
+
   return out
+}
+
+/** Filtered suggested-drill ids for this shot (Next Drill cycles inside this list). */
+export function suggestedDrillIdsForShot(
+  shotLabel: string | null | undefined,
+  strokePreset?: string | null
+): string[] {
+  return mediaPacksForShot(shotLabel, strokePreset).map((p) => p.id)
+}
+
+/** Next drill id within `ids` (or within the shot-filtered list when ids omitted). */
+export function getNextSuggestedDrillId(
+  currentId: string | null | undefined,
+  ids?: readonly string[] | null,
+  shotLabel?: string | null,
+  strokePreset?: string | null
+): string {
+  const list =
+    ids && ids.length
+      ? [...ids]
+      : suggestedDrillIdsForShot(shotLabel ?? null, strokePreset ?? null)
+  if (!list.length) return currentId?.trim() || ''
+  const idx = list.indexOf(currentId ?? '')
+  const next = idx >= 0 ? (idx + 1) % list.length : 0
+  return list[next]!
 }
 
 /** Turn a Railway media pack into the Drill shape used by DrillsView / DrillDetail / DrillStep. */

@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import {
   Image,
   type ImageSourcePropType,
@@ -9,13 +9,21 @@ import {
   View,
 } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
+import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../../context'
 import { UI } from '../../components/ui'
 import { LocalSvgAsset, prefetchSvgAssets } from '../../components/LocalSvgAsset'
+import { localCatalogueDrills } from '../../lib/drillLocalCatalogue'
+import type { Drill } from '../../lib/drillsApi'
+import { stepText, stepTitle } from '../../lib/drillsApi'
 import { DrillOverviewPage } from './DrillOverviewPage'
 import { DrillWalkthroughPage } from './DrillWalkthroughPage'
 import { DrillCompletedPage } from './DrillCompletedPage'
-import { getNextSuggestedDrillId } from './drillMedia'
+import {
+  getNextSuggestedDrillId,
+  mediaPacksForShot,
+  type DrillMediaPack,
+} from './drillMedia'
 
 const RACKET_SVG = require('../../../assets/drillspage/tennisracket.svg')
 prefetchSvgAssets([RACKET_SVG])
@@ -24,53 +32,23 @@ const THUMB_BANDEJA = require('../../../assets/drillspage/bandejadrill.png')
 const THUMB_OVERHEAD = require('../../../assets/drillspage/overheadpositining.png')
 const THUMB_RECOVERY = require('../../../assets/drillspage/recoveryandbalance.png')
 
-type MockDrill = {
+type SuggestedDrillCard = {
   id: string
   title: string
   summary: string
   level?: 'beginner'
   thumb: ImageSourcePropType
+  pack: DrillMediaPack
 }
 
-const MOCK_DRILLS: MockDrill[] = [
-  {
-    id: 'bandeja-drill',
-    title: 'Bandeja Drill',
-    summary: 'Build a more consistent bandeja with the right preparation and contact.',
-    level: 'beginner',
-    thumb: THUMB_BANDEJA,
-  },
-  {
-    id: 'overhead-positioning',
-    title: 'Overhead Positioning',
-    summary: 'Improve your overhead position and spacing',
-    thumb: THUMB_OVERHEAD,
-  },
-  {
-    id: 'topspin-smash',
-    title: 'Topsin Smash',
-    summary: 'Lift and wrap the ball so it climbs the glass with forward spin.',
-    thumb: THUMB_OVERHEAD,
-  },
-  {
-    id: 'forehand-volley',
-    title: 'Forehand Volley',
-    summary: 'Build a compact forehand volley from the block to impact in front.',
-    thumb: THUMB_BANDEJA,
-  },
-  {
-    id: 'backhand-volley',
-    title: 'Backhand Volley',
-    summary: 'Train hip transfer on the sliced backhand volley.',
-    thumb: THUMB_RECOVERY,
-  },
-  {
-    id: 'recovery-balance',
-    title: 'Recovery & Balance',
-    summary: 'Recover after the overhead and get ready for the next shot.',
-    thumb: THUMB_RECOVERY,
-  },
-]
+const THUMB_BY_ID: Record<string, ImageSourcePropType> = {
+  'bandeja-drill': THUMB_BANDEJA,
+  'overhead-positioning': THUMB_OVERHEAD,
+  'topspin-smash': THUMB_OVERHEAD,
+  'forehand-volley': THUMB_BANDEJA,
+  'backhand-volley': THUMB_RECOVERY,
+  'recovery-balance': THUMB_RECOVERY,
+}
 
 /** Compact row height from the Figma cards — never let image aspect ratio stretch the row. */
 const CARD_HEIGHT = 112
@@ -79,29 +57,113 @@ const RACKET = 64
 
 type Props = {
   onClose: () => void
-  /** Shot name in the hero; mock defaults to Bandeja. */
-  shotLabel?: string
-  subtitle?: string
+  /** Shot name in the hero. */
+  shotLabel?: string | null
+  /** Stroke preset from analysis (e.g. `backhand_drive`, `bandeja`). */
+  strokePreset?: string | null
+  subtitle?: string | null
+}
+
+function packToCard(pack: DrillMediaPack): SuggestedDrillCard {
+  return {
+    id: pack.id,
+    title: pack.name,
+    summary: pack.subtitle,
+    level: pack.id === 'bandeja-drill' ? 'beginner' : undefined,
+    thumb: THUMB_BY_ID[pack.id] ?? THUMB_RECOVERY,
+    pack,
+  }
+}
+
+/** Local catalogue rows → card + synthetic media pack (text steps, no Railway video). */
+function localDrillToCard(drill: Drill): SuggestedDrillCard {
+  const steps = drill.steps.map((step, i) => {
+    const title = stepTitle(step) ?? `Step ${i + 1}`
+    const summary = stepText(step)
+    return {
+      title,
+      summary,
+      task: summary,
+      focus: [] as string[],
+      practice: '3 sets x 8 repetitions',
+      minutes: `~ ${Math.max(1, Math.round(drill.minutes / Math.max(1, drill.steps.length)))} min`,
+      videoUri: drill.videoUrl,
+    }
+  })
+  const pack: DrillMediaPack = {
+    id: drill.slug,
+    name: drill.title,
+    shotLabel: drill.focusLabel,
+    subtitle: drill.summary,
+    focusParts: drill.focus,
+    steps,
+  }
+  return {
+    id: drill.slug,
+    title: drill.title,
+    summary: drill.summary,
+    level: drill.level === 'beginner' ? 'beginner' : undefined,
+    thumb: THUMB_RECOVERY,
+    pack,
+  }
 }
 
 /**
- * Static Suggested Drills UI matched to the Figma mock (header racket + cards).
- * Renders inside the main shell (global Header + tab bar stay visible).
+ * Suggested Drills UI matched to the Figma mock (header racket + cards).
+ * Cards are filtered to the current shot — bandeja only when the shot is bandeja.
  */
 export function SuggestedDrillsPage({
   onClose,
-  shotLabel = 'Bandeja',
-  subtitle = 'Targeted drills to improve your bandeja and overhead consistency',
+  shotLabel = null,
+  strokePreset = null,
+  subtitle = null,
 }: Props) {
+  const { t, i18n } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const font = theme.regularFont
   const fontSemi = theme.semiBoldFont ?? theme.regularFont
-  const [selectedId, setSelectedId] = useState(MOCK_DRILLS[0]?.id ?? null)
+
+  const displayShot =
+    (typeof shotLabel === 'string' && shotLabel.trim()) ||
+    (typeof strokePreset === 'string' && strokePreset.replace(/[_-]+/g, ' ').trim()) ||
+    t('analysis.viewAnglesPage.shotFallback')
+
+  const heroSubtitle =
+    (typeof subtitle === 'string' && subtitle.trim()) ||
+    t('analysis.suggestedDrillsSubtitle', {
+      defaultValue: 'Targeted drills to improve this shot',
+      shot: displayShot,
+    })
+
+  const drills = useMemo(() => {
+    const packs = mediaPacksForShot(shotLabel, strokePreset)
+    if (packs.length) return packs.map(packToCard)
+    // No Railway pack for this family — shot-tagged local catalogue only (never dumps bandeja).
+    const shotQuery =
+      [shotLabel, strokePreset].filter(Boolean).join(' ').replace(/[_-]+/g, ' ').trim() || null
+    return localCatalogueDrills([], shotQuery, i18n.language, 3, true).map(localDrillToCard)
+  }, [shotLabel, strokePreset, i18n.language])
+
+  const drillIds = useMemo(() => drills.map((d) => d.id), [drills])
+  const packsById = useMemo(() => {
+    const map: Record<string, DrillMediaPack> = {}
+    for (const d of drills) map[d.id] = d.pack
+    return map
+  }, [drills])
+
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [overviewOpen, setOverviewOpen] = useState(false)
   const [walkthroughOpen, setWalkthroughOpen] = useState(false)
   const [completedOpen, setCompletedOpen] = useState(false)
   /** Bump so Repeat / Do Again always remounts walkthrough at step 1. */
   const [walkthroughKey, setWalkthroughKey] = useState(0)
+
+  useEffect(() => {
+    setSelectedId(drills[0]?.id ?? null)
+    setOverviewOpen(false)
+    setWalkthroughOpen(false)
+    setCompletedOpen(false)
+  }, [drills])
 
   function restartWalkthroughFromStepOne() {
     setCompletedOpen(false)
@@ -116,28 +178,31 @@ export function SuggestedDrillsPage({
     setOverviewOpen(false)
   }
 
-  const activeDrillId = selectedId ?? 'bandeja-drill'
-  const activeDrill = MOCK_DRILLS.find((d) => d.id === activeDrillId) ?? MOCK_DRILLS[0]
+  const activeDrillId = selectedId ?? drills[0]?.id ?? ''
+  const activeDrill = drills.find((d) => d.id === activeDrillId) ?? drills[0] ?? null
+  const activePack = activeDrill ? packsById[activeDrill.id] ?? activeDrill.pack : null
 
-  if (completedOpen) {
+  if (completedOpen && activeDrill) {
     return (
       <DrillCompletedPage
-        drillName={activeDrill?.title ?? 'Drill'}
+        drillName={activeDrill.title}
         onDoAgain={restartWalkthroughFromStepOne}
         onDone={backToSuggestedDrills}
         onNextDrill={() => {
           backToSuggestedDrills()
-          setSelectedId(getNextSuggestedDrillId(activeDrillId))
+          const next = getNextSuggestedDrillId(activeDrillId, drillIds, shotLabel, strokePreset)
+          if (next) setSelectedId(next)
         }}
       />
     )
   }
 
-  if (walkthroughOpen) {
+  if (walkthroughOpen && activeDrillId) {
     return (
       <DrillWalkthroughPage
         key={walkthroughKey}
         drillId={activeDrillId}
+        mediaPack={activePack}
         onClose={() => setWalkthroughOpen(false)}
         onBackToOverview={() => setWalkthroughOpen(false)}
         onComplete={() => {
@@ -148,12 +213,13 @@ export function SuggestedDrillsPage({
     )
   }
 
-  if (overviewOpen) {
+  if (overviewOpen && activeDrillId) {
     return (
       <DrillOverviewPage
         drillId={activeDrillId}
-        shotLabel={activeDrill?.title ?? shotLabel}
-        subtitle={activeDrill?.summary ?? subtitle}
+        mediaPack={activePack}
+        shotLabel={activeDrill?.title ?? displayShot}
+        subtitle={activeDrill?.summary ?? heroSubtitle}
         onClose={() => setOverviewOpen(false)}
         onNext={() => setWalkthroughOpen(true)}
       />
@@ -184,10 +250,10 @@ export function SuggestedDrillsPage({
           </View>
           <View style={styles.heroCopy}>
             <Text allowFontScaling={false} style={[styles.heroTitle, { fontFamily: fontSemi }]}>
-              {shotLabel}
+              {displayShot}
             </Text>
             <Text allowFontScaling={false} style={[styles.heroSubtitle, { fontFamily: font }]}>
-              {subtitle}
+              {heroSubtitle}
             </Text>
           </View>
         </View>
@@ -197,19 +263,27 @@ export function SuggestedDrillsPage({
         </Text>
 
         <View style={styles.cardList}>
-          {MOCK_DRILLS.map((drill) => (
-            <DrillMockCard
-              key={drill.id}
-              drill={drill}
-              selected={drill.id === selectedId}
-              onSelect={() => {
-                if (drill.id === selectedId) setOverviewOpen(true)
-                else setSelectedId(drill.id)
-              }}
-              font={font}
-              fontSemi={fontSemi}
-            />
-          ))}
+          {drills.length === 0 ? (
+            <Text allowFontScaling={false} style={[styles.emptyCopy, { fontFamily: font }]}>
+              {t('analysis.noSuggestedDrills', {
+                defaultValue: 'No suggested drills for this shot yet.',
+              })}
+            </Text>
+          ) : (
+            drills.map((drill) => (
+              <DrillMockCard
+                key={drill.id}
+                drill={drill}
+                selected={drill.id === selectedId}
+                onSelect={() => {
+                  if (drill.id === selectedId) setOverviewOpen(true)
+                  else setSelectedId(drill.id)
+                }}
+                font={font}
+                fontSemi={fontSemi}
+              />
+            ))
+          )}
         </View>
       </ScrollView>
     </View>
@@ -223,7 +297,7 @@ function DrillMockCard({
   font,
   fontSemi,
 }: {
-  drill: MockDrill
+  drill: SuggestedDrillCard
   selected: boolean
   onSelect: () => void
   font: string
@@ -313,109 +387,73 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 4,
   },
-  heroTitle: {
-    color: UI.text,
-    fontSize: 28,
-    lineHeight: 32,
-  },
-  heroSubtitle: {
-    color: '#86A7D2',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  sectionTitle: {
-    color: UI.text,
-    fontSize: 20,
-    lineHeight: 24,
-    marginBottom: 14,
-  },
-  cardList: {
-    gap: 12,
-  },
-  /** Outer keeps the halo — overflow:hidden on the inner would clip it. */
+  heroTitle: { color: '#FFFFFF', fontSize: 22 },
+  heroSubtitle: { color: 'rgba(255,255,255,0.65)', fontSize: 13, lineHeight: 18 },
+  sectionTitle: { color: '#FFFFFF', fontSize: 18, marginBottom: 12 },
+  emptyCopy: { color: 'rgba(255,255,255,0.65)', fontSize: 14, lineHeight: 20, paddingVertical: 8 },
+  cardList: { gap: 12 },
   cardOuter: {
-    borderRadius: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   cardOuterSelected: {
-    boxShadow: '0px 0px 20px 0px #0048FF',
+    borderColor: '#3D8BFF',
+    boxShadow: '0px 0px 16px 0px rgba(47, 107, 255, 0.55)',
   },
   cardInner: {
+    height: CARD_HEIGHT,
+    borderRadius: 14,
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'stretch',
-    height: CARD_HEIGHT,
-    borderRadius: 20,
-    backgroundColor: '#0048FF0D',
-    overflow: 'hidden',
-    borderWidth: 1,
-    position: 'relative',
-  },
-  cardInnerSelected: {
-    borderColor: '#00B8FF',
+    backgroundColor: '#06102E',
   },
   cardInnerIdle: {
-    borderColor: '#07256D',
+    borderWidth: 1.5,
+    borderColor: '#062C7B',
   },
-  glowOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
+  cardInnerSelected: {
+    borderWidth: 0,
   },
-  glowOverlaySelected: {
-    boxShadow: '0px 0px 30px 0px #0048FF inset',
-  },
-  glowOverlayIdle: {
-    boxShadow: '0px 0px 30px 0px #0048FF80 inset',
-  },
-  /** Left slot fills card height; image covers the whole slot. */
   thumbWrap: {
     width: THUMB_WIDTH,
-    height: '100%',
-    backgroundColor: UI.surface,
-    overflow: 'hidden',
-  },
-  thumb: {
-    width: THUMB_WIDTH,
     height: CARD_HEIGHT,
+    backgroundColor: '#020814',
   },
+  thumb: { width: '100%', height: '100%' },
   cardBody: {
     flex: 1,
-    justifyContent: 'center',
-    paddingLeft: 12,
-    paddingRight: 4,
-    paddingVertical: 12,
-    gap: 4,
     minWidth: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingRight: 28,
+    justifyContent: 'center',
+    gap: 4,
   },
-  cardTitle: {
-    color: '#4DA6FF',
-    fontSize: 15,
-    lineHeight: 19,
-  },
-  /** Anchored to the card corner — not inline with the title. */
+  cardTitle: { color: '#FFFFFF', fontSize: 15 },
+  cardSummary: { color: 'rgba(255,255,255,0.65)', fontSize: 12, lineHeight: 16 },
+  chevron: { position: 'absolute', right: 10, top: '50%', marginTop: -9 },
   levelPill: {
     position: 'absolute',
-    top: 10,
-    right: 12,
-    zIndex: 2,
-    borderRadius: UI.radiusPill,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    backgroundColor: '#00FFA626',
+    top: 8,
+    left: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: 'rgba(6, 16, 40, 0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(61, 139, 255, 0.55)',
   },
-  levelText: {
-    color: '#00FFA6',
-    fontSize: 12,
-    lineHeight: 14,
+  levelText: { color: '#7AECFF', fontSize: 10 },
+  glowOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
   },
-  cardSummary: {
-    color: UI.text,
-    fontSize: 12,
-    lineHeight: 16,
-    opacity: 0.92,
+  glowOverlayIdle: {
+    boxShadow: '0px 0px 18px 0px #0048FF55 inset',
   },
-  chevron: {
-    marginRight: 12,
-    marginLeft: 2,
-    alignSelf: 'center',
-    zIndex: 2,
+  glowOverlaySelected: {
+    boxShadow: '0px 0px 22px 0px #3D8BFF88 inset',
   },
 })

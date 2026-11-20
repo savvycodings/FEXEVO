@@ -5,7 +5,7 @@ import { ThemeContext } from '../../context'
 import { PrimaryFill, UI } from '../../components/ui'
 import { LocalSvgAsset, prefetchSvgAssets } from '../../components/LocalSvgAsset'
 import { MockDrillPlayer } from './MockDrillPlayer'
-import { getDrillMediaPack, type DrillStepMedia } from './drillMedia'
+import { getDrillMediaPack, type DrillMediaPack, type DrillStepMedia } from './drillMedia'
 
 const TASK_SVG = require('../../../assets/drillspage/yourtasks.svg')
 const FOCUS_SVG = require('../../../assets/drillspage/focusonblue.svg')
@@ -25,18 +25,26 @@ type Props = {
   onComplete?: () => void
   /** Suggested-drills card id. */
   drillId?: string
+  /** When set (e.g. local-catalogue synthetic pack), preferred over id lookup. */
+  mediaPack?: DrillMediaPack | null
 }
 
 /**
  * Drill step walkthrough — opened from overview “Next”.
  * Same video chrome / pill CTAs as the overview; badges + Your Focus removed.
  */
-export function DrillWalkthroughPage({ onClose, onBackToOverview, onComplete, drillId }: Props) {
+export function DrillWalkthroughPage({
+  onClose,
+  onBackToOverview,
+  onComplete,
+  drillId,
+  mediaPack,
+}: Props) {
   const { theme } = useContext(ThemeContext)
   const font = theme.regularFont
   const fontSemi = theme.semiBoldFont ?? theme.regularFont
   const fontMed = theme.mediumFont ?? theme.regularFont
-  const pack = getDrillMediaPack(drillId)
+  const pack = mediaPack ?? getDrillMediaPack(drillId)
   const steps: DrillStepMedia[] = pack.steps
   const stepCount = steps.length
   const [stepIndex, setStepIndex] = useState(0)

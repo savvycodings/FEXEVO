@@ -21,7 +21,12 @@ function mediaHost(): string {
   return api
 }
 
-/** Resolve `/uploads/...` paths to absolute URLs for `<Image />`. */
+/**
+ * Resolve `/uploads/...` paths to absolute URLs for `<Image />`.
+ * Hologram stills and orbit clips are served from the media host as well: behind the ngrok
+ * tunnel `/uploads/technique-holograms/...` is a 404 while the Railway volume has the file.
+ * A laptop that writes its own uploads sets EXPO_PUBLIC_MEDIA_BASE_URL instead.
+ */
 export function resolveUploadUrl(path: string | null | undefined): string | null {
   if (!path) return null
   const trimmed = path.trim()

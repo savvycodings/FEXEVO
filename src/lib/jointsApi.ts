@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { authClient } from './auth-client'
 
 export type ContactJoint = 'shoulder' | 'elbow' | 'wrist' | 'torso' | 'knee'
+/** Joint-detail pages. `feet` is client-only (pose-derived); the /joints API does not return it. */
+export type DetailJoint = ContactJoint | 'feet'
 export type JointStatus = 'good' | 'warn' | 'bad'
 export type JointDirection =
   | 'match'
@@ -32,10 +34,19 @@ export type ContactJoints = {
   joints: Record<ContactJoint, JointReading>
 }
 
+const CONTACT_KEYS: ContactJoint[] = ['shoulder', 'elbow', 'wrist', 'torso', 'knee']
+
 function toJoints(raw: unknown): ContactJoints | null {
-  const body = ((raw as { data?: unknown })?.data ?? raw) as Record<string, unknown> | null
-  const joints = body?.joints as ContactJoints['joints'] | undefined
-  if (!body || !joints || typeof joints !== 'object' || !joints.elbow) return null
+  // better-auth $fetch may return the body directly or wrap it as `{ data }`.
+  const outer = raw as { data?: unknown; error?: unknown } | null
+  if (outer && typeof outer === 'object' && outer.error && outer.data == null) return null
+  const body = (outer?.data ?? raw) as Record<string, unknown> | null
+  if (!body || typeof body !== 'object') return null
+  const joints = body.joints as ContactJoints['joints'] | undefined
+  if (!joints || typeof joints !== 'object') return null
+  // Accept a partial payload — requiring only elbow dropped valid wrist/torso/racket rows.
+  const hasAny = CONTACT_KEYS.some((k) => joints[k] != null && typeof joints[k] === 'object')
+  if (!hasAny) return null
   return {
     shotLabel: typeof body.shotLabel === 'string' ? body.shotLabel : null,
     side: body.side === 'LEFT' ? 'LEFT' : 'RIGHT',
@@ -48,14 +59,36 @@ function toJoints(raw: unknown): ContactJoints | null {
 export function useContactJoints(analysisId: string | null | undefined, reloadKey = 0): ContactJoints | null {
   const [state, setState] = useState<ContactJoints | null>(null)
   useEffect(() => {
-    if (!analysisId) return
+    if (!analysisId) {
+      setState(null)
+      return
+    }
     let cancelled = false
-    authClient
-      .$fetch(`/technique/analysis/${analysisId}/joints`, { method: 'GET', headers: { Accept: 'application/json' } })
-      .then((res) => {
-        if (!cancelled) setState(toJoints(res))
-      })
-      .catch(() => {})
+    setState(null)
+
+    const load = async (attempt: number) => {
+      try {
+        const res = await authClient.$fetch(`/technique/analysis/${analysisId}/joints`, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+        })
+        if (cancelled) return
+        const parsed = toJoints(res)
+        if (parsed) {
+          setState(parsed)
+          return
+        }
+      } catch {
+        // Network / 409 pose-not-ready — retry below.
+      }
+      // Pose can lag the analysis row on Android (ngrok); retry a few times before giving up.
+      if (!cancelled && attempt < 4) {
+        await new Promise((r) => setTimeout(r, 700 * (attempt + 1)))
+        if (!cancelled) await load(attempt + 1)
+      }
+    }
+
+    void load(0)
     return () => {
       cancelled = true
     }

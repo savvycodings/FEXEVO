@@ -796,6 +796,7 @@ export const en = {
       wrist: "Wrist",
       torso: "Torso",
       knee: "Knee",
+      feet: "Foot",
     },
     joints: {
       shoulder: {

@@ -248,6 +248,8 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
     let cancelled = false
     let startedStill = false
     let kickedOrbit = false
+    /** Polls after an orbit kick while status stays idle (server skipped Seedance). */
+    let idleOrbitPollsAfterKick = 0
     let timer: ReturnType<typeof setInterval> | null = null
 
     const stop = () => {
@@ -277,8 +279,29 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
         !kickedOrbit
       if (needsOrbitKick) {
         kickedOrbit = true
+        idleOrbitPollsAfterKick = 0
         next = (await startHologram(analysisId)) ?? next
         if (cancelled) return
+      }
+      // When orbit is disabled on the server, status stays `idle` forever. After a kick + a
+      // couple of polls with no clip, treat it as failed so Smart 3D can settle on the still.
+      if (
+        next &&
+        kickedOrbit &&
+        hasContactStill(next) &&
+        !hasOrbit(next) &&
+        next.orbitStatus === 'idle'
+      ) {
+        idleOrbitPollsAfterKick += 1
+        if (idleOrbitPollsAfterKick >= 2) {
+          next = {
+            ...next,
+            orbitStatus: 'failed',
+            orbitError: next.orbitError ?? 'Orbit unavailable',
+          }
+        }
+      } else if (next?.orbitStatus === 'running' || hasOrbit(next)) {
+        idleOrbitPollsAfterKick = 0
       }
       if (next) {
         // Start saving the mp4 as soon as the URL appears — before Smart 3D mounts —
@@ -301,16 +324,19 @@ export function useHologram(analysisId: string | null | undefined): HologramStat
           })
         }
       }
-      // Stay on the preparing screen until the player orbit and the pro orbit have
-      // both finished or actually failed. Idle means the server has not started yet.
+      // Stay pending until contact still + orbits settle. Idle after a kick is handled above.
       const proSettled =
         next?.proStatus === 'done' || next?.proStatus === 'failed' || next?.proStatus === 'unavailable'
+      const orbitSettled =
+        Boolean(next?.orbitVideo) ||
+        next?.orbitStatus === 'failed' ||
+        next?.orbitStatus === 'done'
       const pending =
         !hasContactStill(next) ||
         next?.status === 'running' ||
         !proSettled ||
         next?.orbitStatus === 'running' ||
-        (hasContactStill(next) && !hasOrbit(next) && next?.orbitStatus !== 'failed')
+        (hasContactStill(next) && !orbitSettled)
       if (!pending) stop()
     }
 

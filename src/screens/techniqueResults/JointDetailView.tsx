@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { ThemeContext } from '../../context'
 import { ResultSectionPill } from '../../components/ResultSectionPill'
 import { CARD_GLOW, SELECTED_GLOW, UI } from '../../components/ui'
-import type { ContactJoint, JointReading } from '../../lib/jointsApi'
+import type { DetailJoint, JointReading } from '../../lib/jointsApi'
 import { BodyPartIcon } from './BodyPartRail'
 import type { SegmentTiming } from '../../lib/kineticChain'
 import type { HologramKeypoints, HologramOrbitFrame } from '../../lib/hologramJob'
@@ -29,7 +29,7 @@ export type OrbitClip = {
 }
 
 type Props = {
-  joint: ContactJoint
+  joint: DetailJoint
   reading: JointReading | null
   shotLabel: string | null
   hologramImage: string | null

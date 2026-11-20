@@ -285,7 +285,9 @@ export function ViewAnglesPage({
 
   // Cover the video frame ourselves: size the clip so its short side fills it, then centre on the
   // player at contact. (expo-av's cover mode doesn't fill on web.)
-  const aspect = clipSize ? clipSize.h / clipSize.w : 16 / 9
+  // Until the clip's size is known the panel draws itself 16:9 wide, so assume the same here.
+  // Assuming a tall clip left the panel filling only the top of the box.
+  const aspect = clipSize ? clipSize.h / clipSize.w : 9 / 16
   const coverSide = Math.max(videoW, videoH)
   const panelW = aspect >= 1 ? coverSide : coverSide / aspect
   const panelH = panelW * aspect

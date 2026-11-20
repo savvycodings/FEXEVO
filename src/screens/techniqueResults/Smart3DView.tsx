@@ -13,6 +13,8 @@ import {
   View,
 } from 'react-native'
 import { ResizeMode, Video, type AVPlaybackStatus } from 'expo-av'
+import { Image as FrameImage } from 'expo-image'
+import { captureRef } from 'react-native-view-shot'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
@@ -25,8 +27,16 @@ import { LocalSvgAsset } from '../../components/LocalSvgAsset'
 import { GlowButton, SELECTED_GLOW, UI } from '../../components/ui'
 import { useHologram, type HologramKeypoints, type HologramOrbitFrame } from '../../lib/hologramJob'
 import { cacheOrbitVideo } from '../../lib/orbitCache'
+import {
+  finishOrbitFrameSet,
+  nearestOrbitFrame,
+  orbitFrameKey,
+  orbitFrameSet,
+  saveOrbitFrame,
+  type OrbitFrameSet,
+} from '../../lib/orbitFrameCache'
 import { orbitKeypointsAt } from '../../lib/orbitKeypoints'
-import { useContactJoints, type ContactJoint, type JointReading } from '../../lib/jointsApi'
+import { useContactJoints, type ContactJoint, type DetailJoint, type JointReading } from '../../lib/jointsApi'
 import { kineticChainTiming } from '../../lib/kineticChain'
 import { poseAngle } from '../../lib/poseJointAngles'
 import { nearestPoseByFrame, type PoseFrameRow } from '../../lib/techniquePose'
@@ -53,6 +63,34 @@ const RAIL_W = BODY_RAIL_W
 const RAIL_GAP = BODY_RAIL_GAP
 const HIGH = '#E5482B'
 const MEDIUM = '#FF8000'
+/** Longest wait for a scrub seek to draw before the next one may start. */
+const SEEK_SETTLE_TIMEOUT_MS = 1000
+/** Longest wait for a saved frame picture to appear. */
+const SHOT_SETTLE_TIMEOUT_MS = 400
+/**
+ * ExoPlayer hands a frame to the screen this long before its timestamp, so the frame on screen
+ * at a playback position is the one due this much later. Measured: the picture flips 49-50 ms
+ * ahead of each frame time.
+ */
+const FRAME_EARLY_MS = 50
+/** A frame is only captured this far clear of the flip on either side of it. */
+const FRAME_EDGE_MS = 8
+/** How far past that edge a step aims to stop. */
+const FRAME_AIM_MS = 6
+/** Playback that slips by between asking the player to start and to stop. */
+const FRAME_STEP_MS = 6
+/** How far short of its target a timed step is cut, to absorb a late timer. */
+const FRAME_SHORT_MS = 60
+/** Play-throughs allowed for saving the frames; the later ones fill in what was stepped across. */
+const FRAME_PASS_LIMIT = 4
+/** The play-throughs give up after this long and keep what they have. */
+const FRAME_PASS_TIMEOUT_MS = 45000
+/** Fewer saved frames than this share of the clip is not worth scrubbing over. */
+const FRAME_PASS_MIN_SHARE = 0.5
+/** A set is kept for later visits from this share of the clip up. */
+const FRAME_PASS_KEEP_SHARE = 0.6
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 type PartSeverity = 'high' | 'medium' | null
 
 type Props = {
@@ -92,12 +130,13 @@ const FIX_TITLE: Partial<Record<BodyPart, string>> = {
 }
 
 /** Body parts that open a joint close-up, and the joint they measure. */
-const DETAIL_JOINT: Partial<Record<BodyPart, ContactJoint>> = {
+const DETAIL_JOINT: Partial<Record<BodyPart, DetailJoint>> = {
   shoulder: 'shoulder',
   elbow: 'elbow',
   wrist: 'wrist',
   torso: 'torso',
   knee: 'knee',
+  feet: 'feet',
   racket: 'wrist',
 }
 
@@ -189,6 +228,20 @@ function coverPlacement(stageW: number, stageH: number, videoW: number, videoH: 
     y: (stageH - videoH * scale) / 2,
     w: videoW * scale,
     h: videoH * scale,
+  }
+}
+
+/** Whole picture inside the stage (same as resizeMode "contain"), for the contact still. */
+function containPlacement(stageW: number, stageH: number, imageW: number, imageH: number) {
+  if (stageW <= 0 || stageH <= 0 || imageW <= 0 || imageH <= 0) {
+    return { x: 0, y: 0, w: Math.max(1, stageW), h: Math.max(1, stageH) }
+  }
+  const scale = Math.min(stageW / imageW, stageH / imageH)
+  return {
+    x: (stageW - imageW * scale) / 2,
+    y: (stageH - imageH * scale) / 2,
+    w: imageW * scale,
+    h: imageH * scale,
   }
 }
 
@@ -426,7 +479,7 @@ export function Smart3DView({
   const entryJoint = initialPart ? DETAIL_JOINT[initialPart] ?? null : null
   /** Priority / Action Plan deep-link: back from joint detail leaves Smart 3D entirely. */
   const [detailFromEntry] = useState(Boolean(entryJoint))
-  const [detail, setDetail] = useState<ContactJoint | null>(entryJoint)
+  const [detail, setDetail] = useState<DetailJoint | null>(entryJoint)
   const timing = useMemo(
     () => (poseFrames?.length ? kineticChainTiming(poseFrames, impactFrame, fps, dominantSide(poseFrames)) : null),
     [poseFrames, impactFrame, fps]
@@ -434,19 +487,65 @@ export function Smart3DView({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 })
   const videoRef = useRef<Video>(null)
+  /** Orbit frame that is on screen. The joint markers follow this, not the finger. */
   const [orbitIndex, setOrbitIndex] = useState(0)
-  const [playbackUri, setPlaybackUri] = useState<string | null>(null)
-  const [orbitReady, setOrbitReady] = useState(false)
-  const [orbitVideoError, setOrbitVideoError] = useState<string | null>(null)
+  /** Saved clip, the frame-painted flag and any error each remember which remote clip they are for. */
+  const [savedClip, setSavedClip] = useState<{ remote: string; uri: string } | null>(null)
+  const [paintedUri, setPaintedUri] = useState<string | null>(null)
+  const [clipError, setClipError] = useState<{ remote: string | null; message: string } | null>(null)
   const [orbitUrlHttp, setOrbitUrlHttp] = useState<number | null>(null)
   const [viewPreset, setViewPreset] = useState<OrbitPreset>('view')
+  /** Contact still that stands in when a layer has no orbit at all. */
+  const [stillSize, setStillSize] = useState<{ uri: string; w: number; h: number } | null>(null)
+  const [stillFailedUri, setStillFailedUri] = useState<string | null>(null)
+  /** Wraps only the orbit video, so a capture holds the model and nothing drawn over it. */
+  const clipShotRef = useRef<View>(null)
+  /** Saved frame picture shown over the video while the model is turned (Android). */
+  const [frameShot, setFrameShot] = useState<{ clip: string; uri: string } | null>(null)
+  /** Share of the clip's frames saved so far, while they are still being saved. */
+  const [framePass, setFramePass] = useState<number | null>(null)
+  /** Where the finger is on the orbit, in frames. Fractional so a drag picks up where it left off. */
   const orbitIndexRef = useRef(0)
   const grantIndex = useRef(0)
   const stageWRef = useRef(1)
+  const stageHRef = useRef(1)
   const frameCountRef = useRef(2)
   const durationRef = useRef(4000)
-  const seekQueue = useRef<{ ms: number | null; running: boolean }>({ ms: null, running: false })
-  const stepGen = useRef(0)
+  const clipWidthRef = useRef(0)
+  /**
+   * One paint at a time. `shown` is the frame on screen (-1 before the first paint), `target`
+   * the frame under the finger, and `settle` resolves once the pending frame has been drawn.
+   * `frames` holds the saved pictures of the clip; while `pass` is set the clip is being
+   * stepped through underneath to save them.
+   */
+  const scrub = useRef<{
+    target: number
+    shown: number
+    running: boolean
+    gen: number
+    settle: { sawBuffering: boolean; shot: boolean; done: () => void } | null
+    frames: OrbitFrameSet | null
+    shotUri: string | null
+    /** Picture that has actually been drawn. */
+    shotUp: string | null
+    clip: string | null
+    pass: boolean
+    mount: number
+    startedMount: number
+  }>({
+    target: 0,
+    shown: -1,
+    running: false,
+    gen: 0,
+    settle: null,
+    frames: null,
+    shotUri: null,
+    shotUp: null,
+    clip: null,
+    pass: false,
+    mount: 0,
+    startedMount: 0,
+  }).current
   /** Frame the finger is on. A stray play is stopped here, not at the end of the clip. */
   const holdMs = useRef(0)
   /**
@@ -465,10 +564,20 @@ export function Smart3DView({
   const clipHeight = metaHeight || naturalClip?.h || null
   const [playDurationMs, setPlayDurationMs] = useState<number | null>(null)
   const overlayFraction = orbitFraction(viewPreset, viewId)
+  // Derived from the remote clip, so switching Player / Ideal Form can never show the other
+  // layer's model for a frame while the effects below catch up.
+  const playbackUri = savedClip && savedClip.remote === remoteClip ? savedClip.uri : null
+  const orbitReady = Boolean(playbackUri) && paintedUri === playbackUri
+  const orbitVideoError = clipError && clipError.remote === (remoteClip ?? null) ? clipError.message : null
   /** Orbit is shown only after its file is on the phone and the player has painted a frame. */
   const reveal = Boolean(playbackUri) && orbitReady && !orbitVideoError
-  frameCountRef.current = Math.max(2, clipFrameCount ?? 2)
-  durationRef.current = clipDurationMs && clipDurationMs > 0 ? clipDurationMs : 4000
+  durationRef.current =
+    (playDurationMs && playDurationMs > 0 ? playDurationMs : null) ??
+    (clipDurationMs && clipDurationMs > 0 ? clipDurationMs : 4000)
+  // Clips are 24 fps. Without a server frame count, step at that rate instead of two coarse stops.
+  frameCountRef.current = Math.max(2, clipFrameCount ?? Math.round((durationRef.current / 1000) * 24))
+  clipWidthRef.current = clipWidth ?? 0
+  scrub.clip = playbackUri
   // Tall stage right of the body-part rail (Figma 6266:55785) — flex fills leftover height.
   const stageWidth = Math.max(1, windowWidth - 40 - RAIL_W - RAIL_GAP)
   const fallbackStageH = Math.max(360, windowHeight - (300 + insets.bottom))
@@ -522,13 +631,33 @@ export function Smart3DView({
     setOrbitIndex(0)
     orbitIndexRef.current = 0
     holdMs.current = 0
-    setOrbitReady(false)
-    setOrbitVideoError(null)
+    // Drop any paint or play-through still running on the previous clip.
+    scrub.gen += 1
+    scrub.running = false
+    scrub.target = 0
+    scrub.shown = -1
+    scrub.settle?.done()
+    scrub.frames = null
+    scrub.shotUri = null
+    scrub.shotUp = null
+    scrub.pass = false
+    setFrameShot(null)
+    setFramePass(null)
+    setPaintedUri(null)
+    setClipError(null)
     setOrbitUrlHttp(null)
     setNaturalClip(null)
     setPlayDurationMs(null)
     if (layer === 'overlay') setViewPreset('view')
   }, [remoteClip, layer])
+
+  // Leaving Smart 3D stops any paint or frame play-through still running.
+  useEffect(
+    () => () => {
+      scrub.gen += 1
+    },
+    [scrub]
+  )
 
   // Overlay: snap the player orbit to the same View 1/2/3 fraction as Ideal Form.
   useEffect(() => {
@@ -566,26 +695,28 @@ export function Smart3DView({
   // cacheOrbitVideo keeps the download alive if the user leaves Smart 3D mid-save.
   useEffect(() => {
     const remote = remoteClip
-    setPlaybackUri(null)
-    setOrbitReady(false)
-    setOrbitVideoError(null)
     setOrbitUrlHttp(null)
     if (!remote) return
     let cancelled = false
     if (__DEV__) console.log('[smart3d] orbit save', { remote: remote.slice(0, 160) })
     void (async () => {
       try {
-        const head = await fetch(remote, { method: 'HEAD' }).catch(() => null)
-        const status = head?.status ?? 0
-        if (!cancelled) setOrbitUrlHttp(status || null)
+        // Dev badge only. Not awaited: it used to hold up the download behind it.
+        if (__DEV__) {
+          void fetch(remote, { method: 'HEAD' })
+            .then((head) => {
+              if (!cancelled) setOrbitUrlHttp(head.status || null)
+            })
+            .catch(() => {})
+        }
         const uri = await cacheOrbitVideo(remote)
         if (cancelled) return
         if (__DEV__) console.log('[smart3d] orbit on phone', uri)
-        setPlaybackUri(uri)
+        setSavedClip({ remote, uri })
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         if (__DEV__) console.warn('[smart3d] orbit save failed', msg)
-        if (!cancelled) setOrbitVideoError(msg)
+        if (!cancelled) setClipError({ remote, message: msg })
       }
     })()
     return () => {
@@ -616,71 +747,246 @@ export function Smart3DView({
     orbitVideoError,
   ])
 
-  function seekOrbit(index: number) {
+  // The functions from here to the pan responder are reached from handlers created on the
+  // first render, so they read refs only.
+
+  /** Time to seek to so that exactly this frame is the one drawn. */
+  function frameMillis(frame: number) {
+    const per = durationRef.current / Math.max(frameCountRef.current, 1)
+    // ExoPlayer draws the first frame at or after the seek time; AVPlayer the frame containing it.
+    const ms = Platform.OS === 'android' ? frame * per - per / 2 : frame * per + per / 2
+    return Math.round(Math.max(0, Math.min(durationRef.current - 1, ms)))
+  }
+
+  /** Waits for the pending paint: resolved when it is drawn, or after `timeoutMs`. */
+  function awaitPaint(shot: boolean, timeoutMs: number) {
+    return new Promise<void>((resolve) => {
+      const entry = {
+        sawBuffering: false,
+        shot,
+        done: () => {
+          clearTimeout(timer)
+          if (scrub.settle === entry) scrub.settle = null
+          resolve()
+        },
+      }
+      const timer = setTimeout(entry.done, timeoutMs)
+      scrub.settle = entry
+    })
+  }
+
+  /** Shows a saved frame picture over the video. Resolves once it is on screen. */
+  function paintShot(frame: number, uri: string) {
+    // Same render as the picture, so the markers and the model move as one.
+    setOrbitIndex(frame)
+    if (scrub.shotUri === uri) return Promise.resolve()
+    const drawn = awaitPaint(true, SHOT_SETTLE_TIMEOUT_MS)
+    scrub.shotUri = uri
+    setFrameShot({ clip: scrub.clip ?? '', uri })
+    return drawn
+  }
+
+  /** Seeks the video to a frame. Resolves once that frame is on screen. */
+  async function paintSeek(frame: number) {
+    const player = videoRef.current
+    if (!player) return
+    const ms = frameMillis(frame)
+    holdMs.current = ms
+    if (Platform.OS !== 'android') {
+      // iOS only paints a new frame if playback is asked to start at that time. Pause on the
+      // same timestamp so the clip steps with the finger. Both calls resolve when the seek is done.
+      const at = { positionMillis: ms, seekMillisToleranceBefore: 0, seekMillisToleranceAfter: 0 }
+      await player.setStatusAsync({ shouldPlay: true, ...at })
+      await player.setStatusAsync({ shouldPlay: false, ...at })
+      return
+    }
+    // On Android the call resolves as soon as the player accepts the seek, well before the
+    // frame is decoded. The frame is drawn once playback status goes buffering and back.
+    const drawn = awaitPaint(false, SEEK_SETTLE_TIMEOUT_MS)
+    try {
+      await player.setStatusAsync({ shouldPlay: false, positionMillis: ms })
+    } catch (e) {
+      scrub.settle?.done()
+      throw e
+    }
+    await drawn
+  }
+
+  /** Puts a frame on screen, or the closest one there is a picture for. Returns the frame shown. */
+  async function paintFrame(frame: number) {
+    const set = scrub.frames
+    if (set) {
+      const near = nearestOrbitFrame(set, frame)
+      const uri = near >= 0 ? set.uris[near] : null
+      if (!uri) return scrub.shown
+      await paintShot(near, uri)
+      return near
+    }
+    await paintSeek(frame)
+    if (scrub.shotUri) {
+      scrub.shotUri = null
+      setFrameShot(null)
+    }
+    return frame
+  }
+
+  /**
+   * Moves the orbit to a frame. Paints are never stacked: the next starts when the current one
+   * is on screen, and always goes to wherever the finger is by then. That matters most for
+   * seeks, where a new seek cancels the decode of the one before it and nothing would be drawn
+   * until the finger stopped. The markers move to each frame as it lands.
+   */
+  function showOrbitFrame(index: number) {
     const last = frameCountRef.current - 1
     const clamped = Math.min(last, Math.max(0, index))
     orbitIndexRef.current = clamped
-    setOrbitIndex(clamped)
-    const q = seekQueue.current
-    q.ms = (clamped / last) * durationRef.current
-    holdMs.current = q.ms
-    if (q.running) return
-    q.running = true
-    const pump = async () => {
-      while (q.ms != null) {
-        const next = q.ms
-        q.ms = null
-        holdMs.current = next
-        const gen = ++stepGen.current
-        const player = videoRef.current
-        if (!player) continue
+    scrub.target = Math.round(clamped)
+    if (scrub.running) return
+    scrub.running = true
+    const gen = scrub.gen
+    void (async () => {
+      while (scrub.gen === gen && scrub.shown !== scrub.target) {
+        const want = scrub.target
+        let got: number
         try {
-          // iOS only paints a new frame if playback is asked to start at that time.
-          // Pause on the same timestamp so the clip steps with the finger and does not run on.
-          await player.setStatusAsync({
-            shouldPlay: true,
-            positionMillis: next,
-            seekMillisToleranceBefore: 0,
-            seekMillisToleranceAfter: 0,
-          })
-          if (stepGen.current !== gen) continue
-          await player.setStatusAsync({
-            shouldPlay: false,
-            positionMillis: holdMs.current,
-            seekMillisToleranceBefore: 0,
-            seekMillisToleranceAfter: 0,
-          })
+          got = await paintFrame(want)
         } catch {
-          /* the next drag sends a fresh position */
+          // The player went away mid-seek. The next drag starts a fresh run.
+          break
         }
+        if (scrub.gen !== gen) return
+        scrub.shown = got
+        setOrbitIndex(got)
+        // The closest saved frame is up. The play-through asks again as more are saved.
+        if (got !== want && scrub.target === want) break
       }
-      q.running = false
-    }
-    void pump()
+      if (scrub.gen === gen) scrub.running = false
+    })()
   }
 
-  function scrubMillis() {
-    const last = Math.max(frameCountRef.current - 1, 1)
-    return (orbitIndexRef.current / last) * durationRef.current
+  /**
+   * Android: saves the orbit frames as pictures, so that turning the model swaps pictures
+   * instead of seeking. The clip is stepped through once, hidden under the picture of the frame
+   * being shown: play a frame's worth, pause, capture. Capturing a playing clip is several
+   * times slower and holds whichever frame came up meanwhile, so each one is taken at rest.
+   * A clip that was stepped through on an earlier visit already has its pictures.
+   */
+  async function prepareFrames(gen: number) {
+    const player = videoRef.current
+    const wrap = clipShotRef.current
+    const clip = scrub.clip
+    if (!player || !wrap || !clip) return
+    const count = frameCountRef.current
+    // Pictures are the shape of the stage and about the resolution of the clip.
+    const width = Math.round(clipWidthRef.current || 496)
+    const height = Math.round((width * stageHRef.current) / Math.max(stageWRef.current, 1))
+    const set = orbitFrameSet(orbitFrameKey(clip, width, height), count)
+    scrub.frames = set
+    try {
+      if (!set.complete) {
+        const shoot = () => captureRef(wrap, { format: 'jpg', quality: 0.85, result: 'tmpfile', width, height })
+        const saved = () => set.uris.reduce((n, uri) => (uri ? n + 1 : n), 0)
+        // The clip is paused on its first frame, so this picture is exact.
+        if (!set.uris[0]) saveOrbitFrame(set, 0, await shoot())
+        if (scrub.gen !== gen) return
+        // Cover the video before it starts to move. The video already shows this frame, so
+        // without forgetting that, nothing is painted and the model is seen turning by itself.
+        scrub.shown = -1
+        showOrbitFrame(orbitIndexRef.current)
+        while (scrub.running && scrub.gen === gen) await sleep(8)
+        if (scrub.gen !== gen) return
+        // Never start the clip moving unless its picture is really up.
+        if (!scrub.shotUri || scrub.shotUp !== scrub.shotUri) throw new Error('frame picture did not appear')
+        const per = durationRef.current / count
+        const deadline = Date.now() + FRAME_PASS_TIMEOUT_MS
+        scrub.pass = true
+        setFramePass(saved() / count)
+        for (let pass = 0; pass < FRAME_PASS_LIMIT && saved() < count && Date.now() < deadline; pass++) {
+          // Later passes start over to pick up frames the one before stepped across.
+          let status = await player.setStatusAsync(
+            pass === 0 ? { shouldPlay: false } : { shouldPlay: false, positionMillis: 0 }
+          )
+          for (let i = 0; i < 50 && status.isLoaded && status.isBuffering; i++) {
+            await sleep(20)
+            status = await player.getStatusAsync()
+          }
+          let before = -1
+          let stalled = 0
+          while (Date.now() < deadline) {
+            if (scrub.gen !== gen) return
+            if (!status.isLoaded) throw new Error('orbit clip unloaded')
+            const ms = status.positionMillis
+            // Ended, or not moving: nothing more to get from this pass.
+            stalled = ms > before ? 0 : stalled + 1
+            if (stalled > 10) break
+            before = ms
+            // Frame on screen at this position, and how far into its time on screen.
+            const onScreen = ms + FRAME_EARLY_MS
+            const frame = Math.min(count - 1, Math.floor(onScreen / per))
+            const into = onScreen - frame * per
+            const early = into < FRAME_EDGE_MS
+            const late = frame < count - 1 && into > per - FRAME_EDGE_MS
+            if (!early && !late && !set.uris[frame]) {
+              saveOrbitFrame(set, frame, await shoot())
+              if (scrub.gen !== gen) return
+              const n = saved()
+              if (n % 4 === 0 || n === count) setFramePass(n / count)
+              // The finger may be waiting on a frame that has just been saved.
+              if (scrub.shown !== scrub.target) showOrbitFrame(orbitIndexRef.current)
+            }
+            let next = early && !set.uris[frame] ? frame : frame + 1
+            while (next < count && set.uris[next]) next += 1
+            if (next >= count) break
+            // Play up to just inside the next missing frame's time on screen, then stop there.
+            const aim = next * per - FRAME_EARLY_MS + FRAME_EDGE_MS + FRAME_AIM_MS
+            // Timers run late, so stop short and let the bare steps (a few ms each) close in.
+            const dwell = aim - ms - FRAME_STEP_MS - FRAME_SHORT_MS
+            await player.setStatusAsync({ shouldPlay: true })
+            if (dwell > 1) await sleep(dwell)
+            status = await player.setStatusAsync({ shouldPlay: false })
+          }
+          if (__DEV__) console.log('[smart3d] orbit frame pass', pass, 'saved', saved(), 'of', count)
+        }
+        if (scrub.gen !== gen) return
+        scrub.pass = false
+        setFramePass(null)
+        await player.setStatusAsync({ shouldPlay: false })
+        if (__DEV__) console.log('[smart3d] orbit frames saved', saved(), 'of', count)
+        if (saved() < count * FRAME_PASS_MIN_SHARE) throw new Error('too few orbit frames saved')
+        // Kept for later visits only when nearly whole; otherwise the next visit fills it in.
+        if (saved() >= count * FRAME_PASS_KEEP_SHARE) finishOrbitFrameSet(set)
+      }
+      if (scrub.gen === gen) showOrbitFrame(orbitIndexRef.current)
+    } catch (e) {
+      if (scrub.gen !== gen) return
+      if (__DEV__) console.warn('[smart3d] orbit frames unavailable, seeking instead', e)
+      // No pictures: turn the model by seeking the video.
+      scrub.pass = false
+      scrub.frames = null
+      scrub.shown = -1
+      setFramePass(null)
+      showOrbitFrame(orbitIndexRef.current)
+    }
   }
 
   function onOrbitStatus(status: AVPlaybackStatus) {
     // Ready as soon as the player has loaded — do not wait for iOS play≥80ms (that left the still stuck).
     if (!status.isLoaded) {
-      if ('error' in status && status.error && __DEV__) {
-        console.warn('[smart3d] orbit status error', status.error)
-        setOrbitVideoError(String(status.error))
+      if ('error' in status && status.error) {
+        if (__DEV__) console.warn('[smart3d] orbit status error', status.error)
+        setClipError({ remote: remoteClip ?? null, message: String(status.error) })
       }
       return
     }
-    if (!orbitReady) {
-      setOrbitReady(true)
-      if (__DEV__) {
-        console.log('[smart3d] orbitReady via status', {
-          isPlaying: status.isPlaying,
-          positionMillis: status.positionMillis,
-        })
-      }
+    // iOS is ready once the player has loaded (waiting for its display event left the stage
+    // stuck). Android waits for the first drawn frame, so the stage never opens empty.
+    if (Platform.OS !== 'android' && playbackUri && paintedUri !== playbackUri) setPaintedUri(playbackUri)
+    // The frame play-through starts and stops the clip itself.
+    if (scrub.pass) return
+    const settle = scrub.settle
+    if (settle && !settle.shot) {
+      if (status.isBuffering) settle.sawBuffering = true
+      else if (settle.sawBuffering) settle.done()
     }
     // A step starts playback at the finger's frame and pauses there. Only pull back a real run-on.
     if (status.isPlaying && status.positionMillis > holdMs.current + 200) {
@@ -707,15 +1013,25 @@ export function Smart3DView({
       onPanResponderMove: (_, g) => {
         const last = frameCountRef.current - 1
         const delta = (g.dx / Math.max(stageWRef.current, 1)) * last
-        seekOrbit(grantIndex.current + delta)
+        showOrbitFrame(grantIndex.current + delta)
       },
     })
   ).current
+  const solo = layer === 'player' || layer === 'pro'
   const proFailed = hologram.proStatus === 'failed' || hologram.proStatus === 'unavailable'
   const playerFailed = hologram.ready && hologram.orbitStatus === 'failed' && !hologram.orbitVideo
   const proMissing = layer === 'pro' && hologram.ready && proFailed && !hologram.proOrbitVideo
   const clipBroken = Boolean(orbitVideoError) || (layer === 'player' && playerFailed)
-  const preparing = (layer === 'player' || layer === 'pro') && !reveal && !proMissing && !clipBroken
+  // The contact still is framed differently from the orbit, so it is never shown on the way to
+  // one: the model would change size when the clip took over. It stands in only when this layer
+  // has no orbit to show at all, and then it is the one picture for the whole visit.
+  const stillUri = layer === 'pro' ? hologram.proImage : layer === 'player' ? hologram.image : null
+  const showStill =
+    solo && !reveal && (clipBroken || proMissing) && Boolean(stillUri) && stillFailedUri !== stillUri
+  const stillLoaded = showStill && stillSize?.uri === stillUri ? stillSize : null
+  /** Frame picture over the video, only for the clip it was taken from. */
+  const shot = solo && reveal && frameShot?.clip === playbackUri ? frameShot : null
+  const preparing = solo && !reveal && !proMissing && !clipBroken
   const lit = selected ? partKeypoints(selected, contactJoints?.side ?? 'RIGHT') : []
   // Prefer per-frame orbit pose. Do not fall back to the contact still while the orbit plays —
   // that pinned dots to impact pose while the camera turned.
@@ -727,19 +1043,23 @@ export function Smart3DView({
       : reveal
         ? orbitKeypointsAt(clipFrames, orbitIndex, frameCountRef.current) ??
           (clipFrames?.length ? null : stillKeys)
-        : null
+        : stillLoaded
+          ? stillKeys
+          : null
   const stageW = stageSize.w || stageWidth
   const stageH = stageSize.h || fallbackStageH
   // Prefer real orbit/natural size so dots track the COVER-fitted video in a tall stage.
   // Fall back to square hologram stills only before video metadata arrives.
   const placed =
     stageW && stageH
-      ? coverPlacement(
-          stageW,
-          stageH,
-          clipWidth && clipHeight ? clipWidth : 1024,
-          clipWidth && clipHeight ? clipHeight : 1024
-        )
+      ? stillLoaded
+        ? containPlacement(stageW, stageH, stillLoaded.w, stillLoaded.h)
+        : coverPlacement(
+            stageW,
+            stageH,
+            clipWidth && clipHeight ? clipWidth : 1024,
+            clipWidth && clipHeight ? clipHeight : 1024
+          )
       : null
 
   useEffect(() => {
@@ -771,7 +1091,9 @@ export function Smart3DView({
   }
 
   if (detail) {
-    const served = contactJoints?.joints[detail] ?? null
+    // Feet is client-only — no /joints payload. Elbow/knee/etc. use the API when present.
+    const served =
+      detail === 'feet' ? null : (contactJoints?.joints[detail as ContactJoint] ?? null)
     // Fill a missing player angle from pose, but keep any pro/ideal the server already returned.
     let reading: JointReading | null = served
     if (served?.you == null && poseFrames?.length && impactFrame != null) {
@@ -986,12 +1308,15 @@ export function Smart3DView({
         style={styles.stage}
         onLayout={(e) => {
           stageWRef.current = e.nativeEvent.layout.width
+          stageHRef.current = e.nativeEvent.layout.height
           setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
         }}
       >
         {/* Clip oversized 9:16 AVPlayerLayer so it cannot float over the part buttons. */}
         <View collapsable={false} style={styles.stageClip} pointerEvents="box-none">
           {pictureUri ? (
+            // Its own view, so a capture of it holds the model and nothing drawn over it.
+            <View ref={clipShotRef} collapsable={false} pointerEvents="none" style={styles.clipShot}>
             <Video
               // Overlay View 1/2/3 remount so the paused frame actually changes on Android.
               key={layer === 'overlay' ? `overlay-player-${viewPreset}-${pictureUri}` : `orbit-${pictureUri}`}
@@ -1020,25 +1345,47 @@ export function Smart3DView({
                 }
                 const player = videoRef.current
                 if (!player) return
-                const at =
-                  layer === 'overlay'
-                    ? Math.round(
-                        Math.max(0, Math.min(1, overlayFraction)) *
-                          ((status.isLoaded && status.durationMillis) || durationRef.current)
-                      )
-                    : orbitIndexRef.current === 0
-                      ? 0
-                      : scrubMillis()
-                holdMs.current = at
                 if (__DEV__) {
                   console.log('[smart3d] orbit onLoad', {
                     uri: pictureUri.slice(0, 80),
                     platform: Platform.OS,
-                    at,
+                    frame: orbitIndexRef.current,
                     naturalSize: status.isLoaded ? status.naturalSize : null,
                     stage: { w: stageWRef.current, h: stageSize.h },
                   })
                 }
+                if (layer !== 'overlay') {
+                  // A freshly mounted clip: nothing that was running on the last one applies.
+                  scrub.gen += 1
+                  scrub.running = false
+                  scrub.pass = false
+                  scrub.settle?.done()
+                  holdMs.current = 0
+                  if (Platform.OS !== 'android') {
+                    // Back from a joint close-up the orbit returns to the frame it was left on.
+                    scrub.shown = -1
+                    showOrbitFrame(orbitIndexRef.current)
+                    return
+                  }
+                  // Android draws the first frame of a paused clip by itself. Playing it for a
+                  // moment to force a paint made the model twitch as the view opened.
+                  scrub.shown = 0
+                  const mount = (scrub.mount += 1)
+                  // onReadyForDisplay normally reveals the stage and starts the frame pictures.
+                  // If it never comes, reveal anyway and turn the model by seeking.
+                  setTimeout(() => {
+                    if (scrub.mount !== mount || scrub.startedMount === mount) return
+                    scrub.startedMount = mount
+                    setPaintedUri((uri) => uri ?? pictureUri)
+                    showOrbitFrame(orbitIndexRef.current)
+                  }, 800)
+                  return
+                }
+                const at = Math.round(
+                  Math.max(0, Math.min(1, overlayFraction)) *
+                    ((status.isLoaded && status.durationMillis) || durationRef.current)
+                )
+                holdMs.current = at
                 void player
                   .setStatusAsync({
                     shouldPlay: true,
@@ -1057,16 +1404,60 @@ export function Smart3DView({
                   .catch(() => {})
               }}
               onReadyForDisplay={() => {
-                setOrbitReady(true)
+                setPaintedUri(pictureUri)
                 if (__DEV__) console.log('[smart3d] orbit frame on screen')
+                // First frame of this mount is drawn: it can be captured, so start the pictures.
+                if (Platform.OS === 'android' && layer !== 'overlay' && scrub.startedMount !== scrub.mount) {
+                  scrub.startedMount = scrub.mount
+                  void prepareFrames(scrub.gen)
+                }
               }}
               onPlaybackStatusUpdate={onOrbitStatus}
               onError={(e) => {
                 const msg = typeof e === 'string' ? e : JSON.stringify(e)
                 if (__DEV__) console.warn('[smart3d] orbit video error', msg)
-                setOrbitVideoError(msg)
+                setClipError({ remote: remoteClip ?? null, message: msg })
               }}
-              style={[StyleSheet.absoluteFillObject, { zIndex: 1 }]}
+              style={StyleSheet.absoluteFillObject}
+            />
+            </View>
+          ) : null}
+          {/* Saved picture of the frame being shown. Swapping these is what turns the model. */}
+          {shot ? (
+            <FrameImage
+              source={{ uri: shot.uri }}
+              contentFit="fill"
+              transition={0}
+              cachePolicy="memory"
+              style={styles.frameShot}
+              testID="smart3d-frame"
+              onLoad={() => {
+                scrub.shotUp = shot.uri
+                if (scrub.settle?.shot) scrub.settle.done()
+              }}
+            />
+          ) : null}
+          {/* Frames still being saved: the model turns as far as they reach. */}
+          {shot && framePass != null ? (
+            <View pointerEvents="none" style={styles.framePass} testID="smart3d-frame-pass">
+              <View style={[styles.framePassFill, { width: `${Math.round(framePass * 100)}%` }]} />
+            </View>
+          ) : null}
+          {/* Player / Ideal Form with no orbit to show: the contact still, whole and unscaled. */}
+          {showStill && stillUri ? (
+            <Image
+              source={{ uri: stillUri }}
+              resizeMode="contain"
+              style={StyleSheet.absoluteFillObject}
+              testID="smart3d-still"
+              onLoad={(e) => {
+                const { width, height } = e.nativeEvent.source
+                if (width > 0 && height > 0) setStillSize({ uri: stillUri, w: width, h: height })
+              }}
+              onError={() => {
+                if (__DEV__) console.warn('[smart3d] still image failed', stillUri.slice(0, 120))
+                setStillFailedUri(stillUri)
+              }}
             />
           ) : null}
           {layer === 'overlay' && !pictureUri && (hologram.image || hologram.proImage) ? (
@@ -1116,7 +1507,7 @@ export function Smart3DView({
               accessibilityLabel={t('analysis.smart3dTitle')}
             />
           ) : null}
-          {proMissing ? (
+          {proMissing && !showStill ? (
             <View pointerEvents="none" style={styles.proMissing} testID="smart3d-pro-missing">
               <Ionicons name="ribbon-outline" size={28} color="#7AECFF" />
               <Text allowFontScaling={false} style={[styles.proMissingLabel, { fontFamily: theme.mediumFont }]}>
@@ -1275,6 +1666,20 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
   },
+  clipShot: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
+  // Above the video and the Overlay tab's second orbit, below the joint markers.
+  frameShot: { ...StyleSheet.absoluteFillObject, zIndex: 3 },
+  framePass: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 10,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: 'rgba(122,236,255,0.18)',
+    zIndex: 6,
+  },
+  framePassFill: { height: 2, borderRadius: 1, backgroundColor: '#7AECFF' },
   presetColumn: {
     position: 'absolute',
     right: 10,

@@ -280,10 +280,13 @@ export function localCatalogueDrills(
   focus: DrillFocus[],
   shotLabel: string | null,
   lang: string,
-  limit = 3
+  limit = 3,
+  /** When true, only return drills whose `shots` tags overlap the label (empty if none). */
+  requireShotMatch = false
 ): Drill[] {
   const tags = shotTags(shotLabel)
   const es = lang.startsWith('es')
+  if (requireShotMatch && !tags.length) return []
   const scored = LOCAL.map((row) => {
     let score = 0
     focus.forEach((f, i) => {
@@ -292,21 +295,26 @@ export function localCatalogueDrills(
     if (row.shots.length) score += row.shots.some((s) => tags.includes(s)) ? 2 : tags.length ? -3 : 0
     return { row, score }
   })
-  return scored
+  const ranked = scored
+    .filter(({ row }) => {
+      if (!requireShotMatch) return true
+      return row.shots.length > 0 && row.shots.some((s) => tags.includes(s))
+    })
     .sort((a, b) => b.score - a.score || a.row.sort - b.row.sort)
     .slice(0, Math.max(1, limit))
-    .map(({ row }) => {
-      const copy = es ? row.es : row.en
-      return {
-        slug: row.slug,
-        level: row.level,
-        minutes: row.minutes,
-        focus: row.focus,
-        videoUrl: null,
-        title: copy.title,
-        summary: copy.summary,
-        focusLabel: copy.focusLabel,
-        steps: copy.steps,
-      }
-    })
+  if (requireShotMatch && !ranked.length) return []
+  return ranked.map(({ row }) => {
+    const copy = es ? row.es : row.en
+    return {
+      slug: row.slug,
+      level: row.level,
+      minutes: row.minutes,
+      focus: row.focus,
+      videoUrl: null,
+      title: copy.title,
+      summary: copy.summary,
+      focusLabel: copy.focusLabel,
+      steps: copy.steps,
+    }
+  })
 }

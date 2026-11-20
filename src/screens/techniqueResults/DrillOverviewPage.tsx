@@ -5,7 +5,7 @@ import { ThemeContext } from '../../context'
 import { PrimaryFill, UI } from '../../components/ui'
 import { LocalSvgAsset, prefetchSvgAssets } from '../../components/LocalSvgAsset'
 import { MockDrillPlayer } from './MockDrillPlayer'
-import { getDrillMediaPack, type DrillStepMedia } from './drillMedia'
+import { getDrillMediaPack, type DrillMediaPack, type DrillStepMedia } from './drillMedia'
 
 const RACKET_SVG = require('../../../assets/drillspage/tennisracket.svg')
 const STEPS_SVG = require('../../../assets/drillspage/steps.svg')
@@ -27,6 +27,8 @@ type Props = {
   onNext?: () => void
   /** Suggested-drills card id (bandeja-drill, overhead-positioning, …). */
   drillId?: string
+  /** When set (e.g. local-catalogue synthetic pack), preferred over id lookup. */
+  mediaPack?: DrillMediaPack | null
   shotLabel?: string
   subtitle?: string
 }
@@ -39,6 +41,7 @@ export function DrillOverviewPage({
   onClose,
   onNext,
   drillId,
+  mediaPack,
   shotLabel,
   subtitle,
 }: Props) {
@@ -46,7 +49,7 @@ export function DrillOverviewPage({
   const font = theme.regularFont
   const fontSemi = theme.semiBoldFont ?? theme.regularFont
   const fontMed = theme.mediumFont ?? theme.regularFont
-  const pack = getDrillMediaPack(drillId)
+  const pack = mediaPack ?? getDrillMediaPack(drillId)
   const steps: DrillStepMedia[] = pack.steps
   const heroShot = shotLabel ?? pack.shotLabel
   const heroSubtitle = subtitle ?? pack.subtitle
