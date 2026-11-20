@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from 'react'
 import { Image, Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { ThemeContext } from '../../context'
@@ -269,7 +269,6 @@ export function ViewAnglesPage({
   const target = targetOf(reading)
   const diff =
     reading?.deltaDeg ?? (reading?.you != null && target != null ? reading.you - target : null)
-  const insets = useSafeAreaInsets()
   const [fullscreen, setFullscreen] = useState(false)
   const jointColumn = BODY_RAIL_W
   /** Figma Frame 1107 — navy housing around video + Motion/Angles (290×323, pad 10). */
@@ -503,21 +502,21 @@ export function ViewAnglesPage({
       ) : null}
 
       <Modal visible={fullscreen} animationType="fade" onRequestClose={() => setFullscreen(false)} supportedOrientations={['portrait', 'landscape']}>
-        <View style={[styles.fullscreen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
+        <SafeAreaView style={styles.fullscreen} edges={['top', 'bottom', 'left', 'right']}>
           <Pressable
             testID="viewAnglesFullscreenClose"
             accessibilityRole="button"
             accessibilityLabel={t('analysis.back')}
             onPress={() => setFullscreen(false)}
-            hitSlop={10}
+            hitSlop={14}
             style={styles.fullscreenClose}
           >
-            <Ionicons name="close" size={24} color={UI.text} />
+            <Ionicons name="close" size={28} color={UI.text} />
           </Pressable>
           {fullscreen && width > 0 ? (
             <FullscreenClip panelProps={panelProps} videoKey={`${videoKey}-angles-full`} startFraction={startFraction} />
           ) : null}
-        </View>
+        </SafeAreaView>
       </Modal>
     </View>
   )
@@ -723,6 +722,16 @@ const styles = StyleSheet.create({
   phaseLabel: { color: UI.text, fontSize: 11, lineHeight: 14, textAlign: 'center', letterSpacing: -0.2 },
   phaseTime: { color: UI.textMuted, fontSize: 10 },
   fullscreen: { flex: 1, backgroundColor: '#000' },
-  fullscreenClose: { alignSelf: 'flex-end', padding: 10, marginRight: 6 },
+  fullscreenClose: {
+    alignSelf: 'flex-end',
+    zIndex: 2,
+    minWidth: 44,
+    minHeight: 44,
+    marginTop: 4,
+    marginRight: 8,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   fullscreenBody: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 })
