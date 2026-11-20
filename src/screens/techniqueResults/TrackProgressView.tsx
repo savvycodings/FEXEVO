@@ -45,9 +45,15 @@ const ICON_JOINT = require('../../../assets/aicoach/analysis/track-progress/join
 const ICON_OVER_TIME = require('../../../assets/aicoach/analysis/track-progress/over-time-icon.svg')
 const SCORE_RING_TRACK = require('../../../assets/aicoach/analysis/track-progress/score-ring-track.svg')
 const SCORE_RING_GLOW = require('../../../assets/aicoach/analysis/track-progress/score-ring-glow.png')
+const ICON_YOUR_SHOT = require('../../../assets/aicoach/analysis/shot-vs-ideal/your-shot.svg')
+const ICON_IDEAL = require('../../../assets/aicoach/analysis/shot-vs-ideal/ideal-form.svg')
 
 const MINT = '#00FFA6'
 const CYAN = '#1AE1F4'
+const COMPARE_YOU = 'rgba(0, 72, 255, 0.5)'
+const COMPARE_IDEAL = 'rgba(0, 238, 212, 0.5)'
+const COMPARE_YOU_HEAD = 'rgba(0, 72, 255, 0.25)'
+const COMPARE_IDEAL_HEAD = 'rgba(0, 238, 212, 0.1)'
 const RING = 83
 /** Figma glow PNG sits ~13.7% outside the 83px dial. */
 const RING_GLOW = Math.round(RING * 1.274)
@@ -313,14 +319,17 @@ export function TrackProgressView({
         ) : null}
 
         <View style={styles.videoRow}>
-          <View style={styles.videoCard}>
-            <Text
-              allowFontScaling={false}
-              numberOfLines={1}
-              style={[styles.videoLabel, { fontFamily: theme.mediumFont }]}
-            >
-              {isBefore && previous ? `${t('analysis.yourShot')} • ${fmtDate(previous.createdAt)}` : yourShotLabel}
-            </Text>
+          <View style={[styles.videoCard, { borderColor: COMPARE_YOU }]} testID="track-progress-you-card">
+            <View style={[styles.videoCardHead, { backgroundColor: COMPARE_YOU_HEAD, borderBottomColor: COMPARE_YOU }]}>
+              <LocalSvgAsset assetModule={ICON_YOUR_SHOT} width={24} height={24} />
+              <Text
+                allowFontScaling={false}
+                numberOfLines={1}
+                style={[styles.videoLabel, { fontFamily: theme.mediumFont }]}
+              >
+                {isBefore && previous ? `${t('analysis.yourShot')} • ${fmtDate(previous.createdAt)}` : yourShotLabel}
+              </Text>
+            </View>
             {isBefore && !previous ? (
               <View style={[styles.clipFrame, styles.emptyClip]}>
                 <Text allowFontScaling={false} style={[styles.emptyText, { fontFamily: theme.mediumFont }]}>
@@ -334,24 +343,29 @@ export function TrackProgressView({
                 <PlayableClip
                   uri={shownVideo}
                   testID="track-progress-you"
-                  accent="#07256D"
+                  accent="transparent"
+                  allowFullscreen
                 />
               </View>
             )}
           </View>
-          <View style={[styles.videoCard, styles.idealCard]}>
-            <Text
-              allowFontScaling={false}
-              numberOfLines={1}
-              style={[styles.videoLabel, { fontFamily: theme.mediumFont }]}
-            >
-              {t('analysis.idealForm')}
-            </Text>
+          <View style={[styles.videoCard, { borderColor: COMPARE_IDEAL }]} testID="track-progress-ideal-card">
+            <View style={[styles.videoCardHead, { backgroundColor: COMPARE_IDEAL_HEAD, borderBottomColor: COMPARE_IDEAL }]}>
+              <LocalSvgAsset assetModule={ICON_IDEAL} width={24} height={24} />
+              <Text
+                allowFontScaling={false}
+                numberOfLines={1}
+                style={[styles.videoLabel, { fontFamily: theme.mediumFont }]}
+              >
+                {t('analysis.idealForm')}
+              </Text>
+            </View>
             <View style={styles.clipFrame}>
               <PlayableClip
                 uri={idealVideoUri}
                 testID="track-progress-ideal"
-                accent="rgba(0,72,255,0.5)"
+                accent="transparent"
+                allowFullscreen
               />
             </View>
           </View>
@@ -672,27 +686,29 @@ const styles = StyleSheet.create({
   segText: { color: '#86A7D2', fontSize: 13 },
   segTextOn: { color: '#07256D', fontSize: 13 },
   loadingBox: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
-  videoRow: { flexDirection: 'row', gap: 10 },
+  videoRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
   videoCard: {
     flex: 1,
+    minWidth: 0,
     borderRadius: 20,
-    backgroundColor: '#041641',
-    padding: 10,
-    gap: 10,
-  },
-  idealCard: {
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    boxShadow: '0px 0px 5px #0048FF',
-  },
-  videoLabel: { color: '#FFFFFF', fontSize: 16, textAlign: 'center' },
-  clipFrame: {
-    height: 140,
-    borderRadius: 20,
+    borderWidth: 2,
     overflow: 'hidden',
     backgroundColor: '#030A17',
-    borderWidth: 2,
-    borderColor: '#07256D',
+  },
+  videoCardHead: {
+    height: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 2,
+  },
+  videoLabel: { flexShrink: 1, color: '#FFFFFF', fontSize: 13, textAlign: 'center' },
+  clipFrame: {
+    height: 210,
+    overflow: 'hidden',
+    backgroundColor: '#030A17',
   },
   emptyClip: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   emptyText: { color: '#86A7D2', fontSize: 12, textAlign: 'center', lineHeight: 16 },

@@ -1,5 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
@@ -11,30 +13,48 @@ const clock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-/** Compact clip with a reliable play / pause control. */
+/** Compact clip with a reliable play / pause control. Optional tap-to-fullscreen. */
 export function PlayableClip({
   uri,
   testID,
   accent,
+  allowFullscreen = false,
 }: {
   uri: string | null
   testID: string
   accent: string
+  /** When true, tapping the video (not the play button) opens a fullscreen player. */
+  allowFullscreen?: boolean
 }) {
+  const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const videoRef = useRef<Video>(null)
+  const fullRef = useRef<Video>(null)
   const [playing, setPlaying] = useState(false)
+  const [fullPlaying, setFullPlaying] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
   const [failed, setFailed] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
   const playable = uri && !failed ? uri : null
 
   useEffect(() => {
     setPlaying(false)
+    setFullPlaying(false)
     setPosition(0)
     setDuration(0)
     setFailed(false)
+    setFullscreen(false)
   }, [uri])
+
+  useEffect(() => {
+    if (!fullscreen) return
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setFullscreen(false)
+      return true
+    })
+    return () => sub.remove()
+  }, [fullscreen])
 
   function onStatus(status: AVPlaybackStatus) {
     if (!status.isLoaded) {
@@ -50,8 +70,19 @@ export function PlayableClip({
     }
   }
 
-  async function togglePlay() {
-    const ref = videoRef.current
+  function onFullStatus(status: AVPlaybackStatus) {
+    if (!status.isLoaded) return
+    setPosition(status.positionMillis)
+    setDuration(status.durationMillis ?? 0)
+    setFullPlaying(status.isPlaying)
+    if (status.didJustFinish) {
+      setFullPlaying(false)
+      void fullRef.current?.setPositionAsync(0)
+    }
+  }
+
+  async function togglePlay(target: 'inline' | 'full') {
+    const ref = target === 'full' ? fullRef.current : videoRef.current
     if (!ref || !playable) return
     try {
       const status = await ref.getStatusAsync()
@@ -72,21 +103,46 @@ export function PlayableClip({
     }
   }
 
+  async function openFullscreen() {
+    if (!playable || !allowFullscreen) return
+    try {
+      await videoRef.current?.pauseAsync()
+    } catch {
+      // ignore
+    }
+    setPlaying(false)
+    setFullscreen(true)
+  }
+
+  function closeFullscreen() {
+    setFullscreen(false)
+    setFullPlaying(false)
+    void videoRef.current?.setPositionAsync(position).catch(() => undefined)
+  }
+
   return (
     <View style={[styles.mediaFrame, { borderColor: accent }]} testID={testID}>
       {playable ? (
-        <Video
-          key={playable}
-          ref={videoRef}
-          source={{ uri: playable }}
-          style={styles.media}
-          resizeMode={ResizeMode.COVER}
-          isMuted
-          shouldPlay={false}
-          useNativeControls={false}
-          onPlaybackStatusUpdate={onStatus}
-          onError={() => setFailed(true)}
-        />
+        <Pressable
+          style={styles.mediaPress}
+          accessibilityRole={allowFullscreen ? 'button' : undefined}
+          accessibilityLabel={allowFullscreen ? t('analysis.fullscreen') : undefined}
+          disabled={!allowFullscreen}
+          onPress={() => void openFullscreen()}
+        >
+          <Video
+            key={playable}
+            ref={videoRef}
+            source={{ uri: playable }}
+            style={styles.media}
+            resizeMode={ResizeMode.COVER}
+            isMuted
+            shouldPlay={false}
+            useNativeControls={false}
+            onPlaybackStatusUpdate={onStatus}
+            onError={() => setFailed(true)}
+          />
+        </Pressable>
       ) : (
         <View style={styles.proEmpty}>
           <Ionicons name="videocam-off-outline" size={28} color="#3D9DFF" />
@@ -104,7 +160,7 @@ export function PlayableClip({
             accessibilityRole="button"
             accessibilityLabel={playing ? 'Pause' : 'Play'}
             hitSlop={8}
-            onPress={() => void togglePlay()}
+            onPress={() => void togglePlay('inline')}
             testID={`${testID}-play`}
           >
             <Ionicons
@@ -117,8 +173,86 @@ export function PlayableClip({
           <Text allowFontScaling={false} style={[styles.time, { fontFamily: theme.mediumFont }]}>
             {clock(position)}/{clock(duration)}
           </Text>
+          {allowFullscreen ? (
+            <Pressable
+              style={styles.expand}
+              accessibilityRole="button"
+              accessibilityLabel={t('analysis.fullscreen')}
+              hitSlop={8}
+              onPress={() => void openFullscreen()}
+              testID={`${testID}-fullscreen`}
+            >
+              <Ionicons name="expand-outline" size={16} color="#FFFFFF" />
+            </Pressable>
+          ) : null}
         </LinearGradient>
       ) : null}
+
+      <Modal
+        visible={fullscreen && !!playable}
+        animationType="fade"
+        onRequestClose={closeFullscreen}
+        supportedOrientations={['portrait']}
+      >
+        <SafeAreaView style={styles.fullRoot} edges={['top', 'bottom', 'left', 'right']}>
+          <View style={styles.fullBar}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('analysis.back')}
+              onPress={closeFullscreen}
+              hitSlop={12}
+              style={styles.fullBack}
+              testID={`${testID}-fullscreen-back`}
+            >
+              <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
+              <Text allowFontScaling={false} style={[styles.fullBackLabel, { fontFamily: theme.semiBoldFont }]}>
+                {t('analysis.back')}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.fullStage}>
+            {playable ? (
+              <Video
+                key={`${playable}-full`}
+                ref={fullRef}
+                source={{ uri: playable }}
+                style={StyleSheet.absoluteFill}
+                resizeMode={ResizeMode.CONTAIN}
+                isMuted
+                shouldPlay
+                useNativeControls={false}
+                onLoad={() => {
+                  const at = Math.max(0, position)
+                  void fullRef.current?.setStatusAsync({
+                    shouldPlay: true,
+                    positionMillis: at,
+                    seekMillisToleranceBefore: 0,
+                    seekMillisToleranceAfter: 80,
+                  })
+                }}
+                onPlaybackStatusUpdate={onFullStatus}
+              />
+            ) : null}
+          </View>
+          <View style={styles.fullControls}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void togglePlay('full')}
+              style={styles.play}
+            >
+              <Ionicons
+                name={fullPlaying ? 'pause' : 'play'}
+                size={18}
+                color="#FFFFFF"
+                style={fullPlaying ? undefined : styles.playIcon}
+              />
+            </Pressable>
+            <Text allowFontScaling={false} style={[styles.time, { fontFamily: theme.mediumFont }]}>
+              {clock(position)}/{clock(duration)}
+            </Text>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </View>
   )
 }
@@ -132,6 +266,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     borderTopWidth: 0,
   },
+  mediaPress: { ...StyleSheet.absoluteFillObject },
   media: { ...StyleSheet.absoluteFillObject },
   proEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 140 },
   clipControls: {
@@ -156,5 +291,32 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.92)',
   },
   playIcon: { marginLeft: 2 },
-  time: { color: '#FFFFFF', fontSize: 12 },
+  time: { color: '#FFFFFF', fontSize: 12, flex: 1 },
+  expand: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(6, 16, 40, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  fullRoot: { flex: 1, backgroundColor: '#000' },
+  fullBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  fullBack: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  fullBackLabel: { color: '#FFFFFF', fontSize: 17 },
+  fullStage: { flex: 1, backgroundColor: '#000' },
+  fullControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
 })

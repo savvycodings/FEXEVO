@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react'
 import { BackHandler, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ResizeMode, Video } from 'expo-av'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
@@ -607,14 +607,14 @@ export function JointDetailView({
       )}
 
       <Modal visible={fullscreen} animationType="fade" onRequestClose={() => setFullscreen(false)} supportedOrientations={['portrait']}>
-        <View style={[styles.fullscreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <SafeAreaView style={styles.fullscreen} edges={['top', 'bottom', 'left', 'right']}>
           <View style={styles.fullBar}>
             <Pressable
               testID="joint-fullscreen-close"
               accessibilityRole="button"
               accessibilityLabel={t('analysis.back')}
               onPress={() => setFullscreen(false)}
-              hitSlop={8}
+              hitSlop={12}
               style={styles.fullBack}
             >
               <Ionicons name="chevron-back" size={26} color={UI.text} />
@@ -652,7 +652,7 @@ export function JointDetailView({
               />
             )}
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
     </ScrollView>
   )

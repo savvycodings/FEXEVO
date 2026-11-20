@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { BackHandler, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -59,33 +59,35 @@ const ICON_METRIC: Record<Exclude<PhysicalMetricKey, 'stability'>, ReturnType<ty
   acceleration: require('../../../assets/aicoach/analysis/metric-acceleration.svg'),
 }
 
-function StabilityMetricIcon() {
+function StabilityMetricIcon({ size = 24 }: { size?: number }) {
+  const s = size / 24
   return (
-    <View style={styles.stabilityIcon}>
-      <View style={[styles.stabilityPart, { left: 2, top: 0.2, width: 16.28, height: 23.71 }]}>
-        <LocalSvgAsset assetModule={ICON_STABILITY_BODY} width={16.28} height={23.71} />
+    <View style={[styles.stabilityIcon, { width: size, height: size }]}>
+      <View style={[styles.stabilityPart, { left: 2 * s, top: 0.2 * s, width: 16.28 * s, height: 23.71 * s }]}>
+        <LocalSvgAsset assetModule={ICON_STABILITY_BODY} width={16.28 * s} height={23.71 * s} />
       </View>
-      <View style={[styles.stabilityPart, { left: 8.86, top: 2.92, width: 4.689, height: 4.689 }]}>
-        <LocalSvgAsset assetModule={ICON_STABILITY_HEAD} width={4.689} height={4.689} />
+      <View style={[styles.stabilityPart, { left: 8.86 * s, top: 2.92 * s, width: 4.689 * s, height: 4.689 * s }]}>
+        <LocalSvgAsset assetModule={ICON_STABILITY_HEAD} width={4.689 * s} height={4.689 * s} />
       </View>
-      <View style={[styles.stabilityPart, { left: 19.05, top: 0.48, width: 2.954, height: 2.954 }]}>
-        <LocalSvgAsset assetModule={ICON_STABILITY_BALL} width={2.954} height={2.954} />
+      <View style={[styles.stabilityPart, { left: 19.05 * s, top: 0.48 * s, width: 2.954 * s, height: 2.954 * s }]}>
+        <LocalSvgAsset assetModule={ICON_STABILITY_BALL} width={2.954 * s} height={2.954 * s} />
       </View>
     </View>
   )
 }
 
-function MetricIcon({ metric }: { metric: PhysicalMetricKey }) {
-  if (metric === 'stability') return <StabilityMetricIcon />
+function MetricIcon({ metric, size = 24 }: { metric: PhysicalMetricKey; size?: number }) {
+  if (metric === 'stability') return <StabilityMetricIcon size={size} />
   // Reaction glyph is taller than wide in Figma (18.2 × 24).
   if (metric === 'reactions') {
+    const w = (18.2 / 24) * size
     return (
-      <View style={styles.stabilityIcon}>
-        <LocalSvgAsset assetModule={ICON_METRIC.reactions} width={18.2} height={24} />
+      <View style={[styles.stabilityIcon, { width: size, height: size }]}>
+        <LocalSvgAsset assetModule={ICON_METRIC.reactions} width={w} height={size} />
       </View>
     )
   }
-  return <LocalSvgAsset assetModule={ICON_METRIC[metric]} width={24} height={24} />
+  return <LocalSvgAsset assetModule={ICON_METRIC[metric]} width={size} height={size} />
 }
 const ICON_PRIORITY: Record<'elbow' | 'knee' | 'feet', ReturnType<typeof require>> = {
   elbow: require('../../../assets/aicoach/analysis/priority-elbow.svg'),
@@ -366,7 +368,6 @@ function AnalysisFullscreen({
 }) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
-  const insets = useSafeAreaInsets()
   const ref = useRef<Video>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
   const [natural, setNatural] = useState(naturalHint)
@@ -439,13 +440,13 @@ function AnalysisFullscreen({
 
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onClose} supportedOrientations={['portrait']}>
-      <View style={[styles.fullScreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <SafeAreaView style={styles.fullScreen} edges={['top', 'bottom', 'left', 'right']}>
         <View style={styles.fullBar}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('analysis.back')}
             onPress={onClose}
-            hitSlop={8}
+            hitSlop={12}
             style={styles.fullBack}
           >
             <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
@@ -508,7 +509,7 @@ function AnalysisFullscreen({
             {clock(position)}/{clock(duration)}
           </Text>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   )
 }
@@ -536,6 +537,10 @@ export function AnalysisOverview({
   void _detail
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
+  const { height: windowHeight } = useWindowDimensions()
+  /** Short screens get denser chrome so the Overview video stays a usable size. */
+  const compact = windowHeight < 740
+  const iconSz = compact ? 18 : 24
   const videoRef = useRef<Video>(null)
   const [frameW, setFrameW] = useState(0)
   const [trackW, setTrackW] = useState(0)
@@ -686,10 +691,11 @@ export function AnalysisOverview({
   }, [scrubStart, scrubMove, scrubEnd])
 
   // Overview stage is a wide 16:9 card — not the tall rail+stage View Angles layout.
-  const overviewH = frameW > 0 ? Math.round(frameW * (9 / 16)) : 200
+  const overviewH =
+    frameW > 0 ? Math.max(Math.round(frameW * (9 / 16)), compact ? 200 : 180) : 200
 
   return (
-    <View style={styles.page}>
+    <View style={[styles.page, compact ? styles.pageCompact : null]}>
       {showHubChrome && shotLabel ? (
         <View style={styles.titleRow}>
           <Text allowFontScaling={false} style={[styles.title, { fontFamily: theme.semiBoldFont }]}>
@@ -837,9 +843,16 @@ export function AnalysisOverview({
         {PHYSICAL_METRIC_KEYS.map((key) => {
           const value = metrics?.[key]
           return (
-            <View key={key} style={styles.metric}>
-              <MetricIcon metric={key} />
-              <Text allowFontScaling={false} style={[styles.metricValue, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}>
+            <View key={key} style={[styles.metric, compact ? styles.metricCompact : null]}>
+              <MetricIcon metric={key} size={iconSz} />
+              <Text
+                allowFontScaling={false}
+                style={[
+                  styles.metricValue,
+                  compact ? styles.metricValueCompact : null,
+                  { fontFamily: theme.boldFont ?? theme.semiBoldFont },
+                ]}
+              >
                 {value ?? '—'}
               </Text>
               <Text allowFontScaling={false} numberOfLines={1} style={[styles.metricLabel, { fontFamily: theme.regularFont }]}>
@@ -850,9 +863,19 @@ export function AnalysisOverview({
         })}
       </View>
 
-      <View style={styles.priorityBlock} testID="overview-biggest-mistakes">
+      <View
+        style={[styles.priorityBlock, compact ? styles.priorityBlockCompact : null]}
+        testID="overview-biggest-mistakes"
+      >
         <View style={styles.priorityHead}>
-          <Text allowFontScaling={false} style={[styles.priorityHeadLabel, { fontFamily: theme.mediumFont }]}>
+          <Text
+            allowFontScaling={false}
+            style={[
+              styles.priorityHeadLabel,
+              compact ? styles.priorityHeadLabelCompact : null,
+              { fontFamily: theme.mediumFont },
+            ]}
+          >
             {t('analysis.hubPriorityFixes')}
           </Text>
         </View>
@@ -868,14 +891,19 @@ export function AnalysisOverview({
                 onPress={() => onPriorityJoint(part.id)}
                 style={[
                   styles.priorityJoint,
+                  compact ? styles.priorityJointCompact : null,
                   high ? styles.priorityJointHigh : styles.priorityJointAdjust,
                 ]}
               >
-                <LocalSvgAsset assetModule={ICON_PRIORITY[part.id]} width={24} height={24} />
+                <LocalSvgAsset assetModule={ICON_PRIORITY[part.id]} width={iconSz} height={iconSz} />
                 <Text
                   allowFontScaling={false}
                   numberOfLines={1}
-                  style={[styles.priorityJointLabel, { fontFamily: theme.mediumFont }]}
+                  style={[
+                    styles.priorityJointLabel,
+                    compact ? styles.priorityJointLabelCompact : null,
+                    { fontFamily: theme.mediumFont },
+                  ]}
                 >
                   {t(part.labelKey)}
                 </Text>
@@ -885,18 +913,30 @@ export function AnalysisOverview({
         </View>
       </View>
 
-      <View style={styles.ctaRow}>
+      <View style={[styles.ctaRow, compact ? styles.ctaRowCompact : null]}>
         {onProgress ? (
-          <Pressable onPress={onProgress} accessibilityRole="button" style={styles.progressBtn} testID="overview-progress">
+          <Pressable
+            onPress={onProgress}
+            accessibilityRole="button"
+            style={[styles.progressBtn, compact ? styles.progressBtnCompact : null]}
+            testID="overview-progress"
+          >
             <View pointerEvents="none" style={styles.progressInset} />
-            <ProgressBarsIcon size={24} />
-            <Text allowFontScaling={false} style={[styles.progressLabel, { fontFamily: theme.semiBoldFont }]}>
+            <ProgressBarsIcon size={iconSz} />
+            <Text
+              allowFontScaling={false}
+              style={[
+                styles.progressLabel,
+                compact ? styles.progressLabelCompact : null,
+                { fontFamily: theme.semiBoldFont },
+              ]}
+            >
               {t('analysis.progress')}
             </Text>
           </Pressable>
         ) : null}
         <Pressable onPress={onSmart3d} accessibilityRole="button" style={styles.smart3dBtn}>
-          <View style={styles.smart3dInner}>
+          <View style={[styles.smart3dInner, compact ? styles.smart3dInnerCompact : null]}>
             <LinearGradient
               colors={['#0048FF', '#07256D']}
               start={{ x: 0.5, y: 0 }}
@@ -904,11 +944,15 @@ export function AnalysisOverview({
               style={StyleSheet.absoluteFill}
             />
             <View pointerEvents="none" style={styles.smart3dInset} />
-            <LocalSvgAsset assetModule={ICON_SMART_3D} width={24} height={24} />
+            <LocalSvgAsset assetModule={ICON_SMART_3D} width={iconSz} height={iconSz} />
             <Text
               allowFontScaling={false}
               numberOfLines={1}
-              style={[styles.smart3dLabel, { fontFamily: theme.mediumFont }]}
+              style={[
+                styles.smart3dLabel,
+                compact ? styles.smart3dLabelCompact : null,
+                { fontFamily: theme.mediumFont },
+              ]}
             >
               {t('analysis.smart3d')}
             </Text>
@@ -931,6 +975,7 @@ export function AnalysisOverview({
 
 const styles = StyleSheet.create({
   page: { alignSelf: 'stretch', gap: 12 },
+  pageCompact: { gap: 8 },
   pillTrack: { marginBottom: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   title: { color: '#FFFFFF', fontSize: 18 },
@@ -994,7 +1039,6 @@ const styles = StyleSheet.create({
   phaseLabelActive: { color: ACCENT },
   /** No outer glow on the video card (design); only the gradient border remains. */
   frameGlow: {
-    flex: 1,
     borderRadius: 19,
   },
   frameBorder: {
@@ -1115,7 +1159,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 10,
   },
+  metricCompact: { minHeight: 62, paddingVertical: 6, gap: 1 },
   metricValue: { color: '#FFFFFF', fontSize: 20, textAlign: 'center', letterSpacing: -0.4 },
+  metricValueCompact: { fontSize: 16, letterSpacing: -0.3 },
   metricLabel: { color: '#FFFFFF', fontSize: 9, textAlign: 'center', letterSpacing: -0.18 },
   /** Figma: rgba(7,37,109,0.25) + 2px #0235B6, radius 20 */
   priorityBlock: {
@@ -1128,8 +1174,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 10,
   },
+  priorityBlockCompact: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
   priorityHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   priorityHeadLabel: { flex: 1, color: '#FFFFFF', fontSize: 16 },
+  priorityHeadLabelCompact: { fontSize: 14 },
   priorityPills: { flexDirection: 'row', alignItems: 'stretch', gap: 5, alignSelf: 'stretch' },
   priorityJoint: {
     flex: 1,
@@ -1143,6 +1191,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     minWidth: 0,
   },
+  priorityJointCompact: { height: 32, gap: 5, paddingHorizontal: 6, borderRadius: 12 },
   priorityJointHigh: {
     backgroundColor: 'rgba(255, 0, 0, 0.2)',
     borderColor: 'rgba(255, 0, 0, 0.5)',
@@ -1152,8 +1201,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 128, 0, 0.5)',
   },
   priorityJointLabel: { color: '#FFFFFF', fontSize: 13, flexShrink: 1 },
+  priorityJointLabelCompact: { fontSize: 12 },
   /** Progress hugs content; Smart 3D takes the rest (Figma 6283:51589). */
   ctaRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10, alignSelf: 'stretch' },
+  ctaRowCompact: { gap: 8 },
   progressBtn: {
     height: 60,
     borderRadius: 100,
@@ -1167,11 +1218,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 25,
     overflow: 'hidden',
   },
+  progressBtnCompact: { height: 44, gap: 6, paddingHorizontal: 16 },
   progressInset: {
     ...StyleSheet.absoluteFillObject,
     boxShadow: '0px 0px 20px 0px #0048FF inset',
   },
   progressLabel: { color: '#86A7D2', fontSize: 16 },
+  progressLabelCompact: { fontSize: 14 },
   smart3dBtn: {
     flex: 1,
     minWidth: 0,
@@ -1188,12 +1241,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
+  smart3dInnerCompact: { height: 44, gap: 6, paddingHorizontal: 14 },
   smart3dLabel: {
     color: '#FFFFFF',
     fontSize: 16,
     textAlign: 'center',
     flexShrink: 1,
   },
+  smart3dLabelCompact: { fontSize: 14 },
   smart3dInset: {
     ...StyleSheet.absoluteFillObject,
     boxShadow: '0px 0px 16px 0px rgba(0, 72, 255, 0.25) inset',

@@ -9,6 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { AVPlaybackStatus, ResizeMode, Video } from 'expo-av'
 
@@ -37,6 +38,7 @@ type Props = {
  * Shared by drill overview + walkthrough.
  */
 export function MockDrillPlayer({ fontFamily, uri, style, testID }: Props) {
+  const insets = useSafeAreaInsets()
   const hasUri = !!(uri && uri.trim())
   const videoRef = useRef<Video>(null)
   const [playing, setPlaying] = useState(false)
@@ -164,15 +166,24 @@ export function MockDrillPlayer({ fontFamily, uri, style, testID }: Props) {
           />
         ) : null}
         <Pressable
-          style={styles.fullscreen}
+          style={[
+            styles.fullscreen,
+            // Fullscreen modal is statusBarTranslucent — keep the exit control below the notch/Dynamic Island.
+            full ? { top: Math.max(insets.top, 12) + 8, right: Math.max(insets.right, 10) } : null,
+          ]}
           accessibilityRole="button"
           accessibilityLabel={full ? 'Exit fullscreen' : 'Fullscreen'}
-          hitSlop={10}
+          hitSlop={12}
           onPress={() => setFullscreen((v) => !v)}
         >
-          <Ionicons name={full ? 'contract-outline' : 'expand-outline'} size={16} color="#FFFFFF" />
+          <Ionicons name={full ? 'close' : 'expand-outline'} size={full ? 18 : 16} color="#FFFFFF" />
         </Pressable>
-        <View style={styles.controls}>
+        <View
+          style={[
+            styles.controls,
+            full ? { paddingBottom: Math.max(insets.bottom, 12) + 8 } : null,
+          ]}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={playing ? 'Pause' : 'Play'}
