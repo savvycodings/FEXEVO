@@ -2,6 +2,7 @@ import { useContext, useMemo } from 'react'
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { LinearGradient } from 'expo-linear-gradient'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { ThemeContext } from '../../context'
 import { CoachTabOrb } from '../../components/CoachCharacterAvatar'
 import { LocalSvgAsset } from '../../components/LocalSvgAsset'
@@ -28,13 +29,12 @@ type Props = {
 
 const GOOD = '#11DF97'
 const HIGH = '#E53C3C'
-const ADJUST = '#FF8000'
 const MUTED = 'rgba(255,255,255,0.75)'
 
-const ICON_TARGET = require('../../../assets/aicoach/analysis/action-plan/icon-target.svg')
 const ICON_CHEVRON = require('../../../assets/aicoach/analysis/action-plan/icon-chevron.svg')
 const ICON_PLAY = require('../../../assets/aicoach/analysis/action-plan/icon-play.svg')
 const ICON_ARROW = require('../../../assets/aicoach/analysis/action-plan/icon-arrow.svg')
+const ICON_BULB = require('../../../assets/aicoach/analysis/action-plan/icon-coaching-bulb.png')
 const POSE_FALLBACK = require('../../../assets/aicoach/analysis/action-plan/pose-thumb.png')
 
 const TITLE_KEY: Record<MistakeId, string> = {
@@ -42,6 +42,20 @@ const TITLE_KEY: Record<MistakeId, string> = {
   racket: 'analysis.mistakeRacket',
   torso: 'analysis.mistakeTorso',
   foot: 'analysis.mistakeFoot',
+}
+
+const BODY_KEY: Record<MistakeId, string> = {
+  elbow: 'analysis.mistakeElbowBody',
+  racket: 'analysis.mistakeRacketBody',
+  torso: 'analysis.mistakeTorsoBody',
+  foot: 'analysis.mistakeFootBody',
+}
+
+const WHY_KEY: Record<MistakeId, string> = {
+  elbow: 'analysis.mistakeElbowWhy',
+  racket: 'analysis.mistakeRacketWhy',
+  torso: 'analysis.mistakeTorsoWhy',
+  foot: 'analysis.mistakeFootWhy',
 }
 
 const JOINT_FOR: Record<MistakeId, ContactJoint | null> = {
@@ -59,9 +73,26 @@ const ROW_PART: Record<MistakeId, BodyPartId> = {
   foot: 'feet',
 }
 
+function metricParts(reading: JointReading | null) {
+  const you = reading?.you != null ? Math.round(reading.you) : null
+  const target =
+    reading?.pro != null
+      ? Math.round(reading.pro)
+      : reading?.idealMin != null && reading?.idealMax != null
+        ? Math.round((reading.idealMin + reading.idealMax) / 2)
+        : null
+  const diff =
+    reading?.deltaDeg != null
+      ? Math.round(reading.deltaDeg)
+      : you != null && target != null
+        ? you - target
+        : null
+  return { you, target, diff }
+}
+
 /**
- * Your analysis → Action Plan tab (Figma 6194:103613).
- * Coaching mascot card, Top Priority / Secondary Fixes with angles, Correct Movement CTA.
+ * Your analysis → Action Plan tab (Figma reference).
+ * Priority 01 card + Improve Next tiles with per-fix coaching cues.
  */
 export function ActionPlanPage({
   shotLabel,
@@ -119,12 +150,25 @@ export function ActionPlanPage({
     }
   }
 
+  function coachingCue(id: MistakeId, r: JointReading | null): string | null {
+    const deg = r?.deltaDeg != null ? Math.abs(Math.round(r.deltaDeg)) : 0
+    if (r?.messageKey) {
+      const key = `analysis.${r.messageKey}`
+      const translated = t(key, { deg })
+      if (translated && translated !== key) return translated
+    }
+    return t(WHY_KEY[id])
+  }
+
+  const firstReading = reading(ordered.first)
+  const firstCue = coachingCue(ordered.first, firstReading)
+  const firstMetrics = metricParts(firstReading)
+
   return (
     <View style={styles.page} testID="action-plan">
       <View style={styles.planCard}>
         <View style={styles.mascot} accessibilityElementsHidden>
-          {/* Same Assistant-tab orb + multicolor radial ring. */}
-          <CoachTabOrb ring ballSize={36} />
+          <CoachTabOrb ring ballSize={32} />
         </View>
         <View style={styles.planCopy}>
           <Text allowFontScaling={false} style={[styles.planTitle, { fontFamily: theme.mediumFont }]}>
@@ -136,52 +180,152 @@ export function ActionPlanPage({
         </View>
       </View>
 
-      <View style={styles.sections}>
-        <View style={styles.block}>
-          <SectionHead
-            tone="high"
-            title={t('analysis.topPriority')}
-            subtitle={t('analysis.fixFirst')}
-            fontMed={theme.mediumFont}
-          />
-          <FixRow
-            id={ordered.first}
-            badge={1}
-            severity="high"
-            thumbUri={thumbUri}
-            reading={reading(ordered.first)}
-            onPress={() => onOpenFix(ordered.first)}
-            fontMed={theme.mediumFont}
-            fontBold={theme.boldFont ?? theme.semiBoldFont}
-          />
-        </View>
-
-        {ordered.rest.length ? (
-          <View style={styles.block}>
-            <SectionHead
-              tone="medium"
-              title={t('analysis.secondaryFixes')}
-              subtitle={t('analysis.improveNext')}
-              fontMed={theme.mediumFont}
+      <Pressable
+        onPress={() => onOpenFix(ordered.first)}
+        accessibilityRole="button"
+        style={styles.priorityPress}
+        testID="action-plan-priority"
+      >
+        {/*
+          Figma border-image: linear-gradient(270deg, #07256D 49.52%, #E53D3D 100%)
+          1px gradient ring — left is red; top AND bottom both fade red → #07256D at ~50%.
+        */}
+        <LinearGradient
+          colors={['#E53D3D', '#07256D', '#07256D']}
+          locations={[0, 0.4952, 1]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.priorityBorder}
+        >
+          <View style={styles.priorityInner}>
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(229,61,61,0.16)', 'rgba(229,61,61,0.04)', 'transparent']}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.priorityEdgeGlow}
             />
-            {ordered.rest.map((id, i) => (
-              <View key={id}>
-                {i > 0 ? <View style={styles.rowDivider} /> : null}
-                <FixRow
-                  id={id}
-                  badge={i + 2}
-                  severity="medium"
-                  thumbUri={thumbUri}
-                  reading={reading(id)}
-                  onPress={() => onOpenFix(id)}
-                  fontMed={theme.mediumFont}
-                  fontBold={theme.boldFont ?? theme.semiBoldFont}
+            <Text allowFontScaling={false} style={[styles.priorityEyebrow, { fontFamily: theme.mediumFont }]}>
+              {t('analysis.priority01FixFirst')}
+            </Text>
+            <View style={styles.priorityTitleRow}>
+              <BodyPartGlyph id={ROW_PART[ordered.first]} size={22} severity="high" />
+              <Text allowFontScaling={false} numberOfLines={1} style={[styles.priorityTitle, { fontFamily: theme.mediumFont }]}>
+                {t(TITLE_KEY[ordered.first])}
+              </Text>
+            </View>
+
+            <View style={styles.priorityMetrics}>
+              <View style={styles.priorityThumb}>
+                <Image
+                  source={thumbUri ? { uri: thumbUri } : POSE_FALLBACK}
+                  style={styles.thumbImg}
+                  resizeMode="cover"
                 />
+                <View style={styles.thumbPlay}>
+                  <Ionicons name="play" size={22} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                </View>
               </View>
-            ))}
+
+              <View style={styles.metricsAndCue}>
+                <View style={styles.metricCols}>
+                  <View style={styles.metricCol}>
+                    <Text allowFontScaling={false} style={[styles.metricLabel, { fontFamily: theme.mediumFont }]}>
+                      {t('analysis.yourAngle')}
+                    </Text>
+                    <Text allowFontScaling={false} style={[styles.metricValue, { color: '#FFFFFF', fontFamily: theme.semiBoldFont }]}>
+                      {firstMetrics.you != null ? `${firstMetrics.you}°` : '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.metricDivider} />
+                  <View style={styles.metricCol}>
+                    <Text allowFontScaling={false} style={[styles.metricLabel, { fontFamily: theme.mediumFont }]}>
+                      {t('analysis.viewAnglesPage.target').replace(/:\s*$/, '')}
+                    </Text>
+                    <Text allowFontScaling={false} style={[styles.metricValue, { color: GOOD, fontFamily: theme.semiBoldFont }]}>
+                      {firstMetrics.target != null ? `${firstMetrics.target}°` : '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.metricDivider} />
+                  <View style={styles.metricCol}>
+                    <Text allowFontScaling={false} style={[styles.metricLabel, { fontFamily: theme.mediumFont }]}>
+                      {t('analysis.difference')}
+                    </Text>
+                    <Text allowFontScaling={false} style={[styles.metricValue, { color: HIGH, fontFamily: theme.semiBoldFont }]}>
+                      {firstMetrics.diff != null
+                        ? `${firstMetrics.diff > 0 ? '+' : ''}${firstMetrics.diff}°`
+                        : '—'}
+                    </Text>
+                  </View>
+                </View>
+
+                {firstCue ? (
+                  <View style={styles.cueBox}>
+                    <Image source={ICON_BULB} style={styles.cueBulb} resizeMode="contain" />
+                    <View style={styles.cueCopy}>
+                      <Text allowFontScaling={false} style={[styles.cueTitle, { fontFamily: theme.semiBoldFont }]}>
+                        {t('analysis.coachingCue')}
+                      </Text>
+                      <Text allowFontScaling={false} style={[styles.cueBody, { fontFamily: theme.regularFont }]}>
+                        {firstCue}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            </View>
           </View>
-        ) : null}
-      </View>
+        </LinearGradient>
+      </Pressable>
+
+      {ordered.rest.length ? (
+        <View style={styles.improveBlock}>
+          <Text allowFontScaling={false} style={[styles.improveTitle, { fontFamily: theme.mediumFont }]}>
+            {t('analysis.improveNext')}
+          </Text>
+          {ordered.rest.map((id, i) => {
+            const r = reading(id)
+            const { you, target } = metricParts(r)
+            return (
+              <Pressable
+                key={id}
+                onPress={() => onOpenFix(id)}
+                accessibilityRole="button"
+                style={styles.secondaryCard}
+                testID={`action-plan-secondary-${id}`}
+              >
+                <View pointerEvents="none" style={styles.secondaryInset} />
+                <View style={styles.secondaryBadge}>
+                  <Text allowFontScaling={false} style={[styles.secondaryBadgeText, { fontFamily: theme.boldFont ?? theme.semiBoldFont }]}>
+                    {String(i + 2).padStart(2, '0')}
+                  </Text>
+                </View>
+                <BodyPartGlyph id={ROW_PART[id]} size={22} severity="medium" />
+                <View style={styles.secondaryCopy}>
+                  <Text allowFontScaling={false} numberOfLines={1} style={[styles.secondaryTitle, { fontFamily: theme.mediumFont }]}>
+                    {t(TITLE_KEY[id])}
+                  </Text>
+                  <Text allowFontScaling={false} numberOfLines={2} style={[styles.secondaryBody, { fontFamily: theme.regularFont }]}>
+                    {t(BODY_KEY[id])}
+                  </Text>
+                </View>
+                <View style={styles.secondaryPill}>
+                  <Text allowFontScaling={false} style={[styles.pillYou, { fontFamily: theme.mediumFont }]}>
+                    {you != null ? `${you}°` : '—'}
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.pillArrow}>
+                    →
+                  </Text>
+                  <Text allowFontScaling={false} style={[styles.pillTarget, { fontFamily: theme.mediumFont }]}>
+                    {target != null ? `${target}°` : '—'}
+                  </Text>
+                </View>
+                <LocalSvgAsset assetModule={ICON_CHEVRON} width={16} height={32} />
+              </Pressable>
+            )
+          })}
+        </View>
+      ) : null}
 
       <Pressable
         onPress={onSeeCorrectMovement}
@@ -201,278 +345,200 @@ export function ActionPlanPage({
           end={{ x: 0.9, y: 1 }}
           style={[StyleSheet.absoluteFillObject, { opacity: 0.55 }]}
         />
-        <LocalSvgAsset assetModule={ICON_PLAY} width={32} height={32} />
+        <LocalSvgAsset assetModule={ICON_PLAY} width={28} height={28} />
         <Text allowFontScaling={false} style={[styles.ctaLabel, { fontFamily: theme.semiBoldFont }]}>
           {t('analysis.seeCorrectMovement')}
         </Text>
         <View style={styles.ctaArrow}>
-          <LocalSvgAsset assetModule={ICON_ARROW} width={32} height={32} />
+          <LocalSvgAsset assetModule={ICON_ARROW} width={28} height={28} />
         </View>
       </Pressable>
     </View>
   )
 }
 
-function SectionHead({
-  tone,
-  title,
-  subtitle,
-  fontMed,
-}: {
-  tone: 'high' | 'medium'
-  title: string
-  subtitle: string
-  fontMed?: string
-}) {
-  const high = tone === 'high'
-  return (
-    <View style={styles.sectionHead}>
-      <View
-        style={[
-          styles.sectionIcon,
-          high ? styles.sectionIconHigh : styles.sectionIconMed,
-        ]}
-      >
-        <LocalSvgAsset assetModule={ICON_TARGET} width={20} height={20} />
-      </View>
-      <View style={styles.sectionHeadCopy}>
-        <Text allowFontScaling={false} style={[styles.sectionTitle, { fontFamily: fontMed }]}>
-          {title}
-        </Text>
-        <Text allowFontScaling={false} style={[styles.sectionSub, { fontFamily: fontMed }]}>
-          {subtitle}
-        </Text>
-      </View>
-    </View>
-  )
-}
-
-function FixRow({
-  id,
-  badge,
-  severity,
-  thumbUri,
-  reading,
-  onPress,
-  fontMed,
-  fontBold,
-}: {
-  id: MistakeId
-  badge: number
-  severity: 'high' | 'medium'
-  thumbUri: string | null
-  reading: JointReading | null
-  onPress: () => void
-  fontMed?: string
-  fontBold?: string
-}) {
-  const { t } = useTranslation()
-  const high = severity === 'high'
-  const tone = high ? HIGH : ADJUST
-  const you = reading?.you != null ? Math.round(reading.you) : null
-  const target =
-    reading?.pro != null
-      ? Math.round(reading.pro)
-      : reading?.idealMin != null && reading?.idealMax != null
-        ? Math.round((reading.idealMin + reading.idealMax) / 2)
-        : null
-  const diff =
-    reading?.deltaDeg != null
-      ? Math.round(reading.deltaDeg)
-      : you != null && target != null
-        ? you - target
-        : null
-  const pill = high ? t('analysis.mistakeHighPriority') : t('analysis.adjustPriority')
-
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={styles.fixRow}>
-      <View style={styles.thumb}>
-        <Image
-          source={thumbUri ? { uri: thumbUri } : POSE_FALLBACK}
-          style={styles.thumbImg}
-          resizeMode="cover"
-        />
-        <View style={[styles.badge, { backgroundColor: high ? '#FF0000' : ADJUST }]}>
-          <Text allowFontScaling={false} style={[styles.badgeText, { fontFamily: fontBold }]}>
-            {badge}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.fixMid}>
-        <View style={styles.fixTitleRow}>
-          <BodyPartGlyph id={ROW_PART[id]} size={24} severity={severity} />
-          <Text allowFontScaling={false} numberOfLines={1} style={[styles.fixTitle, { fontFamily: fontMed }]}>
-            {t(TITLE_KEY[id])}
-          </Text>
-        </View>
-        <View style={styles.metricRow}>
-          <Text allowFontScaling={false} style={[styles.metricDeg, { color: tone, fontFamily: fontMed }]}>
-            {you != null ? `${you}°` : '—'}
-          </Text>
-          <View style={styles.metricCopy}>
-            <Text allowFontScaling={false} style={[styles.metricLine, { fontFamily: fontMed }]}>
-              {t('analysis.viewAnglesPage.target')}
-              <Text style={{ color: GOOD }}>{target != null ? `${target}°` : '—'}</Text>
-            </Text>
-            <Text allowFontScaling={false} style={[styles.metricLine, { fontFamily: fontMed }]}>
-              {t('analysis.viewAnglesPage.difference')}
-              <Text style={{ color: tone }}>
-                {diff != null ? `${diff > 0 ? '+' : ''}${diff}°` : '—'}
-              </Text>
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.fixRight}>
-        <View
-          style={[
-            styles.sevPill,
-            high ? styles.sevPillHigh : styles.sevPillMed,
-          ]}
-        >
-          <Text
-            allowFontScaling={false}
-            style={[styles.sevLabel, { color: high ? '#FF7676' : ADJUST, fontFamily: fontMed }]}
-          >
-            {pill}
-          </Text>
-        </View>
-        <LocalSvgAsset assetModule={ICON_CHEVRON} width={20} height={40} />
-      </View>
-    </Pressable>
-  )
-}
-
 const styles = StyleSheet.create({
-  page: { alignSelf: 'stretch', gap: 20, paddingVertical: 15, paddingBottom: 8 },
+  page: { alignSelf: 'stretch', gap: 12, paddingVertical: 8, paddingBottom: 4 },
   planCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
-    borderRadius: 20,
+    gap: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#00B8FF',
     backgroundColor: 'rgba(0, 72, 255, 0.2)',
-    padding: 10,
+    padding: 8,
     boxShadow: 'inset 0px 0px 20px 0px #0048FF',
   },
   mascot: {
-    width: 50,
-    height: 50,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
   },
-  planCopy: { flex: 1, minWidth: 0, gap: 5 },
-  planTitle: { color: '#FFFFFF', fontSize: 16 },
-  planBody: { color: MUTED, fontSize: 11, lineHeight: 15 },
-  sections: { gap: 10, alignSelf: 'stretch' },
-  block: {
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#001950',
-    backgroundColor: '#030A17',
-    overflow: 'hidden',
-    boxShadow: 'inset 0px 0px 20px 0px #0048FF',
+  planCopy: { flex: 1, minWidth: 0, gap: 3 },
+  planTitle: { color: '#FFFFFF', fontSize: 15 },
+  planBody: { color: MUTED, fontSize: 10, lineHeight: 13 },
+
+  priorityPress: { alignSelf: 'stretch' },
+  /** 1px Figma border-image ring — same gradient on top and bottom. */
+  priorityBorder: {
+    borderRadius: 16,
+    padding: 1,
   },
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(7, 37, 109, 0.5)',
-  },
-  sectionIcon: {
-    width: 30,
-    height: 30,
+  priorityInner: {
     borderRadius: 15,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#030A17',
+    paddingTop: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    gap: 8,
+    overflow: 'hidden',
+    boxShadow: 'inset 0px 0px 28px 0px rgba(0, 72, 255, 0.4)',
   },
-  sectionIconHigh: {
-    borderColor: '#FF0000',
-    backgroundColor: 'rgba(255, 0, 0, 0.25)',
+  /** Soft red wash from the left edge — horizontal only, full height. */
+  priorityEdgeGlow: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 72,
   },
-  sectionIconMed: {
-    borderColor: ADJUST,
-    backgroundColor: 'rgba(255, 128, 0, 0.25)',
+  priorityEyebrow: {
+    color: HIGH,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginLeft: 4,
   },
-  sectionHeadCopy: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 5 },
-  sectionTitle: { color: '#FFFFFF', fontSize: 16 },
-  sectionSub: { color: MUTED, fontSize: 9, flex: 1 },
-  fixRow: {
+  priorityTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    marginLeft: 4,
+  },
+  priorityTitle: { color: '#FFFFFF', fontSize: 16, flexShrink: 1 },
+  /** Row: thumb fills remaining height; right column stacks metrics + cue. */
+  priorityMetrics: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     gap: 10,
-    paddingLeft: 15,
-    paddingRight: 10,
-    paddingVertical: 10,
+    marginLeft: 4,
   },
-  rowDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(134,167,210,0.35)',
-    marginLeft: 15,
-  },
-  thumb: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#00B8FF',
+  /** Thumb: fixed width, stretches to match right column height. */
+  priorityThumb: {
+    width: 125,
+    borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#030A17',
   },
   thumbImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  badge: {
-    position: 'absolute',
-    top: 5,
-    left: 5,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  thumbPlay: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { color: '#FFFFFF', fontSize: 9 },
-  fixMid: { flex: 1, minWidth: 0, gap: 5 },
-  fixTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  fixTitle: { color: '#FFFFFF', fontSize: 16, flexShrink: 1 },
-  metricRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  metricDeg: { fontSize: 32, lineHeight: 32 },
-  metricCopy: { flex: 1, minWidth: 0, gap: 2 },
-  metricLine: { color: MUTED, fontSize: 11 },
-  fixRight: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  sevPill: {
-    height: 24,
+  /** Right column: metrics on top, coaching cue below. */
+  metricsAndCue: {
+    flex: 1,
+    gap: 8,
+  },
+  /** Three metric columns with pipe dividers — fixed height content only. */
+  metricCols: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metricCol: { flex: 1, alignItems: 'center', gap: 3 },
+  /** Thin vertical pipe between metric columns — fixed height so it matches text only. */
+  metricDivider: {
+    width: 1,
+    height: 44,
+    backgroundColor: 'rgba(91, 108, 255, 0.55)',
+  },
+  metricLabel: { color: MUTED, fontSize: 9, textAlign: 'center' },
+  metricValue: { fontSize: 18, lineHeight: 22, textAlign: 'center' },
+
+  /** Figma: 201×65, radius 20, pad/gap 10, bg #0048FF33, border #00B8FF, inset #0048FF. */
+  cueBox: {
+    flex: 1,
+    minHeight: 65,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#00B8FF',
+    backgroundColor: '#0048FF33',
+    padding: 10,
+    boxShadow: '0px 0px 20px 0px #0048FF inset',
+  },
+  cueBulb: { width: 20, height: 20, marginTop: 1 },
+  cueCopy: { flex: 1, minWidth: 0, gap: 2 },
+  cueTitle: { color: '#FFFFFF', fontSize: 12 },
+  cueBody: { color: MUTED, fontSize: 10, lineHeight: 13 },
+
+  improveBlock: { gap: 10, alignSelf: 'stretch' },
+  improveTitle: { color: '#FFFFFF', fontSize: 15 },
+  secondaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#032C91',
+    backgroundColor: '#030A17',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    minHeight: 68,
+    overflow: 'hidden',
+  },
+  secondaryInset: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
+    boxShadow: 'inset 0px 0px 28px 0px rgba(0, 72, 255, 0.45)',
+  },
+  /** Orange outline badge: border + low-opacity fill, matching the reference. */
+  secondaryBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 128, 0, 0.18)',
+    borderWidth: 1.5,
+    borderColor: '#FF8000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBadgeText: { color: '#FFFFFF', fontSize: 11 },
+  secondaryCopy: { flex: 1, minWidth: 0, gap: 1 },
+  secondaryTitle: { color: '#FFFFFF', fontSize: 13 },
+  secondaryBody: { color: MUTED, fontSize: 10, lineHeight: 13 },
+  secondaryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: 'rgba(0, 184, 255, 0.55)',
+    backgroundColor: 'rgba(0, 72, 255, 0.18)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    boxShadow: 'inset 0px 0px 10px 0px rgba(0, 72, 255, 0.35)',
   },
-  sevPillHigh: {
-    borderColor: '#FF0000',
-    backgroundColor: 'rgba(255, 0, 4, 0.2)',
-  },
-  sevPillMed: {
-    borderColor: ADJUST,
-    backgroundColor: 'rgba(255, 128, 0, 0.15)',
-  },
-  sevLabel: { fontSize: 11 },
+  pillYou: { color: '#FFFFFF', fontSize: 11 },
+  pillArrow: { color: MUTED, fontSize: 11 },
+  pillTarget: { color: GOOD, fontSize: 11 },
+
   cta: {
-    height: 60,
+    height: 52,
     borderRadius: 100,
     overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 35,
+    gap: 8,
+    paddingHorizontal: 24,
   },
-  ctaLabel: { color: '#07256D', fontSize: 18 },
+  ctaLabel: { color: '#07256D', fontSize: 16 },
   ctaArrow: { transform: [{ rotate: '-90deg' }] },
 })

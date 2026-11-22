@@ -23,6 +23,7 @@ import { useSessionData } from '../context/SessionDataContext'
 import { authClient } from '../lib/auth-client'
 import { headlineScoreFromAnalysis } from '../lib/techniqueScoreDisplay'
 import { DOMAIN } from '../../constants'
+import { resolveTechniqueVideoUrl } from '../lib/mediaUrl'
 import { useFavoriteIds } from '../lib/activitiesFavorites'
 import type { ActivitySession } from '../lib/activitySession'
 import { getMainStackNavigation } from '../lib/mainStackNavigation'
@@ -79,8 +80,7 @@ function localDateKey(d: Date): string {
 }
 
 function videoUri(path: string): string {
-  if (path.startsWith('http')) return path
-  return `${API_ROOT}${path}`
+  return resolveTechniqueVideoUrl(path) ?? `${API_ROOT}${path}`
 }
 
 function getCalendarCells(monthStart: Date): { inMonth: boolean; date: Date }[] {

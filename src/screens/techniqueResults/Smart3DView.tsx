@@ -57,8 +57,8 @@ type UiLayer = Layer | 'compare'
 type Mode = '3d' | 'kinetic'
 type BodyPart = BodyPartId
 
-/** Ideal Form green, shared with the kinetic chain legend. */
-const IDEAL_GREEN = '#3DDC97'
+/** Ideal Form — white to match the hologram figure (was mint green). */
+const IDEAL_GREEN = '#FFFFFF'
 const RAIL_W = BODY_RAIL_W
 const RAIL_GAP = BODY_RAIL_GAP
 const HIGH = '#E5482B'
@@ -115,7 +115,7 @@ type Props = {
 }
 
 const COMPARE_YOU = 'rgba(0, 72, 255, 0.5)'
-const COMPARE_IDEAL = 'rgba(0, 238, 212, 0.5)'
+const COMPARE_IDEAL = 'rgba(255, 255, 255, 0.55)'
 const GOOD = '#11DF97'
 
 const FIX_TITLE: Partial<Record<BodyPart, string>> = {
@@ -696,27 +696,30 @@ export function Smart3DView({
   useEffect(() => {
     const remote = remoteClip
     setOrbitUrlHttp(null)
+    setClipError(null)
     if (!remote) return
     let cancelled = false
     if (__DEV__) console.log('[smart3d] orbit save', { remote: remote.slice(0, 160) })
     void (async () => {
       try {
-        // Dev badge only. Not awaited: it used to hold up the download behind it.
+        const uri = await cacheOrbitVideo(remote)
+        if (cancelled) return
         if (__DEV__) {
+          console.log('[smart3d] orbit on phone', uri)
+          // HEAD after download only — parallel HEAD + download often aborts on Android/ngrok.
           void fetch(remote, { method: 'HEAD' })
             .then((head) => {
               if (!cancelled) setOrbitUrlHttp(head.status || null)
             })
             .catch(() => {})
         }
-        const uri = await cacheOrbitVideo(remote)
-        if (cancelled) return
-        if (__DEV__) console.log('[smart3d] orbit on phone', uri)
         setSavedClip({ remote, uri })
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        if (__DEV__) console.warn('[smart3d] orbit save failed', msg)
-        if (!cancelled) setClipError({ remote, message: msg })
+        if (__DEV__) console.warn('[smart3d] orbit save failed; streaming remote', msg)
+        // Emulator/ngrok can abort File.downloadFileAsync (SocketException). Play the remote
+        // URL instead of a hard error — TestFlight rarely hits this path.
+        if (!cancelled) setSavedClip({ remote, uri: remote })
       }
     })()
     return () => {
@@ -1222,7 +1225,7 @@ export function Smart3DView({
               image={hologram.proImage}
               label={t('analysis.idealForm')}
               accent={COMPARE_IDEAL}
-              headerBg="rgba(0, 238, 212, 0.1)"
+              headerBg="rgba(255, 255, 255, 0.1)"
               icon={ICON_IDEAL}
               testID="smart3d-compare-ideal"
               emptyText={proFailed ? t('analysis.smart3dProMissing') : t('analysis.smart3dViewBuilding')}
