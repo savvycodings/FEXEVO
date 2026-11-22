@@ -26,7 +26,8 @@ import {
 } from '../../lib/kineticChain'
 
 export const CHAIN_YOU = '#5B6CFF'
-export const CHAIN_PRO = '#3DDC97'
+/** Matches the white Ideal Form hologram (legend used to be mint green). */
+export const CHAIN_PRO = '#FFFFFF'
 
 const SEQ_STRIP = require('../../../assets/aicoach/analysis/kinetic/sequence-strip.png')
 const ICON_POWER = require('../../../assets/aicoach/analysis/kinetic/icon-power-flow.svg')

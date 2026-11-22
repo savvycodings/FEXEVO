@@ -51,9 +51,9 @@ const ICON_IDEAL = require('../../../assets/aicoach/analysis/shot-vs-ideal/ideal
 const MINT = '#00FFA6'
 const CYAN = '#1AE1F4'
 const COMPARE_YOU = 'rgba(0, 72, 255, 0.5)'
-const COMPARE_IDEAL = 'rgba(0, 238, 212, 0.5)'
+const COMPARE_IDEAL = 'rgba(255, 255, 255, 0.55)'
 const COMPARE_YOU_HEAD = 'rgba(0, 72, 255, 0.25)'
-const COMPARE_IDEAL_HEAD = 'rgba(0, 238, 212, 0.1)'
+const COMPARE_IDEAL_HEAD = 'rgba(255, 255, 255, 0.1)'
 const RING = 83
 /** Figma glow PNG sits ~13.7% outside the 83px dial. */
 const RING_GLOW = Math.round(RING * 1.274)

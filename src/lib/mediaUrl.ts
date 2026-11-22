@@ -43,12 +43,34 @@ export function resolveMediaUrl(path: string | null | undefined): string | null 
   if (!path) return null
   const trimmed = path.trim()
   if (!trimmed) return null
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return withNgrokSkip(trimmed)
-  if (trimmed.startsWith('/train/') || trimmed.startsWith('/pro-library/')) {
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    // Saved analyses point at `/technique/video/:id`. Behind a laptop ngrok tunnel the MP4 is
+    // often missing on disk (pose JSON is in Neon), so rewrite those URLs onto the media host.
+    if (/ngrok/i.test(trimmed) && /\/technique\/video\//i.test(trimmed)) {
+      const pathOnly = trimmed.replace(/^https?:\/\/[^/?#]+/i, '').split('?')[0] || ''
+      if (pathOnly.startsWith('/technique/video/')) {
+        return withNgrokSkip(`${mediaHost()}${pathOnly}`)
+      }
+    }
+    return withNgrokSkip(trimmed)
+  }
+  if (
+    trimmed.startsWith('/train/') ||
+    trimmed.startsWith('/pro-library/') ||
+    trimmed.startsWith('/technique/video/')
+  ) {
     return withNgrokSkip(`${mediaHost()}${trimmed}`)
   }
   if (trimmed.startsWith('/')) return withNgrokSkip(`${DOMAIN.replace(/\/+$/, '')}${trimmed}`)
   return resolveUploadUrl(trimmed)
+}
+
+/**
+ * Playback URL for a saved analysis / activities clip (`/technique/video/:id` or `/uploads/...`).
+ * When the API is ngrok'd to a laptop, streams from Railway so account videos still play.
+ */
+export function resolveTechniqueVideoUrl(path: string | null | undefined): string | null {
+  return resolveMediaUrl(path)
 }
 
 type ProShotHint = {

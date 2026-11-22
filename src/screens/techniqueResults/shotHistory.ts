@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { TFunction } from 'i18next'
 import { DOMAIN } from '../../../constants'
 import { authClient } from '../../lib/auth-client'
+import { resolveTechniqueVideoUrl } from '../../lib/mediaUrl'
 import { type BiomechanicsSummary, parseBiomechanicsSummary } from '../../lib/biomechanicsSummary'
 import { type ActivityItem, listFromFetch } from '../coachHome/coachHomeData'
 
@@ -96,8 +97,10 @@ export type ShotHistory = {
 const EMPTY: ShotHistory = { loading: false, shotLabel: null, points: [], previous: null }
 
 function absoluteUrl(path: string): string {
-  if (path.startsWith('http')) return path
-  return `${DOMAIN.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`
+  return (
+    resolveTechniqueVideoUrl(path) ??
+    `${DOMAIN.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`
+  )
 }
 
 const time = (iso?: string) => (iso ? Date.parse(iso) : NaN)

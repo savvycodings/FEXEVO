@@ -57,8 +57,8 @@ type Props = {
 
 /** Your Shot (Figma blue). */
 const YOU = '#5B6CFF'
-/** Ideal Form (Figma green). */
-const PRO = '#3DDC97'
+/** Ideal Form — white to match the hologram figure (was mint green). */
+const PRO = '#FFFFFF'
 /** Off-target values and the degrees called out in a warning. */
 const BAD = '#E5482B'
 const GOOD = '#7BE495'
@@ -594,7 +594,7 @@ export function JointDetailView({
               style={[styles.messageCard, { borderColor: MESSAGE[tone].border }]}
             >
               <View style={styles.messageIcon}>
-                <Ionicons name={MESSAGE[tone].icon} size={30} color={MESSAGE[tone].iconColor} />
+                <Ionicons name={MESSAGE[tone].icon} size={20} color={MESSAGE[tone].iconColor} />
               </View>
               <Highlighted
                 text={message}
@@ -806,20 +806,21 @@ const styles = StyleSheet.create({
   messageCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    padding: 16,
-    borderRadius: UI.radiusCard,
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
     borderWidth: 1.5,
   },
   messageIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  messageText: { flex: 1, color: UI.text, fontSize: 15, lineHeight: 21 },
+  messageText: { flex: 1, color: UI.text, fontSize: 12, lineHeight: 16 },
   fullscreen: { flex: 1, backgroundColor: '#000' },
   fullBar: { height: 52, justifyContent: 'center', paddingHorizontal: 8 },
   fullBack: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 8, paddingRight: 16 },

@@ -15,7 +15,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { useTranslation } from 'react-i18next'
 import { ThemeContext } from '../context'
 import { DOMAIN } from '../../constants'
-import { proLibraryVideoUrl } from '../lib/mediaUrl'
+import { proLibraryVideoUrl, resolveTechniqueVideoUrl } from '../lib/mediaUrl'
 import { authClient } from '../lib/auth-client'
 import { normalizePoseData, type PoseFrameRow, resolveTotalFrames } from '../lib/techniquePose'
 import type { ActivitySession } from '../lib/activitySession'
@@ -101,8 +101,7 @@ const VA = {
 /** Screen gutters + card inset — aligned with product mock (~20–24px). */
 const SCREEN_GUTTER = 22
 function videoUri(path: string): string {
-  if (path.startsWith('http')) return path
-  return `${API_ROOT}${path}`
+  return resolveTechniqueVideoUrl(path) ?? `${API_ROOT}${path}`
 }
 
 function formatTimeTag(d: Date): string {

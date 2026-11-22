@@ -554,7 +554,9 @@ export function AnalysisOverview({
   const { height: windowHeight } = useWindowDimensions()
   /** Short screens get denser chrome so the Overview video stays a usable size. */
   const compact = windowHeight < 740
+  /** Priority-pill icons can stay a touch larger on tall phones; CTAs always use 18. */
   const iconSz = compact ? 18 : 24
+  const ctaIconSz = 18
   const videoRef = useRef<Video>(null)
   const naturalFromPlayerRef = useRef(false)
   const playBusyRef = useRef(false)
@@ -658,9 +660,13 @@ export function AnalysisOverview({
   }, [playing, scrubMs, duration])
 
   // Overview stage is a wide 16:9 card — not the tall rail+stage View Angles layout.
-  // Overview stage is a wide 16:9 card — not the tall rail+stage View Angles layout.
-  const overviewH =
-    frameW > 0 ? Math.max(Math.round(frameW * (9 / 16)), compact ? 200 : 180) : 200
+  // Cap height from window so short phones shrink the video first (no Overview scroll).
+  const overviewH = useMemo(() => {
+    if (frameW <= 0) return 180
+    const ideal = Math.round(frameW * (9 / 16))
+    const maxByScreen = Math.max(160, Math.round(windowHeight * (compact ? 0.26 : 0.3)))
+    return Math.min(ideal, maxByScreen)
+  }, [frameW, windowHeight, compact])
 
   const pose = useMemo(() => {
     if (!poseFrames?.length) return null
@@ -985,6 +991,7 @@ export function AnalysisOverview({
           >
             {t('analysis.hubPriorityFixes')}
           </Text>
+          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
         </View>
         <View style={styles.priorityPills}>
           {PRIORITY_PARTS.map((part) => {
@@ -1025,25 +1032,21 @@ export function AnalysisOverview({
           <Pressable
             onPress={onProgress}
             accessibilityRole="button"
-            style={[styles.progressBtn, compact ? styles.progressBtnCompact : null]}
+            style={styles.progressBtn}
             testID="overview-progress"
           >
             <View pointerEvents="none" style={styles.progressInset} />
-            <ProgressBarsIcon size={iconSz} />
+            <ProgressBarsIcon size={ctaIconSz} />
             <Text
               allowFontScaling={false}
-              style={[
-                styles.progressLabel,
-                compact ? styles.progressLabelCompact : null,
-                { fontFamily: theme.semiBoldFont },
-              ]}
+              style={[styles.progressLabel, { fontFamily: theme.semiBoldFont }]}
             >
               {t('analysis.progress')}
             </Text>
           </Pressable>
         ) : null}
         <Pressable onPress={onSmart3d} accessibilityRole="button" style={styles.smart3dBtn}>
-          <View style={[styles.smart3dInner, compact ? styles.smart3dInnerCompact : null]}>
+          <View style={styles.smart3dInner}>
             <LinearGradient
               colors={['#0048FF', '#07256D']}
               start={{ x: 0.5, y: 0 }}
@@ -1051,15 +1054,11 @@ export function AnalysisOverview({
               style={StyleSheet.absoluteFill}
             />
             <View pointerEvents="none" style={styles.smart3dInset} />
-            <LocalSvgAsset assetModule={ICON_SMART_3D} width={iconSz} height={iconSz} />
+            <LocalSvgAsset assetModule={ICON_SMART_3D} width={ctaIconSz} height={ctaIconSz} />
             <Text
               allowFontScaling={false}
               numberOfLines={1}
-              style={[
-                styles.smart3dLabel,
-                compact ? styles.smart3dLabelCompact : null,
-                { fontFamily: theme.mediumFont },
-              ]}
+              style={[styles.smart3dLabel, { fontFamily: theme.mediumFont }]}
             >
               {t('analysis.smart3d')}
             </Text>
@@ -1309,11 +1308,11 @@ const styles = StyleSheet.create({
   },
   priorityJointLabel: { color: '#FFFFFF', fontSize: 13, flexShrink: 1 },
   priorityJointLabelCompact: { fontSize: 12 },
-  /** Progress hugs content; Smart 3D takes the rest (Figma 6283:51589). */
+  /** Progress hugs content; Smart 3D takes the rest — fixed 44px on all phones. */
   ctaRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10, alignSelf: 'stretch' },
   ctaRowCompact: { gap: 8 },
   progressBtn: {
-    height: 60,
+    height: 44,
     borderRadius: 100,
     borderWidth: 2,
     borderColor: '#0048FF',
@@ -1321,17 +1320,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 25,
+    gap: 6,
+    paddingHorizontal: 16,
     overflow: 'hidden',
   },
-  progressBtnCompact: { height: 44, gap: 6, paddingHorizontal: 16 },
   progressInset: {
     ...StyleSheet.absoluteFillObject,
     boxShadow: '0px 0px 20px 0px #0048FF inset',
   },
-  progressLabel: { color: '#86A7D2', fontSize: 16 },
-  progressLabelCompact: { fontSize: 14 },
+  progressLabel: { color: '#86A7D2', fontSize: 14 },
   smart3dBtn: {
     flex: 1,
     minWidth: 0,
@@ -1339,23 +1336,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   smart3dInner: {
-    height: 60,
+    height: 44,
     borderRadius: 100,
     overflow: 'hidden',
-    paddingHorizontal: 20,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 6,
   },
-  smart3dInnerCompact: { height: 44, gap: 6, paddingHorizontal: 14 },
   smart3dLabel: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     textAlign: 'center',
     flexShrink: 1,
   },
-  smart3dLabelCompact: { fontSize: 14 },
   smart3dInset: {
     ...StyleSheet.absoluteFillObject,
     boxShadow: '0px 0px 16px 0px rgba(0, 72, 255, 0.25) inset',

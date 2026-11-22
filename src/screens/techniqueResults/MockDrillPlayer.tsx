@@ -158,7 +158,9 @@ export function MockDrillPlayer({ fontFamily, uri, style, testID }: Props) {
             ref={videoRef}
             style={StyleSheet.absoluteFill}
             source={{ uri: uri!.trim() }}
-            resizeMode={ResizeMode.CONTAIN}
+            // Inline card matches analysis/PlayableClip: fill the frame (portrait no longer letterboxes).
+            // Fullscreen keeps CONTAIN so the whole clip stays visible.
+            resizeMode={full ? ResizeMode.CONTAIN : ResizeMode.COVER}
             useNativeControls={false}
             isLooping={false}
             onPlaybackStatusUpdate={onPlaybackStatusUpdate}

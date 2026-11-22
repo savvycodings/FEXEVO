@@ -648,6 +648,8 @@ export const es = {
       "Esto es lo que debes corregir, en orden, para que tu {{shot}} sea más consistente y potente.",
     topPriority: "Prioridad principal",
     fixFirst: "Corrige primero",
+    priority01FixFirst: "PRIORIDAD 01 • CORRIGE PRIMERO",
+    coachingCue: "Consejo de coaching",
     secondaryFixes: "Correcciones secundarias",
     improveNext: "Mejora a continuación",
     idealForm: "Forma ideal",
