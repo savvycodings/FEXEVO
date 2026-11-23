@@ -680,9 +680,12 @@ export function ActivitiesVideoAnalysis({
     setOverviewDetail('pose')
   }
 
+  /** Action Plan Priority / Improve Next → Your Shot VS Ideal Form (not Smart 3D). */
   function openMistakeFix(id: MistakeId) {
-    const part: BodyPartId = id === 'foot' ? 'feet' : id === 'racket' ? 'racket' : id
-    openSmart3d(part, 'overview', 'pro')
+    const joint: ViewJoint =
+      id === 'foot' ? 'knee' : id === 'racket' ? 'wrist' : id === 'torso' ? 'torso' : 'elbow'
+    setShotVsIdealJoint(joint)
+    setOverviewDetail('shotVsIdeal')
   }
 
   /** Where Drill exercises back should land (shotVsIdeal / compare / pose / …). */
