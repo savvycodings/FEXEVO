@@ -9,9 +9,9 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { AVPlaybackStatus, ResizeMode, Video } from 'expo-av'
+import { FullscreenSafeArea } from '../../components/FullscreenSafeArea'
 
 /** Placeholder clip length when no real media URI is provided. */
 export const VIDEO_DURATION_SEC = 8
@@ -38,7 +38,6 @@ type Props = {
  * Shared by drill overview + walkthrough.
  */
 export function MockDrillPlayer({ fontFamily, uri, style, testID }: Props) {
-  const insets = useSafeAreaInsets()
   const hasUri = !!(uri && uri.trim())
   const videoRef = useRef<Video>(null)
   const [playing, setPlaying] = useState(false)
@@ -168,11 +167,7 @@ export function MockDrillPlayer({ fontFamily, uri, style, testID }: Props) {
           />
         ) : null}
         <Pressable
-          style={[
-            styles.fullscreen,
-            // Fullscreen modal is statusBarTranslucent — keep the exit control below the notch/Dynamic Island.
-            full ? { top: Math.max(insets.top, 12) + 8, right: Math.max(insets.right, 10) } : null,
-          ]}
+          style={styles.fullscreen}
           accessibilityRole="button"
           accessibilityLabel={full ? 'Exit fullscreen' : 'Fullscreen'}
           hitSlop={12}
@@ -180,12 +175,7 @@ export function MockDrillPlayer({ fontFamily, uri, style, testID }: Props) {
         >
           <Ionicons name={full ? 'close' : 'expand-outline'} size={full ? 18 : 16} color="#FFFFFF" />
         </Pressable>
-        <View
-          style={[
-            styles.controls,
-            full ? { paddingBottom: Math.max(insets.bottom, 12) + 8 } : null,
-          ]}
-        >
+        <View style={styles.controls}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={playing ? 'Pause' : 'Play'}
@@ -240,9 +230,11 @@ export function MockDrillPlayer({ fontFamily, uri, style, testID }: Props) {
         onRequestClose={() => setFullscreen(false)}
         statusBarTranslucent
       >
-        <View style={styles.fsRoot} testID={testID ? `${testID}-fullscreen` : undefined}>
-          {renderStage(true, fullscreen)}
-        </View>
+        <FullscreenSafeArea style={styles.fsRoot}>
+          <View style={styles.fsInner} testID={testID ? `${testID}-fullscreen` : undefined}>
+            {renderStage(true, fullscreen)}
+          </View>
+        </FullscreenSafeArea>
       </Modal>
     </>
   )
@@ -273,6 +265,9 @@ const styles = StyleSheet.create({
   fsRoot: {
     flex: 1,
     backgroundColor: '#030A17',
+  },
+  fsInner: {
+    flex: 1,
   },
   fullscreen: {
     position: 'absolute',

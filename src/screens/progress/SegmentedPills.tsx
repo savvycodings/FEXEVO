@@ -17,6 +17,8 @@ type Props<K> = {
   activeFontFamily?: string
   /** Larger pills for the primary Score / Achievements switch. */
   size?: 'md' | 'lg'
+  /** Shorter track / pill padding — same width and type size, less height. */
+  dense?: boolean
   style?: StyleProp<ViewStyle>
   accessibilityLabel?: string
   /** `radio` for single-choice form fields (court side, hand); `tab` for view switches. */
@@ -30,6 +32,7 @@ export function SegmentedPills<K extends string | number>({
   fontFamily,
   activeFontFamily,
   size = 'md',
+  dense = false,
   style,
   accessibilityLabel,
   role = 'tab',
@@ -40,7 +43,7 @@ export function SegmentedPills<K extends string | number>({
       colors={[PG.cardTop, PG.cardBottom]}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
-      style={[styles.track, glow(14, 0.45), style]}
+      style={[styles.track, dense && styles.trackDense, glow(14, 0.45), style]}
       accessibilityRole={role === 'radio' ? 'radiogroup' : 'tablist'}
       accessibilityLabel={accessibilityLabel}
     >
@@ -92,12 +95,12 @@ export function SegmentedPills<K extends string | number>({
                 colors={[PG.pillTop, PG.pillBottom]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
-                style={[styles.pill, lg && styles.pillLg, glow(10, 0.7)]}
+                style={[styles.pill, lg && styles.pillLg, dense && styles.pillDense, dense && lg && styles.pillLgDense, glow(10, 0.7)]}
               >
                 {label}
               </LinearGradient>
             ) : (
-              <View style={[styles.pill, lg && styles.pillLg]}>
+              <View style={[styles.pill, lg && styles.pillLg, dense && styles.pillDense, dense && lg && styles.pillLgDense]}>
                 {label}
               </View>
             )}
@@ -127,6 +130,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pillLg: { paddingVertical: 11 },
+  trackDense: { padding: 3 },
+  pillDense: { paddingVertical: 6 },
+  pillLgDense: { paddingVertical: 7 },
   txt: {
     fontSize: 12,
     color: PG.pillIdleText,

@@ -16,6 +16,13 @@ prefetchSvgAssets([TASK_SVG, FOCUS_SVG, PRACTICE_SVG, CLOCK_SVG])
 
 const CARD_BORDER = '#336AB3'
 const CHECK_GREEN = '#00FFA6'
+/** Per-digit optical nudge inside the hero ring (x right, y down). Narrow glyphs need a left nudge. */
+const STEP_NUM_NUDGE: Record<number, { x: number; y: number }> = {
+  1: { x: -1.5, y: -2 },
+  2: { x: 0, y: -2 },
+  3: { x: 0, y: -2 },
+  4: { x: 0, y: -2 },
+}
 
 type Props = {
   onClose: () => void
@@ -134,7 +141,21 @@ export function DrillWalkthroughPage({
 
         <View style={styles.heroRow}>
           <View style={styles.stepNum}>
-            <Text allowFontScaling={false} style={[styles.stepNumText, { fontFamily: fontSemi }]}>
+            <Text
+              allowFontScaling={false}
+              style={[
+                styles.stepNumText,
+                { fontFamily: fontSemi },
+                STEP_NUM_NUDGE[stepIndex + 1]
+                  ? {
+                      transform: [
+                        { translateX: STEP_NUM_NUDGE[stepIndex + 1]!.x },
+                        { translateY: STEP_NUM_NUDGE[stepIndex + 1]!.y },
+                      ],
+                    }
+                  : null,
+              ]}
+            >
               {stepIndex + 1}
             </Text>
           </View>
@@ -365,16 +386,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#030A17',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     boxShadow: '0px 0px 20px 0px #0048FF inset, 0px 0px 20px 0px #0048FF',
   },
   stepNumText: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     color: '#00B8FF',
     fontSize: 36,
-    lineHeight: 36,
+    lineHeight: 52,
     textAlign: 'center',
     includeFontPadding: false,
-    /** Pull up — previous nudge sat the digit too low in the ring. */
-    marginTop: -4,
+    textAlignVertical: 'center',
   },
   heroCopy: { flex: 1, gap: 4, minWidth: 0 },
   heroTitle: { color: UI.text, fontSize: 20, lineHeight: 24 },

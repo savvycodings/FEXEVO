@@ -187,12 +187,13 @@ export function ActionPlanPage({
         testID="action-plan-priority"
       >
         {/*
-          Figma border-image: linear-gradient(270deg, #07256D 49.52%, #E53D3D 100%)
-          1px gradient ring — left is red; top AND bottom both fade red → #07256D at ~50%.
+          Box fill stays #030A17. Only the left red edge is Figma:
+          border-image → bright #FF0005 on the left fading out;
+          soft wash uses #E53D3D → transparent so the card body does not turn red.
         */}
         <LinearGradient
-          colors={['#E53D3D', '#07256D', '#07256D']}
-          locations={[0, 0.4952, 1]}
+          colors={['#FF0005', 'rgba(255, 0, 5, 0.35)', 'rgba(255, 0, 5, 0)']}
+          locations={[0, 0.12, 0.55]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
           style={styles.priorityBorder}
@@ -200,7 +201,8 @@ export function ActionPlanPage({
           <View style={styles.priorityInner}>
             <LinearGradient
               pointerEvents="none"
-              colors={['rgba(229,61,61,0.16)', 'rgba(229,61,61,0.04)', 'transparent']}
+              colors={['rgba(229, 61, 61, 0.28)', 'rgba(229, 61, 61, 0.08)', 'transparent']}
+              locations={[0, 0.45, 1]}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
               style={styles.priorityEdgeGlow}
@@ -382,13 +384,13 @@ const styles = StyleSheet.create({
   planBody: { color: MUTED, fontSize: 10, lineHeight: 13 },
 
   priorityPress: { alignSelf: 'stretch' },
-  /** 1px Figma border-image ring — same gradient on top and bottom. */
+  /** Thin left-weighted red ring only — does not recolor the card body. */
   priorityBorder: {
     borderRadius: 16,
-    padding: 1,
+    padding: 1.5,
   },
   priorityInner: {
-    borderRadius: 15,
+    borderRadius: 14.5,
     backgroundColor: '#030A17',
     paddingTop: 10,
     paddingHorizontal: 12,
@@ -397,13 +399,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     boxShadow: 'inset 0px 0px 28px 0px rgba(0, 72, 255, 0.4)',
   },
-  /** Soft red wash from the left edge — horizontal only, full height. */
+  /** Soft red wash along the left edge only. */
   priorityEdgeGlow: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    width: 72,
+    width: 88,
   },
   priorityEyebrow: {
     color: HIGH,
@@ -473,7 +475,8 @@ const styles = StyleSheet.create({
     padding: 10,
     boxShadow: '0px 0px 20px 0px #0048FF inset',
   },
-  cueBulb: { width: 20, height: 20, marginTop: 1 },
+  // Layout footprint stays ~20 so the cue copy does not shift; scale draws it larger.
+  cueBulb: { width: 20, height: 20, marginTop: 6, transform: [{ scale: 1.55 }] },
   cueCopy: { flex: 1, minWidth: 0, gap: 2 },
   cueTitle: { color: '#FFFFFF', fontSize: 12 },
   cueBody: { color: MUTED, fontSize: 10, lineHeight: 13 },

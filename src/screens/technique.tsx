@@ -577,17 +577,35 @@ export function Technique() {
   const [shotVsIdealJoint, setShotVsIdealJoint] = useState<ViewJoint>('elbow')
   /** Body part to open inside Smart 3D (Priority Fixes / Action Plan); null = main 3D stage. */
   const [smart3dPart, setSmart3dPart] = useState<BodyPartId | null>(null)
+  /** Smart 3D layer to land on (Action Plan fixes → Ideal Form). */
+  const [smart3dLayer, setSmart3dLayer] = useState<'player' | 'pro' | 'overlay'>('player')
   const [poseReturn, setPoseReturn] = useState<'overview' | 'compare' | 'drills'>('overview')
+  /** Where Drill exercises back should land (shotVsIdeal / compare / pose / …). */
+  const [drillsReturn, setDrillsReturn] = useState<
+    'overview' | 'pose' | 'compare' | 'shotVsIdeal' | 'trackProgress' | 'mistakes'
+  >('compare')
 
-  function openSmart3d(part: BodyPartId | null = null, returnTo: 'overview' | 'compare' | 'drills' = 'overview') {
+  function openSmart3d(
+    part: BodyPartId | null = null,
+    returnTo: 'overview' | 'compare' | 'drills' = 'overview',
+    layer: 'player' | 'pro' | 'overlay' = 'player'
+  ) {
     setSmart3dPart(part)
+    setSmart3dLayer(layer)
     setPoseReturn(returnTo)
     setResultsDetail('pose')
   }
 
   function openMistakeFix(id: MistakeId) {
     const part: BodyPartId = id === 'foot' ? 'feet' : id === 'racket' ? 'racket' : id
-    openSmart3d(part, 'overview')
+    openSmart3d(part, 'overview', 'pro')
+  }
+
+  function openDrills(
+    returnTo: 'overview' | 'pose' | 'compare' | 'shotVsIdeal' | 'trackProgress' | 'mistakes' = 'compare'
+  ) {
+    setDrillsReturn(returnTo)
+    setResultsDetail('drills')
   }
   const [smartFocusScrubbing, setSmartFocusScrubbing] = useState(false)
   const resultsScrollRef = useRef<ScrollView>(null)
@@ -2862,9 +2880,11 @@ export function Technique() {
             viewId={userShot?.viewId ?? null}
             errors={technicalErrorsList}
             initialPart={smart3dPart}
-            onDrills={() => setResultsDetail('drills')}
+            initialLayer={smart3dLayer}
+            onDrills={() => openDrills('pose')}
             onClose={() => {
               setSmart3dPart(null)
+              setSmart3dLayer('player')
               setResultsDetail(poseReturn)
             }}
           />
@@ -2872,7 +2892,7 @@ export function Technique() {
           <SuggestedDrillsPage
             shotLabel={userShot?.shotLabel ?? proReferenceShot}
             strokePreset={userShot?.strokePreset ?? null}
-            onClose={() => setResultsDetail('compare')}
+            onClose={() => setResultsDetail(drillsReturn)}
           />
         ) : step === 3 && resultsDetail === 'trackProgress' ? (
           <TrackProgressView
@@ -2947,7 +2967,7 @@ export function Technique() {
             errors={technicalErrorsList}
             onClose={() => setResultsDetail('overview')}
             onSmart3d={() => openSmart3d(null, 'compare')}
-            onDrills={() => setResultsDetail('drills')}
+            onDrills={() => openDrills('compare')}
             analysisId={analysisId}
             contactMs={
               typeof biomechanicsSummary?.timing?.impact_frame === 'number'
@@ -2969,7 +2989,7 @@ export function Technique() {
                 : null
             }
             onClose={() => setResultsDetail('overview')}
-            onDrills={() => setResultsDetail('drills')}
+            onDrills={() => openDrills('shotVsIdeal')}
           />
         ) : (
         <ScrollView
@@ -3328,10 +3348,11 @@ export function Technique() {
                 hitSlop={12}
                 accessibilityRole="button"
                 accessibilityLabel={t('analysis.back')}
+                style={styles.analysisTitleSide}
               >
                 <Ionicons name="chevron-back" size={24} color="#86A7D2" />
               </TouchableOpacity>
-              <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={styles.analysisTitleCenter}>
                 <Text
                   allowFontScaling={false}
                   style={[styles.analysisTitle, { fontFamily: theme.semiBoldFont }]}
@@ -3342,12 +3363,13 @@ export function Technique() {
                   <Text
                     allowFontScaling={false}
                     numberOfLines={1}
-                    style={{ color: '#00B8FF', fontSize: 13, marginTop: 2, fontFamily: theme.regularFont }}
+                    style={[styles.analysisTitleSub, { fontFamily: theme.regularFont }]}
                   >
                     {userShot?.shotLabel ?? proReferenceShot}
                   </Text>
                 ) : null}
               </View>
+              <View style={styles.analysisTitleSide} />
             </View>
             <TechniqueResults
               section={resultSection}
@@ -3438,8 +3460,7 @@ export function Technique() {
               weaknesses={technicalErrorsList}
               metrics={physicalMetrics}
               detail={resultsDetail}
-              onPriorityJoint={(id) => openSmart3d(id, 'overview')}
-              onPriorityFixes={() => setResultsDetail('mistakes')}
+              onPriorityFixes={() => onResultSectionChange('actionPlan')}
               onProgress={() => setResultsDetail('trackProgress')}
               onSmart3d={() => openSmart3d(null, 'overview')}
               onScrubbingChange={setSmartFocusScrubbing}
@@ -4710,13 +4731,32 @@ function getStyles(theme: any) {
     analysisTitleRow: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      gap: 8,
       marginBottom: -4,
     },
-    analysisTitle: {
+    analysisTitleSide: {
+      width: 36,
+      height: 36,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    },
+    analysisTitleCenter: {
       flex: 1,
+      minWidth: 0,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    },
+    analysisTitle: {
       color: '#FFFFFF',
       fontSize: 22,
+      textAlign: 'center' as const,
+      alignSelf: 'stretch' as const,
+    },
+    analysisTitleSub: {
+      color: '#00B8FF',
+      fontSize: 13,
+      marginTop: 2,
+      textAlign: 'center' as const,
+      alignSelf: 'stretch' as const,
     },
     /** Step 2: scroll region + pinned actions above tab bar */
     step2SplitRoot: {

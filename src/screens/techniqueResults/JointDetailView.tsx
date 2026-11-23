@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react'
 import { BackHandler, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { FullscreenSafeArea } from '../../components/FullscreenSafeArea'
 import { ResizeMode, Video } from 'expo-av'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
@@ -91,11 +92,20 @@ function Highlighted({ text, mark, style }: { text: string; mark: string | null;
   )
 }
 
-function ViewPresets({ value, onChange }: { value: ViewPreset; onChange: (v: ViewPreset) => void }) {
+function ViewPresets({
+  value,
+  onChange,
+  row = false,
+}: {
+  value: ViewPreset
+  onChange: (v: ViewPreset) => void
+  /** Horizontal row under the image (Ideal Form); default stacks for Overlay. */
+  row?: boolean
+}) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   return (
-    <View style={styles.presets}>
+    <View style={[styles.presets, row ? styles.presetsRow : null]}>
       {(Object.keys(VIEW_ICONS) as ViewPreset[]).map((id) => {
         const on = id === value
         return (
@@ -105,9 +115,9 @@ function ViewPresets({ value, onChange }: { value: ViewPreset; onChange: (v: Vie
             accessibilityRole="button"
             accessibilityState={{ selected: on }}
             onPress={() => onChange(id)}
-            style={[styles.preset, on && styles.presetOn]}
+            style={[styles.preset, row ? styles.presetRowItem : null, on && styles.presetOn]}
           >
-            <MaterialCommunityIcons name={VIEW_ICONS[id]} size={22} color={UI.text} />
+            <MaterialCommunityIcons name={VIEW_ICONS[id]} size={row ? 18 : 22} color={UI.text} />
             <Text allowFontScaling={false} style={[styles.presetLabel, { fontFamily: theme.regularFont }]}>
               {t(`analysis.smart3dViews.${id}`)}
             </Text>
@@ -307,29 +317,31 @@ function ChainStage({
   const [preset, setPreset] = useState<ViewPreset>('view')
   const fraction = orbitFraction(preset, viewId)
   return (
-    <View testID="chain-stage" style={[styles.stage, expanded ? styles.stageFill : styles.stageTall]}>
-      <View style={styles.pair}>
-        <View style={styles.pairHalf}>
-          <ClipPicture clip={player} fraction={fraction} />
+    <View testID="chain-stage" style={styles.chainWrap}>
+      <View style={[styles.stage, expanded ? styles.stageFill : styles.stageTall]}>
+        <View style={styles.pair}>
+          <View style={styles.pairHalf}>
+            <ClipPicture clip={player} fraction={fraction} />
+          </View>
+          <View style={styles.pairHalf}>
+            <ClipPicture clip={pro} fraction={fraction} />
+          </View>
         </View>
-        <View style={styles.pairHalf}>
-          <ClipPicture clip={pro} fraction={fraction} />
-        </View>
+        {expanded ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('analysis.fullscreen')}
+            hitSlop={8}
+            onPress={onFullscreen}
+            style={styles.fullscreenBtn}
+          >
+            <MaterialCommunityIcons name="arrow-expand-all" size={16} color={UI.text} />
+          </Pressable>
+        )}
       </View>
-      <View style={styles.presetColumnLeft}>
-        <ViewPresets value={preset} onChange={setPreset} />
+      <View style={styles.presetBelow}>
+        <ViewPresets value={preset} onChange={setPreset} row />
       </View>
-      {expanded ? null : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('analysis.fullscreen')}
-          hitSlop={8}
-          onPress={onFullscreen}
-          style={styles.fullscreenBtn}
-        >
-          <MaterialCommunityIcons name="arrow-expand-all" size={16} color={UI.text} />
-        </Pressable>
-      )}
     </View>
   )
 }
@@ -607,7 +619,7 @@ export function JointDetailView({
       )}
 
       <Modal visible={fullscreen} animationType="fade" onRequestClose={() => setFullscreen(false)} supportedOrientations={['portrait']}>
-        <SafeAreaView style={styles.fullscreen} edges={['top', 'bottom', 'left', 'right']}>
+        <FullscreenSafeArea style={styles.fullscreen}>
           <View style={styles.fullBar}>
             <Pressable
               testID="joint-fullscreen-close"
@@ -652,7 +664,7 @@ export function JointDetailView({
               />
             )}
           </View>
-        </SafeAreaView>
+        </FullscreenSafeArea>
       </Modal>
     </ScrollView>
   )
@@ -760,8 +772,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   presetColumnRight: { position: 'absolute', right: 10, top: 50 },
-  presetColumnLeft: { position: 'absolute', left: 10, top: 10 },
+  chainWrap: { gap: 10 },
+  presetBelow: { alignItems: 'center', justifyContent: 'center' },
   presets: { gap: 6 },
+  presetsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   preset: {
     width: 62,
     height: 58,
@@ -773,9 +787,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
+  presetRowItem: { width: 72, height: 52 },
   presetOn: { borderColor: UI.text, backgroundColor: 'rgba(47, 107, 255, 0.45)' },
   presetLabel: { color: UI.text, fontSize: 12 },
-  pair: { flex: 1, flexDirection: 'row', paddingLeft: 70 },
+  pair: { flex: 1, flexDirection: 'row' },
   pairFull: { paddingLeft: 0 },
   pairHalf: { flex: 1 },
   metricCard: {

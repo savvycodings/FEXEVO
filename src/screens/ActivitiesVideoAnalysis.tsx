@@ -253,12 +253,14 @@ function getStyles(theme: any) {
       gap: 8,
     },
     titleNavBack: {
-      padding: 6,
-      marginRight: 4,
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     titleNavCenter: {
       flex: 1,
-      alignItems: 'flex-start',
+      alignItems: 'center',
       justifyContent: 'center',
       minWidth: 0,
     },
@@ -266,14 +268,16 @@ function getStyles(theme: any) {
       fontFamily: theme.boldFont ?? theme.semiBoldFont,
       fontSize: 20,
       color: '#FFFFFF',
-      textAlign: 'left',
+      textAlign: 'center',
+      alignSelf: 'stretch',
     },
     shotTitleSub: {
       fontFamily: theme.regularFont,
       fontSize: 13,
       color: '#00B8FF',
       marginTop: 2,
-      textAlign: 'left',
+      textAlign: 'center',
+      alignSelf: 'stretch',
     },
     /** Wraps the video panel; radii are applied inside the panel for stacked layout. */
     videoShell: {
@@ -663,18 +667,34 @@ export function ActivitiesVideoAnalysis({
   const [shotVsIdealJoint, setShotVsIdealJoint] = useState<ViewJoint>('elbow')
   /** Body part to open inside Smart 3D (Priority Fixes / Action Plan); null = main 3D stage. */
   const [smart3dPart, setSmart3dPart] = useState<BodyPartId | null>(null)
+  /** Smart 3D layer to land on (Action Plan fixes → Ideal Form). */
+  const [smart3dLayer, setSmart3dLayer] = useState<'player' | 'pro' | 'overlay'>('player')
   function openSmart3d(
     part: BodyPartId | null = null,
-    returnTo: 'overview' | 'compare' | 'drills' | 'shotVsIdeal' = 'overview'
+    returnTo: 'overview' | 'compare' | 'drills' | 'shotVsIdeal' = 'overview',
+    layer: 'player' | 'pro' | 'overlay' = 'player'
   ) {
     setSmart3dPart(part)
+    setSmart3dLayer(layer)
     setPoseReturn(returnTo)
     setOverviewDetail('pose')
   }
 
   function openMistakeFix(id: MistakeId) {
     const part: BodyPartId = id === 'foot' ? 'feet' : id === 'racket' ? 'racket' : id
-    openSmart3d(part, 'overview')
+    openSmart3d(part, 'overview', 'pro')
+  }
+
+  /** Where Drill exercises back should land (shotVsIdeal / compare / pose / …). */
+  const [drillsReturn, setDrillsReturn] = useState<
+    'overview' | 'pose' | 'compare' | 'shotVsIdeal' | 'trackProgress' | 'mistakes'
+  >('compare')
+
+  function openDrills(
+    returnTo: 'overview' | 'pose' | 'compare' | 'shotVsIdeal' | 'trackProgress' | 'mistakes' = 'compare'
+  ) {
+    setDrillsReturn(returnTo)
+    setOverviewDetail('drills')
   }
 
   const styles = useMemo(() => getStyles(theme), [theme])
@@ -694,6 +714,10 @@ export function ActivitiesVideoAnalysis({
     setHasCorrectionImagesFlag(false)
     setCorrectionVideo(null)
     setTotalVidFrames(1)
+    // Reset tabs when opening a session — not when the fetch finishes (that was
+    // kicking Action Plan → Overview if the user switched tabs before load completed).
+    setOverviewDetail('overview')
+    setAnalysisTab('overview')
     ;(async () => {
       try {
         const [res, overlayRes] = await Promise.all([
@@ -802,9 +826,6 @@ export function ActivitiesVideoAnalysis({
         })
         setPoseFrames(rows)
         setTotalVidFrames(tf)
-        // Always land on Your Analysis overview (Figma 6283:51484), not Smart 3D / Metrics.
-        setOverviewDetail('overview')
-        setAnalysisTab('overview')
         const expectsCorrections = metrics?.has_correction_images === true
         setHasCorrectionImagesFlag(expectsCorrections)
         const expectsVideo =
@@ -1098,9 +1119,11 @@ export function ActivitiesVideoAnalysis({
           viewId={aiSnapshot?.viewId ?? null}
           errors={aiSections?.technicalErrors ?? []}
           initialPart={smart3dPart}
-          onDrills={() => setOverviewDetail('drills')}
+          initialLayer={smart3dLayer}
+          onDrills={() => openDrills('pose')}
           onClose={() => {
             setSmart3dPart(null)
+            setSmart3dLayer('player')
             setOverviewDetail(poseReturn)
           }}
         />
@@ -1114,7 +1137,7 @@ export function ActivitiesVideoAnalysis({
         <SuggestedDrillsPage
           shotLabel={session.shotLabel ?? shotTitle}
           strokePreset={aiSections?.strokePresetId ?? aiSections?.strokePreset ?? null}
-          onClose={() => setOverviewDetail('compare')}
+          onClose={() => setOverviewDetail(drillsReturn)}
         />
       </View>
     )
@@ -1181,7 +1204,7 @@ export function ActivitiesVideoAnalysis({
           errors={aiSections?.technicalErrors ?? []}
           onClose={() => setOverviewDetail('overview')}
           onSmart3d={() => openSmart3d(null, 'compare')}
-          onDrills={() => setOverviewDetail('drills')}
+          onDrills={() => openDrills('compare')}
           analysisId={session.analysisId}
           contactMs={
             typeof aiSnapshot?.biomechanicsSummary?.timing?.impact_frame === 'number'
@@ -1209,7 +1232,7 @@ export function ActivitiesVideoAnalysis({
               : null
           }
           onClose={() => setOverviewDetail('overview')}
-          onDrills={() => setOverviewDetail('drills')}
+          onDrills={() => openDrills('shotVsIdeal')}
         />
       </View>
     )
@@ -1226,6 +1249,8 @@ export function ActivitiesVideoAnalysis({
           // the same top padding when you tap into a shot.
           { paddingTop: 8 },
         ]}
+        // Overview is laid out to fit the screen; scrolling it only slides the CTAs under the tab bar.
+        scrollEnabled={analysisTab !== 'overview'}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews={Platform.OS === 'android' ? false : undefined}
       >
@@ -1273,6 +1298,7 @@ export function ActivitiesVideoAnalysis({
           ]}
           value={analysisTab}
           onChange={setAnalysisTab}
+          dense
         />
         </View>
 
@@ -1350,8 +1376,7 @@ export function ActivitiesVideoAnalysis({
             weaknesses={aiSections?.technicalErrors ?? null}
             metrics={aiSnapshot?.physicalMetrics ?? null}
             detail={overviewDetail}
-            onPriorityJoint={(id) => openSmart3d(id, 'overview')}
-            onPriorityFixes={() => setOverviewDetail('mistakes')}
+            onPriorityFixes={() => setAnalysisTab('actionPlan')}
             onProgress={() => setOverviewDetail('trackProgress')}
             onSmart3d={() => openSmart3d(null, 'overview')}
           />

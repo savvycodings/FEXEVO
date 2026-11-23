@@ -63,6 +63,7 @@ export function TechniqueResults({
       tabs={tabs}
       value={section}
       onChange={onSectionChange}
+      dense
       trackStyle={overlay ? styles.pillOnVideo : undefined}
     />
   )

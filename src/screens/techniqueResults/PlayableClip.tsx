@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react'
 import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
+import { FullscreenSafeArea } from '../../components/FullscreenSafeArea'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av'
@@ -194,7 +194,7 @@ export function PlayableClip({
         onRequestClose={closeFullscreen}
         supportedOrientations={['portrait']}
       >
-        <SafeAreaView style={styles.fullRoot} edges={['top', 'bottom', 'left', 'right']}>
+        <FullscreenSafeArea style={styles.fullRoot}>
           <View style={styles.fullBar}>
             <Pressable
               accessibilityRole="button"
@@ -251,7 +251,7 @@ export function PlayableClip({
               {clock(position)}/{clock(duration)}
             </Text>
           </View>
-        </SafeAreaView>
+        </FullscreenSafeArea>
       </Modal>
     </View>
   )

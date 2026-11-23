@@ -267,6 +267,8 @@ const DRILLS: Record<string, DrillMediaPack> = {
     shotLabel: 'Recovery',
     subtitle: 'Recover after the overhead and get ready for the next shot.',
     focusParts: ['foot', 'torso'],
+    // No dedicated recovery clips on the media host yet — reuse remate-plano
+    // (overhead) step videos so overview / walkthrough can be tested end-to-end.
     steps: [
       {
         title: 'Recover to ready',
@@ -275,7 +277,7 @@ const DRILLS: Record<string, DrillMediaPack> = {
         focus: ['Split-step after the smash.', 'Eyes up for the next ball.'],
         practice: PRACTICE,
         minutes: MINUTES,
-        videoUri: null,
+        videoUri: drillsMediaUrl('remate-plano', '01-primary.mp4'),
       },
       {
         title: 'Balance through contact',
@@ -284,7 +286,7 @@ const DRILLS: Record<string, DrillMediaPack> = {
         focus: ['Stable base.', 'Controlled finish.'],
         practice: PRACTICE,
         minutes: MINUTES,
-        videoUri: null,
+        videoUri: drillsMediaUrl('remate-plano', '02-secondary.mp4'),
       },
       {
         title: 'First step after smash',
@@ -293,7 +295,7 @@ const DRILLS: Record<string, DrillMediaPack> = {
         focus: ['Quick first step.', 'Racket up in ready.'],
         practice: PRACTICE,
         minutes: MINUTES,
-        videoUri: null,
+        videoUri: drillsMediaUrl('remate-plano', '03-tertiary.mp4'),
       },
       {
         title: 'Link to next ball',
@@ -302,7 +304,7 @@ const DRILLS: Record<string, DrillMediaPack> = {
         focus: ['Eyes on the reply.', 'Ready stance early.'],
         practice: PRACTICE,
         minutes: MINUTES,
-        videoUri: null,
+        videoUri: drillsMediaUrl('remate-plano', '04-final.mp4'),
       },
     ],
   },

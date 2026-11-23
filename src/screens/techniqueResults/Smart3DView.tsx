@@ -111,6 +111,8 @@ type Props = {
    * When it maps to a contact joint, Joint Detail shows immediately; back leaves Smart 3D.
    */
   initialPart?: BodyPart | null
+  /** Player / Ideal Form / Overlay tab to land on (Action Plan fixes use Ideal Form). */
+  initialLayer?: Layer
   onClose: () => void
 }
 
@@ -462,12 +464,13 @@ export function Smart3DView({
   errors = [],
   onDrills,
   initialPart = null,
+  initialLayer = 'player',
   onClose,
 }: Props) {
   const { t } = useTranslation()
   const { theme } = useContext(ThemeContext)
   const insets = useSafeAreaInsets()
-  const [uiLayer, setUiLayer] = useState<UiLayer>('player')
+  const [uiLayer, setUiLayer] = useState<UiLayer>(initialLayer)
   const [mode, setMode] = useState<Mode>('3d')
   // Compare has no clip of its own; the stage keeps the player orbit loaded behind it.
   const layer: Layer = uiLayer === 'compare' ? 'player' : uiLayer
