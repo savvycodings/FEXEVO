@@ -1,5 +1,6 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
+import { PG } from '../screens/progress/progressTheme'
 import { type FrameView, FRAME_VIEW_RESET, ZOOM_STEPS, clampView, nearestZoomStep } from './contactFrameZoom'
 
 type Props = {
@@ -38,24 +39,17 @@ export function ZoomChips({ view, onViewChange, font, testIDPrefix }: Props) {
 }
 
 const styles = StyleSheet.create({
-  /** Design: 42pt track, 4px padding, 1px #07256D rim, radius 10, 20px between steps, soft outer + inset glow. */
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 42,
-    padding: 4,
-    gap: 20,
-    borderRadius: 10,
-    backgroundColor: '#041641',
+    padding: 3,
+    gap: 2,
+    borderRadius: 12,
+    backgroundColor: '#0A1E5C',
     borderWidth: 1,
-    borderColor: '#07256D',
-    boxShadow: '0px 0px 15px 0px rgba(0, 72, 255, 0.25), 0px 0px 16px 0px rgba(0, 72, 255, 0.25) inset',
+    borderColor: PG.border,
   },
-  chip: { minWidth: 34, height: 34, paddingHorizontal: 4, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  /** Active step: solid #3E88F1, radius 10. */
-  chipOn: { backgroundColor: '#3E88F1' },
-  /** Design: #3E88F1, Inter 600 16px (white on the active step). */
-  txt: { fontSize: 16, color: '#3E88F1' },
+  chip: { minWidth: 40, paddingVertical: 5, paddingHorizontal: 8, borderRadius: 9, alignItems: 'center' },
+  chipOn: { backgroundColor: '#2A88F4' },
+  txt: { fontSize: 14, color: PG.labelBlue },
   txtOn: { color: '#FFFFFF' },
 })

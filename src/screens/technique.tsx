@@ -527,29 +527,11 @@ export function Technique() {
   const [shotPickerOpen, setShotPickerOpen] = useState(false)
   /** Set Clip's Back reopens the picker on Camera with the declared shot restored. */
   const [shotPickerStart, setShotPickerStart] = useState<'shot' | 'camera'>('shot')
-  /** Set Clip's "Contact" step (after Next): one frame with a stepper, shown in place of the Set Clip content. */
-  const [contactStepOpen, setContactStepOpen] = useState(false)
-  const step2ScrollRef = useRef<any>(null)
-  useEffect(() => {
-    if (!contactStepOpen) return
-    // The step replaces the content the user scrolled through to reach Next.
-    // Next frame: Android clamps the offset when the content shrinks, after this effect runs.
-    const raf = requestAnimationFrame(() => step2ScrollRef.current?.scrollTo?.({ y: 0, animated: false }))
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setContactStepOpen(false)
-      return true
-    })
-    return () => {
-      cancelAnimationFrame(raf)
-      sub.remove()
-    }
-  }, [contactStepOpen])
   /** Set when the shot picker finishes; the effect below starts the analysis with the new shot. */
   const [analyzeAfterShot, setAnalyzeAfterShot] = useState(false)
   useEffect(() => {
     if (!analyzeAfterShot || shotPickerOpen) return
     setAnalyzeAfterShot(false)
-    setContactStepOpen(false)
     // Runs after the render that stored the shot, so the request carries it.
     void runAnalysis(undefined, { navigateOnDone: true, resetState: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1475,7 +1457,6 @@ export function Technique() {
   }
 
   const resetToNewVideo = useCallback(() => {
-    setContactStepOpen(false)
     setUploadedVideoUrl(null)
     setLocalVideoUri(null)
     setUploadedVideoId(null)
@@ -2569,7 +2550,6 @@ export function Technique() {
           />
         ) : step === 2 ? (
           <KeyboardAwareScrollView
-            ref={step2ScrollRef}
             style={styles.stepContent}
             contentContainerStyle={[
               styles.stepContentInner,
@@ -2586,8 +2566,7 @@ export function Technique() {
             bottomOffset={insets.bottom + 12}
           >
             <View style={styles.step2}>
-                {/* Contact step: everything but the grid (which shows the frame) stays mounted but hidden, so Back keeps the player and timeline. */}
-                <View style={[styles.step2VideoSummaryCard, contactStepOpen && styles.hidden]}>
+                <View style={styles.step2VideoSummaryCard}>
                   {/* Back lives in the instruction card (design), not in a title row above it. */}
                   <TouchableOpacity
                     onPress={() => {
@@ -2631,7 +2610,7 @@ export function Technique() {
                 </View>
 
                 {trimPreviewUri ? (
-                  <View style={contactStepOpen ? styles.hidden : undefined}>
+                  <View>
                   <TrimClipPreview
                     ref={trimPreviewRef}
                     videoUri={trimPreviewUri}
@@ -2655,7 +2634,7 @@ export function Technique() {
                 ) : null}
 
                 <View style={styles.trimCard}>
-                  <View style={contactStepOpen ? styles.hidden : undefined}>
+                  <View>
                   {uploadedVideoUrl != null ? (
                     videoDurationSeconds != null && videoDurationSeconds > 0 ? (
                       <VideoFrameCarousel
@@ -2745,12 +2724,6 @@ export function Technique() {
                       onChangeContactFrame={(frame) => {
                         contactFrameRef.current = frame
                       }}
-                      contactStep={contactStepOpen}
-                      onCloseContactStep={() => setContactStepOpen(false)}
-                      onConfirm={() => {
-                        setShotPickerStart('shot')
-                        setShotPickerOpen(true)
-                      }}
                     />
                   ) : null}
 
@@ -2805,7 +2778,7 @@ export function Technique() {
                   </View>
                   ) : null}
                 </View>
-              <View style={[styles.step2BottomBar, contactStepOpen && styles.hidden]}>
+              <View style={styles.step2BottomBar}>
                 <View style={styles.step2BottomBarHalf}>
                   <TouchableOpacity
                     style={[styles.step2TryNewVideoBtn, styles.step2BottomBarBtnFill]}
@@ -2829,13 +2802,8 @@ export function Technique() {
                         return
                       }
                       void trimPreviewRef.current?.pause()
-                      // Contact step: the frame viewer on the current contact; without one, go straight to the shot.
-                      if (contactMs != null) {
-                        setContactStepOpen(true)
-                      } else {
-                        setShotPickerStart('shot')
-                        setShotPickerOpen(true)
-                      }
+                      setShotPickerStart('shot')
+                      setShotPickerOpen(true)
                     }}
                     activeOpacity={0.9}
                     disabled={

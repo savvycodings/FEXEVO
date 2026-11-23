@@ -192,7 +192,7 @@ export async function openScreen(page: Page, name: string, params: object | unde
   return bodies
 }
 
-/** From the AI Coach home: Choose File → how-to → upload → Set Clip → Contact → Net Play / Forehand volley / Front → analyse. */
+/** From the AI Coach home: Choose File → how-to → upload → Set Clip → Net Play / Forehand volley / Front → analyse. */
 export async function uploadAndAnalyze(page: Page, fixturePath: string): Promise<string> {
   await nav(page, 'Main', { screen: 'AICoach', params: { screen: 'AICoachMain' } })
   // The AI Coach home's "Analyze a New Shot" opens the how-to; accepting it opens the file picker.
@@ -201,10 +201,8 @@ export async function uploadAndAnalyze(page: Page, fixturePath: string): Promise
   const chooser = page.waitForEvent('filechooser')
   await page.getByTestId(T.howToAccept).click()
   await (await chooser).setFiles(fixturePath)
-  // Set Clip → Next → Contact viewer → Next → Shot / Type / Camera → Analyze.
+  // Set Clip (contact picked in the frame grid) → Next → Shot / Type / Camera → Analyze.
   await page.getByTestId(T.setClipNext).click()
-  const contactNext = page.getByTestId('contact-frame-viewer-use')
-  if (await contactNext.isVisible({ timeout: 15_000 }).catch(() => false)) await contactNext.click()
   await page.getByTestId(T.shotCategory('net_play')).click()
   await page.getByTestId(T.shotOption('forehand_volley')).click()
   await page.getByTestId(T.viewAngle('front')).click()
