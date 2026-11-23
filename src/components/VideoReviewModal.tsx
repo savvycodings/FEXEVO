@@ -14,6 +14,7 @@ import {
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
+import { FullscreenSafeArea } from './FullscreenSafeArea'
 import Svg, { Path } from 'react-native-svg'
 import { Video, ResizeMode } from 'expo-av'
 import { captureRef } from 'react-native-view-shot'
@@ -295,7 +296,8 @@ export function VideoReviewModal({ visible, videoUri, durationMs, onClose, onSav
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false}>
-      <View style={[st.root, { backgroundColor: theme.backgroundColor, paddingTop: insets.top }]}>
+      <FullscreenSafeArea style={{ backgroundColor: theme.backgroundColor }}>
+      <View style={st.root}>
         <View style={st.header}>
           <TouchableOpacity onPress={onClose} hitSlop={12}>
             <Ionicons name="close" size={24} color="#FFFFFF" />
@@ -306,7 +308,7 @@ export function VideoReviewModal({ visible, videoUri, durationMs, onClose, onSav
 
         <KeyboardAwareScrollView
           style={st.scroll}
-          contentContainerStyle={[st.scrollInner, { paddingBottom: insets.bottom + 24 }]}
+          contentContainerStyle={[st.scrollInner, { paddingBottom: 24 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           bottomOffset={insets.bottom + 20}
@@ -396,10 +398,12 @@ export function VideoReviewModal({ visible, videoUri, durationMs, onClose, onSav
           )}
         </KeyboardAwareScrollView>
       </View>
+      </FullscreenSafeArea>
 
       {/* ========== DRAW POPUP ========== */}
       <Modal visible={popupMode === 'draw'} animationType="slide" transparent={false}>
-        <View style={[st.root, { backgroundColor: theme.backgroundColor, paddingTop: insets.top }]}>
+        <FullscreenSafeArea style={{ backgroundColor: theme.backgroundColor }}>
+        <View style={st.root}>
           <View style={st.header}>
             <TouchableOpacity onPress={() => setPopupMode(null)} hitSlop={12}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
@@ -409,7 +413,7 @@ export function VideoReviewModal({ visible, videoUri, durationMs, onClose, onSav
           </View>
           <KeyboardAwareScrollView
             style={st.scroll}
-            contentContainerStyle={[st.scrollInner, { paddingBottom: insets.bottom + 24 }]}
+            contentContainerStyle={[st.scrollInner, { paddingBottom: 24 }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             scrollEnabled={!isDrawing}
@@ -498,11 +502,13 @@ export function VideoReviewModal({ visible, videoUri, durationMs, onClose, onSav
             </TouchableOpacity>
           </KeyboardAwareScrollView>
         </View>
+        </FullscreenSafeArea>
       </Modal>
 
       {/* ========== COMMENT POPUP ========== */}
       <Modal visible={popupMode === 'comment'} animationType="slide" transparent={false}>
-        <View style={[st.root, { backgroundColor: theme.backgroundColor, paddingTop: insets.top }]}>
+        <FullscreenSafeArea style={{ backgroundColor: theme.backgroundColor }}>
+        <View style={st.root}>
           <View style={st.header}>
             <TouchableOpacity onPress={() => setPopupMode(null)} hitSlop={12}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
@@ -512,7 +518,7 @@ export function VideoReviewModal({ visible, videoUri, durationMs, onClose, onSav
           </View>
           <KeyboardAwareScrollView
             style={st.scroll}
-            contentContainerStyle={[st.scrollInner, { paddingBottom: insets.bottom + 24 }]}
+            contentContainerStyle={[st.scrollInner, { paddingBottom: 24 }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             bottomOffset={insets.bottom + 20}
@@ -567,6 +573,7 @@ export function VideoReviewModal({ visible, videoUri, durationMs, onClose, onSav
             </TouchableOpacity>
           </KeyboardAwareScrollView>
         </View>
+        </FullscreenSafeArea>
       </Modal>
     </Modal>
   )

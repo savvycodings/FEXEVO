@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { BackHandler, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { FullscreenSafeArea } from '../../components/FullscreenSafeArea'
 import { useTranslation } from 'react-i18next'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -34,6 +34,8 @@ import {
 } from '../../lib/poseJointAngles'
 import {
   MEDIAPIPE_POSE_CONNECTIONS,
+  containerSizeFromNatural,
+  landmarksSuggestPortrait,
   nearestPoseByFrame,
   poseSegmentColor,
   type PoseFrameRow,
@@ -109,9 +111,7 @@ type Props = {
   weaknesses?: string[] | null
   metrics: PhysicalMetricsValues | null
   detail: Detail
-  /** Open the Smart 3D joint detail for this Priority Fixes pill. */
-  onPriorityJoint: (id: PriorityPartId) => void
-  /** Open the full Priority Fixes page (title / card outside the joint pills). */
+  /** Open Action Plan (Priority Fixes title and elbow / knee / foot pills). */
   onPriorityFixes: () => void
   onSmart3d: () => void
   onScrubbingChange?: (scrubbing: boolean) => void
@@ -235,8 +235,11 @@ function ratingTone(rating: string | null, score: number | null) {
 const STATUS_INTERVAL_MS = 100
 /** Seek at most this often while dragging, so the decoder keeps up. */
 const SCRUB_SEEK_MS = 80
-/** Exact seeks, so the paused picture matches the slider and the skeleton. */
-const EXACT_SEEK = { toleranceMillisBefore: 0, toleranceMillisAfter: 0 }
+/**
+ * Scrub / play seeks. Zero after-tolerance hangs ExoPlayer on many phones; a small window
+ * still lands close enough for the skeleton without blocking playAsync.
+ */
+const SEEK = { toleranceMillisBefore: 0, toleranceMillisAfter: 80 }
 
 function clock(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -425,7 +428,7 @@ function AnalysisFullscreen({
     return computeOverlayJointAngles(getPx, pose.landmarks)
   }, [pose, natural, box])
 
-  async function hold(ms: number, play: boolean) {
+  function hold(ms: number, play: boolean) {
     const video = ref.current
     if (!video) return
     const at = duration > 0 ? Math.min(Math.max(0, ms), Math.max(0, duration - 40)) : Math.max(0, ms)
@@ -435,25 +438,19 @@ function AnalysisFullscreen({
     anchor.current = { pos: next, at: Date.now(), playing: play }
     setPlaying(play)
     setPosition(next)
-    try {
-      const status = await video.getStatusAsync()
-      if (!status.isLoaded) {
-        await video.playAsync()
-        return
-      }
-      if (restart || Math.abs((status.positionMillis ?? 0) - next) > 40) {
-        await video.setPositionAsync(next, EXACT_SEEK)
-      }
-      if (play) await video.playAsync()
-      else await video.pauseAsync()
-    } catch {
-      // Android expo-av can throw on mid-load taps; next press retries.
-    }
+    void video
+      .setStatusAsync({
+        shouldPlay: play,
+        positionMillis: next,
+        seekMillisToleranceBefore: SEEK.toleranceMillisBefore,
+        seekMillisToleranceAfter: SEEK.toleranceMillisAfter,
+      })
+      .catch(() => {})
   }
 
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onClose} supportedOrientations={['portrait']}>
-      <SafeAreaView style={styles.fullScreen} edges={['top', 'bottom', 'left', 'right']}>
+      <FullscreenSafeArea style={styles.fullScreen}>
         <View style={styles.fullBar}>
           <Pressable
             accessibilityRole="button"
@@ -513,7 +510,7 @@ function AnalysisFullscreen({
         <View style={styles.fullControls}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => void hold(position, !playing)}
+            onPress={() => hold(position, !playing)}
             style={styles.play}
           >
             <Ionicons name={playing ? 'pause' : 'play'} size={18} color="#FFFFFF" style={playing ? undefined : styles.playIcon} />
@@ -522,7 +519,7 @@ function AnalysisFullscreen({
             {clock(position)}/{clock(duration)}
           </Text>
         </View>
-      </SafeAreaView>
+      </FullscreenSafeArea>
     </Modal>
   )
 }
@@ -540,7 +537,6 @@ export function AnalysisOverview({
   weaknesses = null,
   metrics,
   detail: _detail,
-  onPriorityJoint,
   onPriorityFixes,
   onSmart3d,
   onScrubbingChange,
@@ -556,10 +552,11 @@ export function AnalysisOverview({
   const compact = windowHeight < 740
   /** Priority-pill icons can stay a touch larger on tall phones; CTAs always use 18. */
   const iconSz = compact ? 18 : 24
+  /** Five metric cells: same layout, scaled down so the video can take the freed space. */
+  const metricIconSz = compact ? 15 : 20
   const ctaIconSz = 18
   const videoRef = useRef<Video>(null)
   const naturalFromPlayerRef = useRef(false)
-  const playBusyRef = useRef(false)
   const [frameW, setFrameW] = useState(0)
   const [trackW, setTrackW] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -574,11 +571,16 @@ export function AnalysisOverview({
   const scrub = useRef({ wasPlaying: false, lastSeek: 0 })
   const tone = ratingTone(rating, score)
 
-  const applyNaturalSize = useCallback((ns: { width: number; height: number } | null | undefined) => {
-    if (!ns || ns.width <= 0 || ns.height <= 0) return
-    naturalFromPlayerRef.current = true
-    setNatural({ w: ns.width, h: ns.height })
-  }, [])
+  // Use the presented aspect (orientation-aware). COVER and the skeleton must share it or
+  // phone clips land the dots off the body once the overview box is taller than 16:9.
+  const applyNaturalSize = useCallback(
+    (ns: { width: number; height: number; orientation?: 'portrait' | 'landscape' } | null | undefined) => {
+      if (!ns || ns.width <= 0 || ns.height <= 0) return
+      naturalFromPlayerRef.current = true
+      setNatural(containerSizeFromNatural(ns))
+    },
+    []
+  )
 
   useEffect(() => {
     naturalFromPlayerRef.current = false
@@ -598,7 +600,11 @@ export function AnalysisOverview({
         ?.getStatusAsync()
         .then((s) => {
           if (!s.isLoaded || naturalFromPlayerRef.current) return
-          const ns = (s as AVPlaybackStatus & { naturalSize?: { width: number; height: number } }).naturalSize
+          const ns = (
+            s as AVPlaybackStatus & {
+              naturalSize?: { width: number; height: number; orientation?: 'portrait' | 'landscape' }
+            }
+          ).naturalSize
           applyNaturalSize(ns)
         })
         .catch(() => {})
@@ -622,7 +628,7 @@ export function AnalysisOverview({
   function onStatus(status: AVPlaybackStatus) {
     if (!status.isLoaded) return
     const ext = status as AVPlaybackStatus & {
-      naturalSize?: { width: number; height: number }
+      naturalSize?: { width: number; height: number; orientation?: 'portrait' | 'landscape' }
     }
     if (ext.naturalSize) applyNaturalSize(ext.naturalSize)
     anchor.current = {
@@ -631,9 +637,15 @@ export function AnalysisOverview({
       rate: status.rate ?? 1,
       playing: status.isPlaying,
     }
-    setPosition(status.positionMillis)
     setDuration(status.durationMillis ?? 0)
-    setPlaying(status.isPlaying)
+    // While playing the RAF clock owns position. Writing every status tick snaps the skeleton
+    // backward whenever the decoder lags the wall clock (jitter on emulator / mid devices).
+    if (status.isPlaying) {
+      setPlaying(true)
+    } else {
+      setPlaying(false)
+      setPosition(status.positionMillis)
+    }
   }
 
   // Status only arrives every STATUS_INTERVAL_MS; between reports, advance the position with a
@@ -659,15 +671,6 @@ export function AnalysisOverview({
     return () => cancelAnimationFrame(raf)
   }, [playing, scrubMs, duration])
 
-  // Overview stage is a wide 16:9 card — not the tall rail+stage View Angles layout.
-  // Cap height from window so short phones shrink the video first (no Overview scroll).
-  const overviewH = useMemo(() => {
-    if (frameW <= 0) return 180
-    const ideal = Math.round(frameW * (9 / 16))
-    const maxByScreen = Math.max(160, Math.round(windowHeight * (compact ? 0.26 : 0.3)))
-    return Math.min(ideal, maxByScreen)
-  }, [frameW, windowHeight, compact])
-
   const pose = useMemo(() => {
     if (!poseFrames?.length) return null
     // Show the first pose as soon as data arrives — don't wait for duration (Android can lag).
@@ -678,8 +681,23 @@ export function AnalysisOverview({
     return nearestPoseByFrame(poseFrames, idx)
   }, [poseFrames, totalFrames, shownMs, duration])
 
-  // Prefer player-reported size; fall back to the 16:9 card so the skeleton still draws on Android.
-  const overlayNatural = natural ?? { w: 16, h: 9 }
+  // Prefer player-reported (presented) size. Before it arrives, guess from pose so COVER
+  // mapping is not stuck on a landscape card while a phone clip is on screen.
+  const overlayNatural = useMemo(() => {
+    if (natural) return natural
+    if (pose && landmarksSuggestPortrait(pose.landmarks)) return { w: 9, h: 16 }
+    return { w: 16, h: 9 }
+  }, [natural, pose])
+
+  // Overview stage — tall enough that Progress / Smart 3D sit just above the tab bar.
+  // Cap from window so the page still fits without scrolling. Same portrait signal as the skeleton.
+  const overviewH = useMemo(() => {
+    if (frameW <= 0) return 210
+    const portrait = overlayNatural.h > overlayNatural.w
+    const ideal = Math.round(frameW * (portrait ? 12 / 16 : 10.5 / 16))
+    const maxByScreen = Math.max(180, Math.round(windowHeight * (compact ? 0.34 : 0.38)))
+    return Math.min(ideal, maxByScreen)
+  }, [frameW, windowHeight, compact, overlayNatural])
 
   const angles = useMemo(() => {
     if (!pose || frameW <= 0 || overviewH <= 0) return []
@@ -691,36 +709,30 @@ export function AnalysisOverview({
     return computeOverlayJointAngles(getPx, pose.landmarks)
   }, [pose, overlayNatural, frameW, overviewH])
 
-  async function togglePlay() {
+  function togglePlay() {
     const video = videoRef.current
-    if (!video || playBusyRef.current) return
-    playBusyRef.current = true
+    if (!video) return
     // The frame clock can run a little past the clip. Seeking there makes the next play do nothing.
-    const wantPlay = !playing
+    const wantPlay = !anchor.current.playing
     const at = duration > 0 ? Math.min(Math.max(0, position), Math.max(0, duration - 40)) : Math.max(0, position)
     const restart = wantPlay && duration > 0 && at >= duration - 120
     const next = restart ? 0 : at
     anchor.current = { ...anchor.current, playing: wantPlay, pos: next, at: Date.now() }
     setPlaying(wantPlay)
     setPosition(next)
-    try {
-      const status = await video.getStatusAsync()
-      if (!status.isLoaded) {
-        await video.playAsync()
-        return
-      }
-      if (restart || Math.abs((status.positionMillis ?? 0) - next) > 40) {
-        await video.setPositionAsync(next, EXACT_SEEK)
-      }
-      if (wantPlay) await video.playAsync()
-      else await video.pauseAsync()
-    } catch {
-      // Android expo-av can throw on mid-load taps; next press retries.
-      anchor.current = { ...anchor.current, playing: false, at: Date.now() }
-      setPlaying(false)
-    } finally {
-      playBusyRef.current = false
-    }
+    // One status call — chained getStatus/setPosition/playAsync with zero seek tolerance
+    // hangs ExoPlayer on real phones so the button looks dead.
+    void video
+      .setStatusAsync({
+        shouldPlay: wantPlay,
+        positionMillis: next,
+        seekMillisToleranceBefore: SEEK.toleranceMillisBefore,
+        seekMillisToleranceAfter: SEEK.toleranceMillisAfter,
+      })
+      .catch(() => {
+        anchor.current = { ...anchor.current, playing: false, at: Date.now() }
+        setPlaying(false)
+      })
   }
 
   const msAt = useCallback(
@@ -732,7 +744,15 @@ export function AnalysisOverview({
     (x: number) => {
       scrub.current = { wasPlaying: anchor.current.playing, lastSeek: 0 }
       onScrubbingChange?.(true)
-      if (anchor.current.playing) void videoRef.current?.pauseAsync()
+      if (anchor.current.playing) {
+        void videoRef.current
+          ?.setStatusAsync({
+            shouldPlay: false,
+            seekMillisToleranceBefore: SEEK.toleranceMillisBefore,
+            seekMillisToleranceAfter: SEEK.toleranceMillisAfter,
+          })
+          .catch(() => {})
+      }
       setScrubMs(msAt(x))
     },
     [msAt, onScrubbingChange]
@@ -745,7 +765,14 @@ export function AnalysisOverview({
       const now = Date.now()
       if (now - scrub.current.lastSeek >= SCRUB_SEEK_MS) {
         scrub.current.lastSeek = now
-        void videoRef.current?.setPositionAsync(ms, EXACT_SEEK)
+        void videoRef.current
+          ?.setStatusAsync({
+            shouldPlay: false,
+            positionMillis: ms,
+            seekMillisToleranceBefore: SEEK.toleranceMillisBefore,
+            seekMillisToleranceAfter: SEEK.toleranceMillisAfter,
+          })
+          .catch(() => {})
       }
     },
     [msAt]
@@ -755,17 +782,20 @@ export function AnalysisOverview({
     (x: number) => {
       const ms = msAt(x)
       const video = videoRef.current
+      const resume = scrub.current.wasPlaying
       onScrubbingChange?.(false)
       setPosition(ms)
-      anchor.current = { ...anchor.current, pos: ms, at: Date.now() }
-      void (async () => {
-        try {
-          await video?.setPositionAsync(ms, EXACT_SEEK)
-          if (scrub.current.wasPlaying) await video?.playAsync()
-        } finally {
-          setScrubMs(null)
-        }
-      })()
+      anchor.current = { ...anchor.current, pos: ms, at: Date.now(), playing: resume }
+      setPlaying(resume)
+      void video
+        ?.setStatusAsync({
+          shouldPlay: resume,
+          positionMillis: ms,
+          seekMillisToleranceBefore: SEEK.toleranceMillisBefore,
+          seekMillisToleranceAfter: SEEK.toleranceMillisAfter,
+        })
+        .catch(() => {})
+        .finally(() => setScrubMs(null))
     },
     [msAt, onScrubbingChange]
   )
@@ -850,7 +880,7 @@ export function AnalysisOverview({
             <View style={styles.controls}>
               <Pressable
                 style={styles.play}
-                onPress={() => void togglePlay()}
+                onPress={togglePlay}
                 accessibilityRole="button"
                 testID="analysis-video-play"
               >
@@ -954,7 +984,7 @@ export function AnalysisOverview({
           const value = metrics?.[key]
           return (
             <View key={key} style={[styles.metric, compact ? styles.metricCompact : null]}>
-              <MetricIcon metric={key} size={iconSz} />
+              <MetricIcon metric={key} size={metricIconSz} />
               <Text
                 allowFontScaling={false}
                 style={[
@@ -1002,7 +1032,7 @@ export function AnalysisOverview({
                 accessibilityRole="button"
                 accessibilityLabel={t(part.labelKey)}
                 testID={`overview-priority-${part.id}`}
-                onPress={() => onPriorityJoint(part.id)}
+                onPress={onPriorityFixes}
                 style={[
                   styles.priorityJoint,
                   compact ? styles.priorityJointCompact : null,
@@ -1257,18 +1287,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    minHeight: 83,
+    minHeight: 68,
     borderRadius: 10,
     backgroundColor: '#001435',
     borderWidth: 1,
     borderColor: '#0B285A',
     paddingHorizontal: 2,
-    paddingVertical: 10,
+    paddingVertical: 7,
   },
-  metricCompact: { minHeight: 62, paddingVertical: 6, gap: 1 },
-  metricValue: { color: '#FFFFFF', fontSize: 20, textAlign: 'center', letterSpacing: -0.4 },
-  metricValueCompact: { fontSize: 16, letterSpacing: -0.3 },
-  metricLabel: { color: '#FFFFFF', fontSize: 9, textAlign: 'center', letterSpacing: -0.18 },
+  metricCompact: { minHeight: 54, paddingVertical: 5, gap: 1 },
+  metricValue: { color: '#FFFFFF', fontSize: 17, textAlign: 'center', letterSpacing: -0.4 },
+  metricValueCompact: { fontSize: 14, letterSpacing: -0.3 },
+  metricLabel: { color: '#FFFFFF', fontSize: 8, textAlign: 'center', letterSpacing: -0.18 },
   /** Figma: rgba(7,37,109,0.25) + 2px #0235B6, radius 20 */
   priorityBlock: {
     alignSelf: 'stretch',

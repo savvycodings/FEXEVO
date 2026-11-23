@@ -14,13 +14,15 @@ type PillProps<T extends string> = {
   value: T
   onChange: (id: T) => void
   trackStyle?: StyleProp<ViewStyle>
+  /** Shorter height for Overview | View Angles | Action Plan — width unchanged. */
+  dense?: boolean
 }
 
 /**
  * Segmented control for the analysis screens. Renders the shared `SegmentedPills`
  * (same look as Activities / Progress) so every tab row in the app matches.
  */
-export function ResultSectionPill<T extends string>({ tabs, value, onChange, trackStyle }: PillProps<T>) {
+export function ResultSectionPill<T extends string>({ tabs, value, onChange, trackStyle, dense = false }: PillProps<T>) {
   const { theme } = useContext(ThemeContext)
   return (
     <SegmentedPills
@@ -28,13 +30,15 @@ export function ResultSectionPill<T extends string>({ tabs, value, onChange, tra
       value={value}
       onChange={onChange}
       size={tabs.length > 3 ? 'md' : 'lg'}
+      dense={dense}
       fontFamily={theme.mediumFont}
       activeFontFamily={theme.semiBoldFont}
-      style={[styles.track, trackStyle]}
+      style={[styles.track, dense && styles.trackDense, trackStyle]}
     />
   )
 }
 
 const styles = StyleSheet.create({
   track: { marginBottom: 18 },
+  trackDense: { marginBottom: 10 },
 })

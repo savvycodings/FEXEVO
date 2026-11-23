@@ -20,6 +20,13 @@ const RACKET = 64
 const FOCUS_GOLD = '#FFBB00'
 const FOCUS_BORDER = '#FFBB0080'
 const FOCUS_DISC = '#FFBB0026'
+/** Per-digit optical nudge in the small overview circles (x right, y down). Narrow glyphs need a left nudge. */
+const STEP_NUM_NUDGE: Record<number, { x: number; y: number }> = {
+  1: { x: -1, y: -1.5 },
+  2: { x: 0, y: -1.5 },
+  3: { x: 0, y: -1.5 },
+  4: { x: 0, y: -1.5 },
+}
 
 type Props = {
   onClose: () => void
@@ -34,8 +41,8 @@ type Props = {
 }
 
 /**
- * Figma drill overview (Bandeja): hero, video chrome, stats, progression, focus, CTAs.
- * Opened from SuggestedDrillsPage when a selected card is tapped again. No real media yet.
+ * Figma drill overview: hero, video chrome, stats, progression, focus, CTAs.
+ * Opened from SuggestedDrillsPage when a selected card is tapped again.
  */
 export function DrillOverviewPage({
   onClose,
@@ -145,7 +152,21 @@ export function DrillOverviewPage({
               testID={`drill-overview-step-${i + 1}`}
             >
               <View style={styles.stepNum}>
-                <Text allowFontScaling={false} style={[styles.stepNumText, { fontFamily: fontSemi }]}>
+                <Text
+                  allowFontScaling={false}
+                  style={[
+                    styles.stepNumText,
+                    { fontFamily: fontSemi },
+                    STEP_NUM_NUDGE[i + 1]
+                      ? {
+                          transform: [
+                            { translateX: STEP_NUM_NUDGE[i + 1]!.x },
+                            { translateY: STEP_NUM_NUDGE[i + 1]!.y },
+                          ],
+                        }
+                      : null,
+                  ]}
+                >
                   {i + 1}
                 </Text>
               </View>
@@ -184,6 +205,7 @@ export function DrillOverviewPage({
             accessibilityRole="button"
             accessibilityLabel="Start Full Drill"
             style={styles.startBtn}
+            onPress={onNext}
             testID="drill-overview-start"
           >
             <PrimaryFill radius={UI.radiusPill} />
@@ -331,12 +353,25 @@ const styles = StyleSheet.create({
     borderColor: '#00B8FF',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     backgroundColor: '#07256D',
     boxShadow: '0px 0px 10px 0px #0048FF',
     /** Extra air between the circle and the title copy. */
     marginRight: 4,
   },
-  stepNumText: { color: '#FFFFFF', fontSize: 18 },
+  stepNumText: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 40,
+    textAlign: 'center',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
   stepCopy: { flex: 1, justifyContent: 'center', minWidth: 0 },
   stepTitle: { color: UI.text, fontSize: 15, lineHeight: 19 },
   stepThumb: {
