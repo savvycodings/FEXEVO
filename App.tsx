@@ -17,6 +17,7 @@ import {
   Inter_900Black,
   Inter_700Bold_Italic,
 } from '@expo-google-fonts/inter'
+import { Oswald_500Medium } from '@expo-google-fonts/oswald'
 import { ThemeContext, AppContext } from './src/context'
 import * as themes from './src/theme'
 import { IMAGE_MODELS, MODELS } from './constants'
@@ -78,6 +79,7 @@ export default function App() {
     Inter_800ExtraBold,
     Inter_900Black,
     Inter_700Bold_Italic,
+    Oswald_500Medium,
   })
 
   useEffect(() => {

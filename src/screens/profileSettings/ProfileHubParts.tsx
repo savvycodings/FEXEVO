@@ -15,12 +15,16 @@ import { useTranslation } from "react-i18next";
 import { ThemeContext } from "../../context";
 import { LocalSvgAsset } from "../../components/LocalSvgAsset";
 import { PG, glow } from "../progress/progressTheme";
-import { PillChip, SegmentedPills } from "../progress/SegmentedPills";
+import { SegmentedPills } from "../progress/SegmentedPills";
 import { DOMAIN } from "../../../constants";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
 export type ProfileHubTab = "profile" | "stats" | "achievements" | "settings";
+
+/** Figma PRO pill — same chrome for Get PRO and PRO. */
+const PRO_PILL_COLORS = ["#00BBFF", "#003CFF", "#0022FF"] as const;
+const PRO_PILL_LOCS = [0.0907, 0.7715, 0.9093] as const;
 
 /* ------------------------------------------------------------------------------------------------
  * Identity header: round avatar (camera corner), name + PRO pill, email.
@@ -45,6 +49,13 @@ export function ProfileIdentityHeader({
 }) {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
+  /**
+   * No subscription entitlement is wired yet (`isPro` is hardcoded false at the hub).
+   * Until real Pro status exists, always show the PRO mark (not "Get PRO").
+   * When entitlement lands: show only when `isPro`; hide for free users.
+   */
+  const showProPill = true;
+  void isPro;
   return (
     <View style={s.identityRow} testID="profile-hub-identity">
       <TouchableOpacity
@@ -52,9 +63,11 @@ export function ProfileIdentityHeader({
         activeOpacity={0.88}
         accessibilityRole="button"
         accessibilityLabel={t("profileSettingsUi.changeProfilePhoto")}
-        style={[s.avatarRing, glow(18, 0.75)]}
+        style={s.avatarHit}
       >
-        <Image source={avatarSource} style={s.avatar} resizeMode="cover" />
+        <View style={s.avatarRing}>
+          <Image source={avatarSource} style={s.avatar} resizeMode="cover" />
+        </View>
         <View style={s.avatarCamera}>
           <Ionicons name={uploading ? "cloud-upload-outline" : "camera-outline"} size={14} color="#CFE0FF" />
         </View>
@@ -68,16 +81,31 @@ export function ProfileIdentityHeader({
           >
             {name}
           </Text>
-          <PillChip
-            label={isPro ? "PRO" : t("profileHub.getPro")}
-            active={isPro}
-            onPress={onProPress}
-            style={s.proPill}
-            textStyle={s.proPillText}
-            fontFamily={theme.semiBoldFont}
-            activeFontFamily={theme.boldFont ?? theme.semiBoldFont}
-            testID="profile-hub-pro-pill"
-          />
+          {showProPill ? (
+            <TouchableOpacity
+              onPress={onProPress}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="PRO"
+              testID="profile-hub-pro-pill"
+              style={[s.proPill, s.proPillPro]}
+            >
+              <LinearGradient
+                colors={[...PRO_PILL_COLORS]}
+                locations={[...PRO_PILL_LOCS]}
+                start={{ x: 0.05, y: 0.15 }}
+                end={{ x: 0.95, y: 0.85 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <Text
+                allowFontScaling={false}
+                numberOfLines={1}
+                style={[s.proPillText, { fontFamily: theme.oswaldMedium }]}
+              >
+                PRO
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         {email ? (
           <Text allowFontScaling={false} numberOfLines={1} style={[s.email, { fontFamily: theme.regularFont }]}>
@@ -108,6 +136,7 @@ export function ProfileHubTabs({ value, onChange }: { value: ProfileHubTab; onCh
       onChange={onChange}
       fontFamily={theme.mediumFont}
       activeFontFamily={theme.semiBoldFont}
+      variant="flat"
       style={s.tabs}
       accessibilityLabel={t("profileSettingsUi.profileEdit")}
     />
@@ -123,17 +152,24 @@ export function ProfileHubRow({
   subtitle,
   icon,
   iconModule,
+  iconImage,
   onPress,
   testID,
   tone = "default",
   trailing,
   value,
   compact,
+  /** Explicit row height (e.g. body measurements: 46 / 70). Overrides compact minHeight. */
+  rowHeight,
+  /** Outer vertical gap below the row (default 12 / compact 10). */
+  rowGap,
 }: {
   title: string;
   subtitle?: string;
   icon?: IconName;
   iconModule?: number;
+  /** Raster/PNG hub icons (preferred over Ionicons for profile menu). */
+  iconImage?: ImageSourcePropType;
   onPress?: () => void;
   testID?: string;
   tone?: "default" | "danger";
@@ -143,22 +179,42 @@ export function ProfileHubRow({
   value?: string;
   /** Shorter single-line row for value lists. */
   compact?: boolean;
+  rowHeight?: number;
+  rowGap?: number;
 }) {
   const { theme } = useContext(ThemeContext);
   const danger = tone === "danger";
   const iconColor = danger ? "#FF6B5E" : "#2F7BFF";
+  /** Tall body-measurement tiles: icon is ~60 (assets already include their own frame). */
+  const tall = rowHeight != null && rowHeight >= 70;
+  const iconPx = tall ? 60 : compact || rowHeight != null ? 24 : 30;
+  const sized =
+    rowHeight != null
+      ? tall
+        ? {
+            height: rowHeight,
+            minHeight: rowHeight,
+            paddingVertical: 0,
+            paddingHorizontal: 5,
+            borderRadius: 10,
+            gap: 10,
+          }
+        : {
+            height: rowHeight,
+            minHeight: rowHeight,
+            paddingVertical: 0,
+            borderRadius: 16,
+          }
+      : null;
   const body = (
-    <LinearGradient
-      colors={[PG.cardTop, PG.cardBottom]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={[s.rowCard, compact && s.rowCardCompact, danger && s.rowCardDanger]}
-    >
-      <View style={[s.rowIcon, compact && s.rowIconCompact]}>
-        {iconModule != null ? (
-          <LocalSvgAsset assetModule={iconModule} width={compact ? 24 : 30} height={compact ? 24 : 30} strokeColor={iconColor} />
+    <View style={[s.rowCard, compact && s.rowCardCompact, sized, danger && s.rowCardDanger]}>
+      <View style={[s.rowIcon, (compact || rowHeight != null) && s.rowIconCompact, tall && s.rowIconTall]}>
+        {iconImage != null ? (
+          <Image source={iconImage} style={{ width: iconPx, height: iconPx }} resizeMode="contain" />
+        ) : iconModule != null ? (
+          <LocalSvgAsset assetModule={iconModule} width={iconPx} height={iconPx} strokeColor={iconColor} />
         ) : icon ? (
-          <Ionicons name={icon} size={compact ? 24 : 30} color={iconColor} />
+          <Ionicons name={icon} size={iconPx} color={iconColor} />
         ) : null}
       </View>
       <View style={s.rowText}>
@@ -181,9 +237,15 @@ export function ProfileHubRow({
         </Text>
       ) : null}
       {trailing ?? (onPress ? <Ionicons name="chevron-forward" size={20} color={danger ? "#FF6B5E" : "#86A7D2"} /> : null)}
-    </LinearGradient>
+    </View>
   );
-  const outer = [s.rowOuter, compact && s.rowOuterCompact, glow(10, 0.35)];
+  const outer = [
+    s.rowOuter,
+    compact && s.rowOuterCompact,
+    tall && s.rowOuterTall,
+    rowHeight != null && rowHeight <= 50 && s.rowOuterCompact,
+    rowGap != null && { marginBottom: rowGap },
+  ];
   if (!onPress) return <View style={outer}>{body}</View>;
   return (
     <TouchableOpacity
@@ -327,16 +389,27 @@ export function PrivacyDataSection() {
 
 const s = StyleSheet.create({
   identityRow: { flexDirection: "row", alignItems: "center", gap: 16, marginTop: 4, marginBottom: 22 },
+  avatarHit: { width: 96, height: 96 },
   avatarRing: {
     width: 96,
     height: 96,
-    borderRadius: 48,
+    borderRadius: 100,
     borderWidth: 2,
-    borderColor: "rgba(0, 102, 255, 0.85)",
-    padding: 3,
+    borderColor: "#07256D",
+    overflow: "hidden",
     backgroundColor: PG.cardBottom,
+    // Figma: 0 0 10px #0048FF80
+    boxShadow: "0px 0px 10px 0px #0048FF80",
   },
-  avatar: { width: "100%", height: "100%", borderRadius: 999 },
+  /** Slightly oversized so the photo fills to the ring with no inner gap. */
+  avatar: {
+    position: "absolute",
+    width: 98.67,
+    height: 98.67,
+    top: -1.335,
+    left: -1.335,
+    borderRadius: 100,
+  },
   avatarCamera: {
     position: "absolute",
     right: -2,
@@ -353,12 +426,28 @@ const s = StyleSheet.create({
   identityText: { flex: 1, minWidth: 0, gap: 4 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   name: { flexShrink: 1, fontSize: 22, color: "#FFFFFF" },
-  proPill: { paddingHorizontal: 12, height: 26 },
-  proPillText: { fontSize: 12, letterSpacing: 1.2 },
+  proPill: {
+    height: 26,
+    borderRadius: 999,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    // Figma: inset #35C7FF + outer #0015D4
+    boxShadow: "0px 0px 16px 0px #35C7FF inset, 0px 0px 15px 0px #0015D4",
+  },
+  proPillPro: { paddingHorizontal: 10, minWidth: 48 },
+  proPillGet: { paddingHorizontal: 10, minWidth: 72 },
+  proPillText: {
+    zIndex: 1,
+    color: "#FFFFFF",
+    fontSize: 11,
+    letterSpacing: 1.1, // 10% of 11px
+  },
   email: { fontSize: 14, color: "#86A7D2" },
   tabs: { marginBottom: 16 },
-  rowOuter: { borderRadius: 24, marginBottom: 12 },
+  rowOuter: { borderRadius: 24, marginBottom: 12, overflow: "hidden" },
   rowOuterCompact: { borderRadius: 20, marginBottom: 10 },
+  rowOuterTall: { borderRadius: 10, marginBottom: 10 },
   rowCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -369,10 +458,19 @@ const s = StyleSheet.create({
     paddingRight: 14,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: PG.border,
+    borderColor: "#07256D",
+    backgroundColor: "#030A17",
+    boxShadow: "0px 0px 30px 0px #0048FF80 inset",
   },
   rowCardCompact: { minHeight: 58, paddingVertical: 10, borderRadius: 20 },
   rowIconCompact: { width: 30 },
+  /** Tall-tile icon slot — assets already include their frame; no extra border. */
+  rowIconTall: {
+    width: 60,
+    height: 60,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   rowValue: { fontSize: 15, color: "#FFFFFF", marginLeft: 8 },
   rowCardDanger: { borderColor: "rgba(255, 107, 94, 0.45)" },
   rowIcon: { width: 40, alignItems: "center", justifyContent: "center" },

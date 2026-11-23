@@ -18,7 +18,7 @@ const colors = {
   pinkMuted: 'rgba(233, 30, 140, .4)'
 }
 
-/** Loaded in `App.tsssx` via `@expo-google-fonts/inter` — names must match `useFonts` keys. */
+/** Loaded in `App.tsx` via `@expo-google-fonts/*` — names must match `useFonts` keys. */
 const fonts = {
   ultraLightFont: 'Inter_100Thin',
   thinFont: 'Inter_200ExtraLight',
@@ -29,6 +29,7 @@ const fonts = {
   boldFont: 'Inter_700Bold',
   blackFont: 'Inter_800ExtraBold',
   ultraBlackFont: 'Inter_900Black',
+  oswaldMedium: 'Oswald_500Medium',
 }
 
 const lightTheme = {

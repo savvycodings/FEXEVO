@@ -92,6 +92,16 @@ const MENU_SVG = {
   game: require("../../assets/youpage/gamesettingsicon.svg"),
 } as const;
 
+/** Profile hub row icons (Figma PNGs). */
+const HUB_ICONS = {
+  personal: require("../../assets/aicoach/profile-hub/icon-personal-info.png"),
+  body: require("../../assets/aicoach/profile-hub/icon-body-measurements.png"),
+  racket: require("../../assets/aicoach/profile-hub/icon-racket-info.png"),
+  calibration: require("../../assets/aicoach/profile-hub/icon-athlete-calibration.png"),
+  privacy: require("../../assets/aicoach/profile-hub/icon-privacy-data.png"),
+  account: require("../../assets/aicoach/profile-hub/icon-account.png"),
+} as const;
+
 const SHARE_BUTTON_SVG = require("../../assets/actiities/sharebutton.svg");
 const BIRTHDAY_ICON_SVG = require("../../assets/actiities/birthday.svg");
 const LOCATION_PIN_ICON_SVG = require("../../assets/actiities/location.svg");
@@ -235,6 +245,8 @@ function SubsectionFooter({
   primaryTestID = TEST_IDS.settingsSave,
   primaryIcon,
   primaryArrow,
+  primaryVariant = "default",
+  hideBack = false,
 }: {
   onBack: () => void;
   primaryLabel?: string;
@@ -244,13 +256,19 @@ function SubsectionFooter({
   primaryTestID?: string;
   primaryIcon?: React.ComponentProps<typeof Ionicons>["name"];
   primaryArrow?: boolean;
+  /** `accent` = vivid blue CTA (Save Measurements / Start Scan). */
+  primaryVariant?: "default" | "accent";
+  /** Full-width primary only (body Save / Start Scan). */
+  hideBack?: boolean;
 }) {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const styles = getStyles(theme);
   return (
     <View style={styles.subsectionFooterRow}>
-      <SurfaceIconButton icon="chevron-back" onPress={onBack} accessibilityLabel={t("common.goBack")} />
+      {hideBack ? null : (
+        <SurfaceIconButton icon="chevron-back" onPress={onBack} accessibilityLabel={t("common.goBack")} />
+      )}
       {onPrimary ? (
         <GlowButton
           label={primaryLoading ? "Saving..." : primaryLabel ?? ""}
@@ -259,6 +277,7 @@ function SubsectionFooter({
           disabled={primaryDisabled || primaryLoading}
           leadingIcon={primaryIcon}
           arrow={primaryArrow}
+          variant={primaryVariant}
           style={styles.subsectionPrimaryButton}
         />
       ) : (
@@ -2132,6 +2151,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   primaryDisabled={bodySavingNow}
                   primaryLoading={bodySavingNow}
                   primaryTestID="body-save"
+                  primaryVariant="accent"
+                  hideBack
                 />
               )}
             />
@@ -2289,42 +2310,42 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             <ProfileHubRow
               title={t("profileHub.personalInfo")}
               subtitle={t("profileHub.personalInfoSub")}
-              iconModule={MENU_SVG.personal}
+              iconImage={HUB_ICONS.personal}
               onPress={() => setActiveSection("personal")}
               testID={TEST_IDS.settingsSection("personal")}
             />
             <ProfileHubRow
               title={t("profileHub.bodyMeasurements")}
               subtitle={t("profileHub.bodyMeasurementsSub")}
-              icon="body-outline"
+              iconImage={HUB_ICONS.body}
               onPress={() => openBodyMeasurements()}
               testID={TEST_IDS.settingsSection("body")}
             />
             <ProfileHubRow
               title={t("profileHub.racketInfo")}
               subtitle={t("profileHub.racketInfoSub")}
-              icon="tennisball-outline"
+              iconImage={HUB_ICONS.racket}
               onPress={() => setActiveSection("racket")}
               testID={TEST_IDS.settingsSection("racket")}
             />
             <ProfileHubRow
               title={t("profileHub.athleteCalibration")}
               subtitle={t("profileHub.athleteCalibrationSub")}
-              icon="trophy-outline"
+              iconImage={HUB_ICONS.calibration}
               onPress={() => setActiveSection("calibration")}
               testID={TEST_IDS.settingsSection("calibration")}
             />
             <ProfileHubRow
               title={t("profileHub.privacyData")}
               subtitle={t("profileHub.privacyDataSub")}
-              icon="shield-checkmark-outline"
+              iconImage={HUB_ICONS.privacy}
               onPress={() => setActiveSection("privacy")}
               testID={TEST_IDS.settingsSection("privacy")}
             />
             <ProfileHubRow
               title={t("profileSettingsUi.account")}
               subtitle={t("profileSettingsUi.accountSub")}
-              iconModule={MENU_SVG.account}
+              iconImage={HUB_ICONS.account}
               onPress={() => setActiveSection("account")}
               testID={TEST_IDS.settingsSection("account")}
             />

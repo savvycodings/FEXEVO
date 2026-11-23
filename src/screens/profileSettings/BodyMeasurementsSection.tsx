@@ -94,20 +94,38 @@ export const RANGE_CM: Record<SingleKey | PairKey, { min: number; max: number }>
   calfCirc: { min: 25, max: 60 },
 };
 
-const ROWS: { key: EditKey; icon: IconName; pair?: boolean }[] = [
-  { key: "height", icon: "resize-outline" },
-  { key: "weight", icon: "speedometer-outline" },
-  { key: "wingspan", icon: "swap-horizontal-outline" },
-  { key: "shoulder", icon: "accessibility-outline" },
-  { key: "chest", icon: "ellipse-outline" },
+const MEAS_ICONS = {
+  height: require("../../../assets/aicoach/profile-hub/measurements/icon-height.png"),
+  weight: require("../../../assets/aicoach/profile-hub/measurements/icon-weight.png"),
+  wingspan: require("../../../assets/aicoach/profile-hub/measurements/icon-wingspan.png"),
+  shoulder: require("../../../assets/aicoach/profile-hub/measurements/icon-shoulder.png"),
+  chest: require("../../../assets/aicoach/profile-hub/measurements/icon-chest.png"),
+  hip: require("../../../assets/aicoach/profile-hub/measurements/icon-hip.png"),
+  arm: require("../../../assets/aicoach/profile-hub/measurements/icon-arm.png"),
+  upperArm: require("../../../assets/aicoach/profile-hub/measurements/icon-upper-arm.png"),
+  forearm: require("../../../assets/aicoach/profile-hub/measurements/icon-forearm.png"),
+  hand: require("../../../assets/aicoach/profile-hub/measurements/icon-hand.png"),
+  upperLeg: require("../../../assets/aicoach/profile-hub/measurements/icon-thigh.png"),
+  lowerLeg: require("../../../assets/aicoach/profile-hub/measurements/icon-lower-leg.png"),
+} as const;
+
+/** First three rows are short (46); remaining length rows are taller (70). */
+const SHORT_KEYS = new Set<EditKey>(["height", "weight", "wingspan"]);
+
+const ROWS: { key: EditKey; icon?: IconName; iconImage?: number; pair?: boolean }[] = [
+  { key: "height", iconImage: MEAS_ICONS.height },
+  { key: "weight", iconImage: MEAS_ICONS.weight },
+  { key: "wingspan", iconImage: MEAS_ICONS.wingspan },
+  { key: "shoulder", iconImage: MEAS_ICONS.shoulder },
+  { key: "chest", iconImage: MEAS_ICONS.chest },
   { key: "torso", icon: "shirt-outline" },
-  { key: "hip", icon: "git-compare-outline" },
-  { key: "arm", icon: "git-branch-outline", pair: true },
-  { key: "upperArm", icon: "barbell-outline", pair: true },
-  { key: "forearm", icon: "fitness-outline", pair: true },
-  { key: "hand", icon: "hand-left-outline", pair: true },
-  { key: "upperLeg", icon: "walk-outline", pair: true },
-  { key: "lowerLeg", icon: "footsteps-outline", pair: true },
+  { key: "hip", iconImage: MEAS_ICONS.hip },
+  { key: "arm", iconImage: MEAS_ICONS.arm, pair: true },
+  { key: "upperArm", iconImage: MEAS_ICONS.upperArm, pair: true },
+  { key: "forearm", iconImage: MEAS_ICONS.forearm, pair: true },
+  { key: "hand", iconImage: MEAS_ICONS.hand, pair: true },
+  { key: "upperLeg", iconImage: MEAS_ICONS.upperLeg, pair: true },
+  { key: "lowerLeg", iconImage: MEAS_ICONS.lowerLeg, pair: true },
 ];
 
 function isPairKey(k: EditKey): k is PairKey {
@@ -279,7 +297,7 @@ export function BodyMeasurementsSection({
       </Text>
 
       <SegmentedPills<"manual" | "scan">
-        size="lg"
+        variant="flat"
         options={[
           { key: "manual", label: t("profileHub.manualInput"), testID: "body-mode-manual" },
           { key: "scan", label: t("profileHub.scan3d"), testID: "body-mode-scan" },
@@ -296,6 +314,7 @@ export function BodyMeasurementsSection({
       ) : (
         <>
           <SegmentedPills<System>
+            variant="flat"
             role="radio"
             options={[
               { key: "metric", label: t("profileHub.unitMetric"), testID: "body-units-metric" },
@@ -320,6 +339,9 @@ export function BodyMeasurementsSection({
               key={row.key}
               compact
               icon={row.icon}
+              iconImage={row.iconImage}
+              rowHeight={SHORT_KEYS.has(row.key) ? 46 : 70}
+              rowGap={5}
               title={t(`profileHub.m_${row.key}`)}
               value={displayValue(row.key)}
               onPress={() => setEditing(row.key)}
@@ -377,11 +399,19 @@ const SCAN_ART: Record<ScanView, number> = {
 const SCAN_ART_ASPECT = 640 / 1030;
 type ScanView = "front" | "side" | "back";
 
-const SCAN_TIPS: { key: string; icon: IconName }[] = [
-  { key: "Light", icon: "scan-outline" },
-  { key: "Clothing", icon: "flash-outline" },
-  { key: "Guide", icon: "bulb-outline" },
-  { key: "Phone", icon: "phone-portrait-outline" },
+/** Tip icons match the Figma tip list order (viewfinder / bolt / bulb / phone). */
+const SCAN_TIP_ICONS = {
+  Light: require("../../../assets/aicoach/profile-hub/scan-tips/icon-guide.png"),
+  Clothing: require("../../../assets/aicoach/profile-hub/scan-tips/icon-clothing.png"),
+  Guide: require("../../../assets/aicoach/profile-hub/scan-tips/icon-light.png"),
+  Phone: require("../../../assets/aicoach/profile-hub/scan-tips/icon-phone.png"),
+} as const;
+
+const SCAN_TIPS: { key: keyof typeof SCAN_TIP_ICONS }[] = [
+  { key: "Light" },
+  { key: "Clothing" },
+  { key: "Guide" },
+  { key: "Phone" },
 ];
 
 function BodyScanPanel({
@@ -396,6 +426,7 @@ function BodyScanPanel({
   return (
     <View>
       <SegmentedPills<ScanView>
+        variant="flat"
         options={[
           { key: "front", label: t("profileHub.scanFront"), testID: "scan-view-front" },
           { key: "side", label: t("profileHub.scanSide"), testID: "scan-view-side" },
@@ -422,21 +453,16 @@ function BodyScanPanel({
         ))}
       </View>
 
-      <LinearGradient
-        colors={[PG.cardTop, PG.cardBottom]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={[st.tipsCard, glow(10, 0.3)]}
-      >
+      <View style={st.tipsCard} testID="scan-tips">
         {SCAN_TIPS.map((tip) => (
-          <View key={tip.key} style={st.tipRow}>
-            <Ionicons name={tip.icon} size={24} color="#2F7BFF" />
+          <View key={tip.key} style={st.tipRow} testID={`scan-tip-${tip.key.toLowerCase()}`}>
+            <Image source={SCAN_TIP_ICONS[tip.key]} style={st.tipIcon} resizeMode="contain" />
             <Text allowFontScaling={false} style={[st.tipText, { fontFamily: theme.regularFont }]}>
               {t(`profileHub.scanTip${tip.key}`)}
             </Text>
           </View>
         ))}
-      </LinearGradient>
+      </View>
 
       {notice ? (
         <Text allowFontScaling={false} style={[st.notice, { fontFamily: theme.mediumFont }]}>
@@ -668,15 +694,19 @@ const st = StyleSheet.create({
   corner_tr: { top: 14, right: 14, borderTopWidth: 2, borderRightWidth: 2, borderTopRightRadius: 10 },
   corner_bl: { bottom: 14, left: 14, borderBottomWidth: 2, borderLeftWidth: 2, borderBottomLeftRadius: 10 },
   corner_br: { bottom: 14, right: 14, borderBottomWidth: 2, borderRightWidth: 2, borderBottomRightRadius: 10 },
+  /** Single tips panel — flat fill, no gradient; icons have no extra chrome. */
   tipsCard: {
     marginTop: 14,
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: PG.border,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
+    borderColor: "#07256D",
+    backgroundColor: "#030A17",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 4,
   },
-  tipRow: { flexDirection: "row", alignItems: "center", gap: 16, paddingVertical: 10 },
+  tipRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 8 },
+  tipIcon: { width: 28, height: 28 },
   tipText: { flex: 1, fontSize: 15, color: "#FFFFFF" },
   overlay: { flex: 1, backgroundColor: "rgba(1, 7, 25, 0.78)", justifyContent: "center", paddingHorizontal: 18 },
   modalCard: { borderRadius: 24, borderWidth: 1, borderColor: PG.border, padding: 18, gap: 14 },

@@ -61,7 +61,8 @@ export function PrimaryFill({ radius }: { radius?: number }) {
   )
 }
 
-/** Primary action: `#A9D8FF → #4DA6FF` vertical gradient with a dark navy label, optional arrow badge on the right. */
+/** Primary action: `#A9D8FF → #4DA6FF` vertical gradient with a dark navy label, optional arrow badge on the right.
+ *  `variant="accent"`: vivid `#00BBFF → #0022FF` diagonal fill + multi-shadow (Save Measurements / Start Scan). */
 export function GlowButton({
   label,
   onPress,
@@ -75,6 +76,7 @@ export function GlowButton({
   height = UI.buttonHeight,
   radius = UI.btnRadius,
   paddingX = UI.btnPaddingX,
+  variant = 'default',
 }: BaseProps & {
   arrow?: boolean
   /** Icon in a dark circle on the left (e.g. `play` for "See the Correct Movement"). */
@@ -82,9 +84,12 @@ export function GlowButton({
   height?: number
   /** Corner radius; pass `UI.radiusPill` (or height / 2) for a pill. */
   radius?: number
+  variant?: 'default' | 'accent'
 }) {
   const { theme } = useContext(ThemeContext)
   const inactive = disabled || loading
+  const accent = variant === 'accent'
+  const labelColor = accent ? '#FFFFFF' : UI.btnPrimaryText
   return (
     <TouchableOpacity
       activeOpacity={0.88}
@@ -94,23 +99,34 @@ export function GlowButton({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
-      style={[styles.outer, { height, borderRadius: radius }, disabled && styles.disabled, style]}
+      style={[
+        styles.outer,
+        { height, borderRadius: radius },
+        accent && styles.outerAccent,
+        disabled && styles.disabled,
+        style,
+      ]}
     >
       <LinearGradient
-        colors={UI.btnPrimaryGradient}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={[styles.fill, { paddingHorizontal: leadingIcon ? 56 : paddingX, borderRadius: radius }]}
+        colors={accent ? [...UI.gradient] : [...UI.btnPrimaryGradient]}
+        locations={accent ? [...UI.gradientLocations] : undefined}
+        start={accent ? UI.gradientStart : { x: 0.5, y: 0 }}
+        end={accent ? UI.gradientEnd : { x: 0.5, y: 1 }}
+        style={[
+          styles.fill,
+          accent && styles.fillAccent,
+          { paddingHorizontal: leadingIcon ? 56 : paddingX, borderRadius: radius },
+        ]}
       >
         {loading ? (
-          <ActivityIndicator color={UI.btnPrimaryText} />
+          <ActivityIndicator color={labelColor} />
         ) : (
           <Text
             allowFontScaling={false}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.72}
-            style={[styles.label, styles.primaryLabel, { fontFamily: theme.semiBoldFont }]}
+            style={[styles.label, styles.primaryLabel, { color: labelColor, fontFamily: theme.semiBoldFont }]}
           >
             {label}
           </Text>
@@ -218,6 +234,11 @@ const styles = StyleSheet.create({
     borderRadius: UI.btnRadius,
     overflow: 'hidden',
   },
+  /** Figma: inset #35C7FF + outer #00B8FF / #0015D4 — overflow visible so outer glow paints. */
+  outerAccent: {
+    overflow: 'visible',
+    boxShadow: '0px 0px 16px 0px #35C7FF inset, 0px 0px 10px 0px #00B8FF, 0px 0px 15px 0px #0015D4',
+  },
   fill: {
     flex: 1,
     borderRadius: UI.btnRadius,
@@ -225,6 +246,9 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  fillAccent: {
+    overflow: 'hidden',
   },
   label: {
     color: UI.btnSecondaryText,
