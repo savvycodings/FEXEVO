@@ -61,6 +61,8 @@ import {
   type ProfileHubTab,
 } from "./profileSettings/ProfileHubParts";
 import { BodyMeasurementsSection } from "./profileSettings/BodyMeasurementsSection";
+import { BodyScanCaptureFlow } from "./profileSettings/BodyScanCaptureFlow";
+import { BodyScanIntroSection } from "./profileSettings/BodyScanIntroSection";
 import { EliteLabSection } from "./profileSettings/EliteLabSection";
 import { HowToMeasureSection } from "./profileSettings/HowToMeasureSection";
 import { BasicInfoSection, type BasicInfoChanges } from "./profileSettings/BasicInfoSection";
@@ -380,7 +382,23 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     return null;
   }, [data.profile?.birthDate, birthDayInput, birthMonthInput, birthYearInput]);
   const [activeSection, setActiveSection] = useState<
-    "personal" | "account" | "location" | "game" | "body" | "racket" | "calibration" | "howToMeasure" | "basicInfo" | "elite" | "privacy" | WizardStep | "review" | "manualDone" | null
+    | "personal"
+    | "account"
+    | "location"
+    | "game"
+    | "body"
+    | "racket"
+    | "calibration"
+    | "howToMeasure"
+    | "basicInfo"
+    | "elite"
+    | "privacy"
+    | WizardStep
+    | "review"
+    | "manualDone"
+    | "bodyScanIntro"
+    | "bodyScanCapture"
+    | null
   >(null);
   /** Manual calibration wizard values (device-only until the backend stores them). */
   const [wizExtras, setWizExtras] = useState<Extras>(EMPTY_EXTRAS);
@@ -406,6 +424,10 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     mode: "manual",
     from: "hub",
   });
+  /** TEMP: start capture flow on rotate / processing / model view via skip links. Remove before shipping. */
+  const [scanCaptureInitialPhase, setScanCaptureInitialPhase] = useState<
+    "capture" | "rotate" | "processing" | "modelView" | "complete"
+  >("capture");
   /** Game Settings is two steps: player details (hand, side, height, weight), then level. */
   const [gameStep, setGameStep] = useState<"details" | "level">("details");
   const [handInput, setHandInput] = useState<Side | null>(null);
@@ -1113,6 +1135,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     circ: t(STEP_TITLE.circ),
     review: t("profileHub.reviewTitle"),
     manualDone: t("profileHub.doneHeading"),
+    bodyScanIntro: t("profileHub.calScanTitle"),
+    bodyScanCapture: t("profileHub.scanCaptureTitle_front"),
     privacy: t("profileHub.privacyData"),
   };
   const currentTitle = activeSection ? sectionTitleMap[activeSection] : t("profileSettingsUi.profileEdit");
@@ -2107,6 +2131,8 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     activeSection === "circ" ||
     activeSection === "review" ||
     activeSection === "manualDone" ||
+    activeSection === "bodyScanIntro" ||
+    activeSection === "bodyScanCapture" ||
     activeSection === "privacy"
   ) {
     const WIZARD_BACK = { upper: "basicInfo", lower: "upper", circ: "lower", review: "circ", manualDone: null } as const;
@@ -2116,14 +2142,59 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           ? "calibration"
           : activeSection === "basicInfo"
             ? "howToMeasure"
-            : activeSection in WIZARD_BACK
-              ? WIZARD_BACK[activeSection as keyof typeof WIZARD_BACK]
-            : activeSection === "body" && bodyEntry.from === "calibration"
-              ? bodyEntry.mode === "manual"
-                ? "basicInfo"
-                : "calibration"
-              : null
+            : activeSection === "bodyScanIntro"
+              ? "calibration"
+              : activeSection === "bodyScanCapture"
+                ? "bodyScanIntro"
+                : activeSection in WIZARD_BACK
+                  ? WIZARD_BACK[activeSection as keyof typeof WIZARD_BACK]
+                  : activeSection === "body" && bodyEntry.from === "calibration"
+                    ? bodyEntry.mode === "manual"
+                      ? "basicInfo"
+                      : "calibration"
+                    : null
       );
+    const openScanCapture = () => {
+      setBodyEntry((e) => ({ ...e, mode: "scan", from: "calibration" }));
+      setScanCaptureInitialPhase("capture");
+      setActiveSection("bodyScanCapture");
+    };
+    /** TEMP: skip Front→Left photos and land on the rotate screen. Remove before shipping. */
+    const openScanRotateSkip = () => {
+      setBodyEntry((e) => ({ ...e, mode: "scan", from: "calibration" }));
+      setScanCaptureInitialPhase("rotate");
+      setActiveSection("bodyScanCapture");
+    };
+    /** TEMP: open static Processing UI. Remove before shipping. */
+    const openScanProcessingSkip = () => {
+      setBodyEntry((e) => ({ ...e, mode: "scan", from: "calibration" }));
+      setScanCaptureInitialPhase("processing");
+      setActiveSection("bodyScanCapture");
+    };
+    /** TEMP: open static 3D Model View. Remove before shipping. */
+    const openScanModelViewSkip = () => {
+      setBodyEntry((e) => ({ ...e, mode: "scan", from: "calibration" }));
+      setScanCaptureInitialPhase("modelView");
+      setActiveSection("bodyScanCapture");
+    };
+    const leaveScanCapture = () => {
+      setBodyEntry((e) => ({ ...e, mode: "scan", from: "calibration" }));
+      setScanCaptureInitialPhase("capture");
+      setActiveSection("bodyScanIntro");
+    };
+    /** Finish from Measurements Results → Calibration Complete. */
+    const finishScanResults = () => {
+      setScanCaptureInitialPhase("complete");
+      setActiveSection("bodyScanCapture");
+    };
+    const goScanCompleteProfile = () => {
+      setScanCaptureInitialPhase("capture");
+      setActiveSection(null);
+    };
+    const goScanCompleteElite = () => {
+      setScanCaptureInitialPhase("capture");
+      setActiveSection("elite");
+    };
     return (
       <View style={styles.screenRoot}>
         {profileChromeHeader}
@@ -2137,8 +2208,21 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           showsVerticalScrollIndicator={false}
           bottomOffset={insets.bottom + 12}
         >
-          <ProfileHubTitleBar title={currentTitle} onBack={backToHub} />
-          {activeSection === "body" ? (
+          {activeSection === "bodyScanCapture" ? null : (
+            <ProfileHubTitleBar title={currentTitle} onBack={backToHub} />
+          )}
+          {activeSection === "bodyScanCapture" ? (
+            <BodyScanCaptureFlow
+              key={scanCaptureInitialPhase}
+              initialPhase={scanCaptureInitialPhase}
+              onBack={leaveScanCapture}
+              onDone={leaveScanCapture}
+              profile={data.profile ?? {}}
+              onFinishResults={finishScanResults}
+              onGoProfile={goScanCompleteProfile}
+              onViewElite={goScanCompleteElite}
+            />
+          ) : activeSection === "body" ? (
             <BodyMeasurementsSection
               key={bodyEntry.mode}
               initialMode={bodyEntry.mode}
@@ -2147,6 +2231,10 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               initialExtras={data.profile?.bodyMeasurements ?? null}
               onExtrasSaved={() => void loadRemote()}
               onSaveRemote={saveBodyToAccount}
+              onStartCapture={openScanCapture}
+              onSkipPostPhotos={openScanRotateSkip}
+              onSkipProcessing={openScanProcessingSkip}
+              onSkipModelView={openScanModelViewSkip}
               renderFooter={({ label, onPress, saving: bodySavingNow }) => (
                 <SubsectionFooter
                   onBack={backToHub}
@@ -2165,7 +2253,27 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           ) : activeSection === "calibration" ? (
             <CalibrationChooser
               onManual={() => setActiveSection("howToMeasure")}
-              onScan={() => openBodyMeasurements("scan", "calibration")}
+              onScan={() => {
+                setBodyEntry({ mode: "scan", from: "calibration" });
+                setActiveSection("bodyScanIntro");
+              }}
+            />
+          ) : activeSection === "bodyScanIntro" ? (
+            <BodyScanIntroSection
+              onSkipPostPhotos={openScanRotateSkip}
+              onSkipProcessing={openScanProcessingSkip}
+              onSkipModelView={openScanModelViewSkip}
+              footer={
+                <SubsectionFooter
+                  onBack={backToHub}
+                  primaryLabel={t("profileHub.getStarted")}
+                  onPrimary={openScanCapture}
+                  primaryArrow
+                  primaryVariant="accent"
+                  primaryTestID="scan-intro-start"
+                  hideBack
+                />
+              }
             />
           ) : activeSection === "howToMeasure" ? (
             <HowToMeasureSection
@@ -2247,22 +2355,14 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
             />
           ) : activeSection === "manualDone" ? (
             <ManualComplete
-              onScan={() => openBodyMeasurements("scan", "calibration")}
+              onScan={() => {
+                setBodyEntry({ mode: "scan", from: "calibration" });
+                setActiveSection("bodyScanIntro");
+              }}
               onFinish={() => setActiveSection(null)}
             />
           ) : activeSection === "elite" ? (
-            <EliteLabSection
-              renderFooter={({ label, onPress, disabled, icon }) => (
-                <SubsectionFooter
-                  onBack={backToHub}
-                  primaryLabel={label}
-                  onPrimary={onPress}
-                  primaryDisabled={disabled}
-                  primaryIcon={icon}
-                  primaryTestID="elite-primary"
-                />
-              )}
-            />
+            <EliteLabSection />
           ) : (
             <>
               <PrivacyDataSection />

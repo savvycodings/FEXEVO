@@ -190,6 +190,10 @@ export function BodyMeasurementsSection({
   initialExtras,
   onSaveRemote,
   onExtrasSaved,
+  onStartCapture,
+  onSkipPostPhotos,
+  onSkipProcessing,
+  onSkipModelView,
   renderFooter,
 }: {
   /** Which tab to open on (Athlete Calibration links straight to 3D Scan). */
@@ -202,6 +206,14 @@ export function BodyMeasurementsSection({
   onExtrasSaved?: () => void;
   /** Saves height / weight to the account; resolves to an error message or null. */
   onSaveRemote: (changes: { heightCm?: number; weightKg?: number }) => Promise<string | null>;
+  /** Opens the Front → Right → Back → Left capture flow. */
+  onStartCapture?: () => void;
+  /** TEMP session helper: skip capture and open the rotate screen. Remove before shipping. */
+  onSkipPostPhotos?: () => void;
+  /** TEMP session helper: open static Processing UI. Remove before shipping. */
+  onSkipProcessing?: () => void;
+  /** TEMP session helper: open static 3D Model View. Remove before shipping. */
+  onSkipModelView?: () => void;
   /** Screen-owned footer (back + primary) so this matches the other Profile Edit sections. */
   renderFooter: (args: { label: string; onPress: () => void; saving: boolean; disabled?: boolean }) => React.ReactNode;
 }) {
@@ -313,7 +325,13 @@ export function BodyMeasurementsSection({
       />
 
       {mode === "scan" ? (
-        <BodyScanPanel renderFooter={renderFooter} />
+        <BodyScanPanel
+          renderFooter={renderFooter}
+          onStartCapture={onStartCapture}
+          onSkipPostPhotos={onSkipPostPhotos}
+          onSkipProcessing={onSkipProcessing}
+          onSkipModelView={onSkipModelView}
+        />
       ) : (
         <>
           <SegmentedPills<System>
@@ -393,11 +411,11 @@ export function BodyMeasurementsSection({
   );
 }
 
-/** Hologram guide per view. Side / back art is not drawn yet, so they reuse the front figure. */
+/** Hologram guide per view on the tips panel (side uses right profile art). */
 const SCAN_ART: Record<ScanView, number> = {
   front: require("../../../assets/bodyscan/front.png"),
-  side: require("../../../assets/bodyscan/front.png"),
-  back: require("../../../assets/bodyscan/front.png"),
+  side: require("../../../assets/bodyscan/right.png"),
+  back: require("../../../assets/bodyscan/back.png"),
 };
 /** Figma frames — hologram 370×624, tips tile 370×183. */
 const SCAN_ART_ASPECT = 370 / 624;
@@ -423,13 +441,23 @@ const SCAN_TIPS: { key: keyof typeof SCAN_TIP_ICONS }[] = [
 
 function BodyScanPanel({
   renderFooter,
+  onStartCapture,
+  onSkipPostPhotos,
+  onSkipProcessing,
+  onSkipModelView,
 }: {
   renderFooter: (args: { label: string; onPress: () => void; saving: boolean; disabled?: boolean }) => React.ReactNode;
+  onStartCapture?: () => void;
+  /** TEMP session helper — remove before shipping. */
+  onSkipPostPhotos?: () => void;
+  /** TEMP session helper — remove before shipping. */
+  onSkipProcessing?: () => void;
+  /** TEMP session helper — remove before shipping. */
+  onSkipModelView?: () => void;
 }) {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const [view, setView] = useState<ScanView>("front");
-  const [notice, setNotice] = useState(false);
   return (
     <View>
       <SegmentedPills<ScanView>
@@ -449,13 +477,6 @@ function BodyScanPanel({
       <View style={st.scanStage}>
         <View style={st.artCard} testID="scan-art">
           <Image source={SCAN_ART[view]} style={st.artImage} resizeMode="contain" />
-          {view !== "front" ? (
-            <View style={st.artBadge}>
-              <Text allowFontScaling={false} style={[st.artBadgeText, { fontFamily: theme.mediumFont }]}>
-                {t("profileHub.scanArtPending")}
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         <View style={st.tipsCard} testID="scan-tips">
@@ -470,12 +491,50 @@ function BodyScanPanel({
         </View>
       </View>
 
-      {notice ? (
-        <Text allowFontScaling={false} style={[st.notice, { fontFamily: theme.mediumFont }]}>
-          {t("profileHub.scanSoonNotice")}
-        </Text>
+      {renderFooter({
+        label: t("profileHub.startScan"),
+        onPress: () => onStartCapture?.(),
+        saving: false,
+        disabled: !onStartCapture,
+      })}
+
+      {/* TEMP: skip helpers while building later steps. Remove before shipping. */}
+      {onSkipPostPhotos ? (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={onSkipPostPhotos}
+          style={st.tempSkipBtn}
+          testID="scan-skip-post-photos"
+        >
+          <Text allowFontScaling={false} style={[st.tempSkipText, { fontFamily: theme.mediumFont }]}>
+            Post photos
+          </Text>
+        </TouchableOpacity>
       ) : null}
-      {renderFooter({ label: t("profileHub.startScan"), onPress: () => setNotice(true), saving: false })}
+      {onSkipProcessing ? (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={onSkipProcessing}
+          style={st.tempSkipBtn}
+          testID="scan-skip-processing"
+        >
+          <Text allowFontScaling={false} style={[st.tempSkipText, { fontFamily: theme.mediumFont }]}>
+            Processing
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+      {onSkipModelView ? (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={onSkipModelView}
+          style={st.tempSkipBtn}
+          testID="scan-skip-model-view"
+        >
+          <Text allowFontScaling={false} style={[st.tempSkipText, { fontFamily: theme.mediumFont }]}>
+            3D Model View
+          </Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -718,6 +777,18 @@ const st = StyleSheet.create({
   },
   tipIcon: { width: 24, height: 24, flexShrink: 0 },
   tipText: { flex: 1, fontSize: 14, lineHeight: 18, color: "#FFFFFF" },
+  // TEMP session skip — remove with onSkipPostPhotos before shipping.
+  tempSkipBtn: {
+    alignSelf: "center",
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  tempSkipText: {
+    fontSize: 14,
+    color: "#86A7D2",
+    textDecorationLine: "underline",
+  },
   overlay: { flex: 1, backgroundColor: "rgba(1, 7, 25, 0.78)", justifyContent: "center", paddingHorizontal: 18 },
   modalCard: { borderRadius: 24, borderWidth: 1, borderColor: PG.border, padding: 18, gap: 14 },
   modalHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
