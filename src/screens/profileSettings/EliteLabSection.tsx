@@ -8,7 +8,12 @@ import { useSessionData } from "../../context/SessionDataContext";
 import type { ActivitySession } from "../../lib/activitySession";
 import { PG, glow } from "../progress/progressTheme";
 
-const PLAYER_ART = require("../../../assets/elite/player.jpg");
+const PLAYER_ART = require("../../../assets/elite/unlock-metrics.jpg");
+const LOCK_ICON = require("../../../assets/elite/lock.png");
+const ACCESS_LOCK = require("../../../assets/elite/access-lock.png");
+
+const GRADIENT_BORDER = ["#00B8FF", "#FFFFFF", "#00B8FF", "#87DEFF"] as const;
+const GRADIENT_LOCS = [0.2163, 0.5, 0.7885, 1] as const;
 
 /**
  * Elite thresholds. Provisional product numbers from the design, kept in one place so they are
@@ -46,7 +51,6 @@ export function computeEliteProgress(activities: ActivitySession[], now = Date.n
     .filter((a) => Number.isFinite(a.at))
     .sort((x, y) => y.at - x.at);
 
-  // The window is the last N days; uploads and active days only count inside it.
   const windowStart = now - ELITE_RULES.qualificationDays * DAY_MS;
   const inWindow = valid.filter((a) => a.at >= windowStart);
   const first = inWindow.length ? inWindow[inWindow.length - 1].at : null;
@@ -72,11 +76,7 @@ export function computeEliteProgress(activities: ActivitySession[], now = Date.n
   return { ...p, unlocked };
 }
 
-export function EliteLabSection({
-  renderFooter,
-}: {
-  renderFooter: (args: { label: string; onPress: () => void; disabled?: boolean; icon?: "lock-closed" }) => React.ReactNode;
-}) {
+export function EliteLabSection() {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const { activities, activitiesLoading } = useSessionData();
@@ -116,37 +116,38 @@ export function EliteLabSection({
   ];
 
   return (
-    <View style={{ gap: 16 }}>
-      {/* Status */}
+    <View style={{ gap: 16, alignItems: "center" }}>
+      {/* Keep Improving — 370×183, #001435 + gradient border + inset glow */}
       <LinearGradient
-        colors={[PG.cardTop, PG.cardBottom]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={[st.statusCard, glow(18, 0.55)]}
-        testID="elite-status"
+        colors={[...GRADIENT_BORDER]}
+        locations={[...GRADIENT_LOCS]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={st.statusBorder}
       >
-        <Ionicons name={progress.unlocked ? "lock-open-outline" : "lock-closed-outline"} size={64} color={PG.barFill} />
-        <Text allowFontScaling={false} style={[st.statusTitle, { fontFamily: theme.semiBoldFont }]}>
-          {t(progress.unlocked ? "profileHub.eliteUnlockedTitle" : "profileHub.eliteLockedTitle")}
-        </Text>
-        <Text allowFontScaling={false} style={[st.statusBody, { fontFamily: theme.regularFont }]}>
-          {t(progress.unlocked ? "profileHub.eliteUnlockedBody" : "profileHub.eliteLockedBody")}
-        </Text>
+        <View style={st.statusInner} testID="elite-status">
+          {progress.unlocked ? (
+            <Ionicons name="lock-open-outline" size={56} color="#00B8FF" />
+          ) : (
+            <Image source={LOCK_ICON} style={st.lockArt} resizeMode="contain" />
+          )}
+          <Text allowFontScaling={false} style={[st.statusTitle, { fontFamily: theme.semiBoldFont }]}>
+            {t(progress.unlocked ? "profileHub.eliteUnlockedTitle" : "profileHub.eliteLockedTitle")}
+          </Text>
+          <Text allowFontScaling={false} style={[st.statusBody, { fontFamily: theme.regularFont }]}>
+            {t(progress.unlocked ? "profileHub.eliteUnlockedBody" : "profileHub.eliteLockedBody")}
+          </Text>
+        </View>
       </LinearGradient>
 
-      {/* Qualification progress */}
-      <LinearGradient
-        colors={[PG.cardTop, PG.cardBottom]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={[st.progressCard, glow(10, 0.3)]}
-      >
+      {/* Qualification progress — 370×224, border #001950 */}
+      <View style={st.progressCard}>
         <View style={st.progressHead}>
           <Text allowFontScaling={false} style={[st.progressTitle, { fontFamily: theme.semiBoldFont }]}>
             {t("profileHub.eliteProgressTitle")}
           </Text>
           <TouchableOpacity onPress={() => setRulesOpen(true)} hitSlop={10} accessibilityRole="button" testID="elite-see-rules">
-            <Text allowFontScaling={false} style={[st.link, { fontFamily: theme.mediumFont }]}>
+            <Text allowFontScaling={false} style={[st.seeRulesLabel, { fontFamily: theme.mediumFont }]}>
               {t("profileHub.eliteSeeRules")}
             </Text>
           </TouchableOpacity>
@@ -170,35 +171,39 @@ export function EliteLabSection({
             </View>
           );
         })}
-      </LinearGradient>
+      </View>
 
-      {/* Promo */}
-      <LinearGradient
-        colors={[PG.cardTop, PG.cardBottom]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={[st.promoCard, glow(14, 0.45)]}
-      >
-        <View style={st.promoArtWrap}>
-          <Image source={PLAYER_ART} style={st.promoArt} resizeMode="cover" />
-          <LinearGradient
-            pointerEvents="none"
-            colors={["rgba(4, 18, 54, 0)", "rgba(4, 18, 54, 0.6)", "#041236"]}
-            locations={[0.3, 0.7, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-        <View style={st.promoText}>
-          <Text allowFontScaling={false} style={[st.promoTitle, { fontFamily: theme.semiBoldFont }]}>
-            {t("profileHub.elitePromoTitle")}
-          </Text>
-          <Text allowFontScaling={false} style={[st.promoBody, { fontFamily: theme.regularFont }]}>
-            {t("profileHub.elitePromoBody")}
-          </Text>
-        </View>
-      </LinearGradient>
+      {/* Unlock Elite Metrics — #001435 under art + outer glow off the gradient border */}
+      <View style={[st.promoGlow, glow(22, 0.75)]}>
+        <LinearGradient
+          colors={[...GRADIENT_BORDER]}
+          locations={[...GRADIENT_LOCS]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={st.promoBorder}
+        >
+          <View style={st.promoInner} testID="elite-promo">
+            <Image source={PLAYER_ART} style={st.promoArt} resizeMode="cover" />
+            {/* Pull the JPG's baked black right side into Keep Improving blue */}
+            <LinearGradient
+              pointerEvents="none"
+              colors={["rgba(0,20,53,0)", "rgba(0,20,53,0.72)", "#001435", "#001435"]}
+              locations={[0.22, 0.48, 0.68, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={st.promoText}>
+              <Text allowFontScaling={false} style={[st.promoTitle, { fontFamily: theme.semiBoldFont }]}>
+                {t("profileHub.elitePromoTitle")}
+              </Text>
+              <Text allowFontScaling={false} style={[st.promoBody, { fontFamily: theme.regularFont }]}>
+                {t("profileHub.elitePromoBody")}
+              </Text>
+            </View>
+          </View>
+        </LinearGradient>
+      </View>
 
       {openNotice ? (
         <Text allowFontScaling={false} style={[st.notice, { fontFamily: theme.mediumFont }]}>
@@ -206,10 +211,26 @@ export function EliteLabSection({
         </Text>
       ) : null}
 
-      {renderFooter(
-        progress.unlocked
-          ? { label: t("profileHub.eliteOpen"), onPress: () => setOpenNotice(true) }
-          : { label: t("profileHub.eliteLockedButton"), onPress: () => {}, disabled: true, icon: "lock-closed" }
+      {/* Single Access Locked / Open CTA — no footer back chevron */}
+      {progress.unlocked ? (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => setOpenNotice(true)}
+          style={st.accessBtn}
+          testID="elite-primary"
+          accessibilityRole="button"
+        >
+          <Text allowFontScaling={false} style={[st.accessLabel, { fontFamily: theme.mediumFont }]}>
+            {t("profileHub.eliteOpen")}
+          </Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={[st.accessBtn, st.accessBtnLocked]} testID="elite-primary">
+          <Image source={ACCESS_LOCK} style={st.accessLock} resizeMode="contain" />
+          <Text allowFontScaling={false} style={[st.accessLabel, { fontFamily: theme.mediumFont }]}>
+            {t("profileHub.eliteLockedButton")}
+          </Text>
+        </View>
       )}
 
       <Modal visible={rulesOpen} transparent animationType="fade" onRequestClose={() => setRulesOpen(false)}>
@@ -252,41 +273,100 @@ export function EliteLabSection({
 }
 
 const st = StyleSheet.create({
-  statusCard: {
-    borderRadius: 28,
-    borderWidth: 1.5,
-    borderColor: "rgba(77, 166, 255, 0.75)",
-    paddingVertical: 28,
-    paddingHorizontal: 24,
+  statusBorder: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 370,
+    borderRadius: 20,
+    padding: 1,
+  },
+  statusInner: {
+    minHeight: 181,
+    borderRadius: 19,
+    backgroundColor: "#001435",
+    paddingTop: 24,
+    paddingBottom: 24,
+    paddingHorizontal: 19,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    boxShadow: "0px 0px 20px 0px #0048FF inset",
+  },
+  lockArt: { width: 56, height: 56 },
+  statusTitle: { fontSize: 20, color: "#FFFFFF", textAlign: "center" },
+  statusBody: { fontSize: 14, lineHeight: 20, color: "#86A7D2", textAlign: "center" },
+  progressCard: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 370,
+    minHeight: 224,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#001950",
+    backgroundColor: "#030A17",
+    padding: 10,
     gap: 10,
   },
-  statusTitle: { fontSize: 20, color: "#FFFFFF", textAlign: "center", marginTop: 4 },
-  statusBody: { fontSize: 14, lineHeight: 20, color: "#86A7D2", textAlign: "center" },
-  progressCard: { borderRadius: 24, borderWidth: 1, borderColor: PG.border, padding: 18, gap: 14 },
   progressHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   progressTitle: { flex: 1, fontSize: 15, color: "#FFFFFF" },
-  link: { fontSize: 14, color: PG.labelBlue },
-  barBlock: { gap: 8 },
+  seeRulesLabel: { fontSize: 14, color: "#0059FF" },
+  barBlock: { gap: 6 },
   barLabelRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  barLabel: { flex: 1, fontSize: 14, color: "#FFFFFF" },
-  barValue: { fontSize: 14, color: "#FFFFFF" },
-  barValueMet: { color: PG.labelBlue },
+  barLabel: { flex: 1, fontSize: 13, color: "#FFFFFF" },
+  barValue: { fontSize: 13, color: "#FFFFFF" },
+  barValueMet: { color: "#00B8FF" },
   barTrack: { height: 8, borderRadius: 4, backgroundColor: PG.barTrack, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 4, backgroundColor: PG.barFill },
-  promoCard: {
-    flexDirection: "row",
-    borderRadius: 24,
-    borderWidth: 1.5,
-    borderColor: "rgba(77, 166, 255, 0.75)",
-    overflow: "hidden",
-    minHeight: 150,
+  promoGlow: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 370,
+    borderRadius: 20,
   },
-  promoArtWrap: { width: "42%" },
-  promoArt: { width: "100%", height: "100%" },
-  promoText: { flex: 1, paddingVertical: 18, paddingRight: 18, paddingLeft: 8, gap: 8, justifyContent: "center" },
-  promoTitle: { fontSize: 17, color: "#FFFFFF" },
-  promoBody: { fontSize: 13, lineHeight: 19, color: "#86A7D2" },
+  promoBorder: {
+    borderRadius: 20,
+    padding: 1,
+  },
+  promoInner: {
+    height: 136,
+    borderRadius: 19,
+    backgroundColor: "#001435",
+    overflow: "hidden",
+    boxShadow: "0px 0px 20px 0px #0048FF inset",
+  },
+  promoArt: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  promoText: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+    bottom: 10,
+    left: "38%",
+    gap: 6,
+    justifyContent: "center",
+  },
+  promoTitle: { fontSize: 16, color: "#FFFFFF" },
+  promoBody: { fontSize: 12, lineHeight: 17, color: "#A9C1F5" },
+  accessBtn: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 370,
+    height: 60,
+    borderRadius: 20,
+    backgroundColor: "#001950",
+    paddingHorizontal: 35,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 4,
+  },
+  accessBtnLocked: { opacity: 1 },
+  accessLock: { width: 18, height: 18 },
+  accessLabel: { fontSize: 16, color: "#86A7D2" },
   notice: { color: PG.labelBlue, fontSize: 13, textAlign: "center" },
   overlay: { flex: 1, backgroundColor: "rgba(1, 7, 25, 0.78)", justifyContent: "center", paddingHorizontal: 18 },
   modalCard: { borderRadius: 24, borderWidth: 1, borderColor: PG.border, padding: 18, gap: 14 },
