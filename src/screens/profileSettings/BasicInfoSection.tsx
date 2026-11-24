@@ -22,6 +22,14 @@ type Values = {
 };
 type Editing = "height" | "weight" | "age" | "gender" | "hand" | null;
 
+const BASIC_ICONS = {
+  height: require("../../../assets/aicoach/profile-hub/basic-info/icon-height.png"),
+  weight: require("../../../assets/aicoach/profile-hub/basic-info/icon-weight.png"),
+  age: require("../../../assets/aicoach/profile-hub/basic-info/icon-age.png"),
+  gender: require("../../../assets/aicoach/profile-hub/basic-info/icon-gender.png"),
+  dominant: require("../../../assets/aicoach/profile-hub/basic-info/icon-dominant.png"),
+} as const;
+
 export type BasicInfoChanges = {
   /** For /profile/player-details */
   details: { heightCm?: number; weightKg?: number; dominantHand?: Hand };
@@ -126,27 +134,27 @@ export function BasicInfoSection({
 
   return (
     <View>
-      <ProfileHubRow compact icon="resize-outline" title={t("profileHub.m_height")} value={heightText} onPress={() => setEditing("height")} testID="basic-row-height" />
-      <ProfileHubRow compact icon="speedometer-outline" title={t("profileHub.m_weight")} value={weightText} onPress={() => setEditing("weight")} testID="basic-row-weight" />
+      <ProfileHubRow iconImage={BASIC_ICONS.height} rowHeight={46} title={t("profileHub.m_height")} value={heightText} onPress={() => setEditing("height")} testID="basic-row-height" />
+      <ProfileHubRow iconImage={BASIC_ICONS.weight} rowHeight={46} title={t("profileHub.m_weight")} value={weightText} onPress={() => setEditing("weight")} testID="basic-row-weight" />
       <ProfileHubRow
-        compact
-        icon="people-outline"
+        iconImage={BASIC_ICONS.age}
+        rowHeight={46}
         title={t("profileHub.age")}
         value={age == null ? dash : String(age)}
         onPress={() => setEditing("age")}
         testID="basic-row-age"
       />
       <ProfileHubRow
-        compact
-        icon="male-female-outline"
+        iconImage={BASIC_ICONS.gender}
+        rowHeight={46}
         title={t("profileSettingsUi.gender")}
         value={v.gender ? t(genderTranslationKey(v.gender)) : dash}
         onPress={() => setEditing("gender")}
         testID="basic-row-gender"
       />
       <ProfileHubRow
-        compact
-        icon="hand-right-outline"
+        iconImage={BASIC_ICONS.dominant}
+        rowHeight={46}
         title={t("profileHub.dominantHand")}
         value={v.dominantHand ? t(v.dominantHand === "left" ? "profileHub.handLeft" : "profileHub.handRight") : dash}
         onPress={() => setEditing("hand")}

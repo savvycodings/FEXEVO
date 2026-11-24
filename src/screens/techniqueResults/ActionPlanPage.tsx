@@ -110,9 +110,10 @@ export function ActionPlanPage({
 
   const ordered = useMemo(() => {
     const focus = mistakeFocusOrder(errors)
-    const fallback: MistakeId[] = ['elbow', 'racket', 'torso']
+    // Always surface every coaching fix (elbow / racket / torso / foot), not a top-2 truncate.
+    const fallback: MistakeId[] = ['elbow', 'racket', 'torso', 'foot']
     const list = focus.length ? focus : fallback
-    return { first: list[0]!, rest: list.slice(1, 3) }
+    return { first: list[0]!, rest: list.slice(1) }
   }, [errors])
 
   const contactPose = useMemo(() => {

@@ -10,14 +10,25 @@ import { SegmentedPills } from "../progress/SegmentedPills";
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
 const GUIDE_PHOTO = require("../../../assets/calibration/howto.jpg");
-const GUIDE_ASPECT = 376 / 640;
+/** Figma width ratio 206 : 151 — photo stretches to the tips tile height. */
+const GUIDE_IMG_W = 206;
+const GUIDE_TILE_W = 151;
 
-const GUIDE_TIPS: { key: string; icon: IconName }[] = [
-  { key: "Tape", icon: "resize-outline" },
-  { key: "Flat", icon: "layers-outline" },
-  { key: "Clothing", icon: "shirt-outline" },
-  { key: "Steps", icon: "list-outline" },
-  { key: "Units", icon: "options-outline" },
+/** Tip icons (tape / stand / clothing / follow / units) — framed blue art from Figma. */
+const GUIDE_TIP_ICONS = {
+  Tape: require("../../../assets/aicoach/profile-hub/how-tips/icon-tape.png"),
+  Flat: require("../../../assets/aicoach/profile-hub/how-tips/icon-flat.png"),
+  Clothing: require("../../../assets/aicoach/profile-hub/how-tips/icon-clothing.png"),
+  Steps: require("../../../assets/aicoach/profile-hub/how-tips/icon-steps.png"),
+  Units: require("../../../assets/aicoach/profile-hub/how-tips/icon-units.png"),
+} as const;
+
+const GUIDE_TIPS: { key: keyof typeof GUIDE_TIP_ICONS }[] = [
+  { key: "Tape" },
+  { key: "Flat" },
+  { key: "Clothing" },
+  { key: "Steps" },
+  { key: "Units" },
 ];
 
 /** One line per measurement, in the same order as the Body Measurements list. */
@@ -38,10 +49,11 @@ export function HowToMeasureSection({ footer }: { footer: React.ReactNode }) {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const [tab, setTab] = useState<"guide" | "tips">("guide");
+
   return (
     <View>
       <SegmentedPills<"guide" | "tips">
-        size="lg"
+        variant="flat"
         options={[
           { key: "guide", label: t("profileHub.howGuide"), testID: "howto-tab-guide" },
           { key: "tips", label: t("profileHub.howTips"), testID: "howto-tab-tips" },
@@ -50,31 +62,24 @@ export function HowToMeasureSection({ footer }: { footer: React.ReactNode }) {
         onChange={setTab}
         fontFamily={theme.mediumFont}
         activeFontFamily={theme.semiBoldFont}
-        style={{ marginBottom: 14 }}
+        style={st.segment}
       />
 
       {tab === "guide" ? (
         <View style={st.guideRow}>
-          <View style={[st.photoWrap, glow(14, 0.4)]}>
+          <View style={st.photoWrap}>
             <Image source={GUIDE_PHOTO} style={st.photo} resizeMode="cover" />
           </View>
-          <LinearGradient
-            colors={[PG.cardTop, PG.cardBottom]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={[st.tipsCard, glow(10, 0.3)]}
-          >
+          <View style={st.tipsCard}>
             {GUIDE_TIPS.map((tip) => (
               <View key={tip.key} style={st.tipRow}>
-                <View style={st.tipIcon}>
-                  <Ionicons name={tip.icon} size={20} color="#4D7BFF" />
-                </View>
+                <Image source={GUIDE_TIP_ICONS[tip.key]} style={st.tipIcon} resizeMode="contain" />
                 <Text allowFontScaling={false} style={[st.tipText, { fontFamily: theme.regularFont }]}>
                   {t(`profileHub.howTip${tip.key}`)}
                 </Text>
               </View>
             ))}
-          </LinearGradient>
+          </View>
         </View>
       ) : (
         <LinearGradient
@@ -105,21 +110,38 @@ export function HowToMeasureSection({ footer }: { footer: React.ReactNode }) {
 }
 
 const st = StyleSheet.create({
-  guideRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  // Ratio lives on the frame: an Image's own aspectRatio is ignored on web and it grows to its intrinsic size.
-  photoWrap: { flex: 1.1, aspectRatio: GUIDE_ASPECT, borderRadius: 24, overflow: "hidden", backgroundColor: PG.cardBottom },
-  photo: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
-  tipsCard: { flex: 1, borderRadius: 24, borderWidth: 1, borderColor: PG.border, paddingVertical: 10, paddingHorizontal: 12 },
-  tipRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
-  tipIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: "rgba(77, 123, 255, 0.7)",
-    alignItems: "center",
-    justifyContent: "center",
+  segment: { marginBottom: 14 },
+  guideRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "stretch",
   },
+  /** Wider than the tips tile — stretches to match the tile height. */
+  photoWrap: {
+    flexGrow: GUIDE_IMG_W,
+    flexShrink: 1,
+    flexBasis: 0,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: PG.cardBottom,
+    minHeight: 320,
+  },
+  photo: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  /** Narrower tips tile — sets the row height the photo stretches to. */
+  tipsCard: {
+    flexGrow: GUIDE_TILE_W,
+    flexShrink: 1,
+    flexBasis: 0,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#07256D",
+    backgroundColor: "#030A17",
+    padding: 10,
+    gap: 20,
+    justifyContent: "space-evenly",
+  },
+  tipRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  tipIcon: { width: 28, height: 28, flexShrink: 0 },
   tipText: { flex: 1, fontSize: 13, lineHeight: 17, color: "#FFFFFF" },
   howCard: { borderRadius: 24, borderWidth: 1, borderColor: PG.border, paddingHorizontal: 16 },
   howRow: { flexDirection: "row", gap: 14, paddingVertical: 14 },

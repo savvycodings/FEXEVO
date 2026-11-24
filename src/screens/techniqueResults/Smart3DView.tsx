@@ -139,7 +139,7 @@ const DETAIL_JOINT: Partial<Record<BodyPart, DetailJoint>> = {
   torso: 'torso',
   knee: 'knee',
   feet: 'feet',
-  racket: 'wrist',
+  racket: 'racket',
 }
 
 /** Same order as View Angles (Figma 6266:55786). */
@@ -610,7 +610,10 @@ export function Smart3DView({
       const sev = severityByPart[id]
       if (!sev) continue
       const joint = DETAIL_JOINT[id]
-      const reading = joint ? contactJoints?.joints[joint] : undefined
+      const reading =
+        joint && (SERVED as readonly string[]).includes(joint)
+          ? contactJoints?.joints[joint as ContactJoint]
+          : undefined
       const you = reading?.you ?? null
       const target =
         reading?.pro ??
@@ -1097,9 +1100,11 @@ export function Smart3DView({
   }
 
   if (detail) {
-    // Feet is client-only — no /joints payload. Elbow/knee/etc. use the API when present.
+    // Feet / racket are client-only — no /joints payload. Elbow/knee/etc. use the API when present.
     const served =
-      detail === 'feet' ? null : (contactJoints?.joints[detail as ContactJoint] ?? null)
+      detail === 'feet' || detail === 'racket'
+        ? null
+        : (contactJoints?.joints[detail as ContactJoint] ?? null)
     // Fill a missing player angle from pose, but keep any pro/ideal the server already returned.
     let reading: JointReading | null = served
     if (served?.you == null && poseFrames?.length && impactFrame != null) {

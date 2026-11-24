@@ -244,7 +244,8 @@ function getStyles(theme: any) {
   return StyleSheet.create({
     gradient: { flex: 1 },
     scroll: { flex: 1 },
-    scrollInner: { paddingBottom: 12 },
+    // Clear the main tab bar so Progress / Smart 3D stay reachable when Overview scrolls.
+    scrollInner: { paddingBottom: 28 },
     titleNavRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -682,8 +683,9 @@ export function ActivitiesVideoAnalysis({
 
   /** Action Plan Priority / Improve Next → Your Shot VS Ideal Form (not Smart 3D). */
   function openMistakeFix(id: MistakeId) {
+    // Keep the same body part the Action Plan tile shows (racket≠wrist, foot≠knee).
     const joint: ViewJoint =
-      id === 'foot' ? 'knee' : id === 'racket' ? 'wrist' : id === 'torso' ? 'torso' : 'elbow'
+      id === 'foot' ? 'feet' : id === 'racket' ? 'racket' : id === 'torso' ? 'torso' : 'elbow'
     setShotVsIdealJoint(joint)
     setOverviewDetail('shotVsIdeal')
   }
@@ -1252,8 +1254,7 @@ export function ActivitiesVideoAnalysis({
           // the same top padding when you tap into a shot.
           { paddingTop: 8 },
         ]}
-        // Overview is laid out to fit the screen; scrolling it only slides the CTAs under the tab bar.
-        scrollEnabled={analysisTab !== 'overview'}
+        // Keep Overview scrollable on short phones so Progress / Smart 3D stay reachable.
         showsVerticalScrollIndicator={false}
         removeClippedSubviews={Platform.OS === 'android' ? false : undefined}
       >
@@ -1348,9 +1349,9 @@ export function ActivitiesVideoAnalysis({
                 const first = focus[0]
                 const joint: ViewJoint =
                   first === 'foot'
-                    ? 'knee'
+                    ? 'feet'
                     : first === 'racket'
-                      ? 'wrist'
+                      ? 'racket'
                       : first === 'torso'
                         ? 'torso'
                         : 'elbow'

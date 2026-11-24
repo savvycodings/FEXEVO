@@ -689,8 +689,8 @@ export function AnalysisOverview({
     return { w: 16, h: 9 }
   }, [natural, pose])
 
-  // Overview stage — tall enough that Progress / Smart 3D sit just above the tab bar.
-  // Cap from window so the page still fits without scrolling. Same portrait signal as the skeleton.
+  // Overview stage — prefer a tall clip, but cap by window so short phones stay usable.
+  // Parent ScrollView scrolls when the full page (stage + metrics + CTAs) exceeds the screen.
   const overviewH = useMemo(() => {
     if (frameW <= 0) return 210
     const portrait = overlayNatural.h > overlayNatural.w

@@ -26,20 +26,20 @@ type BaseProps = {
   paddingX?: number
 }
 
-/** Arrow after the primary label (design SVG, 32×32, navy stroke). */
-function ArrowIcon() {
+/** Arrow after the primary label (design SVG, 32×32). Accent CTAs use white; default primary uses navy. */
+function ArrowIcon({ color = UI.btnPrimaryText }: { color?: string }) {
   return (
     <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
       <Path
         d="M24.6695 16L6.66943 16"
-        stroke={UI.btnPrimaryText}
+        stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M17.3359 8C17.3359 8 25.3358 13.8919 25.3359 16C25.3359 18.1083 17.3359 24 17.3359 24"
-        stroke={UI.btnPrimaryText}
+        stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -90,6 +90,8 @@ export function GlowButton({
   const inactive = disabled || loading
   const accent = variant === 'accent'
   const labelColor = accent ? '#FFFFFF' : UI.btnPrimaryText
+  /** Accent + arrow: label stays centered; arrow pins to the far right (Get Started / Next). */
+  const accentArrow = accent && arrow
   return (
     <TouchableOpacity
       activeOpacity={0.88}
@@ -115,6 +117,7 @@ export function GlowButton({
         style={[
           styles.fill,
           accent && styles.fillAccent,
+          accentArrow && styles.fillAccentArrow,
           { paddingHorizontal: leadingIcon ? 56 : paddingX, borderRadius: radius },
         ]}
       >
@@ -131,10 +134,10 @@ export function GlowButton({
             {label}
           </Text>
         )}
-        {/* Design: the arrow sits right after the label (10px gap), centred together, no badge. */}
+        {/* Default: arrow after the label. Accent: absolute right so the label stays centred. */}
         {arrow && !loading ? (
-          <View style={styles.arrowSlot} pointerEvents="none">
-            <ArrowIcon />
+          <View style={[styles.arrowSlot, accentArrow && styles.arrowSlotAccent]} pointerEvents="none">
+            <ArrowIcon color={accent ? '#FFFFFF' : UI.btnPrimaryText} />
           </View>
         ) : null}
         {leadingIcon && !loading ? (
@@ -250,6 +253,9 @@ const styles = StyleSheet.create({
   fillAccent: {
     overflow: 'hidden',
   },
+  fillAccentArrow: {
+    gap: 0,
+  },
   label: {
     color: UI.btnSecondaryText,
     fontSize: 18,
@@ -260,6 +266,14 @@ const styles = StyleSheet.create({
   },
   /** Keep the arrow from being compressed so the label shrinks/fits instead of ellipsizing. */
   arrowSlot: { flexShrink: 0 },
+  /** Far-right arrow on accent CTAs (paddingX already 35). */
+  arrowSlotAccent: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
   leadingBadge: {
     position: 'absolute',
     width: 36,

@@ -34,7 +34,7 @@ type Props = {
   framesPrepToImpact: number | null
   /** Coach technical-error lines — used to flag issue joints red/orange. */
   errors?: string[]
-  /** Opens Your Shot VS Ideal Form for this joint (issue joints only). */
+  /** Opens Your Shot VS Ideal Form for this joint (issues and in-range). */
   onOpenShotVsIdeal?: (joint: ViewJoint) => void
 }
 
@@ -70,7 +70,7 @@ const OFF = '#FF7A6B'
 const HIGH = '#E5482B'
 const MEDIUM = '#FF8000'
 
-function severityOf(reading: JointReading | undefined, joint: ViewJoint, errors: string[]): JointSeverity {
+export function severityOf(reading: JointReading | undefined, joint: ViewJoint, errors: string[]): JointSeverity {
   if (reading?.status === 'bad') return 'high'
   if (reading?.status === 'warn') return 'medium'
   const delta = reading?.deltaDeg
@@ -266,9 +266,10 @@ export function ViewAnglesPage({
             pro: served?.pro ?? null,
           }
         : served
-  const target = targetOf(reading)
-  const diff =
-    reading?.deltaDeg ?? (reading?.you != null && target != null ? reading.you - target : null)
+  const servedTarget = targetOf(reading)
+  const servedDiff =
+    reading?.deltaDeg ??
+    (reading?.you != null && servedTarget != null ? reading.you - servedTarget : null)
   const [fullscreen, setFullscreen] = useState(false)
   const jointColumn = BODY_RAIL_W
   /** Figma Frame 1107 — navy housing around video + Motion/Angles (290×323, pad 10). */
@@ -301,7 +302,6 @@ export function ViewAnglesPage({
     if (total > 0) setSeek((prev) => ({ fraction: p.at / total, key: (prev?.key ?? 0) + 1 }))
   }
 
-  const offTarget = diff != null && Math.abs(diff) > 5
   const severityByJoint = useMemo(() => {
     const map = {} as Record<ViewJoint, JointSeverity>
     for (const id of JOINTS) {
@@ -313,9 +313,19 @@ export function ViewAnglesPage({
     return map
   }, [contact, errors])
   const activeSeverity = severityByJoint[joint]
+  const inRange = activeSeverity == null
+  // Client-only joints (feet/head/racket) and /joints lag never get a pro ideal — when the
+  // card is In Range, still show Target + Difference like the Figma elbow tile.
+  const target =
+    servedTarget ?? (inRange && reading?.you != null ? Math.round(reading.you) : null)
+  const diff =
+    servedDiff ??
+    (inRange && reading?.you != null && target != null ? Math.round(reading.you) - target : null)
+  const offTarget = diff != null && Math.abs(diff) > 5
   const issueColor = severityColor(activeSeverity) ?? (offTarget ? OFF : null)
+  const rangeColor = '#2FA8FF'
   const highlightColor = issueColor ?? '#2454FF'
-  const canOpenIdeal = activeSeverity != null && onOpenShotVsIdeal != null
+  const canOpenIdeal = onOpenShotVsIdeal != null
 
   const panelProps = {
     videoUri,
@@ -411,7 +421,10 @@ export function ViewAnglesPage({
                 allowFontScaling={false}
                 style={[
                   styles.jointCardDeg,
-                  { fontFamily: theme.mediumFont, color: issueColor ?? UI.text },
+                  {
+                    fontFamily: theme.mediumFont,
+                    color: issueColor ?? (inRange ? rangeColor : UI.text),
+                  },
                 ]}
               >
                 {`${Math.round(reading.you)}°`}
@@ -431,7 +444,13 @@ export function ViewAnglesPage({
               {diff != null ? (
                 <Text allowFontScaling={false} style={[styles.jointCardMeta, { fontFamily: theme.regularFont }]}>
                   {t('analysis.viewAnglesPage.difference')}
-                  <Text style={{ color: issueColor ?? (offTarget ? OFF : GOOD) }}>{signed(diff)}</Text>
+                  <Text
+                    style={{
+                      color: issueColor ?? (offTarget ? OFF : inRange ? rangeColor : GOOD),
+                    }}
+                  >
+                    {signed(diff)}
+                  </Text>
                 </Text>
               ) : null}
             </View>
@@ -460,7 +479,16 @@ export function ViewAnglesPage({
                   : t('analysis.mistakeMediumPriority')}
               </Text>
             </View>
-          ) : null}
+          ) : (
+            <View style={[styles.sevPill, styles.sevPillInRange]}>
+              <Text
+                allowFontScaling={false}
+                style={[styles.sevPillLabel, styles.sevPillInRangeLabel, { fontFamily: theme.mediumFont }]}
+              >
+                {t('analysis.inRange')}
+              </Text>
+            </View>
+          )}
           {canOpenIdeal ? <Ionicons name="chevron-forward" size={18} color="#86A7D2" /> : null}
         </View>
       </Pressable>
@@ -697,6 +725,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sevPillLabel: { fontSize: 13 },
+  sevPillInRange: {
+    borderColor: '#2F6BFF',
+    backgroundColor: 'rgba(0,72,255,0.25)',
+  },
+  sevPillInRangeLabel: { color: '#8CCBFF' },
   timelineCard: {
     borderRadius: 20,
     backgroundColor: '#030A17',

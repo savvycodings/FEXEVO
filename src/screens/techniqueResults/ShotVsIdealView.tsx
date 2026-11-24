@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
@@ -11,7 +11,7 @@ import { landmarkVisOk, poseAngle } from '../../lib/poseJointAngles'
 import { nearestPoseByFrame, type LandmarkPoint, type PoseFrameRow } from '../../lib/techniquePose'
 import { BackArrowIcon } from './BackArrowIcon'
 import { BodyPartGlyph } from './bodyPartGlyphs'
-import type { ViewJoint } from './ViewAnglesPage'
+import { severityOf, type ViewJoint } from './ViewAnglesPage'
 import { PlayableClip } from './PlayableClip'
 import { dominantSide } from './movementTimeline'
 
@@ -41,6 +41,7 @@ type Metric = {
 }
 
 const HIGH = '#E5482B'
+const MEDIUM = '#FF8000'
 /** In-range accent (Figma "Analysis View" good state). */
 const GOOD = '#2FA8FF'
 const YOU_BORDER = 'rgba(0, 72, 255, 0.5)'
@@ -205,6 +206,8 @@ export function ShotVsIdealView({
   const insets = useSafeAreaInsets()
   const contact = useContactJoints(analysisId)
   const [joint, setJoint] = useState<ViewJoint>(initialJoint)
+  /** True once the user taps Prev/Next — until then keep the host's `initialJoint`. */
+  const userPicked = useRef(false)
 
   /** True when the reading is off target or the coach's errors name this joint. */
   const isFlagged = (id: ViewJoint) => {
@@ -226,12 +229,23 @@ export function ShotVsIdealView({
 
   const issueJoints = useMemo(() => {
     const flagged = ISSUE_ORDER.filter(isFlagged)
-    return flagged.length ? flagged : [initialJoint]
+    const list = flagged.length ? flagged : [initialJoint]
+    // Always keep the joint the host opened so Prev/Next and the landing page stay linked.
+    if (!list.includes(initialJoint)) return [initialJoint, ...list]
+    return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact, errors, initialJoint])
 
   useEffect(() => {
-    if (!issueJoints.includes(joint)) setJoint(issueJoints[0]!)
+    userPicked.current = false
+    setJoint(initialJoint)
+  }, [initialJoint])
+
+  useEffect(() => {
+    if (issueJoints.includes(joint)) return
+    // Keep the explicitly opened joint until the user starts Prev/Next.
+    if (!userPicked.current) return
+    setJoint(issueJoints[0]!)
   }, [issueJoints, joint])
 
   useEffect(() => {
@@ -298,17 +312,23 @@ export function ShotVsIdealView({
   }, [t, joint, you, rangeLabel, diff, distanceCm])
 
   const idx = Math.max(0, issueJoints.indexOf(joint))
-  const goPrev = () => setJoint(issueJoints[(idx - 1 + issueJoints.length) % issueJoints.length]!)
-  const goNext = () => setJoint(issueJoints[(idx + 1) % issueJoints.length]!)
+  const goPrev = () => {
+    userPicked.current = true
+    setJoint(issueJoints[(idx - 1 + issueJoints.length) % issueJoints.length]!)
+  }
+  const goNext = () => {
+    userPicked.current = true
+    setJoint(issueJoints[(idx + 1) % issueJoints.length]!)
+  }
 
   const titleKey = TITLE_KEY[joint] ?? 'analysis.viewAnglesPage.reading.elbow'
   const bodyKey = BODY_KEY[joint]
   const whyKey = WHY_KEY[joint]
   const problemKey = PROBLEM_KEY[joint]
   const problemBodyKey = PROBLEM_BODY_KEY[joint]
-  // Nothing wrong with this joint: the blue "In Range" state instead of High Priority.
-  const inRange = !isFlagged(joint)
-  const accent = inRange ? GOOD : HIGH
+  const severity = severityOf(reading ?? undefined, joint, errors)
+  const inRange = severity == null
+  const accent = severity === 'high' ? HIGH : severity === 'medium' ? MEDIUM : GOOD
   const jointName = t(`analysis.viewAnglesPage.joints.${joint}`)
 
   // Host tab scenes already clear the status bar — do not stack insets.top again.
@@ -384,7 +404,7 @@ export function ShotVsIdealView({
                 {idx + 1}
               </Text>
             </View>
-            <BodyPartGlyph id={joint} size={24} severity={inRange ? null : 'high'} />
+            <BodyPartGlyph id={joint} size={24} severity={severity} />
             <View style={styles.issueCopy}>
               <Text
                 allowFontScaling={false}
@@ -403,13 +423,29 @@ export function ShotVsIdealView({
                 </Text>
               ) : null}
             </View>
-            <View style={[styles.highPill, inRange && styles.goodPill]} testID="shot-vs-ideal-status">
+            <View
+              style={[
+                styles.highPill,
+                severity === 'medium' && styles.mediumPill,
+                inRange && styles.goodPill,
+              ]}
+              testID="shot-vs-ideal-status"
+            >
               <Text
                 allowFontScaling={false}
                 numberOfLines={1}
-                style={[styles.highPillLabel, inRange && styles.goodPillLabel, { fontFamily: theme.mediumFont }]}
+                style={[
+                  styles.highPillLabel,
+                  severity === 'medium' && styles.mediumPillLabel,
+                  inRange && styles.goodPillLabel,
+                  { fontFamily: theme.mediumFont },
+                ]}
               >
-                {inRange ? t('analysis.inRange') : t('analysis.mistakeHighPriority')}
+                {inRange
+                  ? t('analysis.inRange')
+                  : severity === 'medium'
+                    ? t('analysis.mistakeMediumPriority')
+                    : t('analysis.mistakeHighPriority')}
               </Text>
             </View>
           </View>
@@ -624,6 +660,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   highPillLabel: { color: '#FF7676', fontSize: 11 },
+  mediumPill: { borderColor: MEDIUM, backgroundColor: 'rgba(255,128,0,0.2)' },
+  mediumPillLabel: { color: MEDIUM },
   goodPill: { borderColor: '#2F6BFF', backgroundColor: 'rgba(0,72,255,0.25)' },
   goodPillLabel: { color: '#8CCBFF' },
   metricRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 0, paddingBottom: 0 },

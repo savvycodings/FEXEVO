@@ -580,8 +580,9 @@ export function Technique() {
 
   /** Action Plan Priority / Improve Next → Your Shot VS Ideal Form (not Smart 3D). */
   function openMistakeFix(id: MistakeId) {
+    // Keep the same body part the Action Plan tile shows (racket≠wrist, foot≠knee).
     const joint: ViewJoint =
-      id === 'foot' ? 'knee' : id === 'racket' ? 'wrist' : id === 'torso' ? 'torso' : 'elbow'
+      id === 'foot' ? 'feet' : id === 'racket' ? 'racket' : id === 'torso' ? 'torso' : 'elbow'
     setShotVsIdealJoint(joint)
     setResultsDetail('shotVsIdeal')
   }
@@ -3403,9 +3404,9 @@ export function Technique() {
                     const first = focus[0]
                     const joint: ViewJoint =
                       first === 'foot'
-                        ? 'knee'
+                        ? 'feet'
                         : first === 'racket'
-                          ? 'wrist'
+                          ? 'racket'
                           : first === 'torso'
                             ? 'torso'
                             : 'elbow'

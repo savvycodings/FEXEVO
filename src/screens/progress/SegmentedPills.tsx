@@ -52,6 +52,10 @@ export function SegmentedPills<K extends string | number>({
         <Text
           allowFontScaling={false}
           numberOfLines={1}
+          // Flat hub tabs (Profile / Stats / Achievements / Settings) share one row —
+          // scale slightly on narrow phones so "Achievements" never ellipsizes.
+          adjustsFontSizeToFit={flat}
+          minimumFontScale={flat ? 0.78 : 1}
           style={[
             styles.txt,
             lg && styles.txtLg,
@@ -176,11 +180,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#041641',
     borderColor: '#07256D',
     padding: 2,
-    gap: 4,
+    gap: 2,
     minHeight: 50,
     overflow: 'visible',
   },
-  trackFlatDense: { padding: 2, minHeight: 44, gap: 4 },
+  trackFlatDense: { padding: 2, minHeight: 44, gap: 2 },
   hit: { flex: 1, minWidth: 0 },
   hitFlat: { alignSelf: 'center', justifyContent: 'center' },
   pill: {
@@ -195,7 +199,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     height: 46,
     borderRadius: 20,
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
     paddingVertical: 0,
     overflow: 'hidden',
     justifyContent: 'center',
@@ -204,7 +208,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     height: 46,
     borderRadius: 20,
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
     paddingVertical: 0,
     justifyContent: 'center',
   },

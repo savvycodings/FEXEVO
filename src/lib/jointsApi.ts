@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { authClient } from './auth-client'
 
 export type ContactJoint = 'shoulder' | 'elbow' | 'wrist' | 'torso' | 'knee'
-/** Joint-detail pages. `feet` is client-only (pose-derived); the /joints API does not return it. */
-export type DetailJoint = ContactJoint | 'feet'
+/** Joint-detail pages. `feet` / `racket` are client-only (pose-derived); the /joints API does not return them. */
+export type DetailJoint = ContactJoint | 'feet' | 'racket'
 export type JointStatus = 'good' | 'warn' | 'bad'
 export type JointDirection =
   | 'match'

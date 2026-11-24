@@ -26,6 +26,68 @@ export type ProfileHubTab = "profile" | "stats" | "achievements" | "settings";
 const PRO_PILL_COLORS = ["#00BBFF", "#003CFF", "#0022FF"] as const;
 const PRO_PILL_LOCS = [0.0907, 0.7715, 0.9093] as const;
 
+const PAGE_BACK_COLOR = "#86A7D2";
+
+/* ------------------------------------------------------------------------------------------------
+ * In-page back — sits above the avatar on the hub (search stays in the app Header).
+ * ---------------------------------------------------------------------------------------------- */
+
+export function ProfileHubBack({ onPress, testID = "profile-hub-back" }: { onPress: () => void; testID?: string }) {
+  const { t } = useTranslation();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.8}
+      hitSlop={{ top: 8, bottom: 8, left: 4, right: 12 }}
+      accessibilityRole="button"
+      accessibilityLabel={t("common.goBack")}
+      style={s.pageBack}
+      testID={testID}
+    >
+      <Ionicons name="chevron-back" size={26} color={PAGE_BACK_COLOR} />
+    </TouchableOpacity>
+  );
+}
+
+/**
+ * Subsection top row: chevron fixed left, title centered on the screen
+ * (Athlete Calibration, How to Measure, Basic Information, …).
+ */
+export function ProfileHubTitleBar({
+  title,
+  onBack,
+  testID = "profile-hub-back",
+}: {
+  title: string;
+  onBack: () => void;
+  testID?: string;
+}) {
+  const { t } = useTranslation();
+  const { theme } = useContext(ThemeContext);
+  return (
+    <View style={s.titleBar}>
+      <TouchableOpacity
+        onPress={onBack}
+        activeOpacity={0.8}
+        hitSlop={{ top: 8, bottom: 8, left: 4, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel={t("common.goBack")}
+        style={s.titleBarBack}
+        testID={testID}
+      >
+        <Ionicons name="chevron-back" size={26} color={PAGE_BACK_COLOR} />
+      </TouchableOpacity>
+      <Text
+        allowFontScaling={false}
+        numberOfLines={1}
+        style={[s.titleBarText, { fontFamily: theme.semiBoldFont }]}
+      >
+        {title}
+      </Text>
+    </View>
+  );
+}
+
 /* ------------------------------------------------------------------------------------------------
  * Identity header: round avatar (camera corner), name + PRO pill, email.
  * ---------------------------------------------------------------------------------------------- */
@@ -187,7 +249,8 @@ export function ProfileHubRow({
   const iconColor = danger ? "#FF6B5E" : "#2F7BFF";
   /** Tall body-measurement tiles: icon is ~60 (assets already include their own frame). */
   const tall = rowHeight != null && rowHeight >= 70;
-  const iconPx = tall ? 60 : compact || rowHeight != null ? 24 : 30;
+  /** Short 46h tiles: framed PNGs sit at ~36 so they fill the 40px content band. */
+  const iconPx = tall ? 60 : rowHeight != null && rowHeight <= 50 ? 36 : compact ? 24 : 30;
   const sized =
     rowHeight != null
       ? tall
@@ -200,10 +263,14 @@ export function ProfileHubRow({
             gap: 10,
           }
         : {
+            // Figma short tiles: 46h, radius 20, gap 10, pad 3 / 10.
             height: rowHeight,
             minHeight: rowHeight,
-            paddingVertical: 0,
-            borderRadius: 16,
+            paddingTop: 3,
+            paddingBottom: 3,
+            paddingLeft: 10,
+            borderRadius: 20,
+            gap: 10,
           }
       : null;
   const body = (
@@ -388,7 +455,27 @@ export function PrivacyDataSection() {
 }
 
 const s = StyleSheet.create({
-  identityRow: { flexDirection: "row", alignItems: "center", gap: 16, marginTop: 4, marginBottom: 22 },
+  pageBack: { alignSelf: "flex-start", marginBottom: 10, marginLeft: -4 },
+  titleBar: {
+    height: 32,
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  titleBarBack: {
+    position: "absolute",
+    left: -4,
+    top: 0,
+    bottom: 0,
+    zIndex: 1,
+    justifyContent: "center",
+  },
+  titleBarText: {
+    textAlign: "center",
+    color: "#FFFFFF",
+    fontSize: 22,
+    paddingHorizontal: 36,
+  },
+  identityRow: { flexDirection: "row", alignItems: "center", gap: 16, marginTop: 0, marginBottom: 22 },
   avatarHit: { width: 96, height: 96 },
   avatarRing: {
     width: 96,

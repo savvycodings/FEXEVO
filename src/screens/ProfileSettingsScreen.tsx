@@ -29,7 +29,7 @@ import type { MainStackParamList } from "../navigation/types";
 import { ThemeContext } from "../context";
 import { useSessionData } from "../context/SessionDataContext";
 import { currentAppLanguage, setAppLanguage, type AppLanguage } from "../i18n/language";
-import { GlowButton, SurfaceIconButton } from "../components/ui";
+import { GlowButton, SurfaceButton, SurfaceIconButton } from "../components/ui";
 import { Header } from "../components/Header";
 import { MainTabBarChrome } from "../components/MainTabBarChrome";
 import { ShieldHeroRow } from "../components/ShieldHeroRow";
@@ -53,8 +53,10 @@ import { CARD_GLOW, SegmentedToggle, UI } from "../components/ui";
 import {
   CalibrationChooser,
   PrivacyDataSection,
+  ProfileHubBack,
   ProfileHubRow,
   ProfileHubTabs,
+  ProfileHubTitleBar,
   ProfileIdentityHeader,
   type ProfileHubTab,
 } from "./profileSettings/ProfileHubParts";
@@ -247,6 +249,8 @@ function SubsectionFooter({
   primaryArrow,
   primaryVariant = "default",
   hideBack = false,
+  /** Text "Back" button matching the primary width (wizard steps). */
+  backLabel,
 }: {
   onBack: () => void;
   primaryLabel?: string;
@@ -260,26 +264,39 @@ function SubsectionFooter({
   primaryVariant?: "default" | "accent";
   /** Full-width primary only (body Save / Start Scan). */
   hideBack?: boolean;
+  backLabel?: string;
 }) {
   const { t } = useTranslation();
   const { theme } = useContext(ThemeContext);
   const styles = getStyles(theme);
   return (
     <View style={styles.subsectionFooterRow}>
-      {hideBack ? null : (
+      {hideBack ? null : backLabel ? (
+        <View style={styles.subsectionHalf}>
+          <SurfaceButton
+            label={backLabel}
+            onPress={onBack}
+            accessibilityLabel={backLabel}
+            style={styles.subsectionHalfFill}
+            testID="subsection-back"
+          />
+        </View>
+      ) : (
         <SurfaceIconButton icon="chevron-back" onPress={onBack} accessibilityLabel={t("common.goBack")} />
       )}
       {onPrimary ? (
-        <GlowButton
-          label={primaryLoading ? "Saving..." : primaryLabel ?? ""}
-          onPress={onPrimary}
-          testID={primaryTestID}
-          disabled={primaryDisabled || primaryLoading}
-          leadingIcon={primaryIcon}
-          arrow={primaryArrow}
-          variant={primaryVariant}
-          style={styles.subsectionPrimaryButton}
-        />
+        <View style={backLabel ? styles.subsectionHalf : styles.subsectionPrimaryButton}>
+          <GlowButton
+            label={primaryLoading ? "Saving..." : primaryLabel ?? ""}
+            onPress={onPrimary}
+            testID={primaryTestID}
+            disabled={primaryDisabled || primaryLoading}
+            leadingIcon={primaryIcon}
+            arrow={primaryArrow}
+            variant={primaryVariant}
+            style={backLabel ? styles.subsectionHalfFill : undefined}
+          />
+        </View>
       ) : (
         <View style={styles.subsectionFooterSpacer} />
       )}
@@ -370,6 +387,20 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   const [wizSaving, setWizSaving] = useState(false);
   const [wizError, setWizError] = useState<string | null>(null);
   const [hubTab, setHubTab] = useState<ProfileHubTab>("profile");
+  /** App chrome: search on the left (back lives in the page body above the avatar / title). */
+  const profileChromeHeader = (
+    <Header
+      flatOverlay
+      headerLeftMode="search"
+      onSearchPress={() => navigation.navigate("InviteSearch")}
+      onSettingsPress={() => {
+        setActiveSection(null);
+        setHubTab("settings");
+      }}
+      onProPress={() => navigation.navigate("ProSubscription")}
+      onNotificationsPress={() => navigation.navigate("Notifications")}
+    />
+  );
   /** Body Measurements can open from the Profile tab or from Athlete Calibration (manual / scan). */
   const [bodyEntry, setBodyEntry] = useState<{ mode: "manual" | "scan"; from: "hub" | "calibration" }>({
     mode: "manual",
@@ -1179,12 +1210,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
 
     return (
       <View style={styles.screenRoot}>
-        <Header
-          flatOverlay
-          onBackPress={() => setActiveSection(null)}
-          onProPress={() => navigation.navigate("ProSubscription")}
-          onNotificationsPress={() => navigation.navigate("Notifications")}
-        />
+        {profileChromeHeader}
         <KeyboardAwareScrollView
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={[
@@ -1199,7 +1225,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           showsVerticalScrollIndicator={false}
           bottomOffset={insets.bottom + 12}
         >
-          <Text style={styles.detailPageHeading}>{currentTitle}</Text>
+          <ProfileHubTitleBar title={currentTitle} onBack={() => setActiveSection(null)} />
 
           <View style={styles.personalHeroRow}>
             <TouchableOpacity
@@ -1472,12 +1498,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
 
     return (
       <View style={styles.screenRoot}>
-        <Header
-          flatOverlay
-          onBackPress={() => setActiveSection(null)}
-          onProPress={() => navigation.navigate("ProSubscription")}
-          onNotificationsPress={() => navigation.navigate("Notifications")}
-        />
+        {profileChromeHeader}
         <KeyboardAwareScrollView
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={[
@@ -1492,7 +1513,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           showsVerticalScrollIndicator={false}
           bottomOffset={insets.bottom + 12}
         >
-          <Text style={styles.detailPageHeading}>{currentTitle}</Text>
+          <ProfileHubTitleBar title={currentTitle} onBack={() => setActiveSection(null)} />
 
           <View style={styles.personalHeroRow}>
             <TouchableOpacity
@@ -1706,12 +1727,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
   if (activeSection === "location") {
     return (
       <View style={styles.screenRoot}>
-        <Header
-          flatOverlay
-          onBackPress={() => setActiveSection(null)}
-          onProPress={() => navigation.navigate("ProSubscription")}
-          onNotificationsPress={() => navigation.navigate("Notifications")}
-        />
+        {profileChromeHeader}
         <KeyboardAwareScrollView
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={[
@@ -1726,7 +1742,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           keyboardShouldPersistTaps="handled"
           bottomOffset={insets.bottom + 12}
         >
-          <Text style={styles.detailPageHeading}>{currentTitle}</Text>
+          <ProfileHubTitleBar title={currentTitle} onBack={() => setActiveSection(null)} />
           <View style={styles.personalHeroRow}>
             <Image
               source={profileImageSource(profileImageUri)}
@@ -1889,12 +1905,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
     const backFromGame = () => (gameStep === "level" ? setGameStep("details") : setActiveSection(null));
     return (
       <View style={styles.screenRoot}>
-        <Header
-          flatOverlay
-          onBackPress={backFromGame}
-          onProPress={() => navigation.navigate("ProSubscription")}
-          onNotificationsPress={() => navigation.navigate("Notifications")}
-        />
+        {profileChromeHeader}
         <KeyboardAwareScrollView
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={[
@@ -1909,7 +1920,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           showsVerticalScrollIndicator={false}
           bottomOffset={insets.bottom + 12}
         >
-          <Text style={styles.detailPageHeading}>{currentTitle}</Text>
+          <ProfileHubTitleBar title={currentTitle} onBack={backFromGame} />
           {gameStep === "details" ? (
             <>
               <View style={styles.personalHeroRow}>
@@ -2115,12 +2126,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
       );
     return (
       <View style={styles.screenRoot}>
-        <Header
-          flatOverlay
-          onBackPress={backToHub}
-          onProPress={() => navigation.navigate("ProSubscription")}
-          onNotificationsPress={() => navigation.navigate("Notifications")}
-        />
+        {profileChromeHeader}
         <KeyboardAwareScrollView
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={[
@@ -2131,9 +2137,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
           showsVerticalScrollIndicator={false}
           bottomOffset={insets.bottom + 12}
         >
-          <Text style={[styles.detailPageHeading, activeSection === "manualDone" && { textAlign: "center" }]}>
-            {currentTitle}
-          </Text>
+          <ProfileHubTitleBar title={currentTitle} onBack={backToHub} />
           {activeSection === "body" ? (
             <BodyMeasurementsSection
               key={bodyEntry.mode}
@@ -2171,7 +2175,9 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   primaryLabel={t("profileHub.getStarted")}
                   onPrimary={() => setActiveSection("basicInfo")}
                   primaryArrow
+                  primaryVariant="accent"
                   primaryTestID="howto-start"
+                  hideBack
                 />
               }
             />
@@ -2187,7 +2193,9 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   primaryDisabled={basicSaving}
                   primaryLoading={basicSaving}
                   primaryArrow
+                  primaryVariant="accent"
                   primaryTestID="basic-next"
+                  hideBack
                 />
               )}
             />
@@ -2200,11 +2208,12 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
               footer={
                 <SubsectionFooter
                   onBack={backToHub}
+                  backLabel={t("common.back")}
                   primaryLabel={t("profileHub.next")}
                   onPrimary={() =>
                     void wizardNext(activeSection === "upper" ? "lower" : activeSection === "lower" ? "circ" : "review")
                   }
-                  primaryArrow
+                  primaryVariant="accent"
                   primaryTestID={`wizard-next-${activeSection}`}
                 />
               }
@@ -2225,10 +2234,12 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
                   ) : null}
                   <SubsectionFooter
                     onBack={backToHub}
+                    hideBack
                     primaryLabel={t("profileHub.confirm")}
                     onPrimary={() => void wizardNext("manualDone")}
                     primaryDisabled={wizSaving}
                     primaryLoading={wizSaving}
+                    primaryVariant="accent"
                     primaryTestID="review-confirm"
                   />
                 </>
@@ -2276,12 +2287,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
 
   return (
     <View style={styles.screenRoot}>
-      <Header
-        flatOverlay
-        onBackPress={onClose}
-        onProPress={() => navigation.navigate("ProSubscription")}
-        onNotificationsPress={() => navigation.navigate("Notifications")}
-      />
+      {profileChromeHeader}
       <KeyboardAwareScrollView
         style={{ flex: 1, width: "100%" }}
         contentContainerStyle={{
@@ -2293,6 +2299,7 @@ export function ProfileSettingsScreen(props: { onProfileUpdated?: () => void; on
         keyboardShouldPersistTaps="handled"
         bottomOffset={insets.bottom + 12}
       >
+        <ProfileHubBack onPress={onClose} />
         <ProfileIdentityHeader
           avatarSource={profileImageSource(!loading ? profileImageUri : null)}
           name={data.user?.name || "Player"}
@@ -2712,11 +2719,14 @@ function getStyles(theme: any) {
     subsectionScrollContent: { paddingBottom: 24 },
     subsectionFooterRow: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "stretch",
       gap: 10,
       marginTop: 14,
     },
     subsectionPrimaryButton: { flex: 1 },
+    /** Equal Back / Next halves — same width and height. */
+    subsectionHalf: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, height: 60 },
+    subsectionHalfFill: { alignSelf: "stretch", flex: 1, height: 60, maxHeight: 60 },
     subsectionFooterSpacer: { flex: 1, minHeight: 54 },
     resetLink: {
       marginTop: 4,
@@ -2856,7 +2866,7 @@ function getStyles(theme: any) {
       color: "#fff",
       fontFamily: theme.semiBoldFont,
       fontSize: 22,
-      marginTop: 2,
+      marginTop: 0,
       marginBottom: 12,
     },
     readOnlyField: {

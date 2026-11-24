@@ -94,7 +94,7 @@ export const RANGE_CM: Record<SingleKey | PairKey, { min: number; max: number }>
   calfCirc: { min: 25, max: 60 },
 };
 
-const MEAS_ICONS = {
+export const MEAS_ICONS = {
   height: require("../../../assets/aicoach/profile-hub/measurements/icon-height.png"),
   weight: require("../../../assets/aicoach/profile-hub/measurements/icon-weight.png"),
   wingspan: require("../../../assets/aicoach/profile-hub/measurements/icon-wingspan.png"),
@@ -107,6 +107,9 @@ const MEAS_ICONS = {
   hand: require("../../../assets/aicoach/profile-hub/measurements/icon-hand.png"),
   upperLeg: require("../../../assets/aicoach/profile-hub/measurements/icon-thigh.png"),
   lowerLeg: require("../../../assets/aicoach/profile-hub/measurements/icon-lower-leg.png"),
+  widthCirc: require("../../../assets/aicoach/profile-hub/measurements/icon-width-circ.png"),
+  thighCirc: require("../../../assets/aicoach/profile-hub/measurements/icon-thigh-circ.png"),
+  calfCirc: require("../../../assets/aicoach/profile-hub/measurements/icon-calf-circ.png"),
 } as const;
 
 /** First three rows are short (46); remaining length rows are taller (70). */
@@ -392,11 +395,15 @@ export function BodyMeasurementsSection({
 
 /** Hologram guide per view. Side / back art is not drawn yet, so they reuse the front figure. */
 const SCAN_ART: Record<ScanView, number> = {
-  front: require("../../../assets/bodyscan/front.jpg"),
-  side: require("../../../assets/bodyscan/front.jpg"),
-  back: require("../../../assets/bodyscan/front.jpg"),
+  front: require("../../../assets/bodyscan/front.png"),
+  side: require("../../../assets/bodyscan/front.png"),
+  back: require("../../../assets/bodyscan/front.png"),
 };
-const SCAN_ART_ASPECT = 640 / 1030;
+/** Figma frames — hologram 370×624, tips tile 370×183. */
+const SCAN_ART_ASPECT = 370 / 624;
+const SCAN_TIPS_H = 183;
+/** Light tuck only into the black pad under the feet — keeps clear space above the tips tile. */
+const SCAN_TIPS_OVERLAP = 32;
 type ScanView = "front" | "side" | "back";
 
 /** Tip icons match the Figma tip list order (viewfinder / bolt / bulb / phone). */
@@ -439,29 +446,28 @@ function BodyScanPanel({
         style={st.segment}
       />
 
-      <View style={[st.artCard, glow(18, 0.5)]} testID="scan-art">
-        <Image source={SCAN_ART[view]} style={st.artImage} resizeMode="cover" />
-        {view !== "front" ? (
-          <View style={st.artBadge}>
-            <Text allowFontScaling={false} style={[st.artBadgeText, { fontFamily: theme.mediumFont }]}>
-              {t("profileHub.scanArtPending")}
-            </Text>
-          </View>
-        ) : null}
-        {(["tl", "tr", "bl", "br"] as const).map((c) => (
-          <View key={c} pointerEvents="none" style={[st.corner, st[`corner_${c}`]]} />
-        ))}
-      </View>
+      <View style={st.scanStage}>
+        <View style={st.artCard} testID="scan-art">
+          <Image source={SCAN_ART[view]} style={st.artImage} resizeMode="contain" />
+          {view !== "front" ? (
+            <View style={st.artBadge}>
+              <Text allowFontScaling={false} style={[st.artBadgeText, { fontFamily: theme.mediumFont }]}>
+                {t("profileHub.scanArtPending")}
+              </Text>
+            </View>
+          ) : null}
+        </View>
 
-      <View style={st.tipsCard} testID="scan-tips">
-        {SCAN_TIPS.map((tip) => (
-          <View key={tip.key} style={st.tipRow} testID={`scan-tip-${tip.key.toLowerCase()}`}>
-            <Image source={SCAN_TIP_ICONS[tip.key]} style={st.tipIcon} resizeMode="contain" />
-            <Text allowFontScaling={false} style={[st.tipText, { fontFamily: theme.regularFont }]}>
-              {t(`profileHub.scanTip${tip.key}`)}
-            </Text>
-          </View>
-        ))}
+        <View style={st.tipsCard} testID="scan-tips">
+          {SCAN_TIPS.map((tip) => (
+            <View key={tip.key} style={st.tipRow} testID={`scan-tip-${tip.key.toLowerCase()}`}>
+              <Image source={SCAN_TIP_ICONS[tip.key]} style={st.tipIcon} resizeMode="contain" />
+              <Text allowFontScaling={false} style={[st.tipText, { fontFamily: theme.regularFont }]}>
+                {t(`profileHub.scanTip${tip.key}`)}
+              </Text>
+            </View>
+          ))}
+        </View>
       </View>
 
       {notice ? (
@@ -667,14 +673,14 @@ const st = StyleSheet.create({
   progressText: { fontSize: 12, color: PG.labelBlue },
   error: { color: "#FF6B5E", fontSize: 13, marginTop: 8, textAlign: "center" },
   notice: { color: PG.labelBlue, fontSize: 13, marginTop: 8, textAlign: "center" },
+  /** Hologram + tips: tile tucks slightly over the image's black pad, feet stay clear. */
+  scanStage: { position: "relative", marginBottom: 4 },
   artCard: {
     width: "100%",
     aspectRatio: SCAN_ART_ASPECT,
-    borderRadius: 24,
-    borderWidth: 1.5,
-    borderColor: "rgba(77, 166, 255, 0.85)",
+    borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: PG.cardBottom,
+    backgroundColor: PG.bg,
   },
   artImage: { width: "100%", height: "100%" },
   artBadge: {
@@ -689,25 +695,29 @@ const st = StyleSheet.create({
     borderColor: PG.borderSoft,
   },
   artBadgeText: { fontSize: 12, color: "#86A7D2" },
-  corner: { position: "absolute", width: 26, height: 26, borderColor: PG.accent },
-  corner_tl: { top: 14, left: 14, borderTopWidth: 2, borderLeftWidth: 2, borderTopLeftRadius: 10 },
-  corner_tr: { top: 14, right: 14, borderTopWidth: 2, borderRightWidth: 2, borderTopRightRadius: 10 },
-  corner_bl: { bottom: 14, left: 14, borderBottomWidth: 2, borderLeftWidth: 2, borderBottomLeftRadius: 10 },
-  corner_br: { bottom: 14, right: 14, borderBottomWidth: 2, borderRightWidth: 2, borderBottomRightRadius: 10 },
-  /** Single tips panel — flat fill, no gradient; icons have no extra chrome. */
+  /** Figma big tile — 370×183, padding 10, gap 10, border 2. */
   tipsCard: {
-    marginTop: 14,
+    marginTop: -SCAN_TIPS_OVERLAP,
+    zIndex: 2,
+    minHeight: SCAN_TIPS_H,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: "#07256D",
     backgroundColor: "#030A17",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    gap: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 10,
+    justifyContent: "space-evenly",
+    overflow: "hidden",
   },
-  tipRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 8 },
-  tipIcon: { width: 28, height: 28 },
-  tipText: { flex: 1, fontSize: 15, color: "#FFFFFF" },
+  tipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 28,
+  },
+  tipIcon: { width: 24, height: 24, flexShrink: 0 },
+  tipText: { flex: 1, fontSize: 14, lineHeight: 18, color: "#FFFFFF" },
   overlay: { flex: 1, backgroundColor: "rgba(1, 7, 25, 0.78)", justifyContent: "center", paddingHorizontal: 18 },
   modalCard: { borderRadius: 24, borderWidth: 1, borderColor: PG.border, padding: 18, gap: 14 },
   modalHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
